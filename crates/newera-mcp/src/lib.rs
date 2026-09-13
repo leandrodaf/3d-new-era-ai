@@ -5,6 +5,8 @@
 //! that the desktop UI is also rendering. Whatever an agent does shows up on
 //! screen immediately and can be undone with Ctrl+Z.
 
+mod compact;
+mod edit;
 mod tools;
 
 use std::sync::Arc;

@@ -3,6 +3,8 @@
 //! Routes:
 //! - `GET /health` — liveness probe
 //! - `GET /api/home` — current home as JSON
+//! - `GET /api/plan.png?w=&h=` — floor plan image
+//! - `GET /api/plan.svg` — floor plan at true scale
 //! - `/mcp` — Model Context Protocol (Streamable HTTP)
 
 use std::net::SocketAddr;
@@ -42,6 +44,8 @@ pub fn router(document: SharedDocument, addr: SocketAddr, shutdown: Cancellation
     Router::new()
         .route("/health", get(|| async { "ok" }))
         .route("/api/home", get(get_home))
+        .route("/api/plan.png", get(plan_png))
+        .route("/api/plan.svg", get(plan_svg))
         .nest_service("/mcp", mcp)
         .layer(TraceLayer::new_for_http())
         .with_state(document)
@@ -71,6 +75,55 @@ pub async fn serve_listener(
         .await
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct PlanQuery {
+    w: Option<u32>,
+    h: Option<u32>,
+}
+
+fn scene(document: &SharedDocument) -> (newera_draw::Scene, Option<std::path::PathBuf>) {
+    let doc = document.read();
+    let options = newera_draw::SceneOptions {
+        show_background: true,
+        ..newera_draw::SceneOptions::default()
+    };
+    (
+        newera_draw::plan_scene(doc.home(), &options),
+        doc.path().map(std::path::Path::to_path_buf),
+    )
+}
+
+async fn plan_png(
+    State(document): State<SharedDocument>,
+    axum::extract::Query(query): axum::extract::Query<PlanQuery>,
+) -> Result<([(axum::http::header::HeaderName, &'static str); 1], Vec<u8>), axum::http::StatusCode>
+{
+    let (scene, project) = scene(&document);
+    let options = newera_draw::RenderOptions {
+        width: query.w.unwrap_or(1024).clamp(64, 4096),
+        height: query.h.unwrap_or(768).clamp(64, 4096),
+        ..newera_draw::RenderOptions::default()
+    };
+    let load = |path: &str| {
+        image::open(newera_core::resolve_project_path(project.as_deref(), path))
+            .ok()
+            .map(|img| img.to_rgba8())
+    };
+    let png = newera_draw::render_png(&scene, &options, &load)
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(([(axum::http::header::CONTENT_TYPE, "image/png")], png))
+}
+
+async fn plan_svg(
+    State(document): State<SharedDocument>,
+) -> ([(axum::http::header::HeaderName, &'static str); 1], String) {
+    let (scene, _) = scene(&document);
+    (
+        [(axum::http::header::CONTENT_TYPE, "image/svg+xml")],
+        newera_draw::to_svg(&scene, &newera_draw::SvgOptions::default()),
+    )
+}
+
 async fn get_home(State(document): State<SharedDocument>) -> Json<HomeResponse> {
     let doc = document.read();
     Json(HomeResponse {
@@ -98,7 +151,7 @@ mod tests {
                 Point2::new(0.0, 0.0),
                 Point2::new(300.0, 0.0),
             );
-            doc.execute(Command::add_wall(wall)).unwrap();
+            doc.execute(Command::insert(wall)).unwrap();
         }
 
         let app = router(document, DEFAULT_ADDR, CancellationToken::new());

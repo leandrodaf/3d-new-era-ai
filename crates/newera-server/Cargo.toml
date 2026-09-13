@@ -10,7 +10,9 @@ authors.workspace = true
 
 [dependencies]
 axum.workspace = true
+image.workspace = true
 newera-core.workspace = true
+newera-draw.workspace = true
 newera-mcp.workspace = true
 serde.workspace = true
 tokio.workspace = true

@@ -1,8 +1,10 @@
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::command::Command;
 use crate::error::{CoreError, CoreResult};
-use crate::model::{Home, RoomId, WallId};
+use crate::home::Home;
+use crate::ids::{DimensionId, LabelId, RoomId, WallId};
 
 /// A [`Home`] plus its edit history.
 ///
@@ -15,6 +17,9 @@ pub struct Document {
     undo_stack: Vec<Command>,
     redo_stack: Vec<Command>,
     revision: u64,
+    saved_revision: u64,
+    /// Project file this document was loaded from or saved to.
+    path: Option<PathBuf>,
 }
 
 impl Document {
@@ -41,6 +46,14 @@ impl Document {
     /// Allocates a fresh room id. Ids are never reused, even after undo.
     pub fn new_room_id(&mut self) -> RoomId {
         self.home.new_room_id()
+    }
+
+    pub fn new_dimension_id(&mut self) -> DimensionId {
+        self.home.new_dimension_id()
+    }
+
+    pub fn new_label_id(&mut self) -> LabelId {
+        self.home.new_label_id()
     }
 
     pub fn can_undo(&self) -> bool {
@@ -74,12 +87,33 @@ impl Document {
         Ok(())
     }
 
-    /// Replaces the home and clears the history.
+    /// Replaces the home and clears the history. The loaded state counts as saved.
     pub fn load(&mut self, home: Home) {
         self.home = home;
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.revision += 1;
+        self.saved_revision = self.revision;
+    }
+
+    /// Marks the current state as saved to `path`.
+    pub fn mark_saved(&mut self, path: impl Into<PathBuf>) {
+        self.saved_revision = self.revision;
+        self.path = Some(path.into());
+    }
+
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+
+    /// Sets the project file path (e.g. after opening a file).
+    pub fn set_path(&mut self, path: Option<PathBuf>) {
+        self.path = path;
+    }
+
+    /// True when there are changes since the last save or load.
+    pub fn is_modified(&self) -> bool {
+        self.revision != self.saved_revision
     }
 
     fn apply_from_history(&mut self, command: Command) -> CoreResult<Command> {

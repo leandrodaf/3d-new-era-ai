@@ -1,0 +1,20 @@
+[package]
+name = "newera-draw"
+description = "Floor plan drawing for 3D New Era AI: scene building, PNG and SVG output"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+ab_glyph.workspace = true
+epaint_default_fonts.workspace = true
+image.workspace = true
+newera-core.workspace = true
+thiserror.workspace = true
+tiny-skia.workspace = true
+
+[lints]
+workspace = true

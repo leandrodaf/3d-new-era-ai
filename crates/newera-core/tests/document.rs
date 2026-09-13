@@ -14,9 +14,9 @@ fn undo_and_redo_restore_exact_state() {
     let a = wall(0.0, 0.0, 400.0, 0.0);
     let b = wall(400.0, 0.0, 400.0, 300.0);
 
-    doc.execute(Command::add_wall(a.clone())).unwrap();
-    doc.execute(Command::add_wall(b.clone())).unwrap();
-    doc.execute(Command::RemoveWall { id: a.id }).unwrap();
+    doc.execute(Command::insert(a.clone())).unwrap();
+    doc.execute(Command::insert(b.clone())).unwrap();
+    doc.execute(Command::remove(a.id)).unwrap();
     assert_eq!(doc.home().walls, vec![b.clone()]);
 
     doc.undo().unwrap();
@@ -33,7 +33,7 @@ fn undo_and_redo_restore_exact_state() {
 #[test]
 fn new_command_clears_redo() {
     let mut doc = Document::default();
-    doc.execute(Command::add_wall(wall(0.0, 0.0, 100.0, 0.0)))
+    doc.execute(Command::insert(wall(0.0, 0.0, 100.0, 0.0)))
         .unwrap();
     doc.undo().unwrap();
     assert!(doc.can_redo());
@@ -54,8 +54,8 @@ fn failed_batch_leaves_home_untouched() {
 
     let result = doc.execute(Command::Batch {
         commands: vec![
-            Command::add_wall(wall(0.0, 0.0, 100.0, 0.0)),
-            Command::add_wall(wall(0.0, 0.0, 0.0, 0.0)), // zero length: invalid
+            Command::insert(wall(0.0, 0.0, 100.0, 0.0)),
+            Command::insert(wall(0.0, 0.0, 0.0, 0.0)), // zero length: invalid
         ],
     });
 
@@ -68,19 +68,19 @@ fn failed_batch_leaves_home_untouched() {
 #[test]
 fn batch_undoes_as_a_single_step() {
     let mut doc = Document::default();
-    let room = Room {
-        id: RoomId(9_000),
-        name: "Sala".into(),
-        points: vec![
+    let room = Room::new(
+        RoomId(9_000),
+        "Sala",
+        vec![
             Point2::new(0.0, 0.0),
             Point2::new(400.0, 0.0),
             Point2::new(400.0, 300.0),
         ],
-    };
+    );
     doc.execute(Command::Batch {
         commands: vec![
-            Command::add_wall(wall(0.0, 0.0, 400.0, 0.0)),
-            Command::add_room(room),
+            Command::insert(wall(0.0, 0.0, 400.0, 0.0)),
+            Command::insert(room),
         ],
     })
     .unwrap();
@@ -91,9 +91,12 @@ fn batch_undoes_as_a_single_step() {
 
 #[test]
 fn commands_round_trip_through_json() {
-    let command = Command::add_wall(wall(0.0, 0.0, 250.0, 0.0));
+    let command = Command::insert(wall(0.0, 0.0, 250.0, 0.0));
     let json = serde_json::to_string(&command).unwrap();
-    assert!(json.contains(r#""type":"add_wall""#));
+    assert!(
+        json.contains(r#""op":"insert""#) && json.contains(r#""kind":"wall""#),
+        "{json}"
+    );
     assert!(
         json.contains(r#""start":[0.0,0.0]"#),
         "points are compact: {json}"

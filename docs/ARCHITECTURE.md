@@ -37,8 +37,9 @@ That is what makes these properties hold everywhere, for free:
 
 | Crate | Depends on | Responsibility |
 |-------|-----------|----------------|
-| `newera-core` | serde, schemars | Model (`Home`, `Wall`, `Room`, `Compass`), geometry, `Command`, `Document`. No UI, no async, no I/O. |
-| `newera-mcp` | core, rmcp | MCP tools and their token-efficient wire format. |
+| `newera-core` | serde, schemars, geo | Model (`Home`, `Element`: walls, rooms, dimensions, labels), geometry (joins, triangulation, room detection), `Command`, `Document`, project format. No UI, no async, no I/O. |
+| `newera-draw` | core, tiny-skia | Plan scene (styled primitives in cm) and its PNG/SVG backends. |
+| `newera-mcp` | core, draw, rmcp | MCP tools and their token-efficient wire format. |
 | `newera-server` | core, mcp, axum | HTTP transport: REST API and the Streamable HTTP MCP endpoint. |
 | `newera-app` | core, eframe | Desktop editor. Never talks to the network. |
 | `newera` | all | CLI entry point and process wiring. |
@@ -54,6 +55,12 @@ dependencies so it can later compile to WebAssembly and power a web client.
 - The compass `north_degrees` is clockwise from plan up (−y) to geographic north.
 
 ## Commands and history
+
+Every element kind is one variant of `Element`, so there are only three element
+commands — `Insert`, `Update` and `Remove` — plus home-level ones (`RenameHome`,
+`SetCompass`, `SetBackground`) and `Batch`. Composite edits (split a wall, move
+with joined walls, dimension a wall) live in `newera_core::ops` and are shared by the
+editor and MCP.
 
 `Command::apply(self, &mut Home) -> Result<Command>` applies a change and returns
 its inverse. `Document` keeps two stacks of inverses:
@@ -95,6 +102,13 @@ like an API for a slow network:
 The REST API (`/api/home`) serves the full, self-describing model for tooling and
 debugging; MCP serves the compact view.
 
+## One drawing, every output
+
+`newera_draw::plan_scene` turns a home into styled primitives (fills with precomputed
+triangles, lines, texts, images) in plan centimeters. The editor paints them with egui,
+`render_png` rasterizes them with tiny-skia for MCP and export, and `to_svg` writes them
+at true scale. What an agent sees in `render_plan` is exactly what the user sees.
+
 ## Desktop editor
 
 - `eframe`/`egui` with the `wgpu` backend.
@@ -102,6 +116,8 @@ debugging; MCP serves the compact view.
   3D view below; both splitters are resizable.
 - The 3D view renders into its **own offscreen texture** (MSAA + depth) that egui shows
   as an image. Owning the pass keeps 3D rendering independent from egui's renderer.
+- Drags edit a scratch copy of the home for live preview and commit one command on release.
+- Interaction is tested headlessly with `egui_kittest` (real pointer/keyboard events).
 - The app polls the document revision a few times per second while idle, so edits
   from MCP/HTTP appear without user input.
 

@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- M1 working drawings: background image calibration, arc walls, wall splitting and
+  endpoint handles, dimensions, labels, room detection from walls, magnetism with typed
+  lengths, rulers, units, selection with move/copy/paste, project files and plan export.
+- `newera-draw`: one plan scene for the editor, PNG renders (MCP `render_plan`) and SVG.
+- Consolidated, token-lean MCP tools (`create`, `update`, `move`, …).
+- UI interaction tests with `egui_kittest`.
+
 - Workspace with `newera-core`, `newera-mcp`, `newera-server`, `newera-app` and the `newera` binary.
 - Reversible commands with undo/redo, atomic batches and document revisions.
 - Walls, rooms and compass; short typed ids (`w12`, `r3`) and compact `[x, y]` points.

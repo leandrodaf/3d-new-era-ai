@@ -8,7 +8,7 @@ CARGO   ?= cargo
 ADDR    ?= 127.0.0.1:7878
 BIN     := target/debug/newera
 RELEASE := target/release/newera
-LOG     ?= info,wgpu_core=warn,wgpu_hal=warn,naga=warn
+LOG     ?= info,wgpu_core=warn,wgpu_hal=warn,naga=warn,rmcp=warn,egui_wgpu=warn
 
 export NEWERA_ADDR := $(ADDR)
 export NEWERA_LOG  := $(LOG)

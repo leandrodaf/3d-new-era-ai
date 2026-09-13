@@ -48,26 +48,48 @@ SESSION=$(grep -i '^mcp-session-id:' "$LOG.headers" | awk '{print $2}' | tr -d '
 rpc '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
 
 reply=$(rpc '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
-for tool in get_home create_walls create_room delete set_compass undo redo; do
+for tool in get_home create update delete move split_wall set_home set_background render_plan export_plan save_home open_home new_home undo redo; do
   check "tool $tool listed" "$reply" "\"name\":\"$tool\""
 done
 
-count_walls() { curl -s "$BASE/api/home" | grep -o '"id":"w[0-9]*"' | wc -l | tr -d ' '; }
+call() { rpc '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"'"$1"'","arguments":'"$2"'}}'; }
+count() { curl -s "$BASE/api/home" | grep -o "\"id\":\"$1[0-9]*\"" | wc -l | tr -d ' '; }
 
-reply=$(rpc '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"create_walls","arguments":{"points":[[800,0],[1200,0],[1200,600]]}}}')
-check "create_walls answers in one line" "$reply" 'ok rev=1 ids=w8,w9'
-check "REST sees 7 walls (5 demo + 2 new)" "$(count_walls)" "7"
+reply=$(call create '{"walls":[{"pts":[[900,0],[1300,0],[1300,600],[900,600]],"closed":true}],"rooms":[{"name":"Cozinha","at":[1100,300]}],"dims":[{"wall":"w1"}],"labels":[{"text":"Entrada","at":[1100,-60]}]}')
+check "create answers in one line" "$reply" 'ok rev=1 ids=w8,w9,w10,w11,r12,d13,t14'
+check "REST sees 9 walls (5 demo + 4 new)" "$(count w)" "9"
+check "room detected from walls" "$(count r)" "3"
 
-reply=$(rpc '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"get_home","arguments":{}}}')
-check "get_home is compact" "$reply" '\"a\":[800,0]'
+reply=$(call get_home '{"detail":"summary"}')
+check "summary lists the kitchen" "$reply" 'Cozinha'
 
-reply=$(rpc '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"undo","arguments":{}}}')
-check "undo" "$reply" 'ok rev=2'
-check "undo reverts the whole batch" "$(count_walls)" "5"
+reply=$(call update '{"items":[{"id":"w8","t":25},{"id":"t14","text":"Porta"}]}')
+check "update several kinds" "$reply" 'ok rev=2'
+reply=$(call update '{"items":[{"id":"w8","text":"x"}]}')
+check "update rejects fields of other kinds" "$reply" 'does not apply'
 
-reply=$(rpc '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"delete","arguments":{"ids":["w1","nope"]}}}')
-check "unknown id is rejected" "$reply" 'unknown id'
-check "failed delete changes nothing" "$(count_walls)" "5"
+reply=$(call split_wall '{"id":"w9"}')
+check "split_wall returns the new wall" "$reply" 'ids=w15'
+
+reply=$(call render_plan '{"w":320,"h":240}')
+check "render_plan returns a PNG image" "$reply" '"mimeType":"image/png"'
+
+reply=$(call undo '{}')
+check "undo" "$reply" 'ok rev=4'
+check "undo reverted the split" "$(count w)" "9"
+
+reply=$(call delete '{"ids":["w1","nope"]}')
+check "unknown id is rejected" "$reply" 'invalid id'
+check "failed delete changes nothing" "$(count w)" "9"
+
+TMP_PROJECT="$(mktemp -d)/casa"
+reply=$(call save_home '{"path":"'"$TMP_PROJECT"'"}')
+check "save_home adds the extension" "$reply" 'casa.newera'
+call new_home '{}' >/dev/null
+check "new_home clears" "$(count w)" "0"
+reply=$(call open_home '{"path":"'"$TMP_PROJECT"'.newera"}')
+check "open_home restores" "$(count w)" "9"
+rm -rf "$(dirname "$TMP_PROJECT")"
 
 rm -f "$LOG.headers"
 echo "All good."

@@ -9,12 +9,11 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+geo = "0.33.1"
 schemars.workspace = true
 serde.workspace = true
-thiserror.workspace = true
-
-[dev-dependencies]
 serde_json.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

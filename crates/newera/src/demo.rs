@@ -18,11 +18,11 @@ pub(crate) fn sample_home() -> Home {
 
     for (name, x0, x1) in [("Sala", 0.0, 450.0), ("Quarto", 450.0, 800.0)] {
         let id = home.new_room_id();
-        home.rooms.push(Room {
+        home.rooms.push(Room::new(
             id,
-            name: name.to_owned(),
-            points: vec![p(x0, 0.0), p(x1, 0.0), p(x1, 600.0), p(x0, 600.0)],
-        });
+            name,
+            vec![p(x0, 0.0), p(x1, 0.0), p(x1, 600.0), p(x0, 600.0)],
+        ));
     }
     home
 }

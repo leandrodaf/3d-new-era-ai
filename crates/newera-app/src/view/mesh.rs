@@ -5,7 +5,9 @@
 
 use bytemuck::{Pod, Zeroable};
 use glam::Vec3;
-use newera_core::{Home, Point2, Room, WallId};
+use newera_core::{ElementId, Home, Point2, Room};
+
+use super::plan::Selection;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
@@ -33,14 +35,14 @@ fn to_world(p: Point2, height_cm: f64) -> Vec3 {
 }
 
 impl Mesh {
-    pub(crate) fn from_home(home: &Home, selected: Option<WallId>) -> Self {
+    pub(crate) fn from_home(home: &Home, selection: &Selection) -> Self {
         let mut mesh = Self::default();
         mesh.add_ground(home);
         for room in &home.rooms {
             mesh.add_room_floor(room);
         }
         for (wall, outline) in home.walls.iter().zip(home.wall_outlines()) {
-            let color = if Some(wall.id) == selected {
+            let color = if selection.contains(&ElementId::Wall(wall.id)) {
                 SELECTED_WALL_COLOR
             } else {
                 WALL_COLOR
@@ -140,7 +142,7 @@ mod tests {
 
     #[test]
     fn empty_home_still_has_ground() {
-        let mesh = Mesh::from_home(&Home::default(), None);
+        let mesh = Mesh::from_home(&Home::default(), &Selection::new());
         assert_eq!(mesh.vertices.len(), 4);
         assert_eq!(mesh.indices.len(), 6);
     }
@@ -163,10 +165,10 @@ mod tests {
             ));
         }
         let id = home.new_room_id();
-        home.rooms.push(Room {
+        home.rooms.push(Room::new(
             id,
-            name: "L".into(),
-            points: [
+            "L",
+            [
                 (0.0, 0.0),
                 (600.0, 0.0),
                 (600.0, 300.0),
@@ -177,8 +179,8 @@ mod tests {
             .iter()
             .map(|&(x, y)| Point2::new(x, y))
             .collect(),
-        });
-        let mesh = Mesh::from_home(&home, None);
+        ));
+        let mesh = Mesh::from_home(&home, &Selection::new());
         assert!(mesh.indices.len() > 6);
         for tri in mesh.indices.chunks(3) {
             let geometric = triangle_normal(&mesh, tri);
@@ -191,11 +193,11 @@ mod tests {
     fn room_floor_faces_up_for_both_windings() {
         let square = [(0.0, 0.0), (300.0, 0.0), (300.0, 300.0), (0.0, 300.0)];
         for points in [square.to_vec(), square.iter().rev().copied().collect()] {
-            let room = Room {
-                id: newera_core::RoomId(1),
-                name: "Sala".into(),
-                points: points.iter().map(|&(x, y)| Point2::new(x, y)).collect(),
-            };
+            let room = Room::new(
+                newera_core::RoomId(1),
+                "Sala",
+                points.iter().map(|&(x, y)| Point2::new(x, y)).collect(),
+            );
             let mut mesh = Mesh::default();
             mesh.add_room_floor(&room);
             for tri in mesh.indices.chunks(3) {
@@ -215,7 +217,7 @@ mod tests {
             Point2::new(0.0, 0.0),
             Point2::new(400.0, 0.0),
         ));
-        let mesh = Mesh::from_home(&home, None);
+        let mesh = Mesh::from_home(&home, &Selection::new());
         let max_y = mesh
             .vertices
             .iter()

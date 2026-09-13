@@ -30,6 +30,10 @@ struct Cli {
     /// Start with a sample house instead of an empty project.
     #[arg(long, global = true)]
     demo: bool,
+
+    /// Project file (.newera) to open.
+    #[arg(global = true)]
+    file: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -54,17 +58,26 @@ fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_env("NEWERA_LOG")
-                .unwrap_or_else(|_| "info,wgpu_core=warn,wgpu_hal=warn,naga=warn".into()),
+            tracing_subscriber::EnvFilter::try_from_env("NEWERA_LOG").unwrap_or_else(|_| {
+                "info,wgpu_core=warn,wgpu_hal=warn,naga=warn,rmcp=warn,egui_wgpu=warn".into()
+            }),
         )
         .init();
 
-    let home = if cli.demo {
+    let mut document = Document::new(if cli.demo {
         demo::sample_home()
     } else {
         Home::default()
-    };
-    let document = SharedDocument::new(Document::new(home));
+    });
+    if let Some(path) = &cli.file {
+        let json = std::fs::read_to_string(path)
+            .with_context(|| format!("cannot read {}", path.display()))?;
+        let home = newera_core::from_project_json(&json)
+            .with_context(|| format!("cannot open {}", path.display()))?;
+        document.load(home);
+        document.mark_saved(path);
+    }
+    let document = SharedDocument::new(document);
 
     match mode {
         Mode::Gui { no_server } => run_gui(document, cli.addr, no_server),
@@ -118,7 +131,13 @@ fn run_gui(document: SharedDocument, addr: SocketAddr, no_server: bool) -> anyho
         }));
     }
 
-    let result = newera_app::run(document, newera_app::AppOptions { mcp_url });
+    let result = newera_app::run(
+        document,
+        newera_app::AppOptions {
+            mcp_url,
+            open: None,
+        },
+    );
 
     shutdown.cancel();
     if let Some(thread) = server_thread {

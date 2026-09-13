@@ -7,7 +7,9 @@ use eframe::egui;
 use eframe::egui_wgpu::RenderState;
 use eframe::wgpu::{self, util::DeviceExt};
 use glam::{Mat4, Vec3};
-use newera_core::{Home, WallId};
+use newera_core::{ElementId, Home};
+
+use super::plan::Selection;
 
 use super::mesh::{Mesh, Vertex};
 
@@ -126,8 +128,8 @@ struct Gpu {
 pub(crate) struct SceneView {
     camera: OrbitCamera,
     gpu: Option<Gpu>,
-    /// `(document revision, selected wall)` the GPU mesh was built from.
-    built_for: Option<(u64, Option<WallId>)>,
+    /// `(document revision, selection)` the GPU mesh was built from.
+    built_for: Option<(u64, Vec<ElementId>)>,
     framed_once: bool,
 }
 
@@ -150,8 +152,9 @@ impl SceneView {
         }
     }
 
-    pub(crate) fn frame_home(&mut self, home: &Home) {
-        self.camera.look_at_home(home);
+    /// Frames the whole home on the next frame.
+    pub(crate) fn request_frame(&mut self) {
+        self.framed_once = false;
     }
 
     pub(crate) fn ui(
@@ -160,7 +163,7 @@ impl SceneView {
         render_state: Option<&RenderState>,
         home: &Home,
         revision: u64,
-        selected: Option<WallId>,
+        selection: &Selection,
     ) {
         let Some(rs) = render_state else {
             ui.centered_and_justified(|ui| ui.label("Visualização 3D requer o backend wgpu."));
@@ -178,15 +181,16 @@ impl SceneView {
             ((rect.height() * ppp).round() as u32).max(1),
         ];
 
-        if !self.framed_once && !home.walls.is_empty() {
+        if !self.framed_once && home.bounds().is_some() {
             self.camera.look_at_home(home);
             self.framed_once = true;
         }
 
         let gpu = self.gpu.get_or_insert_with(|| Gpu::new(&rs.device));
-        if self.built_for != Some((revision, selected)) {
-            gpu.upload_mesh(&rs.device, &Mesh::from_home(home, selected));
-            self.built_for = Some((revision, selected));
+        let key = (revision, selection.iter().copied().collect::<Vec<_>>());
+        if self.built_for.as_ref() != Some(&key) {
+            gpu.upload_mesh(&rs.device, &Mesh::from_home(home, selection));
+            self.built_for = Some(key);
         }
         gpu.render(rs, size, &self.camera);
 

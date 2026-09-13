@@ -18,23 +18,28 @@ and **MCP tools**. A feature is not done until an agent can use it cheaply.
 - [x] MCP over stdio and Streamable HTTP; REST `/api/home`
 - [x] CI (fmt, clippy, tests on 3 OSes, MCP smoke test, MSRV, cargo-deny), release builds
 
-## M1 — Working drawings
+## ✅ M1 — Working drawings
 
 Make the plan precise enough to draw a real house from measurements.
 
-- [ ] **Background image**: import a scanned plan, calibrate scale by marking a known
-      length, set origin, adjust opacity; per level
-- [x] Wall joins: mitered corners, T/X junctions and straight continuations (walls sharing endpoints)
-- [ ] Edit walls: move endpoints, thickness, height, split, arc walls
-- [ ] Dimension lines with offset and automatic wall-length dimensions
-- [x] Concave room floors in plan and 3D (ear clipping)
-- [ ] Rooms: draw polygon, auto-detect from walls (double-click), ceiling toggle
-- [ ] Text labels
-- [ ] Magnetism rules: 15° angles, align to walls, length rounding by zoom level
-- [ ] Rulers and cursor coordinates; metric/imperial display
-- [ ] Save/load native project file (versioned, diff-friendly)
-- [ ] MCP: `set_background`, `update_walls`, `create_dimension`, `detect_room`,
-      `render_plan` (small PNG so agents can check their work visually)
+- [x] **Background image**: import a scanned plan, calibrate scale by marking a known
+      length, drag to position, opacity and visibility
+- [x] Wall joins: mitered corners, T/X junctions and straight continuations
+- [x] Edit walls: drag endpoints (joined walls follow), thickness, height, split, arc walls
+- [x] Dimension lines with offset handles and automatic wall dimensions
+- [x] Rooms: draw polygon, detect from walls (double-click), floor/ceiling/area flags,
+      concave floors (ear clipping)
+- [x] Text labels sized in centimeters
+- [x] Magnetism: 15° angles, wall/room points, length rounding by zoom, Shift disables;
+      typed exact lengths while drawing
+- [x] Rulers and cursor coordinates; cm / m / mm / ft-in display
+- [x] Selection (click, Ctrl+click, box), move, nudge, copy/cut/paste/duplicate
+- [x] Save/load native project file (versioned JSON), recent files, unsaved-changes guard
+- [x] Plan export: SVG at true scale and PNG
+- [x] MCP: `create` (walls/rooms/dims/labels in one call), `update`, `move`, `delete`,
+      `split_wall`, `set_home`, `set_background`, `render_plan` (PNG so agents see
+      their work), `export_plan`, `save_home`/`open_home`/`new_home`
+- [x] Interaction tests with `egui_kittest` (drawing, dragging, handles, dialogs, shortcuts)
 
 ## M2 — Furniture at real scale
 
@@ -60,7 +65,7 @@ The core of what makes the editor useful: placing real objects with real dimensi
 - [ ] Lighting: sun from compass + date/time, light sources from furniture
 - [ ] Virtual visitor camera; stored points of view
 - [ ] Photo renderer (GPU path tracing) and video along a camera path
-- [ ] Export: OBJ, glTF, SVG/PDF plan, PNG
+- [ ] Export: OBJ, glTF, PDF plan (SVG/PNG plan done in M1)
 - [ ] MCP: `set_camera`, `render_photo` with size/quality budget
 
 ## M4 — Interop and reach

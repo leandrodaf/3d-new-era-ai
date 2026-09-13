@@ -51,12 +51,15 @@ Clients that spawn a process can use stdio instead:
 
 | Tool | What it does |
 |------|--------------|
-| `get_home` | Compact snapshot of walls, rooms and north direction |
-| `create_walls` | Connected walls along a polyline, as one undoable step |
-| `create_room` | Named room from a floor polygon, with area |
-| `delete` | Delete walls/rooms by id, atomically |
-| `set_compass` | Set north direction, position and size |
-| `rename_home` | Rename the project |
+| `get_home` | Compact state (`detail=summary` for counts, bounds and room areas) |
+| `create` | Walls (polylines, arcs), rooms (polygon or detected from walls), dimensions and labels — one atomic call |
+| `update` / `move` / `delete` | Edit any element by id |
+| `split_wall` | Split a wall into two joined walls |
+| `set_home` | Project name and compass (north) |
+| `set_background` | Scanned plan at real scale (calibrate with two points and a distance) |
+| `render_plan` | PNG of the plan, exactly as the user sees it |
+| `export_plan` | SVG (true scale) or PNG file |
+| `save_home` / `open_home` / `new_home` | Project files (`.newera`) |
 | `undo` / `redo` | Shared history with the user |
 
 ## Modes
@@ -75,7 +78,8 @@ The server binds to loopback by default and validates the `Host` header.
 
 ```
 crates/
-  newera-core     domain model, commands, undo/redo — no UI, no I/O
+  newera-core     domain model, commands, undo/redo, geometry — no UI, no I/O
+  newera-draw     plan scene shared by the editor, PNG renders and SVG export
   newera-mcp      MCP tools (rmcp), stdio and Streamable HTTP
   newera-server   axum: REST API + MCP endpoint
   newera-app      desktop editor: egui + wgpu

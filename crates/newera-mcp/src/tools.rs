@@ -1,27 +1,29 @@
-//! MCP tools.
-//!
-//! Token budget is a design constraint here, not an afterthought:
-//! - ids are short (`w12`, `r3`) and points are `[x, y]` pairs;
-//! - reads use a compact view that omits default values;
-//! - writes answer with one line (`ok rev=7 ids=w8,w9`) instead of echoing state;
-//! - batch-friendly tools (polyline walls, multi-delete) replace chatty calls.
+//! MCP tool surface. Each tool is a thin adapter over [`crate::edit`] or
+//! `newera-core`; all of them share the document the editor is showing.
 
+use std::path::{Path, PathBuf};
+
+use base64::Engine as _;
 use newera_core::{
-    Command, Compass, CoreError, Home, Point2, Room, RoomId, SharedDocument, Wall, WallId,
+    Command, Compass, Document, Home, Point2, SharedDocument, from_project_json, ops,
+    resolve_project_path, to_project_json,
 };
+use newera_draw::{RenderOptions, SceneOptions, SvgOptions, plan_scene, render_png, to_svg};
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{Implementation, ServerCapabilities, ServerInfo};
+use rmcp::model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerInfo};
 use rmcp::{ErrorData, ServerHandler, tool, tool_handler, tool_router};
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_json::{Value, json};
+
+use crate::compact;
+use crate::edit::{self, BackgroundParams, CreateParams, UpdateSpec};
 
 const INSTRUCTIONS: &str = "\
-Home design editor. Units: centimeters. Plan axes: x right, y down. \
-Points are [x,y]. Ids: w=wall, r=room. Every change is undoable and shows \
-live in the user's editor. Start with get_home. Writes reply `ok rev=N ids=...`; \
-re-read only when you need fresh state.";
+Home design editor, live in the user's window. Units: cm. Plan axes: x right, y down. \
+Points are [x,y]. Id prefixes: w wall, r room, d dimension, t text label. \
+Reads omit defaults (wall t=15 h=250). Writes reply `ok rev=N [ids=...]`; don't re-read \
+unless needed. Every change is one undoable step. Use render_plan to check visually.";
 
 /// The MCP server. Cheap to clone: it only holds a handle to the document.
 #[derive(Debug, Clone)]
@@ -30,45 +32,73 @@ pub struct NewEraMcp {
     tool_router: ToolRouter<Self>,
 }
 
-#[derive(Debug, Deserialize, JsonSchema)]
-pub(crate) struct CreateWallsParams {
-    /// Polyline vertices; N points create N-1 connected walls.
-    points: Vec<Point2>,
-    /// Also connect the last point back to the first.
-    #[serde(default)]
-    closed: bool,
-    /// Thickness in cm (default 15).
-    thickness: Option<f64>,
-    /// Height in cm (default 250).
-    height: Option<f64>,
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct GetHomeParams {
+    /// `summary` (counts, bounds, room areas) or `full` (default).
+    detail: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
-pub(crate) struct DeleteParams {
-    /// Ids to delete, e.g. `["w3","r1"]`. Applied as one undoable step.
+pub(crate) struct UpdateParams {
+    items: Vec<UpdateSpec>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub(crate) struct IdsParams {
     ids: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
-pub(crate) struct CreateRoomParams {
-    name: String,
-    /// Floor polygon, at least 3 points.
-    points: Vec<Point2>,
+pub(crate) struct MoveParams {
+    ids: Vec<String>,
+    dx: f64,
+    dy: f64,
+    /// Drag endpoints of walls joined to moved walls (default true).
+    joined: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
-pub(crate) struct RenameHomeParams {
-    name: String,
+pub(crate) struct SplitParams {
+    id: String,
+    /// Split position along the wall, 0..1 (default 0.5).
+    t: Option<f64>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct SetHomeParams {
+    name: Option<String>,
+    /// Clockwise degrees from plan up to north.
+    north: Option<f64>,
+    compass_at: Option<Point2>,
+    /// Compass diameter cm.
+    compass_d: Option<f64>,
+    compass_visible: Option<bool>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct RenderParams {
+    /// Width px (default 640, max 2048).
+    w: Option<u32>,
+    /// Height px (default 480, max 2048).
+    h: Option<u32>,
+    /// Plan region `[[minx,miny],[maxx,maxy]]`; default fits the drawing.
+    region: Option<[Point2; 2]>,
+    /// Draw the grid (default true).
+    grid: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
-pub(crate) struct SetCompassParams {
-    /// Clockwise degrees from plan up (-y) to north.
-    north_degrees: Option<f64>,
-    center: Option<Point2>,
-    /// Diameter in cm.
-    diameter: Option<f64>,
-    visible: Option<bool>,
+pub(crate) struct ExportParams {
+    /// Output file; `.svg` or `.png`.
+    path: String,
+    w: Option<u32>,
+    h: Option<u32>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct PathParams {
+    /// Project file (`.newera`). Optional for save when already saved once.
+    path: Option<String>,
 }
 
 #[tool_router]
@@ -80,122 +110,218 @@ impl NewEraMcp {
         }
     }
 
-    #[tool(
-        description = "Compact home state. Walls: {id,a,b} plus t(thickness)/h(height) only when not 15/250. Rooms: {id,name,pts,m2}."
-    )]
-    fn get_home(&self) -> String {
+    #[tool(description = "Home state. detail=summary is cheapest.")]
+    fn get_home(&self, Parameters(p): Parameters<GetHomeParams>) -> String {
         let doc = self.document.read();
-        compact_home(doc.home(), doc.revision()).to_string()
-    }
-
-    #[tool(description = "Create connected walls along a polyline in one undoable step.")]
-    fn create_walls(
-        &self,
-        Parameters(params): Parameters<CreateWallsParams>,
-    ) -> Result<String, ErrorData> {
-        if params.points.len() < 2 {
-            return Err(invalid("at least 2 points are required"));
+        match p.detail.as_deref() {
+            Some("summary") => compact::summary(doc.home(), doc.revision()),
+            _ => compact::home(doc.home(), doc.revision()),
         }
-        let mut points = params.points;
-        if params.closed && points.len() > 2 {
-            points.push(points[0]);
+        .to_string()
+    }
+
+    #[tool(
+        description = "Create walls (polylines), rooms (pts, or at=[x,y] to detect from walls), dims (a+b or wall id) and labels in one atomic step."
+    )]
+    fn create(&self, Parameters(p): Parameters<CreateParams>) -> Result<String, ErrorData> {
+        let mut doc = self.document.write();
+        let ids = edit::create(&mut doc, p).map_err(invalid)?;
+        Ok(ok(&doc, &ids))
+    }
+
+    #[tool(description = "Change fields of elements by id; fields must match the element kind.")]
+    fn update(&self, Parameters(p): Parameters<UpdateParams>) -> Result<String, ErrorData> {
+        let mut doc = self.document.write();
+        edit::update(&mut doc, p.items).map_err(invalid)?;
+        Ok(ok(&doc, &[]))
+    }
+
+    #[tool(description = "Delete elements by id, atomically.")]
+    fn delete(&self, Parameters(p): Parameters<IdsParams>) -> Result<String, ErrorData> {
+        let ids = edit::parse_ids(&p.ids).map_err(invalid)?;
+        let mut doc = self.document.write();
+        let commands = ids.into_iter().map(Command::remove).collect();
+        doc.execute(Command::Batch { commands }).map_err(core)?;
+        Ok(ok(&doc, &[]))
+    }
+
+    #[tool(name = "move", description = "Move elements by dx,dy cm.")]
+    fn move_elements(&self, Parameters(p): Parameters<MoveParams>) -> Result<String, ErrorData> {
+        let ids = edit::parse_ids(&p.ids).map_err(invalid)?;
+        let mut doc = self.document.write();
+        ops::translate(&mut doc, &ids, p.dx, p.dy, p.joined.unwrap_or(true)).map_err(core)?;
+        Ok(ok(&doc, &[]))
+    }
+
+    #[tool(description = "Split a wall into two joined walls at t (0..1).")]
+    fn split_wall(&self, Parameters(p): Parameters<SplitParams>) -> Result<String, ErrorData> {
+        let id = p.id.parse().map_err(|e| invalid(format!("{e}")))?;
+        let mut doc = self.document.write();
+        let second = ops::split_wall(&mut doc, id, p.t.unwrap_or(0.5)).map_err(core)?;
+        Ok(ok(&doc, &[second.to_string()]))
+    }
+
+    #[tool(description = "Rename the project and/or set the compass (north).")]
+    fn set_home(&self, Parameters(p): Parameters<SetHomeParams>) -> Result<String, ErrorData> {
+        let mut doc = self.document.write();
+        let mut commands = Vec::new();
+        if let Some(name) = p.name {
+            commands.push(Command::RenameHome { name });
         }
-
-        let mut doc = self.document.write();
-        let walls: Vec<Wall> = points
-            .windows(2)
-            .map(|pair| Wall {
-                thickness: params.thickness.unwrap_or(Wall::DEFAULT_THICKNESS),
-                height: params.height.unwrap_or(Wall::DEFAULT_HEIGHT),
-                ..Wall::new(doc.new_wall_id(), pair[0], pair[1])
-            })
-            .collect();
-        let ids: Vec<String> = walls.iter().map(|w| w.id.to_string()).collect();
-        let commands = walls.into_iter().map(Command::add_wall).collect();
-        doc.execute(Command::Batch { commands }).map_err(to_error)?;
-        Ok(ok(doc.revision(), &ids))
+        if p.north.is_some()
+            || p.compass_at.is_some()
+            || p.compass_d.is_some()
+            || p.compass_visible.is_some()
+        {
+            let c = doc.home().compass;
+            commands.push(Command::SetCompass {
+                compass: Compass {
+                    center: p.compass_at.unwrap_or(c.center),
+                    diameter: p.compass_d.unwrap_or(c.diameter),
+                    north_degrees: p.north.unwrap_or(c.north_degrees),
+                    visible: p.compass_visible.unwrap_or(c.visible),
+                },
+            });
+        }
+        if commands.is_empty() {
+            return Err(invalid("nothing to change"));
+        }
+        doc.execute(Command::Batch { commands }).map_err(core)?;
+        Ok(ok(&doc, &[]))
     }
 
-    #[tool(description = "Create a named room from a floor polygon.")]
-    fn create_room(
+    #[tool(
+        description = "Set a scanned plan as background at real scale: path, then cm_per_px or calibrate {a,b px, cm}; offset/opacity/visible; clear=true removes."
+    )]
+    fn set_background(
         &self,
-        Parameters(params): Parameters<CreateRoomParams>,
+        Parameters(p): Parameters<BackgroundParams>,
     ) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
-        let room = Room {
-            id: doc.new_room_id(),
-            name: params.name,
-            points: params.points,
+        let project = doc.path().map(Path::to_path_buf);
+        let size = |path: &str| {
+            let resolved = resolve_project_path(project.as_deref(), path);
+            image::image_dimensions(&resolved)
+                .map(|(w, h)| [w, h])
+                .map_err(|e| format!("cannot read image {}: {e}", resolved.display()))
         };
-        let ids = [room.id.to_string()];
-        doc.execute(Command::add_room(room)).map_err(to_error)?;
-        Ok(ok(doc.revision(), &ids))
+        edit::set_background(&mut doc, &p, &size).map_err(invalid)?;
+        Ok(ok(&doc, &[]))
     }
 
-    #[tool(description = "Delete walls and/or rooms by id in one undoable step.")]
-    fn delete(&self, Parameters(params): Parameters<DeleteParams>) -> Result<String, ErrorData> {
-        let commands = params
-            .ids
-            .iter()
-            .map(|raw| {
-                if let Ok(id) = raw.parse::<WallId>() {
-                    Ok(Command::RemoveWall { id })
-                } else if let Ok(id) = raw.parse::<RoomId>() {
-                    Ok(Command::RemoveRoom { id })
-                } else {
-                    Err(invalid(format!("unknown id `{raw}`")))
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        self.execute(Command::Batch { commands })
-    }
-
-    #[tool(description = "Rename the project.")]
-    fn rename_home(
+    #[tool(
+        description = "PNG of the floor plan, exactly as the user sees it. Keep w/h small to save tokens."
+    )]
+    fn render_plan(
         &self,
-        Parameters(params): Parameters<RenameHomeParams>,
-    ) -> Result<String, ErrorData> {
-        self.execute(Command::RenameHome { name: params.name })
+        Parameters(p): Parameters<RenderParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let png = self.render(
+            p.w.unwrap_or(640),
+            p.h.unwrap_or(480),
+            p.region,
+            p.grid.unwrap_or(true),
+        )?;
+        let data = base64::engine::general_purpose::STANDARD.encode(png);
+        Ok(CallToolResult::success(vec![ContentBlock::image(
+            data,
+            "image/png",
+        )]))
     }
 
-    #[tool(description = "Update the compass (north direction). Omitted fields keep their value.")]
-    fn set_compass(
-        &self,
-        Parameters(params): Parameters<SetCompassParams>,
-    ) -> Result<String, ErrorData> {
-        let mut doc = self.document.write();
-        let current = doc.home().compass;
-        let compass = Compass {
-            center: params.center.unwrap_or(current.center),
-            diameter: params.diameter.unwrap_or(current.diameter),
-            north_degrees: params.north_degrees.unwrap_or(current.north_degrees),
-            visible: params.visible.unwrap_or(current.visible),
+    #[tool(description = "Export the plan to a .svg (true scale, cm) or .png file.")]
+    fn export_plan(&self, Parameters(p): Parameters<ExportParams>) -> Result<String, ErrorData> {
+        let path = PathBuf::from(&p.path);
+        let bytes = match path.extension().and_then(|e| e.to_str()) {
+            Some("svg") => {
+                let doc = self.document.read();
+                let scene = plan_scene(doc.home(), &scene_options());
+                to_svg(&scene, &SvgOptions::default()).into_bytes()
+            }
+            Some("png") => self.render(p.w.unwrap_or(1600), p.h.unwrap_or(1200), None, false)?,
+            _ => return Err(invalid("path must end with .svg or .png")),
         };
-        doc.execute(Command::SetCompass { compass })
-            .map_err(to_error)?;
-        Ok(ok(doc.revision(), &[]))
+        std::fs::write(&path, bytes)
+            .map_err(|e| invalid(format!("cannot write {}: {e}", path.display())))?;
+        Ok(format!("ok {}", path.display()))
+    }
+
+    #[tool(description = "Save the project (.newera). path optional after the first save.")]
+    fn save_home(&self, Parameters(p): Parameters<PathParams>) -> Result<String, ErrorData> {
+        let mut doc = self.document.write();
+        let path = match (p.path, doc.path()) {
+            (Some(path), _) => with_extension(PathBuf::from(path)),
+            (None, Some(path)) => path.to_path_buf(),
+            (None, None) => return Err(invalid("`path` is required for the first save")),
+        };
+        std::fs::write(&path, to_project_json(doc.home()))
+            .map_err(|e| invalid(format!("cannot write {}: {e}", path.display())))?;
+        doc.mark_saved(&path);
+        Ok(format!("ok {}", path.display()))
+    }
+
+    #[tool(description = "Open a project (.newera), replacing the current one.")]
+    fn open_home(&self, Parameters(p): Parameters<PathParams>) -> Result<String, ErrorData> {
+        let path = PathBuf::from(p.path.ok_or_else(|| invalid("`path` is required"))?);
+        let json = std::fs::read_to_string(&path)
+            .map_err(|e| invalid(format!("cannot read {}: {e}", path.display())))?;
+        let home = from_project_json(&json).map_err(|e| invalid(e.to_string()))?;
+        let mut doc = self.document.write();
+        doc.load(home);
+        doc.mark_saved(&path);
+        Ok(ok(&doc, &[]))
+    }
+
+    #[tool(description = "Start a new empty project.")]
+    fn new_home(&self) -> String {
+        let mut doc = self.document.write();
+        doc.load(Home::default());
+        doc.set_path(None);
+        ok(&doc, &[])
     }
 
     #[tool(description = "Undo the last change, whoever made it.")]
     fn undo(&self) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
-        doc.undo().map_err(to_error)?;
-        Ok(ok(doc.revision(), &[]))
+        doc.undo().map_err(core)?;
+        Ok(ok(&doc, &[]))
     }
 
     #[tool(description = "Redo the last undone change.")]
     fn redo(&self) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
-        doc.redo().map_err(to_error)?;
-        Ok(ok(doc.revision(), &[]))
+        doc.redo().map_err(core)?;
+        Ok(ok(&doc, &[]))
     }
 }
 
 impl NewEraMcp {
-    fn execute(&self, command: Command) -> Result<String, ErrorData> {
-        let mut doc = self.document.write();
-        doc.execute(command).map_err(to_error)?;
-        Ok(ok(doc.revision(), &[]))
+    fn render(
+        &self,
+        w: u32,
+        h: u32,
+        region: Option<[Point2; 2]>,
+        grid: bool,
+    ) -> Result<Vec<u8>, ErrorData> {
+        let (w, h) = (w.clamp(64, 2048), h.clamp(64, 2048));
+        let doc = self.document.read();
+        let scene = plan_scene(doc.home(), &scene_options());
+        let project = doc.path().map(Path::to_path_buf);
+        drop(doc);
+        let options = RenderOptions {
+            width: w,
+            height: h,
+            grid,
+            region: region.map(|[a, b]| (a, b)),
+            ..RenderOptions::default()
+        };
+        let load = |path: &str| {
+            image::open(resolve_project_path(project.as_deref(), path))
+                .ok()
+                .map(|img| img.to_rgba8())
+        };
+        render_png(&scene, &options, &load)
+            .map_err(|e| ErrorData::internal_error(e.to_string(), None))
     }
 }
 
@@ -213,11 +339,26 @@ impl ServerHandler for NewEraMcp {
     }
 }
 
-fn ok(revision: u64, ids: &[String]) -> String {
-    if ids.is_empty() {
-        format!("ok rev={revision}")
+fn scene_options() -> SceneOptions {
+    SceneOptions {
+        show_background: true,
+        ..SceneOptions::default()
+    }
+}
+
+fn with_extension(path: PathBuf) -> PathBuf {
+    if path.extension().is_some() {
+        path
     } else {
-        format!("ok rev={revision} ids={}", ids.join(","))
+        path.with_extension(newera_core::PROJECT_EXTENSION)
+    }
+}
+
+fn ok(doc: &Document, ids: &[String]) -> String {
+    if ids.is_empty() {
+        format!("ok rev={}", doc.revision())
+    } else {
+        format!("ok rev={} ids={}", doc.revision(), ids.join(","))
     }
 }
 
@@ -225,111 +366,70 @@ fn invalid(message: impl Into<String>) -> ErrorData {
     ErrorData::invalid_params(message.into(), None)
 }
 
-#[allow(clippy::needless_pass_by_value)] // used as `map_err(to_error)`
-fn to_error(err: CoreError) -> ErrorData {
+#[allow(clippy::needless_pass_by_value)] // used as `map_err(core)`
+fn core(err: newera_core::CoreError) -> ErrorData {
     invalid(err.to_string())
-}
-
-/// Rounds to 0.1 cm and drops the fractional part when it is zero, so `800`
-/// is sent instead of `800.0`.
-#[allow(clippy::cast_possible_truncation)]
-fn num(value: f64) -> Value {
-    let rounded = (value * 10.0).round() / 10.0;
-    if rounded.fract() == 0.0 && rounded.abs() < 9e15 {
-        json!(rounded as i64)
-    } else {
-        json!(rounded)
-    }
-}
-
-fn point(p: Point2) -> Value {
-    json!([num(p.x), num(p.y)])
-}
-
-pub(crate) fn compact_home(home: &Home, revision: u64) -> Value {
-    let walls: Vec<Value> = home
-        .walls
-        .iter()
-        .map(|w| {
-            let mut v = json!({ "id": w.id.to_string(), "a": point(w.start), "b": point(w.end) });
-            if (w.thickness - Wall::DEFAULT_THICKNESS).abs() > f64::EPSILON {
-                v["t"] = num(w.thickness);
-            }
-            if (w.height - Wall::DEFAULT_HEIGHT).abs() > f64::EPSILON {
-                v["h"] = num(w.height);
-            }
-            v
-        })
-        .collect();
-    let rooms: Vec<Value> = home
-        .rooms
-        .iter()
-        .map(|r| {
-            json!({
-                "id": r.id.to_string(),
-                "name": r.name,
-                "pts": r.points.iter().copied().map(point).collect::<Vec<_>>(),
-                "m2": (r.area() / 100.0).round() / 100.0,
-            })
-        })
-        .collect();
-
-    let mut out = json!({ "rev": revision, "name": home.name, "walls": walls, "rooms": rooms });
-    if home.compass != Compass::default() {
-        out["north"] = num(home.compass.north_degrees);
-    }
-    out
 }
 
 #[cfg(test)]
 mod tests {
-    use newera_core::Document;
-
     use super::*;
 
-    fn walls(server: &NewEraMcp, points: &[[f64; 2]], closed: bool) -> String {
-        server
-            .create_walls(Parameters(CreateWallsParams {
-                points: points.iter().copied().map(Point2::from).collect(),
-                closed,
-                thickness: None,
-                height: None,
-            }))
-            .unwrap()
+    fn server() -> NewEraMcp {
+        NewEraMcp::new(SharedDocument::new(Document::default()))
     }
 
     #[test]
-    fn compact_view_omits_defaults_and_rounds() {
-        let mut home = Home::default();
-        let id = home.new_wall_id();
-        home.walls.push(Wall::new(
-            id,
-            Point2::new(0.0, 0.0),
-            Point2::new(800.04, 0.0),
-        ));
+    fn create_then_render_returns_a_png_image() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}],"rooms":[{"name":"Sala","at":[200,150]}]}"#,
+        )
+        .unwrap();
         assert_eq!(
-            compact_home(&home, 3).to_string(),
-            r#"{"name":"Nova casa","rev":3,"rooms":[],"walls":[{"a":[0,0],"b":[800,0],"id":"w1"}]}"#
+            s.create(Parameters(params)).unwrap(),
+            "ok rev=1 ids=w1,w2,w3,w4,r5"
         );
-    }
-
-    #[test]
-    fn create_walls_replies_with_one_line() {
-        let server = NewEraMcp::new(SharedDocument::new(Document::default()));
-        let reply = walls(&server, &[[0.0, 0.0], [400.0, 0.0], [400.0, 300.0]], true);
-        assert_eq!(reply, "ok rev=1 ids=w1,w2,w3");
-    }
-
-    #[test]
-    fn delete_accepts_mixed_ids_atomically() {
-        let server = NewEraMcp::new(SharedDocument::new(Document::default()));
-        walls(&server, &[[0.0, 0.0], [400.0, 0.0]], false);
-        let err = server
-            .delete(Parameters(DeleteParams {
-                ids: vec!["w1".into(), "r99".into()],
+        let result = s
+            .render_plan(Parameters(RenderParams {
+                w: Some(200),
+                h: Some(150),
+                ..RenderParams::default()
             }))
-            .unwrap_err();
-        assert!(err.message.contains("r99"));
-        assert_eq!(server.document.read().home().walls.len(), 1, "rolled back");
+            .unwrap();
+        let ContentBlock::Image(image) = &result.content[0] else {
+            panic!("expected image")
+        };
+        assert_eq!(image.mime_type, "image/png");
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&image.data)
+            .unwrap();
+        assert_eq!(&bytes[1..4], b"PNG");
+    }
+
+    #[test]
+    fn save_open_round_trip() {
+        let s = server();
+        let dir = std::env::temp_dir().join(format!("newera-mcp-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("casa");
+        let params: CreateParams =
+            serde_json::from_str(r#"{"labels":[{"text":"Oi","at":[1,2]}]}"#).unwrap();
+        s.create(Parameters(params)).unwrap();
+        let reply = s
+            .save_home(Parameters(PathParams {
+                path: Some(path.display().to_string()),
+            }))
+            .unwrap();
+        assert!(reply.ends_with("casa.newera"), "{reply}");
+        s.new_home();
+        assert!(s.document.read().home().labels.is_empty());
+        s.open_home(Parameters(PathParams {
+            path: Some(dir.join("casa.newera").display().to_string()),
+        }))
+        .unwrap();
+        assert_eq!(s.document.read().home().labels[0].text, "Oi");
+        assert!(!s.document.read().is_modified());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

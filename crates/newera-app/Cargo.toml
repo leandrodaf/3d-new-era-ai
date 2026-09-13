@@ -10,10 +10,18 @@ authors.workspace = true
 
 [dependencies]
 bytemuck.workspace = true
-eframe.workspace = true
+eframe = { workspace = true, features = ["persistence"] }
+egui-phosphor = "0.14"
 glam.workspace = true
+image.workspace = true
 newera-core.workspace = true
+newera-draw.workspace = true
+rfd = "0.17"
+serde.workspace = true
 tracing.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+egui_kittest = { version = "0.36.2", features = ["eframe", "wgpu", "snapshot"] }
