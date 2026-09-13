@@ -143,6 +143,8 @@ id_types! {
     DimensionId => "d", Dimension;
     /// Identifier of a [`crate::Label`].
     LabelId => "t", Label;
+    /// Identifier of a [`crate::Furniture`] piece, door or window.
+    FurnitureId => "f", Furniture;
 }
 
 #[cfg(test)]

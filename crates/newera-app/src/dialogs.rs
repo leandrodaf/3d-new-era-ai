@@ -3,7 +3,8 @@
 use eframe::egui::{self, DragValue, RichText};
 use egui_phosphor::regular as icon;
 use newera_core::{
-    BackgroundImage, Command, Compass, Dimension, Element, Label, Point2, Room, Wall, WallId,
+    BackgroundImage, Command, Compass, Dimension, Element, Furniture, Label, Point2, Room, Wall,
+    WallId,
 };
 
 use crate::app::{NewEraApp, Pending};
@@ -21,6 +22,10 @@ pub(crate) enum Dialog {
     ModifyRoom(Room),
     ModifyDimension(Dimension),
     ModifyLabel(Label),
+    ModifyFurniture {
+        piece: Furniture,
+        keep_ratio: bool,
+    },
     NewLabel {
         at: Point2,
         text: String,
@@ -69,6 +74,10 @@ impl Dialog {
             [Element::Room(r)] => Some(Self::ModifyRoom(r.clone())),
             [Element::Dimension(d)] => Some(Self::ModifyDimension(d.clone())),
             [Element::Label(l)] => Some(Self::ModifyLabel(l.clone())),
+            [Element::Furniture(f)] => Some(Self::ModifyFurniture {
+                piece: f.clone(),
+                keep_ratio: false,
+            }),
             _ => None,
         }
     }
@@ -241,6 +250,98 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
             finish(app, answer, Dialog::ModifyLabel(label.clone()), || {
                 Command::update(label)
             })
+        }
+        Dialog::ModifyFurniture {
+            mut piece,
+            mut keep_ratio,
+        } => {
+            let before = (piece.width, piece.depth, piece.height);
+            let answer =
+                modal(
+                    ctx,
+                    &format!("Modificar {}", piece.name.to_lowercase()),
+                    |ui| {
+                        grid(ui, "furniture", |ui| {
+                            ui.label("Nome");
+                            ui.text_edit_singleline(&mut piece.name);
+                            ui.end_row();
+                            ui.label("Posição (x, y)");
+                            ui.horizontal(|ui| {
+                                ui.add(cm(&mut piece.position.x, -1e6..=1e6));
+                                ui.add(cm(&mut piece.position.y, -1e6..=1e6));
+                            });
+                            ui.end_row();
+                            ui.label("Elevação");
+                            ui.add(cm(&mut piece.elevation, -1000.0..=10_000.0));
+                            ui.end_row();
+                            ui.label("Ângulo");
+                            ui.add(
+                                DragValue::new(&mut piece.angle)
+                                    .range(-360.0..=360.0)
+                                    .suffix("°")
+                                    .speed(1.0),
+                            );
+                            ui.end_row();
+                            ui.label("Largura");
+                            ui.add(cm(&mut piece.width, 1.0..=10_000.0));
+                            ui.end_row();
+                            ui.label("Profundidade");
+                            ui.add(cm(&mut piece.depth, 1.0..=10_000.0));
+                            ui.end_row();
+                            ui.label("Altura");
+                            ui.add(cm(&mut piece.height, 1.0..=10_000.0));
+                            ui.end_row();
+                            ui.label("");
+                            ui.checkbox(&mut keep_ratio, "Manter proporções");
+                            ui.end_row();
+                            ui.label("Cor");
+                            ui.horizontal(|ui| {
+                                let mut custom = piece.color.is_some();
+                                if ui.checkbox(&mut custom, "Personalizada").changed() {
+                                    piece.color = custom.then_some([180, 180, 180]);
+                                }
+                                if let Some(color) = &mut piece.color {
+                                    ui.color_edit_button_srgb(color);
+                                }
+                            });
+                            ui.end_row();
+                            ui.label("");
+                            ui.vertical(|ui| {
+                                ui.checkbox(&mut piece.mirrored, "Espelhado");
+                                ui.checkbox(&mut piece.visible, "Visível");
+                                if let Some(opening) = piece.opening.as_mut().filter(|o| {
+                                    o.kind == newera_core::OpeningKind::Door && !o.sliding
+                                }) {
+                                    ui.checkbox(&mut opening.hinge_right, "Dobradiça à direita");
+                                }
+                            });
+                            ui.end_row();
+                        });
+                    },
+                );
+            if keep_ratio {
+                // Scale the other sizes by whichever one changed.
+                let (w0, d0, h0) = before;
+                let factor = if (piece.width - w0).abs() > 1e-9 {
+                    piece.width / w0
+                } else if (piece.depth - d0).abs() > 1e-9 {
+                    piece.depth / d0
+                } else if (piece.height - h0).abs() > 1e-9 {
+                    piece.height / h0
+                } else {
+                    1.0
+                };
+                (piece.width, piece.depth, piece.height) = (w0 * factor, d0 * factor, h0 * factor);
+            }
+            finish(
+                app,
+                answer,
+                Dialog::ModifyFurniture {
+                    piece: piece.clone(),
+                    keep_ratio,
+                },
+                || Command::update(piece),
+            )
         }
         Dialog::NewLabel { at, mut text } => {
             let mut size = Label::DEFAULT_SIZE;

@@ -17,11 +17,11 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::compact;
-use crate::edit::{self, BackgroundParams, CreateParams, UpdateSpec};
+use crate::edit::{self, BackgroundParams, CreateParams, PlaceSpec, UpdateSpec};
 
 const INSTRUCTIONS: &str = "\
 Home design editor, live in the user's window. Units: cm. Plan axes: x right, y down. \
-Points are [x,y]. Id prefixes: w wall, r room, d dimension, t text label. \
+Points are [x,y]. Id prefixes: w wall, r room, d dimension, t label, f furniture/door/window. \
 Reads omit defaults (wall t=15 h=250). Writes reply `ok rev=N [ids=...]`; don't re-read \
 unless needed. Every change is one undoable step. Use render_plan to check visually.";
 
@@ -93,6 +93,21 @@ pub(crate) struct ExportParams {
     path: String,
     w: Option<u32>,
     h: Option<u32>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct CatalogParams {
+    /// Search words (Portuguese or English), e.g. `cama casal`.
+    q: Option<String>,
+    /// Category id, e.g. `kitchen`.
+    cat: Option<String>,
+    /// Max rows (default 40).
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub(crate) struct PlaceParams {
+    items: Vec<PlaceSpec>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -278,6 +293,28 @@ impl NewEraMcp {
         doc.load(Home::default());
         doc.set_path(None);
         ok(&doc, &[])
+    }
+
+    #[allow(clippy::unused_self)] // tool methods need the receiver
+    #[tool(description = "Find catalog items: rows [id,name,w,d,h] in cm.")]
+    fn catalog(&self, Parameters(p): Parameters<CatalogParams>) -> String {
+        compact::catalog(p.q.as_deref(), p.cat.as_deref(), p.limit.unwrap_or(40)).to_string()
+    }
+
+    #[tool(
+        description = "Place catalog items: at=[x,y] center, or wall=id (+along cm) to put doors/windows in a wall or furniture against it. Sizes w/d/h override defaults."
+    )]
+    fn place(&self, Parameters(p): Parameters<PlaceParams>) -> Result<String, ErrorData> {
+        let mut doc = self.document.write();
+        let ids = edit::place(&mut doc, p.items).map_err(invalid)?;
+        Ok(ok(&doc, &ids))
+    }
+
+    #[tool(
+        description = "Layout problems: overlap, in_wall, blocks_door, outside_rooms. {} means none."
+    )]
+    fn check_layout(&self) -> String {
+        compact::issues(self.document.read().home()).to_string()
     }
 
     #[tool(description = "Undo the last change, whoever made it.")]

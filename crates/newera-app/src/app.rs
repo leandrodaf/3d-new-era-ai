@@ -53,6 +53,7 @@ pub(crate) struct NewEraApp {
     allow_close: bool,
     title: String,
     plan_rect: egui::Rect,
+    pub(crate) catalog_query: String,
 }
 
 impl std::fmt::Debug for NewEraApp {
@@ -94,6 +95,7 @@ impl NewEraApp {
             allow_close: false,
             title: String::new(),
             plan_rect: egui::Rect::NOTHING,
+            catalog_query: String::new(),
         }
     }
 
@@ -266,6 +268,52 @@ impl NewEraApp {
         match bytes.and_then(|b| std::fs::write(&path, b).map_err(|e| e.to_string())) {
             Ok(()) => self.set_status(format!("Planta exportada para {}", path.display())),
             Err(err) => self.set_status(format!("⚠ Falha ao exportar: {err}")),
+        }
+    }
+
+    /// Imports an OBJ/glTF file as a piece at its natural size, placed at
+    /// the middle of the plan view.
+    pub(crate) fn import_model(&mut self) {
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("Modelos 3D", &["obj", "gltf", "glb"])
+            .pick_file()
+        else {
+            return;
+        };
+        match newera_catalog::load_model(&path) {
+            Ok(model) => {
+                let at = self.plan.view_center();
+                let name = path
+                    .file_stem()
+                    .map_or_else(|| "Modelo".to_owned(), |s| s.to_string_lossy().into_owned());
+                let mut placed = None;
+                self.run(|doc| {
+                    let piece = newera_core::Furniture {
+                        id: doc.new_furniture_id(),
+                        catalog: "imported".to_owned(),
+                        name,
+                        position: at,
+                        elevation: 0.0,
+                        angle: 0.0,
+                        width: model.size[0],
+                        depth: model.size[1],
+                        height: model.size[2],
+                        mirrored: false,
+                        color: None,
+                        opening: None,
+                        model: Some(path.display().to_string()),
+                        visible: true,
+                    };
+                    placed = Some(piece.id);
+                    doc.execute(Command::insert(piece))
+                });
+                if let Some(id) = placed {
+                    self.selection = std::iter::once(ElementId::from(id)).collect();
+                    self.set_tool(Tool::Select);
+                    self.set_status("Modelo importado. Ajuste medidas com Enter ou pelas alças.");
+                }
+            }
+            Err(err) => self.set_status(format!("⚠ {err}")),
         }
     }
 
@@ -675,6 +723,9 @@ impl NewEraApp {
                         self.dialog = background.map(Dialog::Background);
                     }
                 });
+                if menu_item(ui, icon::CUBE, "Importar modelo 3D…", "", true) {
+                    self.import_model();
+                }
                 if menu_item(ui, icon::COMPASS, "Casa e bússola…", "", true) {
                     self.open_home_settings();
                 }
@@ -882,6 +933,9 @@ fn tool_hint(tool: Tool) -> &'static str {
         Tool::Calibrate => {
             "Clique dois pontos de medida conhecida · arraste para posicionar a imagem"
         }
+        Tool::Place(_) => {
+            "Clique para posicionar · portas e janelas encaixam na parede mais próxima · Esc cancela"
+        }
     }
 }
 
@@ -918,6 +972,11 @@ fn shift_with_new_id(doc: &mut Document, element: Element, offset: f64) -> Eleme
             l.id = doc.new_label_id();
             l.position = shift(l.position);
             Element::Label(l)
+        }
+        Element::Furniture(mut f) => {
+            f.id = doc.new_furniture_id();
+            f.position = shift(f.position);
+            Element::Furniture(f)
         }
     }
 }
@@ -985,6 +1044,7 @@ impl eframe::App for NewEraApp {
                                         distance: 100.0,
                                     });
                                 }
+                                PlanEvent::Placed(_) => self.tool = Tool::Select,
                                 PlanEvent::Status(text) => self.set_status(text),
                             }
                         }
@@ -992,9 +1052,13 @@ impl eframe::App for NewEraApp {
                 egui::CentralPanel::default()
                     .frame(egui::Frame::NONE)
                     .show(ui, |ui| {
-                        let (home, revision) = {
+                        let (home, revision, project) = {
                             let doc = self.document.read();
-                            (doc.home().clone(), doc.revision())
+                            (
+                                doc.home().clone(),
+                                doc.revision(),
+                                doc.path().map(Path::to_path_buf),
+                            )
                         };
                         self.scene.ui(
                             ui,
@@ -1002,6 +1066,7 @@ impl eframe::App for NewEraApp {
                             &home,
                             revision,
                             &self.selection,
+                            project.as_deref(),
                         );
                     });
             });
@@ -1150,7 +1215,10 @@ mod tests {
         h.run_steps(2);
         h.state_mut().open_modify(&[room_id.into()]);
         h.run_steps(3);
-        h.get_by_role(egui::accesskit::Role::TextInput)
+        // The catalog search is also a text input; the dialog's comes last.
+        h.get_all_by_role(egui::accesskit::Role::TextInput)
+            .last()
+            .expect("room name field")
             .type_text("Suíte");
         h.run_steps(3);
         h.get_by_label_contains("OK").click();
@@ -1226,6 +1294,92 @@ mod screenshots {
                 b: Point2::new(600.0, 0.0),
                 distance: 500.0,
             });
+        });
+    }
+}
+
+#[cfg(test)]
+mod furniture_screenshots {
+    use egui_kittest::Harness;
+    use newera_core::{Point2, Room, Wall, align_to_wall};
+
+    use super::*;
+
+    fn furnished() -> Document {
+        let mut doc = Document::default();
+        let pts = [(0.0, 0.0), (700.0, 0.0), (700.0, 500.0), (0.0, 500.0)];
+        let mut walls = Vec::new();
+        for i in 0..4 {
+            let (a, b) = (pts[i], pts[(i + 1) % 4]);
+            walls.push(Wall {
+                thickness: 20.0,
+                ..Wall::new(
+                    doc.new_wall_id(),
+                    Point2::new(a.0, a.1),
+                    Point2::new(b.0, b.1),
+                )
+            });
+        }
+        let room = Room::new(
+            doc.new_room_id(),
+            "Sala",
+            pts.iter().map(|&(x, y)| Point2::new(x, y)).collect(),
+        );
+        let mut commands: Vec<Command> = walls.iter().cloned().map(Command::insert).collect();
+        commands.push(Command::insert(room));
+        let mut add = |doc: &mut Document,
+                       id: &str,
+                       at: (f64, f64),
+                       angle: f64,
+                       wall: Option<(usize, f64)>| {
+            let mut piece = newera_catalog::find(id)
+                .unwrap()
+                .instantiate(doc.new_furniture_id(), Point2::new(at.0, at.1));
+            piece.angle = angle;
+            if let Some((w, along)) = wall {
+                align_to_wall(&mut piece, &walls[w], along);
+            }
+            commands.push(Command::insert(piece));
+        };
+        add(&mut doc, "door", (0.0, 0.0), 0.0, Some((2, 150.0)));
+        add(&mut doc, "window", (0.0, 0.0), 0.0, Some((0, 350.0)));
+        add(&mut doc, "sofa-3", (350.0, 400.0), 180.0, None);
+        add(&mut doc, "coffee-table", (350.0, 280.0), 0.0, None);
+        add(&mut doc, "armchair", (150.0, 250.0), 90.0, None);
+        add(&mut doc, "plant", (620.0, 80.0), 0.0, None);
+        add(&mut doc, "bookcase", (60.0, 30.0), 0.0, None);
+        doc.execute(Command::Batch { commands }).unwrap();
+        doc
+    }
+
+    fn render(name: &str, setup: impl FnOnce(&mut NewEraApp)) {
+        let document = SharedDocument::new(furnished());
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(1400.0, 860.0))
+            .with_step_dt(1.0 / 60.0)
+            .wgpu()
+            .build_eframe(move |cc| NewEraApp::new(cc, document, None));
+        harness.run_steps(5);
+        setup(harness.state_mut());
+        harness.run_steps(12);
+        let image = harness.render().expect("render");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/screenshots");
+        std::fs::create_dir_all(&dir).unwrap();
+        image.save(dir.join(format!("{name}.png"))).unwrap();
+    }
+
+    #[test]
+    #[ignore = "visual review; needs a GPU"]
+    fn furniture() {
+        render("furniture-selected", |app| {
+            app.selection.insert(newera_core::FurnitureId(7).into());
+        });
+        render("furniture-dialog", |app| {
+            app.open_modify(&[newera_core::FurnitureId(7).into()]);
+        });
+        render("catalog-search", |app| app.catalog_query = "cama".into());
+        render("catalog-place", |app| {
+            app.set_tool(Tool::Place("bed-double"));
         });
     }
 }

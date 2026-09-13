@@ -20,6 +20,7 @@ newera-mcp = { path = "crates/newera-mcp", version = "0.1.0" }
 newera-server = { path = "crates/newera-server", version = "0.1.0" }
 newera-app = { path = "crates/newera-app", version = "0.1.0" }
 newera-draw = { path = "crates/newera-draw", version = "0.1.0" }
+newera-catalog = { path = "crates/newera-catalog", version = "0.1.0" }
 
 # External crates
 ab_glyph = "0.2.32"

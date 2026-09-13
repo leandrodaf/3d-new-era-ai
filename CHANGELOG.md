@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- M2 furniture at real scale: parametric catalog (55 items, 3D + plan symbols), OBJ/glTF
+  import, catalog panel with search, placement with ghost, rotate/resize handles, doors
+  and windows cutting walls, layout checks, furniture dialog; MCP `catalog`, `place`,
+  `check_layout`.
+
 - M1 working drawings: background image calibration, arc walls, wall splitting and
   endpoint handles, dimensions, labels, room detection from walls, magnetism with typed
   lengths, rulers, units, selection with move/copy/paste, project files and plan export.

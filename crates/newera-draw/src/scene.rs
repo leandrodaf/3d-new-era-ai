@@ -6,9 +6,10 @@
 
 use std::collections::HashSet;
 
+use newera_catalog::{SymbolShape, plan_symbol};
 use newera_core::{
-    Compass, Dimension, ElementId, Home, Label, LengthUnit, Point2, Room, polygon_centroid,
-    triangulate,
+    Compass, Dimension, ElementId, Furniture, Home, Label, LengthUnit, Point2, Room, cut_outline,
+    polygon_centroid, triangulate,
 };
 
 /// Straight (non-premultiplied) RGBA color.
@@ -144,6 +145,9 @@ pub struct Palette {
     pub label: Color,
     pub compass: Color,
     pub selection: Color,
+    pub furniture_fill: Color,
+    pub furniture_detail: Color,
+    pub furniture_line: Color,
 }
 
 impl Default for Palette {
@@ -160,6 +164,9 @@ impl Default for Palette {
             label: Color::rgb(40, 40, 48),
             compass: Color::rgb(70, 70, 80),
             selection: Color::rgb(40, 120, 230),
+            furniture_fill: Color::rgb(255, 255, 253),
+            furniture_detail: Color::rgb(228, 230, 233),
+            furniture_line: Color::rgb(60, 62, 70),
         }
     }
 }
@@ -172,8 +179,8 @@ pub struct SceneOptions {
     pub show_background: bool,
 }
 
-/// Builds the plan scene. Draw order: background, rooms, walls, dimensions,
-/// labels, compass.
+/// Builds the plan scene. Draw order: background, rooms, furniture, walls
+/// (with door and window holes), openings, dimensions, labels, compass.
 pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
     let palette = &options.palette;
     let mut scene = Scene::default();
@@ -209,9 +216,41 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
         );
     }
 
-    for (wall, outline) in home.walls.iter().zip(home.wall_outlines()) {
+    // Furniture sits on the floor, under the walls; tall pieces over low ones.
+    let mut pieces: Vec<&Furniture> = home
+        .furniture
+        .iter()
+        .filter(|f| f.visible && !f.is_opening())
+        .collect();
+    pieces.sort_by(|a, b| (a.elevation + a.height).total_cmp(&(b.elevation + b.height)));
+    for piece in pieces {
+        furniture_items(
+            &mut scene,
+            piece,
+            options.selected.contains(&piece.id.into()),
+            palette,
+        );
+    }
+
+    let cuts = home.wall_cuts();
+    for ((wall, outline), wall_cuts) in home.walls.iter().zip(home.wall_outlines()).zip(&cuts) {
         let color = pick(wall.id.into(), palette.wall);
-        scene.fill(Some(wall.id.into()), &outline, color);
+        for part in cut_outline(&outline, wall, wall_cuts) {
+            scene.fill(Some(wall.id.into()), &part, color);
+        }
+    }
+
+    for opening in home
+        .furniture
+        .iter()
+        .filter(|f| f.visible && f.is_opening())
+    {
+        furniture_items(
+            &mut scene,
+            opening,
+            options.selected.contains(&opening.id.into()),
+            palette,
+        );
     }
 
     for dimension in &home.dimensions {
@@ -228,6 +267,61 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
         compass_items(&mut scene, &home.compass, palette.compass);
     }
     scene
+}
+
+/// Architectural symbol of a piece, placed and rotated on the plan.
+pub fn furniture_items(scene: &mut Scene, piece: &Furniture, selected: bool, palette: &Palette) {
+    let owner = Some(piece.id.into());
+    let to_plan = |pts: &[(f64, f64)]| pts.iter().map(|p| piece.to_plan(*p)).collect::<Vec<_>>();
+    let line_color = if selected {
+        palette.selection
+    } else {
+        palette.furniture_line
+    };
+    for shape in plan_symbol(piece) {
+        match shape {
+            SymbolShape::Fill { points, detail } => {
+                let base = if detail {
+                    palette.furniture_detail
+                } else {
+                    palette.furniture_fill
+                };
+                let color = if selected {
+                    blend(base, palette.selection, 0.18)
+                } else {
+                    base
+                };
+                scene.fill(owner, &to_plan(&points), color);
+            }
+            SymbolShape::Line {
+                points,
+                closed,
+                strong,
+            } => scene.push(
+                owner,
+                Primitive::Line {
+                    points: to_plan(&points),
+                    closed,
+                    color: line_color,
+                    width: Size::Px(if strong { 1.4 } else { 0.8 }),
+                },
+            ),
+        }
+    }
+}
+
+fn blend(a: Color, b: Color, t: f64) -> Color {
+    let mix = |x: u8, y: u8| {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let v = (f64::from(x) + (f64::from(y) - f64::from(x)) * t).round() as u8;
+        v
+    };
+    Color([
+        mix(a.0[0], b.0[0]),
+        mix(a.0[1], b.0[1]),
+        mix(a.0[2], b.0[2]),
+        a.0[3],
+    ])
 }
 
 fn room_items(scene: &mut Scene, room: &Room, options: &SceneOptions, line: Color) {
@@ -481,5 +575,64 @@ mod tests {
                 .unwrap();
             assert!(angle > -90.0 && angle <= 90.0, "{angle}");
         }
+    }
+}
+
+#[cfg(test)]
+mod furniture_tests {
+    use newera_core::{Command, Document, Point2, Wall, align_to_wall};
+
+    use super::*;
+
+    #[test]
+    fn doors_open_a_gap_in_the_wall_and_draw_their_swing() {
+        let mut doc = Document::default();
+        let wall = Wall::new(
+            doc.new_wall_id(),
+            Point2::new(0.0, 0.0),
+            Point2::new(500.0, 0.0),
+        );
+        let mut door = newera_catalog::find("door")
+            .unwrap()
+            .instantiate(doc.new_furniture_id(), Point2::new(0.0, 0.0));
+        align_to_wall(&mut door, &wall, 250.0);
+        let sofa = newera_catalog::find("sofa-3")
+            .unwrap()
+            .instantiate(doc.new_furniture_id(), Point2::new(250.0, 200.0));
+        let (wall_id, door_id, sofa_id) = (wall.id, door.id, sofa.id);
+        doc.execute(Command::Batch {
+            commands: vec![
+                Command::insert(wall),
+                Command::insert(door),
+                Command::insert(sofa),
+            ],
+        })
+        .unwrap();
+
+        let scene = plan_scene(doc.home(), &SceneOptions::default());
+        let wall_fills = scene
+            .items
+            .iter()
+            .filter(|i| {
+                i.owner == Some(wall_id.into()) && matches!(i.primitive, Primitive::Fill { .. })
+            })
+            .count();
+        assert_eq!(wall_fills, 2, "the door splits the wall");
+        let order: Vec<_> = scene.items.iter().filter_map(|i| i.owner).collect();
+        let first = |id: ElementId| order.iter().position(|o| *o == id).unwrap();
+        assert!(
+            first(sofa_id.into()) < first(wall_id.into()),
+            "furniture under walls"
+        );
+        assert!(
+            first(wall_id.into()) < first(door_id.into()),
+            "doors over walls"
+        );
+        let door_lines = scene
+            .items
+            .iter()
+            .filter(|i| i.owner == Some(door_id.into()))
+            .count();
+        assert!(door_lines >= 3, "leaf, arc and jambs");
     }
 }

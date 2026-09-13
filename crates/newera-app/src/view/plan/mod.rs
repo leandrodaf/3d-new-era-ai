@@ -15,8 +15,8 @@ use std::sync::Arc;
 
 use eframe::egui::{self, Color32, CursorIcon, Key, PointerButton, Pos2, Rect, Stroke, Vec2};
 use newera_core::{
-    Command, CoreResult, Dimension, Document, Element, ElementId, Home, LengthUnit, Point2, Room,
-    SharedDocument, Wall, WallId, detect_room, ops, polygon_area,
+    Command, CoreResult, Dimension, Document, Element, ElementId, Furniture, FurnitureId, Home,
+    LengthUnit, Point2, Room, SharedDocument, Wall, WallId, detect_room, ops, polygon_area,
 };
 use newera_draw::{Align, Palette, Scene, SceneOptions, plan_scene};
 
@@ -37,6 +37,8 @@ pub(crate) enum Tool {
     Labels,
     /// Mark two points of known distance on the background image.
     Calibrate,
+    /// Place one piece of this catalog item.
+    Place(&'static str),
 }
 
 /// Requests the plan makes to the rest of the app.
@@ -44,7 +46,12 @@ pub(crate) enum Tool {
 pub(crate) enum PlanEvent {
     Modify(Vec<ElementId>),
     NewLabel(Point2),
-    Calibrate { a: Point2, b: Point2 },
+    Calibrate {
+        a: Point2,
+        b: Point2,
+    },
+    /// A piece was placed; the placement tool is done.
+    Placed(ElementId),
     Status(String),
 }
 
@@ -67,6 +74,8 @@ enum Drag {
     DimPoint { id: ElementId, at_start: bool },
     DimOffset { id: ElementId },
     Background { origin: Point2, offset: Point2 },
+    Rotate { id: FurnitureId },
+    Resize { id: FurnitureId },
 }
 
 /// What a cached scene was built from: revision, selection and unit.
@@ -390,6 +399,38 @@ impl PlanView {
                     }
                 }
             }
+            Tool::Place(catalog) => {
+                if let (Some(p), Some(item)) = (raw, newera_catalog::find(catalog)) {
+                    let at = if magnetism {
+                        magnet::snap_point(&home, p, zoom, &[])
+                    } else {
+                        p
+                    };
+                    let mut ghost = item.instantiate(FurnitureId(0), at);
+                    if ghost.is_opening()
+                        && let Some((wall_id, along)) =
+                            ops::nearest_wall(&home, p, ops::OPENING_REACH)
+                        && let Some(wall) = home.wall(wall_id)
+                    {
+                        newera_core::align_to_wall(&mut ghost, wall, along);
+                    }
+                    if response.clicked_by(PointerButton::Primary) {
+                        let mut placed = None;
+                        commit(&mut events, &mut |doc| {
+                            let mut piece = ghost.clone();
+                            piece.id = doc.new_furniture_id();
+                            placed = Some(piece.id);
+                            doc.execute(Command::insert(piece))
+                        });
+                        if let Some(id) = placed {
+                            input.selection.clear();
+                            input.selection.insert(id.into());
+                            events.push(PlanEvent::Placed(id.into()));
+                        }
+                    }
+                    overlays.push(Overlay::Ghost(ghost));
+                }
+            }
             Tool::Calibrate => {
                 if let Some(p) = raw {
                     if response.clicked_by(PointerButton::Primary) {
@@ -509,6 +550,7 @@ impl PlanView {
                 }
                 (Tool::Select, _) => CursorIcon::Default,
                 (Tool::Labels, _) => CursorIcon::Text,
+                (Tool::Place(_), _) => CursorIcon::Copy,
                 _ => CursorIcon::Crosshair,
             };
             ui.ctx().set_cursor_icon(icon);
@@ -598,6 +640,15 @@ impl PlanView {
                 _ => current,
             },
             Drag::DimPoint { .. } => magnet::snap_point(home, current, zoom, &[]),
+            Drag::Rotate { id } => home.piece(*id).map_or(current, |f| {
+                let (dx, dy) = (current.x - f.position.x, current.y - f.position.y);
+                let r = dx.hypot(dy);
+                let a = (dy.atan2(dx).to_degrees() / 15.0).round() * 15.0;
+                Point2::new(
+                    f.position.x + r * a.to_radians().cos(),
+                    f.position.y + r * a.to_radians().sin(),
+                )
+            }),
             _ => current,
         }
     }
@@ -699,6 +750,12 @@ impl PlanView {
         let accent = color(palette.selection);
         let to = |p: Point2| self.camera.to_screen(rect, p);
         match overlay {
+            Overlay::Ghost(piece) => {
+                let mut scene = Scene::default();
+                newera_draw::furniture_items(&mut scene, piece, true, palette);
+                let mut textures = Textures::default();
+                paint_scene(painter, rect, &self.camera, &scene, &mut textures, None);
+            }
             Overlay::Cross(p) => {
                 let s = to(*p);
                 let stroke = Stroke::new(1.0, accent.gamma_multiply(0.7));
@@ -799,6 +856,7 @@ impl PlanView {
 
 #[derive(Debug, Clone)]
 enum Overlay {
+    Ghost(Furniture),
     Cross(Point2),
     Box(Point2, Point2),
     WallPreview(Vec<Wall>),
@@ -816,6 +874,16 @@ struct Handle {
 /// Edit handles of a single selected element.
 fn handles(home: &Home, id: ElementId) -> Vec<Handle> {
     match home.element(id) {
+        Some(Element::Furniture(f)) => vec![
+            Handle {
+                at: f.to_plan((0.0, -f.depth / 2.0 - 25.0)),
+                drag: Drag::Rotate { id: f.id },
+            },
+            Handle {
+                at: f.to_plan((f.width / 2.0, f.depth / 2.0)),
+                drag: Drag::Resize { id: f.id },
+            },
+        ],
         Some(Element::Wall(w)) => vec![
             Handle {
                 at: w.start,
@@ -947,6 +1015,29 @@ fn apply_drag(doc: &mut Document, drag: &Drag, target: Point2) -> CoreResult<()>
             }
             _ => Ok(()),
         },
+        Drag::Rotate { id } => match doc.home().piece(*id).cloned() {
+            Some(mut f) => {
+                let (dx, dy) = (target.x - f.position.x, target.y - f.position.y);
+                if dx.hypot(dy) < 1.0 {
+                    return Ok(());
+                }
+                // The handle sits behind the piece (local -y), 90° off its angle.
+                f.angle = (dy.atan2(dx).to_degrees() + 90.0).rem_euclid(360.0);
+                doc.execute(Command::update(f))
+            }
+            None => Ok(()),
+        },
+        Drag::Resize { id } => match doc.home().piece(*id).cloned() {
+            Some(mut f) => {
+                let (lx, ly) = f.to_local(target);
+                f.width = (2.0 * lx.abs()).round().max(1.0);
+                if !f.is_opening() {
+                    f.depth = (2.0 * ly.abs()).round().max(1.0);
+                }
+                doc.execute(Command::update(f))
+            }
+            None => Ok(()),
+        },
         Drag::Background { origin, offset } => match doc.home().background.clone() {
             Some(mut bg) => {
                 bg.offset = Point2::new(
@@ -972,15 +1063,15 @@ mod tests {
 
     use super::*;
 
-    struct State {
-        plan: PlanView,
-        document: SharedDocument,
-        selection: Selection,
-        tool: Tool,
-        events: Vec<PlanEvent>,
+    pub(super) struct State {
+        pub(super) plan: PlanView,
+        pub(super) document: SharedDocument,
+        pub(super) selection: Selection,
+        pub(super) tool: Tool,
+        pub(super) events: Vec<PlanEvent>,
     }
 
-    fn harness(home: Home, tool: Tool) -> Harness<'static, State> {
+    pub(super) fn harness(home: Home, tool: Tool) -> Harness<'static, State> {
         let state = State {
             plan: PlanView::new(),
             document: SharedDocument::new(Document::new(home)),
@@ -1018,13 +1109,13 @@ mod tests {
         h
     }
 
-    fn screen(h: &Harness<'_, State>, p: (f64, f64)) -> Pos2 {
+    pub(super) fn screen(h: &Harness<'_, State>, p: (f64, f64)) -> Pos2 {
         let plan = &h.state().plan;
         plan.camera
             .to_screen(plan.rect.unwrap(), Point2::new(p.0, p.1))
     }
 
-    fn button(h: &mut Harness<'_, State>, pos: Pos2, pressed: bool) {
+    pub(super) fn button(h: &mut Harness<'_, State>, pos: Pos2, pressed: bool) {
         h.event(Event::PointerButton {
             pos,
             button: PointerButton::Primary,
@@ -1035,7 +1126,7 @@ mod tests {
     }
 
     /// A click, then enough idle frames that the next click is not a double click.
-    fn click(h: &mut Harness<'_, State>, p: (f64, f64)) {
+    pub(super) fn click(h: &mut Harness<'_, State>, p: (f64, f64)) {
         let pos = screen(h, p);
         h.hover_at(pos);
         h.step();
@@ -1044,7 +1135,7 @@ mod tests {
         h.run_steps(30);
     }
 
-    fn double_click(h: &mut Harness<'_, State>, p: (f64, f64)) {
+    pub(super) fn double_click(h: &mut Harness<'_, State>, p: (f64, f64)) {
         let pos = screen(h, p);
         h.hover_at(pos);
         h.step();
@@ -1055,7 +1146,7 @@ mod tests {
         h.run_steps(30);
     }
 
-    fn drag(h: &mut Harness<'_, State>, from: (f64, f64), to: (f64, f64)) {
+    pub(super) fn drag(h: &mut Harness<'_, State>, from: (f64, f64), to: (f64, f64)) {
         let (a, b) = (screen(h, from), screen(h, to));
         h.hover_at(a);
         h.step();
@@ -1068,15 +1159,15 @@ mod tests {
         h.run_steps(5);
     }
 
-    fn home(h: &Harness<'_, State>) -> Home {
+    pub(super) fn home(h: &Harness<'_, State>) -> Home {
         h.state().document.read().home().clone()
     }
 
-    fn close(a: Point2, b: (f64, f64)) -> bool {
+    pub(super) fn close(a: Point2, b: (f64, f64)) -> bool {
         a.distance(Point2::new(b.0, b.1)) < 0.6
     }
 
-    fn square(size: f64) -> Home {
+    pub(super) fn square(size: f64) -> Home {
         let mut doc = Document::default();
         let pts = [(0.0, 0.0), (size, 0.0), (size, size), (0.0, size)];
         for i in 0..4 {
@@ -1199,5 +1290,106 @@ mod tests {
             [PlanEvent::NewLabel(at)] => assert!(at.distance(Point2::new(120.0, 80.0)) < 1.0),
             other => panic!("unexpected events {other:?}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod furniture_tests {
+    use newera_core::align_to_wall;
+
+    use super::tests::{click, close, drag, harness, home, square};
+    use super::*;
+
+    #[test]
+    fn placing_from_the_catalog_creates_and_selects_the_piece() {
+        let mut h = harness(Home::default(), Tool::Place("sofa-3"));
+        click(&mut h, (200.0, 150.0));
+        let home = home(&h);
+        assert_eq!(home.furniture.len(), 1);
+        let sofa = &home.furniture[0];
+        assert!(close(sofa.position, (200.0, 150.0)), "{:?}", sofa.position);
+        assert_eq!((sofa.width, sofa.depth), (210.0, 90.0));
+        assert!(h.state().selection.contains(&sofa.id.into()));
+        assert!(matches!(
+            h.state().events.as_slice(),
+            [PlanEvent::Placed(_)]
+        ));
+    }
+
+    #[test]
+    fn doors_snap_into_the_nearest_wall_when_placed_and_moved() {
+        let mut h = harness(square(400.0), Tool::Place("door"));
+        click(&mut h, (150.0, 25.0));
+        let door = home(&h).furniture[0].clone();
+        assert!(
+            door.position.y.abs() < 0.6 && (door.position.x - 150.0).abs() < 0.6,
+            "{:?}",
+            door.position
+        );
+        assert_eq!(home(&h).wall_cuts()[0].len(), 1, "the door cuts the wall");
+
+        h.state_mut().tool = Tool::Select;
+        drag(&mut h, (150.0, 0.0), (260.0, 30.0));
+        let moved = home(&h).furniture[0].clone();
+        assert!(
+            moved.position.y.abs() < 0.6,
+            "stays in the wall: {:?}",
+            moved.position
+        );
+        assert!(
+            (moved.position.x - 260.0).abs() < 1.0,
+            "{:?}",
+            moved.position
+        );
+    }
+
+    #[test]
+    fn handles_rotate_and_resize_a_piece() {
+        let mut base = Home::default();
+        let id = base.new_furniture_id();
+        let mut table = newera_catalog::find("dining-table-4")
+            .unwrap()
+            .instantiate(id, Point2::new(200.0, 150.0));
+        let wall = newera_core::Wall::new(
+            newera_core::WallId(99),
+            Point2::new(-500.0, -500.0),
+            Point2::new(-400.0, -500.0),
+        );
+        align_to_wall(&mut table, &wall, 0.0);
+        table.position = Point2::new(200.0, 150.0);
+        table.angle = 0.0;
+        base.furniture.push(table.clone());
+
+        let mut h = harness(base, Tool::Select);
+        h.state_mut().selection.insert(id.into());
+        h.run_steps(2);
+        // Rotation handle sits 25 cm behind the back edge; drag it to the right.
+        let handle = table.to_plan((0.0, -table.depth / 2.0 - 25.0));
+        drag(&mut h, (handle.x, handle.y), (320.0, 150.0));
+        let rotated = home(&h).furniture[0].clone();
+        assert!(
+            (rotated.angle - 90.0).abs() < 0.5,
+            "angle {}",
+            rotated.angle
+        );
+
+        // Resize from the front-right corner.
+        let corner = rotated.to_plan((rotated.width / 2.0, rotated.depth / 2.0));
+        let target = rotated.to_plan((80.0, 50.0));
+        drag(&mut h, (corner.x, corner.y), (target.x, target.y));
+        let resized = home(&h).furniture[0].clone();
+        assert!(
+            (resized.width - 160.0).abs() < 1.5 && (resized.depth - 100.0).abs() < 1.5,
+            "{} x {}",
+            resized.width,
+            resized.depth
+        );
+    }
+}
+
+impl PlanView {
+    /// Plan point at the middle of the view.
+    pub(crate) fn view_center(&self) -> Point2 {
+        self.camera.center
     }
 }

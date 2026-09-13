@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use crate::command::Command;
 use crate::error::{CoreError, CoreResult};
 use crate::home::Home;
-use crate::ids::{DimensionId, LabelId, RoomId, WallId};
+use crate::ids::{DimensionId, FurnitureId, LabelId, RoomId, WallId};
 
 /// A [`Home`] plus its edit history.
 ///
@@ -54,6 +54,10 @@ impl Document {
 
     pub fn new_label_id(&mut self) -> LabelId {
         self.home.new_label_id()
+    }
+
+    pub fn new_furniture_id(&mut self) -> FurnitureId {
+        self.home.new_furniture_id()
     }
 
     pub fn can_undo(&self) -> bool {

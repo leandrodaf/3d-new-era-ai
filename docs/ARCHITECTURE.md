@@ -38,7 +38,8 @@ That is what makes these properties hold everywhere, for free:
 | Crate | Depends on | Responsibility |
 |-------|-----------|----------------|
 | `newera-core` | serde, schemars, geo | Model (`Home`, `Element`: walls, rooms, dimensions, labels), geometry (joins, triangulation, room detection), `Command`, `Document`, project format. No UI, no async, no I/O. |
-| `newera-draw` | core, tiny-skia | Plan scene (styled primitives in cm) and its PNG/SVG backends. |
+| `newera-catalog` | core, tobj, gltf | Parametric furniture: procedural 3D meshes and plan symbols at any size; model import. |
+| `newera-draw` | core, catalog, tiny-skia | Plan scene (styled primitives in cm) and its PNG/SVG backends. |
 | `newera-mcp` | core, draw, rmcp | MCP tools and their token-efficient wire format. |
 | `newera-server` | core, mcp, axum | HTTP transport: REST API and the Streamable HTTP MCP endpoint. |
 | `newera-app` | core, eframe | Desktop editor. Never talks to the network. |
@@ -108,6 +109,15 @@ debugging; MCP serves the compact view.
 triangles, lines, texts, images) in plan centimeters. The editor paints them with egui,
 `render_png` rasterizes them with tiny-skia for MCP and export, and `to_svg` writes them
 at true scale. What an agent sees in `render_plan` is exactly what the user sees.
+
+## Furniture
+
+A piece is a box (`width × depth × height`, elevation, angle) plus a catalog id. The core
+only needs the box for layout: collisions, door swings, and which wall a door or window
+cuts (`wall_cuts`). Looks come from `newera-catalog`, where each item is a generator that
+builds its mesh and plan symbol for the requested size — so resizing never distorts
+proportions that matter (a sofa's armrests stay armrest-sized) and nothing is ever out of
+scale. Imported models are fitted to the box instead.
 
 ## Desktop editor
 

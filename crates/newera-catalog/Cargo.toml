@@ -1,6 +1,6 @@
 [package]
-name = "newera-draw"
-description = "Floor plan drawing for 3D New Era AI: scene building, PNG and SVG output"
+name = "newera-catalog"
+description = "Parametric furniture catalog for 3D New Era AI: 3D models and plan symbols at exact sizes"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,13 +9,10 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-ab_glyph.workspace = true
-epaint_default_fonts.workspace = true
-image.workspace = true
-newera-catalog.workspace = true
+gltf = { version = "1.4.1", default-features = false, features = ["import", "utils"] }
 newera-core.workspace = true
 thiserror.workspace = true
-tiny-skia.workspace = true
+tobj = "4.0.5"
 
 [lints]
 workspace = true

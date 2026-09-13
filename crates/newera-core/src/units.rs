@@ -65,6 +65,17 @@ impl LengthUnit {
         }
     }
 
+    /// Formats a `width × depth × height` size with the unit written once,
+    /// e.g. `210 × 90 × 85 cm`.
+    pub fn format_size(self, size: [f64; 3]) -> String {
+        if self == Self::Imperial {
+            return size.map(|v| self.format_length(v)).join(" × ");
+        }
+        let suffix = format!(" {}", self.label());
+        let numbers = size.map(|v| self.format_length(v).trim_end_matches(&suffix).to_owned());
+        format!("{}{suffix}", numbers.join(" × "))
+    }
+
     /// Formats an area given in square centimeters.
     pub fn format_area(self, cm2: f64) -> String {
         match self {
@@ -108,5 +119,13 @@ mod tests {
         assert_eq!(LengthUnit::Imperial.format_length(350.52), "11'6\"");
         assert_eq!(LengthUnit::Imperial.format_length(3.81), "1½\"");
         assert_eq!(LengthUnit::Meter.format_area(270_000.0), "27 m²");
+        assert_eq!(
+            LengthUnit::Centimeter.format_size([210.0, 90.0, 85.0]),
+            "210 × 90 × 85 cm"
+        );
+        assert_eq!(
+            LengthUnit::Meter.format_size([210.0, 90.0, 85.0]),
+            "2.1 × 0.9 × 0.85 m"
+        );
     }
 }

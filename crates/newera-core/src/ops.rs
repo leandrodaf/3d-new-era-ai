@@ -8,6 +8,9 @@ use crate::geometry::Point2;
 use crate::ids::{ElementId, WallId};
 use crate::joins::JOIN_TOLERANCE;
 
+/// How far (cm) a moved door or window looks for a wall to sit in.
+pub const OPENING_REACH: f64 = 60.0;
+
 /// Splits a wall at parameter `t` (0..1) into two joined walls. Returns the
 /// id of the new second half.
 pub fn split_wall(doc: &mut Document, id: WallId, t: f64) -> CoreResult<WallId> {
@@ -81,6 +84,17 @@ pub fn translate(
                 l.position = shift(l.position);
                 Element::Label(l)
             }
+            Element::Furniture(mut f) => {
+                f.position = shift(f.position);
+                // Doors and windows stay seated in the nearest wall.
+                if f.is_opening()
+                    && let Some((wall_id, along)) = nearest_wall(home, f.position, OPENING_REACH)
+                    && let Some(wall) = home.wall(wall_id)
+                {
+                    crate::furniture::align_to_wall(&mut f, wall, along);
+                }
+                Element::Furniture(f)
+            }
         };
         commands.push(Command::Update { element: moved });
     }
@@ -153,6 +167,53 @@ pub fn wall_dimension(doc: &mut Document, id: WallId, gap: f64) -> CoreResult<Di
         end: wall.end,
         offset: sign * (wall.thickness / 2.0 + gap),
     })
+}
+
+/// Nearest straight wall to `p` within `max_distance` cm of its centerline,
+/// with the distance along it from its start.
+pub fn nearest_wall(
+    home: &crate::home::Home,
+    p: Point2,
+    max_distance: f64,
+) -> Option<(WallId, f64)> {
+    home.walls
+        .iter()
+        .filter(|w| !w.is_arc())
+        .filter_map(|w| {
+            let len = w.start.distance(w.end);
+            if len < 1e-9 {
+                return None;
+            }
+            let dir = ((w.end.x - w.start.x) / len, (w.end.y - w.start.y) / len);
+            let along = ((p.x - w.start.x) * dir.0 + (p.y - w.start.y) * dir.1).clamp(0.0, len);
+            let foot = Point2::new(w.start.x + dir.0 * along, w.start.y + dir.1 * along);
+            let distance = foot.distance(p);
+            (distance <= max_distance).then_some((w.id, along, distance))
+        })
+        .min_by(|a, b| a.2.total_cmp(&b.2))
+        .map(|(id, along, _)| (id, along))
+}
+
+/// Re-seats doors and windows in the wall nearest to them (after a move).
+pub fn snap_openings(doc: &mut Document, ids: &[ElementId], max_distance: f64) -> CoreResult<()> {
+    let home = doc.home();
+    let commands: Vec<Command> = ids
+        .iter()
+        .filter_map(|id| match home.element(*id) {
+            Some(Element::Furniture(f)) if f.is_opening() => Some(f),
+            _ => None,
+        })
+        .filter_map(|mut f| {
+            let (wall_id, along) = nearest_wall(home, f.position, max_distance)?;
+            let wall = home.wall(wall_id)?;
+            crate::furniture::align_to_wall(&mut f, wall, along);
+            Some(Command::update(f))
+        })
+        .collect();
+    if commands.is_empty() {
+        return Ok(());
+    }
+    doc.execute(Command::Batch { commands })
 }
 
 #[cfg(test)]

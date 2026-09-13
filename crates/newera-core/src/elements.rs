@@ -4,6 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, CoreResult};
+use crate::furniture::Furniture;
 use crate::geometry::{Point2, polygon_area};
 use crate::ids::{DimensionId, ElementId, LabelId, RoomId, WallId};
 
@@ -351,6 +352,7 @@ pub enum Element {
     Room(Room),
     Dimension(Dimension),
     Label(Label),
+    Furniture(Furniture),
 }
 
 impl Element {
@@ -360,6 +362,7 @@ impl Element {
             Self::Room(e) => e.id.into(),
             Self::Dimension(e) => e.id.into(),
             Self::Label(e) => e.id.into(),
+            Self::Furniture(e) => e.id.into(),
         }
     }
 
@@ -369,6 +372,7 @@ impl Element {
             Self::Room(e) => e.validate(),
             Self::Dimension(e) => e.validate(),
             Self::Label(e) => e.validate(),
+            Self::Furniture(e) => e.validate(),
         }
     }
 }
@@ -382,7 +386,7 @@ macro_rules! element_from {
         })+
     };
 }
-element_from!(Wall, Room, Dimension, Label);
+element_from!(Wall, Room, Dimension, Label, Furniture);
 
 fn invalid<T>(message: &str) -> CoreResult<T> {
     Err(CoreError::InvalidGeometry(message.to_owned()))

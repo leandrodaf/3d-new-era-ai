@@ -94,11 +94,19 @@ pub(crate) fn home(home: &Home, revision: u64) -> Value {
         })
         .collect();
 
+    let cuts = home.wall_cuts();
+    let furniture: Vec<Value> = home
+        .furniture
+        .iter()
+        .map(|f| piece(home, &cuts, f))
+        .collect();
+
     for (key, list) in [
         ("walls", walls),
         ("rooms", rooms),
         ("dims", dims),
         ("labels", labels),
+        ("furniture", furniture),
     ] {
         if !list.is_empty() {
             out[key] = Value::Array(list);
@@ -119,6 +127,49 @@ pub(crate) fn home(home: &Home, revision: u64) -> Value {
         ]);
     }
     out
+}
+
+/// A piece, omitting whatever matches its catalog defaults.
+fn piece(home: &Home, cuts: &[Vec<newera_core::WallCut>], f: &newera_core::Furniture) -> Value {
+    let mut v = obj([
+        ("id", json!(f.id.to_string())),
+        ("cat", json!(f.catalog)),
+        ("at", point(f.position)),
+    ]);
+    let item = newera_catalog::find(&f.catalog);
+    let default_size = item.map(|i| i.size);
+    if f.angle.rem_euclid(360.0).abs() > 0.05 {
+        v["angle"] = num(f.angle.rem_euclid(360.0));
+    }
+    if default_size != Some([f.width, f.depth, f.height]) {
+        v["wdh"] = json!([num(f.width), num(f.depth), num(f.height)]);
+    }
+    if (item.map_or(0.0, |i| i.elevation) - f.elevation).abs() > 0.05 {
+        v["elev"] = num(f.elevation);
+    }
+    if item.map(|i| i.name) != Some(f.name.as_str()) {
+        v["name"] = json!(f.name);
+    }
+    if let Some(model) = &f.model {
+        v["model"] = json!(model);
+    }
+    if let Some(color) = f.color {
+        v["color"] = json!(color);
+    }
+    if f.mirrored {
+        v["mirror"] = json!(true);
+    }
+    if !f.visible {
+        v["visible"] = json!(false);
+    }
+    if f.is_opening()
+        && let Some(i) = cuts
+            .iter()
+            .position(|c| c.iter().any(|cut| cut.furniture == f.id))
+    {
+        v["wall"] = json!(home.walls[i].id.to_string());
+    }
+    v
 }
 
 pub(crate) fn wall(w: &Wall) -> Value {
@@ -151,6 +202,7 @@ pub(crate) fn summary(home: &Home, revision: u64) -> Value {
                 ("rooms", json!(home.rooms.len())),
                 ("dims", json!(home.dimensions.len())),
                 ("labels", json!(home.labels.len())),
+                ("furniture", json!(home.furniture.len())),
             ]),
         ),
     ]);
@@ -166,6 +218,56 @@ pub(crate) fn summary(home: &Home, revision: u64) -> Value {
         );
     }
     out
+}
+
+/// Catalog rows `[id, name, w, d, h]`, optionally filtered.
+pub(crate) fn catalog(query: Option<&str>, category: Option<&str>, limit: usize) -> Value {
+    let items: Vec<_> = newera_catalog::search(query.unwrap_or(""))
+        .into_iter()
+        .filter(|i| category.is_none_or(|c| i.category.id() == c))
+        .collect();
+    let rows: Vec<Value> = items
+        .iter()
+        .take(limit)
+        .map(|i| json!([i.id, i.name, num(i.size[0]), num(i.size[1]), num(i.size[2])]))
+        .collect();
+    let mut out = json!({ "items": rows });
+    if items.len() > limit {
+        out["more"] = json!(items.len() - limit);
+    }
+    if query.is_none() && category.is_none() {
+        out["categories"] = json!(
+            newera_catalog::Category::ALL
+                .iter()
+                .map(|c| c.id())
+                .collect::<Vec<_>>()
+        );
+    }
+    out
+}
+
+/// Layout issues grouped by kind; empty object when everything is fine.
+pub(crate) fn issues(home: &Home) -> Value {
+    use newera_core::Issue;
+    let mut out = serde_json::Map::new();
+    let mut push = |key: &str, value: Value| {
+        out.entry(key.to_owned())
+            .or_insert_with(|| Value::Array(Vec::new()))
+            .as_array_mut()
+            .expect("array")
+            .push(value);
+    };
+    for issue in newera_core::check_layout(home) {
+        match issue {
+            Issue::Overlap(a, b) => push("overlap", json!([a.to_string(), b.to_string()])),
+            Issue::InWall(f, w) => push("in_wall", json!([f.to_string(), w.to_string()])),
+            Issue::BlocksDoor { door, by } => {
+                push("blocks_door", json!([door.to_string(), by.to_string()]));
+            }
+            Issue::OutsideRooms(f) => push("outside_rooms", json!(f.to_string())),
+        }
+    }
+    Value::Object(out)
 }
 
 #[cfg(test)]

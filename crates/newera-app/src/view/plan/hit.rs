@@ -52,6 +52,27 @@ pub(crate) fn pick(
             return Some(dim.id.into());
         }
     }
+    // Doors and windows sit inside walls, so they win over them.
+    for piece in home
+        .furniture
+        .iter()
+        .rev()
+        .filter(|f| f.visible && f.is_opening())
+    {
+        if piece.contains(p) {
+            return Some(piece.id.into());
+        }
+    }
+    // Pieces on the floor: the highest (e.g. a lamp on a table) first.
+    let mut pieces: Vec<_> = home
+        .furniture
+        .iter()
+        .filter(|f| f.visible && !f.is_opening() && f.contains(p))
+        .collect();
+    pieces.sort_by(|a, b| (b.elevation + b.height).total_cmp(&(a.elevation + a.height)));
+    if let Some(piece) = pieces.first() {
+        return Some(piece.id.into());
+    }
     for (wall, outline) in home.walls.iter().zip(outlines).rev() {
         let near_line = wall
             .centerline()
@@ -96,6 +117,12 @@ pub(crate) fn in_rect(home: &Home, min: Point2, max: Point2) -> Vec<ElementId> {
             .iter()
             .filter(|l| contains(&l.position))
             .map(|l| ElementId::from(l.id)),
+    );
+    ids.extend(
+        home.furniture
+            .iter()
+            .filter(|f| f.footprint().iter().all(contains))
+            .map(|f| ElementId::from(f.id)),
     );
     ids
 }

@@ -14,6 +14,7 @@ eframe = { workspace = true, features = ["persistence"] }
 egui-phosphor = "0.14"
 glam.workspace = true
 image.workspace = true
+newera-catalog.workspace = true
 newera-core.workspace = true
 newera-draw.workspace = true
 rfd = "0.17"

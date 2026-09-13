@@ -3,8 +3,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::elements::{BackgroundImage, Compass, Dimension, Element, Label, Room, Wall};
 use crate::error::{CoreError, CoreResult};
+use crate::furniture::{Furniture, WallCut, wall_cuts};
 use crate::geometry::Point2;
-use crate::ids::{DimensionId, ElementId, LabelId, RoomId, WallId};
+use crate::ids::{DimensionId, ElementId, FurnitureId, LabelId, RoomId, WallId};
 use crate::joins::wall_outlines;
 
 /// The whole project being edited.
@@ -19,6 +20,8 @@ pub struct Home {
     pub dimensions: Vec<Dimension>,
     #[serde(default)]
     pub labels: Vec<Label>,
+    #[serde(default)]
+    pub furniture: Vec<Furniture>,
     #[serde(default)]
     pub compass: Compass,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -37,6 +40,7 @@ impl Default for Home {
             rooms: Vec::new(),
             dimensions: Vec::new(),
             labels: Vec::new(),
+            furniture: Vec::new(),
             compass: Compass::default(),
             background: None,
             next_id: 1,
@@ -128,6 +132,7 @@ collections! {
     Room, Room, RoomId, rooms, room, new_room_id;
     Dimension, Dimension, DimensionId, dimensions, dimension, new_dimension_id;
     Label, Label, LabelId, labels, label, new_label_id;
+    Furniture, Furniture, FurnitureId, furniture, piece, new_furniture_id;
 }
 
 impl Home {
@@ -150,6 +155,11 @@ impl Home {
         wall_outlines(&self.walls)
     }
 
+    /// Door and window holes in each wall, in `walls` order.
+    pub fn wall_cuts(&self) -> Vec<Vec<WallCut>> {
+        wall_cuts(&self.walls, &self.furniture)
+    }
+
     /// Axis-aligned bounds `(min, max)` of the drawing.
     pub fn bounds(&self) -> Option<(Point2, Point2)> {
         let points = self
@@ -158,7 +168,8 @@ impl Home {
             .flat_map(Wall::centerline)
             .chain(self.rooms.iter().flat_map(|r| r.points.iter().copied()))
             .chain(self.dimensions.iter().flat_map(|d| [d.start, d.end]))
-            .chain(self.labels.iter().map(|l| l.position));
+            .chain(self.labels.iter().map(|l| l.position))
+            .chain(self.furniture.iter().flat_map(Furniture::footprint));
         points.fold(None, |acc, p| {
             let (min, max) = acc.unwrap_or((p, p));
             Some((

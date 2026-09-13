@@ -131,6 +131,10 @@ pub(crate) struct SceneView {
     /// `(document revision, selection)` the GPU mesh was built from.
     built_for: Option<(u64, Vec<ElementId>)>,
     framed_once: bool,
+    /// Imported models by resolved path; `None` when a file failed to load.
+    models: std::cell::RefCell<
+        std::collections::HashMap<std::path::PathBuf, Option<newera_catalog::Mesh>>,
+    >,
 }
 
 impl std::fmt::Debug for SceneView {
@@ -149,6 +153,7 @@ impl SceneView {
             gpu: None,
             built_for: None,
             framed_once: false,
+            models: std::cell::RefCell::default(),
         }
     }
 
@@ -164,6 +169,7 @@ impl SceneView {
         home: &Home,
         revision: u64,
         selection: &Selection,
+        project: Option<&std::path::Path>,
     ) {
         let Some(rs) = render_state else {
             ui.centered_and_justified(|ui| ui.label("Visualização 3D requer o backend wgpu."));
@@ -189,7 +195,23 @@ impl SceneView {
         let gpu = self.gpu.get_or_insert_with(|| Gpu::new(&rs.device));
         let key = (revision, selection.iter().copied().collect::<Vec<_>>());
         if self.built_for.as_ref() != Some(&key) {
-            gpu.upload_mesh(&rs.device, &Mesh::from_home(home, selection));
+            let models = |piece: &newera_core::Furniture| {
+                let path = newera_core::resolve_project_path(project, piece.model.as_deref()?);
+                let mut cache = self.models.borrow_mut();
+                let mut mesh = cache
+                    .entry(path.clone())
+                    .or_insert_with(|| match newera_catalog::load_model(&path) {
+                        Ok(model) => Some(model.mesh),
+                        Err(err) => {
+                            tracing::warn!("cannot load model {}: {err}", path.display());
+                            None
+                        }
+                    })
+                    .clone()?;
+                mesh.fit_to(piece.width, piece.depth, piece.height);
+                Some(mesh)
+            };
+            gpu.upload_mesh(&rs.device, &Mesh::from_home(home, selection, &models));
             self.built_for = Some(key);
         }
         gpu.render(rs, size, &self.camera);

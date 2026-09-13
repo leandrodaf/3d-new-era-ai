@@ -11,6 +11,7 @@ authors.workspace = true
 [dependencies]
 base64.workspace = true
 image.workspace = true
+newera-catalog.workspace = true
 newera-core.workspace = true
 newera-draw.workspace = true
 rmcp = { workspace = true, features = [
