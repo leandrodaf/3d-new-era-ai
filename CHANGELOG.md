@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Plan variants as tabs: duplicate (Ctrl+T), switch (Ctrl+Tab), rename, close, compare
+  versions; project format v2; MCP `variants`.
+
 - M2 furniture at real scale: parametric catalog (55 items, 3D + plan symbols), OBJ/glTF
   import, catalog panel with search, placement with ghost, rotate/resize handles, doors
   and windows cutting walls, layout checks, furniture dialog; MCP `catalog`, `place`,

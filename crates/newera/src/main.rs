@@ -74,7 +74,7 @@ fn main() -> anyhow::Result<()> {
             .with_context(|| format!("cannot read {}", path.display()))?;
         let home = newera_core::from_project_json(&json)
             .with_context(|| format!("cannot open {}", path.display()))?;
-        document.load(home);
+        home.load_into(&mut document);
         document.mark_saved(path);
     }
     let document = SharedDocument::new(document);

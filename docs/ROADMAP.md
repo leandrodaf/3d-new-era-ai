@@ -58,12 +58,14 @@ The core of what makes the editor useful: placing real objects with real dimensi
 - [x] MCP: `catalog` (compact search), `place` (batch, `wall`+`along`, imported `model`),
       `update`/`move`/`delete` for furniture, `check_layout`
 
-## M2.5 — Plan variants (tabs)
+## ✅ M2.5 — Plan variants (tabs)
 
-- [ ] Several versions of the same project as tabs; switch, rename, close
-- [ ] Duplicate the current tab to try an alternative without losing the original
-- [ ] Compare variants (areas, furniture count, layout issues)
-- [ ] MCP: `list_variants`, `new_variant` (duplicate), `switch_variant`, `rename_variant`
+- [x] Several versions of the same project as tabs, each with its own undo history;
+      switch (click, Ctrl+Tab), rename (double-click), close with confirmation
+- [x] Duplicate the current tab (Ctrl+T) to try an alternative without losing the original
+- [x] Compare variants side by side: walls, rooms, area, furniture, layout issues
+- [x] Project file v2 stores every variant (v1 files still open)
+- [x] MCP: `variants` tool (list / duplicate / new / switch / rename / delete)
 
 ## M3 — Levels and presentation
 

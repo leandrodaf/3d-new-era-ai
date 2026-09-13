@@ -23,7 +23,8 @@ const INSTRUCTIONS: &str = "\
 Home design editor, live in the user's window. Units: cm. Plan axes: x right, y down. \
 Points are [x,y]. Id prefixes: w wall, r room, d dimension, t label, f furniture/door/window. \
 Reads omit defaults (wall t=15 h=250). Writes reply `ok rev=N [ids=...]`; don't re-read \
-unless needed. Every change is one undoable step. Use render_plan to check visually.";
+unless needed. Every change is one undoable step. Use render_plan to check visually. \
+A project can hold several plan versions (variants tool); tools act on the active one.";
 
 /// The MCP server. Cheap to clone: it only holds a handle to the document.
 #[derive(Debug, Clone)]
@@ -103,6 +104,16 @@ pub(crate) struct CatalogParams {
     cat: Option<String>,
     /// Max rows (default 40).
     limit: Option<usize>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct VariantsParams {
+    /// `list` (default), `duplicate` (copy active), `new` (empty), `switch`, `rename`, `delete`.
+    action: Option<String>,
+    /// Variant index for switch/rename/delete.
+    i: Option<usize>,
+    /// Name for duplicate/new/rename.
+    name: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -269,7 +280,7 @@ impl NewEraMcp {
             (None, Some(path)) => path.to_path_buf(),
             (None, None) => return Err(invalid("`path` is required for the first save")),
         };
-        std::fs::write(&path, to_project_json(doc.home()))
+        std::fs::write(&path, to_project_json(&doc))
             .map_err(|e| invalid(format!("cannot write {}: {e}", path.display())))?;
         doc.mark_saved(&path);
         Ok(format!("ok {}", path.display()))
@@ -282,7 +293,7 @@ impl NewEraMcp {
             .map_err(|e| invalid(format!("cannot read {}: {e}", path.display())))?;
         let home = from_project_json(&json).map_err(|e| invalid(e.to_string()))?;
         let mut doc = self.document.write();
-        doc.load(home);
+        home.load_into(&mut doc);
         doc.mark_saved(&path);
         Ok(ok(&doc, &[]))
     }
@@ -315,6 +326,35 @@ impl NewEraMcp {
     )]
     fn check_layout(&self) -> String {
         compact::issues(self.document.read().home()).to_string()
+    }
+
+    #[tool(
+        description = "Plan versions (tabs). list: rows [i,name,active,walls,rooms,m2,furniture,issues]. duplicate/new switch to the new one; edits apply to the active version."
+    )]
+    fn variants(&self, Parameters(p): Parameters<VariantsParams>) -> Result<String, ErrorData> {
+        let mut doc = self.document.write();
+        let need = |i: Option<usize>| i.ok_or_else(|| invalid("`i` is required"));
+        match p.action.as_deref().unwrap_or("list") {
+            "list" => Ok(compact::variants(&doc).to_string()),
+            "duplicate" | "new" => {
+                let index = doc.add_variant(p.name, p.action.as_deref() == Some("duplicate"));
+                Ok(format!("ok rev={} i={index}", doc.revision()))
+            }
+            "switch" => {
+                doc.switch_variant(need(p.i)?).map_err(core)?;
+                Ok(ok(&doc, &[]))
+            }
+            "rename" => {
+                let name = p.name.ok_or_else(|| invalid("`name` is required"))?;
+                doc.rename_variant(need(p.i)?, name).map_err(core)?;
+                Ok(ok(&doc, &[]))
+            }
+            "delete" => {
+                doc.remove_variant(need(p.i)?).map_err(core)?;
+                Ok(ok(&doc, &[]))
+            }
+            other => Err(invalid(format!("unknown action `{other}`"))),
+        }
     }
 
     #[tool(description = "Undo the last change, whoever made it.")]
@@ -442,6 +482,45 @@ mod tests {
             .decode(&image.data)
             .unwrap();
         assert_eq!(&bytes[1..4], b"PNG");
+    }
+
+    #[test]
+    fn variants_duplicate_switch_and_list() {
+        let s = server();
+        let params: CreateParams =
+            serde_json::from_str(r#"{"walls":[{"pts":[[0,0],[300,0]]}]}"#).unwrap();
+        s.create(Parameters(params)).unwrap();
+        let reply = s
+            .variants(Parameters(VariantsParams {
+                action: Some("duplicate".into()),
+                name: Some("B".into()),
+                i: None,
+            }))
+            .unwrap();
+        assert!(reply.ends_with("i=1"), "{reply}");
+        let params: CreateParams =
+            serde_json::from_str(r#"{"walls":[{"pts":[[0,100],[300,100]]}]}"#).unwrap();
+        s.create(Parameters(params)).unwrap();
+        let list = s.variants(Parameters(VariantsParams::default())).unwrap();
+        assert_eq!(
+            list,
+            r#"[[0,"Versão 1",false,1,0,0.0,0,0],[1,"B",true,2,0,0.0,0,0]]"#
+        );
+        s.variants(Parameters(VariantsParams {
+            action: Some("switch".into()),
+            i: Some(0),
+            name: None,
+        }))
+        .unwrap();
+        assert_eq!(s.document.read().home().walls.len(), 1);
+        assert!(
+            s.variants(Parameters(VariantsParams {
+                action: Some("switch".into()),
+                i: Some(9),
+                name: None
+            }))
+            .is_err()
+        );
     }
 
     #[test]

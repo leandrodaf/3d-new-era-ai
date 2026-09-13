@@ -41,6 +41,11 @@ pub(crate) enum Dialog {
         compass: Compass,
     },
     ConfirmDiscard(Pending),
+    ConfirmCloseVariant {
+        index: usize,
+        name: String,
+    },
+    Compare(Vec<crate::tabs::VariantStats>),
     Help,
 }
 
@@ -528,6 +533,105 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                 None => DialogOutcome::Keep(Dialog::ConfirmDiscard(action)),
             }
         }
+        Dialog::ConfirmCloseVariant { index, name } => {
+            let mut choice = None;
+            egui::Modal::new(egui::Id::new("close-variant")).show(ctx, |ui| {
+                ui.set_min_width(340.0);
+                ui.heading(format!("Fechar \"{name}\"?"));
+                ui.label("Esta versão e o histórico dela serão removidos do projeto.");
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .button(format!("{} Fechar versão", icon::TRASH))
+                        .clicked()
+                    {
+                        choice = Some(true);
+                    }
+                    if ui.button("Cancelar").clicked() {
+                        choice = Some(false);
+                    }
+                });
+            });
+            match choice {
+                Some(true) => {
+                    app.run(|doc| doc.remove_variant(index));
+                    app.after_variant_change();
+                    DialogOutcome::Close
+                }
+                Some(false) => DialogOutcome::Close,
+                None => DialogOutcome::Keep(Dialog::ConfirmCloseVariant { index, name }),
+            }
+        }
+        Dialog::Compare(rows) => {
+            let mut close = false;
+            let mut switch = None;
+            egui::Modal::new(egui::Id::new("compare-variants")).show(ctx, |ui| {
+                ui.heading(format!("{} Comparar versões", icon::CHART_BAR));
+                ui.add_space(6.0);
+                egui::Grid::new("compare")
+                    .striped(true)
+                    .spacing([18.0, 6.0])
+                    .show(ui, |ui| {
+                        for title in [
+                            "Versão",
+                            "Paredes",
+                            "Cômodos",
+                            "Área",
+                            "Móveis",
+                            "Problemas",
+                            "",
+                        ] {
+                            ui.label(RichText::new(title).strong());
+                        }
+                        ui.end_row();
+                        let best_area = rows.iter().map(|r| r.area).fold(0.0, f64::max);
+                        for (i, row) in rows.iter().enumerate() {
+                            let name = RichText::new(&row.name);
+                            ui.label(if row.active { name.strong() } else { name });
+                            ui.label(row.walls.to_string());
+                            ui.label(row.rooms.to_string());
+                            let area = RichText::new(unit.format_area(row.area));
+                            ui.label(
+                                if rows.len() > 1
+                                    && row.area > 0.0
+                                    && (row.area - best_area).abs() < 1e-6
+                                {
+                                    area.strong()
+                                } else {
+                                    area
+                                },
+                            );
+                            ui.label(row.furniture.to_string());
+                            let issues = RichText::new(row.issues.to_string());
+                            ui.label(if row.issues > 0 {
+                                issues.color(ui.visuals().warn_fg_color)
+                            } else {
+                                issues
+                            });
+                            if row.active {
+                                ui.weak("atual");
+                            } else if ui.small_button("Abrir").clicked() {
+                                switch = Some(i);
+                            }
+                            ui.end_row();
+                        }
+                    });
+                ui.add_space(8.0);
+                if ui.button("Fechar").clicked() {
+                    close = true;
+                }
+            });
+            if let Some(index) = switch {
+                app.run(|doc| doc.switch_variant(index));
+                app.after_variant_change();
+                return DialogOutcome::Close;
+            }
+            if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                DialogOutcome::Close
+            } else {
+                DialogOutcome::Keep(Dialog::Compare(rows))
+            }
+        }
         Dialog::Help => {
             let mut close = false;
             egui::Modal::new(egui::Id::new("help")).show(ctx, |ui| {
@@ -563,6 +667,10 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                         ),
                         ("Ctrl+C · X · V · D", "Copiar · Recortar · Colar · Duplicar"),
                         ("Enter · Del · Esc", "Modificar · Excluir · Cancelar"),
+                        (
+                            "Ctrl+T · Ctrl+Tab",
+                            "Duplicar versão · Próxima versão (guias)",
+                        ),
                     ] {
                         ui.label(RichText::new(keys).monospace().strong());
                         ui.label(what);

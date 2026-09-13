@@ -6,6 +6,9 @@
 mod app;
 mod dialogs;
 mod panels;
+#[cfg(test)]
+mod screens;
+mod tabs;
 mod theme;
 mod view;
 

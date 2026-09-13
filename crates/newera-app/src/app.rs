@@ -54,6 +54,8 @@ pub(crate) struct NewEraApp {
     title: String,
     plan_rect: egui::Rect,
     pub(crate) catalog_query: String,
+    /// Tab being renamed in place: `(variant index, draft name)`.
+    pub(crate) renaming_variant: Option<(usize, String)>,
 }
 
 impl std::fmt::Debug for NewEraApp {
@@ -96,6 +98,7 @@ impl NewEraApp {
             title: String::new(),
             plan_rect: egui::Rect::NOTHING,
             catalog_query: String::new(),
+            renaming_variant: None,
         }
     }
 
@@ -169,7 +172,7 @@ impl NewEraApp {
         match loaded {
             Ok(home) => {
                 let mut doc = self.document.write();
-                doc.load(home);
+                home.load_into(&mut doc);
                 doc.mark_saved(path);
                 drop(doc);
                 self.remember(path);
@@ -207,7 +210,7 @@ impl NewEraApp {
         if path.extension().is_none() {
             path.set_extension(newera_core::PROJECT_EXTENSION);
         }
-        let json = to_project_json(self.document.read().home());
+        let json = to_project_json(&self.document.read());
         match std::fs::write(&path, json) {
             Ok(()) => {
                 self.document.write().mark_saved(&path);
@@ -416,6 +419,35 @@ impl NewEraApp {
         self.dialog = Dialog::modify(&elements);
     }
 
+    pub(crate) fn set_dialog(&mut self, dialog: Dialog) {
+        self.dialog = Some(dialog);
+    }
+
+    /// Selection and in-progress drawing belong to the variant that was active.
+    pub(crate) fn after_variant_change(&mut self) {
+        self.selection.clear();
+        self.plan.cancel();
+    }
+
+    pub(crate) fn open_compare(&mut self) {
+        let doc = self.document.read();
+        let rows = doc
+            .variants()
+            .enumerate()
+            .map(|(i, v)| crate::tabs::stats(&v.name, i == doc.active_variant(), v.home()))
+            .collect();
+        drop(doc);
+        self.dialog = Some(Dialog::Compare(rows));
+    }
+
+    fn cycle_variant(&mut self) {
+        self.run(|doc| {
+            let next = (doc.active_variant() + 1) % doc.variant_count();
+            doc.switch_variant(next)
+        });
+        self.after_variant_change();
+    }
+
     fn open_home_settings(&mut self) {
         let home = self.document.read().home().clone();
         self.dialog = Some(Dialog::HomeSettings {
@@ -433,6 +465,16 @@ impl NewEraApp {
             ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, k)))
         };
 
+        if pressed(cmd, Key::T) {
+            self.run(|doc| {
+                doc.add_variant(None, true);
+                Ok(())
+            });
+            self.after_variant_change();
+        }
+        if pressed(cmd, Key::Tab) {
+            self.cycle_variant();
+        }
         if pressed(cmd, Key::N) {
             self.request(Pending::New);
         }
@@ -1012,6 +1054,9 @@ impl eframe::App for NewEraApp {
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(ui, |ui| {
+                egui::Panel::top("variant_tabs")
+                    .frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(6, 3)))
+                    .show(ui, |ui| crate::tabs::bar(self, ui));
                 egui::Panel::top("plan")
                     .resizable(true)
                     .default_size(ui.available_height() / 2.0)
@@ -1381,5 +1426,96 @@ mod furniture_screenshots {
         render("catalog-place", |app| {
             app.set_tool(Tool::Place("bed-double"));
         });
+    }
+}
+
+#[cfg(test)]
+mod variant_tests {
+    use eframe::egui::{Key, Modifiers};
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::Queryable;
+    use newera_core::{Point2, Wall};
+
+    use super::*;
+
+    fn app() -> Harness<'static, NewEraApp> {
+        let mut doc = Document::default();
+        let wall = Wall::new(
+            doc.new_wall_id(),
+            Point2::new(0.0, 0.0),
+            Point2::new(400.0, 0.0),
+        );
+        doc.execute(Command::insert(wall)).unwrap();
+        let document = SharedDocument::new(doc);
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(1280.0, 800.0))
+            .with_step_dt(1.0 / 60.0)
+            .build_eframe(move |cc| NewEraApp::new(cc, document, None));
+        h.run_steps(5);
+        h
+    }
+
+    #[test]
+    fn duplicate_edit_and_switch_tabs() {
+        let mut h = app();
+        h.key_press_modifiers(Modifiers::COMMAND, Key::T);
+        h.run_steps(4);
+        assert_eq!(h.state().document.read().variant_count(), 2);
+        assert_eq!(h.state().document.read().active_variant(), 1);
+
+        // Edit the copy.
+        h.state()
+            .document
+            .write()
+            .execute(Command::remove(newera_core::WallId(1)))
+            .unwrap();
+        h.run_steps(3);
+
+        // Click the first tab: the original still has its wall.
+        // Exact label: "Versão 1 (cópia)" also contains "Versão 1".
+        h.get_by_label(&format!("{} Versão 1", icon::FILE_TEXT))
+            .click();
+        h.run_steps(4);
+        let doc = h.state().document.read();
+        assert_eq!(doc.active_variant(), 0);
+        assert_eq!(doc.home().walls.len(), 1);
+        drop(doc);
+
+        h.key_press_modifiers(Modifiers::COMMAND, Key::Tab);
+        h.run_steps(3);
+        assert_eq!(h.state().document.read().active_variant(), 1);
+        assert!(h.state().document.read().home().walls.is_empty());
+    }
+
+    #[test]
+    fn compare_dialog_lists_every_version() {
+        let mut h = app();
+        h.key_press_modifiers(Modifiers::COMMAND, Key::T);
+        h.run_steps(3);
+        h.get_by_label_contains("Comparar").click();
+        h.run_steps(4);
+        match &h.state().dialog {
+            Some(Dialog::Compare(rows)) => {
+                assert_eq!(rows.len(), 2);
+                assert!(rows[1].active);
+                assert_eq!(rows[0].walls, 1);
+            }
+            other => panic!("compare dialog should be open, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn closing_a_version_asks_first() {
+        let mut h = app();
+        h.key_press_modifiers(Modifiers::COMMAND, Key::T);
+        h.run_steps(3);
+        h.state_mut().set_dialog(Dialog::ConfirmCloseVariant {
+            index: 1,
+            name: "x".into(),
+        });
+        h.run_steps(3);
+        h.get_by_label_contains("Fechar versão").click();
+        h.run_steps(4);
+        assert_eq!(h.state().document.read().variant_count(), 1);
     }
 }

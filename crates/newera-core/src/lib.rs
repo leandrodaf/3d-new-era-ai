@@ -25,7 +25,7 @@ mod units;
 pub use analysis::{Issue, check_layout, door_swing};
 pub use command::Command;
 pub use detect::detect_room;
-pub use document::{Document, SharedDocument};
+pub use document::{Document, FIRST_VARIANT_NAME, SharedDocument, Variant, VariantInfo};
 pub use elements::{BackgroundImage, Compass, Dimension, Element, Label, Room, Wall};
 pub use error::{CoreError, CoreResult};
 pub use furniture::{
@@ -36,6 +36,7 @@ pub use home::Home;
 pub use ids::{DimensionId, ElementId, FurnitureId, LabelId, ParseIdError, RoomId, WallId};
 pub use joins::{JOIN_TOLERANCE, wall_outlines};
 pub use project::{
-    PROJECT_EXTENSION, ProjectError, from_project_json, resolve_project_path, to_project_json,
+    PROJECT_EXTENSION, Project, ProjectError, from_project_json, resolve_project_path,
+    to_project_json,
 };
 pub use units::LengthUnit;

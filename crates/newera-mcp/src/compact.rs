@@ -270,6 +270,30 @@ pub(crate) fn issues(home: &Home) -> Value {
     Value::Object(out)
 }
 
+/// Variant rows `[i, name, active, walls, rooms, m2, furniture, issues]`.
+pub(crate) fn variants(doc: &newera_core::Document) -> Value {
+    Value::Array(
+        doc.variants()
+            .enumerate()
+            .map(|(i, v)| {
+                let home = v.home();
+                let area: f64 = home.rooms.iter().map(newera_core::Room::area).sum();
+                json!([
+                    i,
+                    v.name,
+                    i == doc.active_variant(),
+                    home.walls.len(),
+                    home.rooms.len(),
+                    // `+ 0.0` turns the empty sum (-0.0) into 0.0.
+                    (area / 100.0).round() / 100.0 + 0.0,
+                    home.furniture.len(),
+                    newera_core::check_layout(home).len()
+                ])
+            })
+            .collect(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use newera_core::WallId;

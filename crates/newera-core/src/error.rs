@@ -14,6 +14,9 @@ pub enum CoreError {
     #[error("invalid geometry: {0}")]
     InvalidGeometry(String),
 
+    #[error("variant {0} does not exist")]
+    NoSuchVariant(usize),
+
     #[error("nothing to undo")]
     NothingToUndo,
 
