@@ -4,11 +4,13 @@ use geo::{BooleanOps, Coord, LineString, Polygon, TriangulateEarcut};
 
 use crate::geometry::Point2;
 use crate::home::Home;
-use crate::ids::LevelId;
+use crate::ids::{LevelId, RoomId};
 
 /// A floor area ready to render: outline, holes and triangles (plan cm).
 #[derive(Debug, Clone, PartialEq)]
 pub struct FloorShape {
+    /// Room this floor belongs to.
+    pub room: RoomId,
     pub exterior: Vec<Point2>,
     pub holes: Vec<Vec<Point2>>,
     pub triangles: Vec<[Point2; 3]>,
@@ -59,7 +61,8 @@ pub fn floor_shapes(home: &Home, level: Option<LevelId>) -> Vec<FloorShape> {
             for hole in &holes {
                 shape = shape.difference(hole);
             }
-            shape.into_iter().map(|poly| {
+            let room_id = room.id;
+            shape.into_iter().map(move |poly| {
                 let raw = poly.earcut_triangles_raw();
                 let vertex = |i: usize| {
                     let [x, y] = raw.vertices[i];
@@ -71,6 +74,7 @@ pub fn floor_shapes(home: &Home, level: Option<LevelId>) -> Vec<FloorShape> {
                     .map(|t| [vertex(t[0]), vertex(t[1]), vertex(t[2])])
                     .collect();
                 FloorShape {
+                    room: room_id,
                     exterior: open_ring(poly.exterior()),
                     holes: poly.interiors().iter().map(open_ring).collect(),
                     triangles,
@@ -86,7 +90,7 @@ mod tests {
     use crate::elements::{Level, Room};
     use crate::furniture::Furniture;
     use crate::geometry::polygon_area;
-    use crate::ids::{FurnitureId, RoomId};
+    use crate::ids::FurnitureId;
 
     #[test]
     fn stairs_cut_a_hole_in_the_floor_above_only() {

@@ -1253,6 +1253,36 @@ mod tests {
     }
 
     #[test]
+    fn wall_dialog_picks_a_type_and_a_side_finish_by_clicking() {
+        let mut h = app_with_wall();
+        h.state_mut().selection.insert(WallId(1).into());
+        h.key_press(Key::Enter);
+        h.run_steps(3);
+        h.get_by_value("Personalizada").click();
+        h.run_steps(3);
+        h.get_by_label_contains("Drywall 95 mm").click();
+        h.run_steps(3);
+        // Two finish combos (left, right); the first is the left side.
+        h.get_all_by_value("Sem acabamento")
+            .next()
+            .expect("left finish")
+            .click();
+        h.run_steps(3);
+        h.get_by_label("Tijolo aparente").click();
+        h.run_steps(3);
+        h.get_by_label_contains("OK").click();
+        h.run_steps(5);
+        let wall = walls(&h).remove(0);
+        assert_eq!(wall.wall_type.as_deref(), Some("drywall-95"));
+        assert!((wall.thickness - 9.5).abs() < 1e-9, "{}", wall.thickness);
+        assert_eq!(
+            wall.left_side,
+            Some(newera_core::Material::pattern(newera_core::Pattern::Brick))
+        );
+        assert!(wall.right_side.is_none());
+    }
+
+    #[test]
     fn modify_room_name_by_typing() {
         let mut h = app_with_wall();
         let room_id = {

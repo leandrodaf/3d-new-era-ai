@@ -137,7 +137,12 @@ pub struct Palette {
     pub paper: Color,
     pub grid_minor: Color,
     pub grid_major: Color,
+    /// Masonry walls (and walls without a type).
     pub wall: Color,
+    pub wall_drywall: Color,
+    pub wall_concrete: Color,
+    pub wall_glass: Color,
+    pub wall_wood: Color,
     pub room_fill: Color,
     pub room_line: Color,
     pub room_text: Color,
@@ -157,6 +162,10 @@ impl Default for Palette {
             grid_minor: Color::rgb(234, 236, 238),
             grid_major: Color::rgb(210, 214, 219),
             wall: Color::rgb(78, 80, 88),
+            wall_drywall: Color::rgb(150, 155, 164),
+            wall_concrete: Color::rgb(48, 50, 56),
+            wall_glass: Color::rgb(150, 196, 222),
+            wall_wood: Color::rgb(150, 112, 76),
             room_fill: Color::rgb(238, 228, 212),
             room_line: Color::rgb(170, 150, 120),
             room_text: Color::rgb(90, 75, 55),
@@ -234,7 +243,7 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
 
     let cuts = home.wall_cuts();
     for ((wall, outline), wall_cuts) in home.walls.iter().zip(home.wall_outlines()).zip(&cuts) {
-        let color = pick(wall.id.into(), palette.wall);
+        let color = pick(wall.id.into(), wall_fill(palette, wall));
         for part in cut_outline(&outline, wall, wall_cuts) {
             scene.fill(Some(wall.id.into()), &part, color);
         }
@@ -310,6 +319,23 @@ pub fn furniture_items(scene: &mut Scene, piece: &Furniture, selected: bool, pal
     }
 }
 
+/// Plan fill of a wall, by construction family.
+fn wall_fill(palette: &Palette, wall: &newera_core::Wall) -> Color {
+    use newera_core::WallFamily;
+    match wall
+        .wall_type
+        .as_deref()
+        .and_then(newera_core::wall_type)
+        .map(|t| t.family)
+    {
+        Some(WallFamily::Drywall) => palette.wall_drywall,
+        Some(WallFamily::Concrete) => palette.wall_concrete,
+        Some(WallFamily::Glass) => palette.wall_glass,
+        Some(WallFamily::Wood) => palette.wall_wood,
+        Some(WallFamily::Masonry) | None => palette.wall,
+    }
+}
+
 fn blend(a: Color, b: Color, t: f64) -> Color {
     let mix = |x: u8, y: u8| {
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -327,7 +353,15 @@ fn blend(a: Color, b: Color, t: f64) -> Color {
 fn room_items(scene: &mut Scene, room: &Room, options: &SceneOptions, line: Color) {
     let owner = Some(room.id.into());
     if room.floor_visible {
-        scene.fill(owner, &room.points, options.palette.room_fill);
+        // Finished floors show their color, softened so the plan stays readable.
+        let fill = room
+            .floor_material
+            .as_ref()
+            .map_or(options.palette.room_fill, |m| {
+                let [r, g, b] = m.base_color([0, 0, 0]);
+                blend(options.palette.paper, Color::rgb(r, g, b), 0.45)
+            });
+        scene.fill(owner, &room.points, fill);
     }
     scene.push(
         owner,

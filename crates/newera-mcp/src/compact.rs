@@ -56,6 +56,12 @@ pub(crate) fn home(home: &Home, revision: u64) -> Value {
             if !r.ceiling_visible {
                 v["ceiling"] = json!(false);
             }
+            if let Some(m) = &r.floor_material {
+                v["floor_mat"] = json!(m.to_string());
+            }
+            if let Some(m) = &r.ceiling_material {
+                v["ceil_mat"] = json!(m.to_string());
+            }
             v
         })
         .collect();
@@ -187,7 +193,43 @@ pub(crate) fn wall(w: &Wall) -> Value {
     if let Some(arc) = w.arc_extent.filter(|_| w.is_arc()) {
         v["arc"] = num(arc);
     }
+    if let Some(kind) = &w.wall_type {
+        v["type"] = json!(kind);
+    }
+    match (&w.left_side, &w.right_side) {
+        (Some(l), Some(r)) if l == r => v["sides"] = json!(l.to_string()),
+        (left, right) => {
+            if let Some(l) = left {
+                v["left"] = json!(l.to_string());
+            }
+            if let Some(r) = right {
+                v["right"] = json!(r.to_string());
+            }
+        }
+    }
     v
+}
+
+/// Wall types and material patterns, for the `materials` tool.
+pub(crate) fn materials() -> Value {
+    let walls: Vec<Value> = newera_core::WALL_TYPES
+        .iter()
+        .map(|t| json!([t.id, t.name, num(t.thickness)]))
+        .collect();
+    let patterns: Vec<Value> = newera_core::Pattern::ALL
+        .iter()
+        .map(|p| {
+            let [r, g, b] = p.default_color();
+            let [w, h] = p.default_tile();
+            json!([
+                p.key(),
+                p.label(),
+                format!("#{r:02x}{g:02x}{b:02x}"),
+                format!("{w}x{h}")
+            ])
+        })
+        .collect();
+    obj([("wall_types", json!(walls)), ("patterns", json!(patterns))])
 }
 
 /// Cheapest overview: counts, bounds and room areas, no geometry.

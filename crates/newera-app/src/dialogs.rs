@@ -3,8 +3,8 @@
 use eframe::egui::{self, DragValue, RichText};
 use egui_phosphor::regular as icon;
 use newera_core::{
-    BackgroundImage, Command, Compass, Dimension, Element, Furniture, Label, Point2, Room, Wall,
-    WallId,
+    BackgroundImage, Command, Compass, Dimension, Element, Furniture, Label, Material, Pattern,
+    Point2, Room, WALL_TYPES, Wall, WallId,
 };
 
 use crate::app::{NewEraApp, Pending};
@@ -18,6 +18,7 @@ pub(crate) enum Dialog {
         thickness: f64,
         height: f64,
         arc: f64,
+        finish: WallFinish,
     },
     ModifyRoom(Room),
     ModifyDimension(Dimension),
@@ -54,7 +55,34 @@ pub(crate) enum Dialog {
     Help,
 }
 
+/// Type and side finishes being edited for one or more walls. Values start
+/// from the first wall; only fields the user touched are applied to all.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct WallFinish {
+    pub(crate) wall_type: Option<String>,
+    pub(crate) left: Option<Material>,
+    pub(crate) right: Option<Material>,
+    pub(crate) type_changed: bool,
+    pub(crate) left_changed: bool,
+    pub(crate) right_changed: bool,
+}
+
+impl WallFinish {
+    fn apply(&self, wall: &mut Wall) {
+        if self.type_changed {
+            wall.wall_type.clone_from(&self.wall_type);
+        }
+        if self.left_changed {
+            wall.left_side.clone_from(&self.left);
+        }
+        if self.right_changed {
+            wall.right_side.clone_from(&self.right);
+        }
+    }
+}
+
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)] // short-lived: returned once per frame
 pub(crate) enum DialogOutcome {
     Keep(Dialog),
     Close,
@@ -78,6 +106,12 @@ impl Dialog {
                 thickness: first.thickness,
                 height: first.height,
                 arc: first.arc_extent.unwrap_or(0.0),
+                finish: WallFinish {
+                    wall_type: first.wall_type.clone(),
+                    left: first.left_side.clone(),
+                    right: first.right_side.clone(),
+                    ..WallFinish::default()
+                },
             });
         }
         match elements {
@@ -129,6 +163,92 @@ fn modal(ctx: &egui::Context, title: &str, body: impl FnOnce(&mut egui::Ui)) -> 
     result
 }
 
+/// Editor for an optional surface finish. Returns true when it changed.
+pub(crate) fn material_editor(
+    ui: &mut egui::Ui,
+    id: &str,
+    material: &mut Option<Material>,
+) -> bool {
+    let before = material.clone();
+    ui.vertical(|ui| {
+        let current = match material {
+            None => "Sem acabamento".to_owned(),
+            Some(m) if m.image.is_some() => "Imagem".to_owned(),
+            Some(Material {
+                pattern: Some(p), ..
+            }) => p.label().to_owned(),
+            Some(_) => "Pintura".to_owned(),
+        };
+        egui::ComboBox::from_id_salt(id)
+            .selected_text(current)
+            .width(190.0)
+            .show_ui(ui, |ui| {
+                if ui
+                    .selectable_label(material.is_none(), "Sem acabamento")
+                    .clicked()
+                {
+                    *material = None;
+                }
+                let paint = material
+                    .as_ref()
+                    .is_some_and(|m| m.pattern.is_none() && m.image.is_none());
+                if ui.selectable_label(paint, "Pintura").clicked() {
+                    *material = Some(Material::paint([242, 239, 230]));
+                }
+                for pattern in Pattern::ALL {
+                    let on = material
+                        .as_ref()
+                        .is_some_and(|m| m.pattern == Some(pattern) && m.image.is_none());
+                    if ui.selectable_label(on, pattern.label()).clicked() {
+                        *material = Some(Material::pattern(pattern));
+                    }
+                }
+                let image = material.as_ref().is_some_and(|m| m.image.is_some());
+                if ui.selectable_label(image, "Imagem…").clicked()
+                    && let Some(path) = rfd::FileDialog::new()
+                        .add_filter("Imagem", &["png", "jpg", "jpeg", "webp", "bmp"])
+                        .pick_file()
+                {
+                    *material = Some(Material {
+                        image: Some(path.display().to_string()),
+                        ..Material::default()
+                    });
+                }
+            });
+        let Some(m) = material else {
+            return;
+        };
+        ui.horizontal(|ui| {
+            let default = m.base_color([242, 239, 230]);
+            let mut tinted = m.color.is_some();
+            if ui.checkbox(&mut tinted, "Cor").changed() {
+                m.color = tinted.then_some(default);
+            }
+            if let Some(color) = &mut m.color {
+                egui::color_picker::color_edit_button_srgb(ui, color);
+            }
+        });
+        if m.pattern.is_some() || m.image.is_some() {
+            ui.horizontal(|ui| {
+                let [mut w, mut h] = m.tile_size();
+                ui.label("Peça");
+                let changed = ui.add(cm(&mut w, 1.0..=1000.0)).changed()
+                    | ui.add(cm(&mut h, 1.0..=1000.0)).changed();
+                if changed {
+                    m.tile = Some([w, h]);
+                }
+                ui.add(
+                    DragValue::new(&mut m.angle)
+                        .range(-360.0..=360.0)
+                        .suffix("°")
+                        .speed(1.0),
+                );
+            });
+        }
+    });
+    *material != before
+}
+
 fn grid(ui: &mut egui::Ui, id: &str, rows: impl FnOnce(&mut egui::Ui)) {
     egui::Grid::new(id)
         .num_columns(2)
@@ -145,6 +265,7 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
             mut thickness,
             mut height,
             mut arc,
+            mut finish,
         } => {
             let title = if ids.len() == 1 {
                 "Modificar parede".to_owned()
@@ -170,6 +291,44 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                         ui.label(RichText::new(unit.format_length(start.distance(*end))).strong());
                         ui.end_row();
                     }
+                    ui.label("Tipo");
+                    let type_name = finish
+                        .wall_type
+                        .as_deref()
+                        .and_then(newera_core::wall_type)
+                        .map_or("Personalizada", |t| t.name);
+                    egui::ComboBox::from_id_salt("wall_type")
+                        .selected_text(type_name)
+                        .width(220.0)
+                        .show_ui(ui, |ui| {
+                            if ui
+                                .selectable_label(finish.wall_type.is_none(), "Personalizada")
+                                .clicked()
+                            {
+                                finish.wall_type = None;
+                                finish.type_changed = true;
+                            }
+                            for kind in WALL_TYPES {
+                                let label = format!(
+                                    "{} · {}",
+                                    kind.name,
+                                    unit.format_length(kind.thickness)
+                                );
+                                if ui
+                                    .selectable_label(
+                                        finish.wall_type.as_deref() == Some(kind.id),
+                                        label,
+                                    )
+                                    .on_hover_text(kind.description)
+                                    .clicked()
+                                {
+                                    finish.wall_type = Some(kind.id.to_owned());
+                                    finish.type_changed = true;
+                                    thickness = kind.thickness;
+                                }
+                            }
+                        });
+                    ui.end_row();
                     ui.label("Espessura");
                     ui.add(cm(&mut thickness, 0.5..=500.0));
                     ui.end_row();
@@ -183,6 +342,12 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                             .suffix("°")
                             .speed(1.0),
                     );
+                    ui.end_row();
+                    ui.label("Lado esquerdo");
+                    finish.left_changed |= material_editor(ui, "wall_left", &mut finish.left);
+                    ui.end_row();
+                    ui.label("Lado direito");
+                    finish.right_changed |= material_editor(ui, "wall_right", &mut finish.right);
                     ui.end_row();
                 });
             });
@@ -200,6 +365,7 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                                 w.thickness = thickness;
                                 w.height = height;
                                 w.arc_extent = (arc.abs() >= 1.0).then_some(arc);
+                                finish.apply(&mut w);
                                 Command::update(w)
                             })
                             .collect();
@@ -214,6 +380,7 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                     thickness,
                     height,
                     arc,
+                    finish,
                 }),
             }
         }
@@ -232,6 +399,12 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                         ui.checkbox(&mut room.floor_visible, "Piso");
                         ui.checkbox(&mut room.ceiling_visible, "Teto");
                     });
+                    ui.end_row();
+                    ui.label("Piso");
+                    material_editor(ui, "room_floor", &mut room.floor_material);
+                    ui.end_row();
+                    ui.label("Teto");
+                    material_editor(ui, "room_ceiling", &mut room.ceiling_material);
                     ui.end_row();
                 });
             });

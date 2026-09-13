@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Wall types (drywall, masonry, concrete, glass…) and surface finishes for wall sides,
+  floors and ceilings: procedural GPU patterns and image textures at real size; room
+  ceilings in 3D; MCP `materials` and `type`/`left`/`right`/`sides`/`floor_mat`/`ceil_mat`.
+
 - Levels: storeys with elevation/height/slab, level selector, faint reference of the
   storey below, stacked 3D with stair openings; MCP `levels`.
 

@@ -115,11 +115,19 @@ struct Targets {
     resolve: wgpu::TextureView,
 }
 
+/// Side of every image texture layer, in pixels.
+const IMAGE_SIZE: u32 = 512;
+const IMAGE_MIPS: u32 = 10;
+
 /// GPU resources for the viewport. Created lazily on the first frame.
 struct Gpu {
     pipeline: wgpu::RenderPipeline,
     uniforms: wgpu::Buffer,
+    layout: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
     bind_group: wgpu::BindGroup,
+    /// Image files currently uploaded, in layer order.
+    images: Vec<String>,
     mesh: Option<GpuMesh>,
     targets: Option<Targets>,
     texture_id: Option<egui::TextureId>,
@@ -211,7 +219,9 @@ impl SceneView {
                 mesh.fit_to(piece.width, piece.depth, piece.height);
                 Some(mesh)
             };
-            gpu.upload_mesh(&rs.device, &Mesh::from_home(home, selection, &models));
+            let mesh = Mesh::from_home(home, selection, &models);
+            gpu.upload_images(rs, &mesh.images, project);
+            gpu.upload_mesh(&rs.device, &mesh);
             self.built_for = Some(key);
         }
         gpu.render(rs, size, &self.camera);
@@ -272,26 +282,48 @@ impl Gpu {
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("scene bind group layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
         });
 
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("scene bind group"),
-            layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniforms.as_entire_binding(),
-            }],
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("scene image sampler"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            anisotropy_clamp: 8,
+            ..Default::default()
         });
+        let bind_group =
+            Self::bind_images(device, &bind_group_layout, &uniforms, &sampler, None, &[]);
 
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("scene pipeline layout"),
@@ -313,6 +345,8 @@ impl Gpu {
                         0 => Float32x3,
                         1 => Float32x3,
                         2 => Float32x3,
+                        3 => Float32x2,
+                        4 => Uint32,
                     ],
                 })],
             },
@@ -348,11 +382,151 @@ impl Gpu {
         Self {
             pipeline,
             uniforms,
+            layout: bind_group_layout,
+            sampler,
             bind_group,
+            images: Vec::new(),
             mesh: None,
             targets: None,
             texture_id: None,
         }
+    }
+
+    /// Builds the bind group with a texture array holding `images` (decoded
+    /// RGBA, one per layer); an empty list binds a single white layer.
+    fn bind_images(
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        uniforms: &wgpu::Buffer,
+        sampler: &wgpu::Sampler,
+        queue: Option<&wgpu::Queue>,
+        images: &[image::RgbaImage],
+    ) -> wgpu::BindGroup {
+        let layers = u32::try_from(images.len().max(1)).expect("layer count fits in u32");
+        let (size, mips) = if images.is_empty() {
+            (1, 1)
+        } else {
+            (IMAGE_SIZE, IMAGE_MIPS)
+        };
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("scene images"),
+            size: wgpu::Extent3d {
+                width: size,
+                height: size,
+                depth_or_array_layers: layers,
+            },
+            mip_level_count: mips,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        if let Some(queue) = queue {
+            for (layer, image) in images.iter().enumerate() {
+                let mut level_image = image.clone();
+                for mip in 0..mips {
+                    let side = (size >> mip).max(1);
+                    if mip > 0 {
+                        level_image = image::imageops::resize(
+                            image,
+                            side,
+                            side,
+                            image::imageops::FilterType::Triangle,
+                        );
+                    }
+                    queue.write_texture(
+                        wgpu::TexelCopyTextureInfo {
+                            texture: &texture,
+                            mip_level: mip,
+                            origin: wgpu::Origin3d {
+                                x: 0,
+                                y: 0,
+                                z: u32::try_from(layer).expect("layer fits in u32"),
+                            },
+                            aspect: wgpu::TextureAspect::All,
+                        },
+                        level_image.as_raw(),
+                        wgpu::TexelCopyBufferLayout {
+                            offset: 0,
+                            bytes_per_row: Some(4 * side),
+                            rows_per_image: Some(side),
+                        },
+                        wgpu::Extent3d {
+                            width: side,
+                            height: side,
+                            depth_or_array_layers: 1,
+                        },
+                    );
+                }
+            }
+        }
+        let view = texture.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            ..Default::default()
+        });
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("scene bind group"),
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniforms.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                },
+            ],
+        })
+    }
+
+    /// Uploads material images when the set of files changed. Unreadable
+    /// files become a neutral gray layer so the rest still renders.
+    fn upload_images(
+        &mut self,
+        rs: &RenderState,
+        images: &[String],
+        project: Option<&std::path::Path>,
+    ) {
+        if self.images == images {
+            return;
+        }
+        let decoded: Vec<image::RgbaImage> = images
+            .iter()
+            .map(|file| {
+                let path = newera_core::resolve_project_path(project, file);
+                match image::open(&path) {
+                    Ok(img) => image::imageops::resize(
+                        &img.to_rgba8(),
+                        IMAGE_SIZE,
+                        IMAGE_SIZE,
+                        image::imageops::FilterType::Triangle,
+                    ),
+                    Err(err) => {
+                        tracing::warn!("cannot load texture {}: {err}", path.display());
+                        image::RgbaImage::from_pixel(
+                            IMAGE_SIZE,
+                            IMAGE_SIZE,
+                            image::Rgba([180, 180, 180, 255]),
+                        )
+                    }
+                }
+            })
+            .collect();
+        self.bind_group = Self::bind_images(
+            &rs.device,
+            &self.layout,
+            &self.uniforms,
+            &self.sampler,
+            Some(&rs.queue),
+            &decoded,
+        );
+        self.images = images.to_vec();
     }
 
     fn upload_mesh(&mut self, device: &wgpu::Device, mesh: &Mesh) {

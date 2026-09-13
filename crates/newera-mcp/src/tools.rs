@@ -24,7 +24,9 @@ Home design editor, live in the user's window. Units: cm. Plan axes: x right, y 
 Points are [x,y]. Id prefixes: w wall, r room, d dimension, t label, f furniture/door/window, lv storey. \
 Reads omit defaults (wall t=15 h=250). Writes reply `ok rev=N [ids=...]`; don't re-read \
 unless needed. Every change is one undoable step. Use render_plan to check visually. \
-A project can hold several plan versions (variants tool); tools act on the active one.";
+A project can hold several plan versions (variants tool); tools act on the active one. \
+Finishes are short strings: `#rrggbb` paint, a pattern like `tiles #ffffff 60x60 r45` \
+(tint, tile cm, rotation) or `img:path 90x90`; `none` clears. Wall types and patterns: materials tool.";
 
 /// The MCP server. Cheap to clone: it only holds a handle to the document.
 #[derive(Debug, Clone)]
@@ -321,6 +323,14 @@ impl NewEraMcp {
         doc.load(Home::default());
         doc.set_path(None);
         ok(&doc, &[])
+    }
+
+    #[allow(clippy::unused_self)] // tool methods need the receiver
+    #[tool(
+        description = "Wall types [id,name,t] (drywall, masonry, concrete…) and finish patterns [key,label,color,tile]."
+    )]
+    fn materials(&self) -> String {
+        compact::materials().to_string()
     }
 
     #[allow(clippy::unused_self)] // tool methods need the receiver

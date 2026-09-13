@@ -7,6 +7,7 @@ use crate::error::{CoreError, CoreResult};
 use crate::furniture::Furniture;
 use crate::geometry::{Point2, polygon_area};
 use crate::ids::{DimensionId, ElementId, LabelId, LevelId, RoomId, WallId};
+use crate::materials::Material;
 
 fn yes() -> bool {
     true
@@ -34,6 +35,15 @@ pub struct Wall {
     /// Storey it belongs to; `None` means the lowest level.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub level: Option<LevelId>,
+    /// Standard construction ([`crate::WALL_TYPES`] id), e.g. `drywall-95`.
+    #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
+    pub wall_type: Option<String>,
+    /// Finish of the side on the left of `start → end` (plan axes).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub left_side: Option<Material>,
+    /// Finish of the side on the right of `start → end`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub right_side: Option<Material>,
 }
 
 impl Wall {
@@ -49,7 +59,16 @@ impl Wall {
             height: Self::DEFAULT_HEIGHT,
             arc_extent: None,
             level: None,
+            wall_type: None,
+            left_side: None,
+            right_side: None,
         }
+    }
+
+    /// Applies a standard construction: sets the type and its thickness.
+    pub fn apply_type(&mut self, wall_type: &crate::WallType) {
+        self.wall_type = Some(wall_type.id.to_owned());
+        self.thickness = wall_type.thickness;
     }
 
     /// True when the wall has a meaningful curvature.
@@ -148,6 +167,14 @@ impl Wall {
         {
             return invalid("arc extent must be between -360 and 360 degrees");
         }
+        if let Some(id) = &self.wall_type
+            && crate::wall_type(id).is_none()
+        {
+            return invalid(&format!("unknown wall type `{id}`"));
+        }
+        for side in [&self.left_side, &self.right_side].into_iter().flatten() {
+            side.validate().map_err(CoreError::InvalidGeometry)?;
+        }
         Ok(())
     }
 }
@@ -168,6 +195,10 @@ pub struct Room {
     /// Storey it belongs to; `None` means the lowest level.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub level: Option<LevelId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub floor_material: Option<Material>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ceiling_material: Option<Material>,
 }
 
 impl Room {
@@ -180,6 +211,8 @@ impl Room {
             ceiling_visible: true,
             area_visible: true,
             level: None,
+            floor_material: None,
+            ceiling_material: None,
         }
     }
 
@@ -197,6 +230,12 @@ impl Room {
         }
         if self.area() < 1.0 {
             return invalid("room area must be positive");
+        }
+        for material in [&self.floor_material, &self.ceiling_material]
+            .into_iter()
+            .flatten()
+        {
+            material.validate().map_err(CoreError::InvalidGeometry)?;
         }
         Ok(())
     }

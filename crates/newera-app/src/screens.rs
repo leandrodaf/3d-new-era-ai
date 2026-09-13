@@ -80,3 +80,36 @@ fn levels() {
     doc.execute(Command::insert(stairs)).unwrap();
     render("levels", SharedDocument::new(doc), |_| {});
 }
+
+#[test]
+#[ignore = "visual review; needs a GPU"]
+fn materials() {
+    use newera_core::{Element, Material};
+    let mut doc = Document::default();
+    house(&mut doc, 700.0);
+    let mut home = doc.home().clone();
+    let finishes = ["brick", "#9fb8c8", "subway 20x10", "stone"];
+    for (wall, finish) in home.walls.iter_mut().zip(finishes) {
+        wall.right_side = Some(finish.parse().unwrap());
+        wall.left_side = Some(finish.parse().unwrap());
+        wall.apply_type(newera_core::wall_type("tijolo-14").unwrap());
+    }
+    home.rooms[0].floor_material = Some("wood".parse::<Material>().unwrap());
+    let commands = home
+        .walls
+        .iter()
+        .cloned()
+        .map(Element::Wall)
+        .chain(home.rooms.iter().cloned().map(Element::Room))
+        .map(|element| Command::Update { element })
+        .collect();
+    doc.execute(Command::Batch { commands }).unwrap();
+    let shared = SharedDocument::new(doc);
+    render("materials", shared.clone(), |_| {});
+    render("materials-wall-dialog", shared.clone(), |app| {
+        app.open_modify(&[newera_core::WallId(1).into()]);
+    });
+    render("materials-room-dialog", shared, |app| {
+        app.open_modify(&[newera_core::RoomId(5).into()]);
+    });
+}

@@ -19,6 +19,7 @@ mod home;
 mod ids;
 mod joins;
 mod levels;
+mod materials;
 pub mod ops;
 mod project;
 mod units;
@@ -39,6 +40,7 @@ pub use ids::{
 };
 pub use joins::{JOIN_TOLERANCE, wall_outlines};
 pub use levels::{FloorShape, floor_shapes, stair_holes};
+pub use materials::{Material, Pattern, WALL_TYPES, WallFamily, WallType, wall_type};
 pub use project::{
     PROJECT_EXTENSION, Project, ProjectError, from_project_json, resolve_project_path,
     to_project_json,

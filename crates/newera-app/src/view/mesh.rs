@@ -1,11 +1,12 @@
 //! Turns the home into a triangle mesh for the 3D view.
 //!
 //! Plan coordinates `(x, y)` in centimeters map to world `(x, height, y)` in
-//! meters, with Y up.
+//! meters, with Y up. Every vertex carries texture coordinates measured in
+//! tiles of its material, so patterns and images keep their real size.
 
 use bytemuck::{Pod, Zeroable};
-use glam::Vec3;
-use newera_core::{ElementId, Furniture, Home, LevelId, Point2, Wall, WallCut};
+use glam::{Vec3, Vec4};
+use newera_core::{ElementId, Furniture, Home, LevelId, Material, Point2, Wall, WallCut};
 
 use super::plan::Selection;
 
@@ -15,12 +16,21 @@ pub(crate) struct Vertex {
     pub(crate) position: [f32; 3],
     pub(crate) normal: [f32; 3],
     pub(crate) color: [f32; 3],
+    /// Texture coordinates in tiles.
+    pub(crate) uv: [f32; 2],
+    /// 0 plain, `1..` procedural pattern, [`IMAGE_BASE`]`+n` image layer `n`.
+    pub(crate) kind: u32,
 }
+
+/// Material kinds at or above this sample image layer `kind - IMAGE_BASE`.
+pub(crate) const IMAGE_BASE: u32 = 100;
 
 #[derive(Debug, Default)]
 pub(crate) struct Mesh {
     pub(crate) vertices: Vec<Vertex>,
     pub(crate) indices: Vec<u32>,
+    /// Image files referenced by materials, in layer order.
+    pub(crate) images: Vec<String>,
 }
 
 const CM_TO_M: f32 = 0.01;
@@ -30,10 +40,96 @@ const SELECTED_COLOR: [f32; 3] = [0.35, 0.62, 0.95];
 const FLOOR_COLOR: [f32; 3] = [0.76, 0.64, 0.50];
 const CEILING_COLOR: [f32; 3] = [0.95, 0.95, 0.94];
 const GROUND_COLOR: [f32; 3] = [0.55, 0.62, 0.52];
+/// Room ceilings sit this far below the storey height so they don't fight
+/// with the underside of the slab above.
+const CEILING_GAP: f64 = 0.5;
 
 #[allow(clippy::cast_possible_truncation)] // centimeters fit comfortably in f32
 fn to_world(p: Point2, height_cm: f64) -> Vec3 {
     Vec3::new(p.x as f32, height_cm as f32, p.y as f32) * CM_TO_M
+}
+
+fn srgb_to_linear([r, g, b]: [u8; 3]) -> [f32; 3] {
+    [r, g, b].map(|c| (f32::from(c) / 255.0).powf(2.2))
+}
+
+/// How a face is painted: a color, a material kind and the planar mapping
+/// from world position (meters) to tile coordinates.
+#[derive(Debug, Clone, Copy)]
+struct Surface {
+    color: [f32; 3],
+    kind: u32,
+    u: Vec4,
+    v: Vec4,
+}
+
+impl Surface {
+    fn plain(color: [f32; 3]) -> Self {
+        Self {
+            color,
+            kind: 0,
+            u: Vec4::ZERO,
+            v: Vec4::ZERO,
+        }
+    }
+
+    /// A material mapped on the plane spanned by `across` (horizontal, unit)
+    /// and `up` (unit), both in world axes; `origin` is where tiles start.
+    #[allow(clippy::cast_possible_truncation)]
+    fn material(
+        mesh: &mut Mesh,
+        material: &Material,
+        fallback: [f32; 3],
+        across: Vec3,
+        up: Vec3,
+        origin: Vec3,
+    ) -> Self {
+        let kind = if let Some(image) = &material.image {
+            IMAGE_BASE + mesh.image_layer(image)
+        } else {
+            material.pattern.map_or(0, newera_core::Pattern::index)
+        };
+        let color = match (material.color, &material.image) {
+            (Some(color), _) => srgb_to_linear(color),
+            (None, Some(_)) => [1.0; 3],
+            (None, None) => material
+                .pattern
+                .map_or(fallback, |p| srgb_to_linear(p.default_color())),
+        };
+        let [w, h] = material.tile_size();
+        let angle = material.angle.to_radians() as f32;
+        let (sin, cos) = angle.sin_cos();
+        let along = across * cos + up * sin;
+        let rise = up * cos - across * sin;
+        // World meters → tile units.
+        let scale_u = 100.0 / w as f32;
+        let scale_v = 100.0 / h as f32;
+        let axis = |dir: Vec3, scale: f32| {
+            let d = dir * scale;
+            d.extend(-d.dot(origin))
+        };
+        Self {
+            color,
+            kind,
+            u: axis(along, scale_u),
+            v: axis(rise, scale_v),
+        }
+    }
+
+    fn uv(&self, p: Vec3) -> [f32; 2] {
+        let h = p.extend(1.0);
+        [self.u.dot(h), self.v.dot(h)]
+    }
+
+    fn vertex(&self, position: Vec3, normal: Vec3) -> Vertex {
+        Vertex {
+            position: position.to_array(),
+            normal: normal.to_array(),
+            color: self.color,
+            uv: self.uv(position),
+            kind: self.kind,
+        }
+    }
 }
 
 /// Supplies meshes for pieces with imported models; `None` falls back to the
@@ -58,22 +154,44 @@ impl Mesh {
         for level in levels {
             let view = home.level_view(level);
             let base = home.elevation_of(level);
-            let slab = level
-                .and_then(|id| home.level(id))
-                .map_or(0.0, |l| l.floor_thickness);
+            let storey = level.and_then(|id| home.level(id));
+            let slab = storey.map_or(0.0, |l| l.floor_thickness);
             for shape in newera_core::floor_shapes(home, level) {
-                mesh.add_floor(&shape, base, if base > 0.0 { slab } else { 0.0 });
+                let material = home
+                    .rooms
+                    .iter()
+                    .find(|r| r.id == shape.room)
+                    .and_then(|r| r.floor_material.clone());
+                mesh.add_floor(
+                    &shape,
+                    base,
+                    if base > 0.0 { slab } else { 0.0 },
+                    material.as_ref(),
+                );
+            }
+            let ceiling_height = storey.map_or_else(
+                || view.walls.iter().map(|w| w.height).fold(0.0, f64::max),
+                |l| l.height,
+            );
+            if ceiling_height > 0.0 {
+                for room in view
+                    .rooms
+                    .iter()
+                    .filter(|r| r.ceiling_visible && r.points.len() >= 3)
+                {
+                    mesh.add_ceiling(
+                        &room.points,
+                        base + ceiling_height - CEILING_GAP,
+                        room.ceiling_material.as_ref(),
+                    );
+                }
             }
             let cuts = view.wall_cuts();
             for ((wall, outline), wall_cuts) in
                 view.walls.iter().zip(view.wall_outlines()).zip(&cuts)
             {
-                let color = if selection.contains(&ElementId::Wall(wall.id)) {
-                    SELECTED_COLOR
-                } else {
-                    WALL_COLOR
-                };
-                mesh.add_wall(&outline, wall, wall_cuts, base, color);
+                let selected = selection.contains(&ElementId::Wall(wall.id));
+                mesh.add_wall(&outline, wall, wall_cuts, base, selected);
             }
             for piece in view.furniture.iter().filter(|f| f.visible) {
                 let local = models(piece).unwrap_or_else(|| newera_catalog::piece_mesh(piece));
@@ -84,19 +202,47 @@ impl Mesh {
         mesh
     }
 
+    fn image_layer(&mut self, path: &str) -> u32 {
+        let index = self
+            .images
+            .iter()
+            .position(|p| p == path)
+            .unwrap_or_else(|| {
+                self.images.push(path.to_owned());
+                self.images.len() - 1
+            });
+        u32::try_from(index).expect("image count fits in u32")
+    }
+
+    fn horizontal(&mut self, material: Option<&Material>, fallback: [f32; 3]) -> Surface {
+        match material {
+            Some(m) => Surface::material(self, m, fallback, Vec3::X, Vec3::Z, Vec3::ZERO),
+            None => Surface::plain(fallback),
+        }
+    }
+
     /// A floor: its top face at `base`, and for upper storeys a slab of
     /// `thickness` below it, whose underside is the ceiling of the room below.
-    fn add_floor(&mut self, shape: &newera_core::FloorShape, base: f64, thickness: f64) {
+    fn add_floor(
+        &mut self,
+        shape: &newera_core::FloorShape,
+        base: f64,
+        thickness: f64,
+        material: Option<&Material>,
+    ) {
+        let top = self.horizontal(material, FLOOR_COLOR);
+        let under = Surface::plain(CEILING_COLOR);
+        let edge = Surface::plain(WALL_COLOR);
         for tri in &shape.triangles {
             let mut t = *tri;
             if newera_core::signed_area(&t) > 0.0 {
                 t.swap(1, 2);
             }
             let corners = t.map(|p| to_world(p, base));
-            self.add_triangle(corners, Vec3::Y, FLOOR_COLOR);
+            self.add_triangle(corners, Vec3::Y, &top);
             if thickness > 0.0 {
                 let below = [t[0], t[2], t[1]].map(|p| to_world(p, base - thickness));
-                self.add_triangle(below, -Vec3::Y, CEILING_COLOR);
+                self.add_triangle(below, -Vec3::Y, &under);
             }
         }
         if thickness > 0.0 {
@@ -115,21 +261,33 @@ impl Mesh {
                         points[(k + 1) % n],
                         base - thickness,
                         base,
-                        WALL_COLOR,
+                        &edge,
                     );
                 }
             }
         }
     }
 
-    fn add_triangle(&mut self, corners: [Vec3; 3], normal: Vec3, color: [f32; 3]) {
+    /// A room ceiling, visible from below only.
+    fn add_ceiling(&mut self, points: &[Point2], height: f64, material: Option<&Material>) {
+        let surface = self.horizontal(material, CEILING_COLOR);
+        let down: Vec<Point2> = up_facing(points).into_iter().rev().collect();
+        let base = self.next_index();
+        for p in &down {
+            self.vertices
+                .push(surface.vertex(to_world(*p, height), -Vec3::Y));
+        }
+        for [a, b, c] in newera_core::triangulate(&down) {
+            let idx = |i: usize| base + u32::try_from(i).expect("index fits in u32");
+            // `triangulate` keeps the input winding, which now faces down.
+            self.indices.extend([idx(a), idx(b), idx(c)]);
+        }
+    }
+
+    fn add_triangle(&mut self, corners: [Vec3; 3], normal: Vec3, surface: &Surface) {
         let base = self.next_index();
         for corner in corners {
-            self.vertices.push(Vertex {
-                position: corner.to_array(),
-                normal: normal.to_array(),
-                color,
-            });
+            self.vertices.push(surface.vertex(corner, normal));
         }
         self.indices.extend([base, base + 1, base + 2]);
     }
@@ -143,7 +301,64 @@ impl Mesh {
         let c = to_world(Point2::new(max.x + margin, max.y + margin), -1.0);
         let b = Vec3::new(c.x, a.y, a.z);
         let d = Vec3::new(a.x, a.y, c.z);
-        self.add_quad([a, d, c, b], Vec3::Y, GROUND_COLOR);
+        let mut grass = Surface::plain(GROUND_COLOR);
+        grass.kind = newera_core::Pattern::Grass.index();
+        grass.u = Vec4::new(0.5, 0.0, 0.0, 0.0);
+        grass.v = Vec4::new(0.0, 0.0, 0.5, 0.0);
+        self.add_quad([a, d, c, b], Vec3::Y, &grass);
+    }
+
+    /// Which side of the wall a plan point is on: `Some(true)` left of
+    /// `start → end`, `Some(false)` right, `None` on the centerline (end caps).
+    fn side_of(wall: &Wall, centerline: &[Point2], p: Point2) -> Option<bool> {
+        let mut best: Option<(f64, f64)> = None;
+        for seg in centerline.windows(2) {
+            let (a, b) = (seg[0], seg[1]);
+            let (dx, dy) = (b.x - a.x, b.y - a.y);
+            let len2 = (dx * dx + dy * dy).max(1e-12);
+            let t = (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0);
+            let q = Point2::new(a.x + dx * t, a.y + dy * t);
+            let dist = p.distance(q);
+            let cross = dx * (p.y - a.y) - dy * (p.x - a.x);
+            if best.is_none_or(|(d, _)| dist < d) {
+                best = Some((dist, cross / len2.sqrt()));
+            }
+        }
+        let (_, signed) = best?;
+        // Left of +x is -y in plan axes: a negative cross product.
+        (signed.abs() > wall.thickness * 0.25).then_some(signed < 0.0)
+    }
+
+    fn wall_surface(
+        &mut self,
+        wall: &Wall,
+        left: bool,
+        p: Point2,
+        q: Point2,
+        selected: bool,
+    ) -> Surface {
+        if selected {
+            return Surface::plain(SELECTED_COLOR);
+        }
+        let material = if left {
+            &wall.left_side
+        } else {
+            &wall.right_side
+        };
+        let Some(material) = material else {
+            return Surface::plain(WALL_COLOR);
+        };
+        // The viewer's right on an outward face is its `p → q` direction.
+        let across = (to_world(q, 0.0) - to_world(p, 0.0)).normalize_or(Vec3::X);
+        // Anchor tiles at the wall start so split faces line up.
+        Surface::material(
+            self,
+            material,
+            WALL_COLOR,
+            across,
+            Vec3::Y,
+            to_world(wall.start, 0.0),
+        )
     }
 
     /// Extrudes a wall outline, leaving holes where doors and windows are:
@@ -155,11 +370,13 @@ impl Mesh {
         wall: &Wall,
         cuts: &[WallCut],
         base: f64,
-        color: [f32; 3],
+        selected: bool,
     ) {
         if outline.len() < 3 {
             return;
         }
+        let plain = Surface::plain(if selected { SELECTED_COLOR } else { WALL_COLOR });
+        let centerline = wall.centerline();
         let points = up_facing(outline);
         let (bottom, top) = (base, base + wall.height);
         let len = wall.start.distance(wall.end).max(1e-9);
@@ -176,9 +393,14 @@ impl Mesh {
             if edge_len < 1e-6 {
                 continue;
             }
+            let mid = Point2::new(p.x.midpoint(q.x), p.y.midpoint(q.y));
+            let surface = match Self::side_of(wall, &centerline, mid) {
+                Some(left) => self.wall_surface(wall, left, p, q, selected),
+                None => plain,
+            };
             let parallel = ((q.x - p.x) * dir.1 - (q.y - p.y) * dir.0).abs() / edge_len < 1e-3;
             if cuts.is_empty() || !parallel || wall.is_arc() {
-                self.add_side(p, q, bottom, top, color);
+                self.add_side(p, q, bottom, top, &surface);
                 continue;
             }
             // Split the long face at every cut boundary it crosses.
@@ -210,17 +432,17 @@ impl Mesh {
                 match cuts.iter().find(|c| c.from <= mid && c.to >= mid) {
                     Some(cut) => {
                         if base + cut.bottom > bottom {
-                            self.add_side(at(s0), at(s1), bottom, base + cut.bottom, color);
+                            self.add_side(at(s0), at(s1), bottom, base + cut.bottom, &surface);
                         }
                         if base + cut.top < top {
-                            self.add_side(at(s0), at(s1), base + cut.top, top, color);
+                            self.add_side(at(s0), at(s1), base + cut.top, top, &surface);
                         }
                     }
-                    None => self.add_side(at(s0), at(s1), bottom, top, color),
+                    None => self.add_side(at(s0), at(s1), bottom, top, &surface),
                 }
             }
         }
-        self.add_cap(&points, top, color);
+        self.add_cap(&points, top, &plain);
         if !wall.is_arc() {
             for cut in cuts {
                 self.add_reveals(wall, dir, cut, base);
@@ -230,6 +452,7 @@ impl Mesh {
 
     /// Inner faces of a hole: jambs, sill and lintel.
     fn add_reveals(&mut self, wall: &Wall, dir: (f64, f64), cut: &WallCut, base: f64) {
+        let reveal = Surface::plain(REVEAL_COLOR);
         let half = wall.thickness / 2.0;
         let normal = (-dir.1, dir.0);
         let point = |s: f64, side: f64| {
@@ -250,7 +473,7 @@ impl Mesh {
                     to_world(l, base + cut.top),
                 ],
                 facing,
-                REVEAL_COLOR,
+                &reveal,
             );
         }
         for (z, facing) in [(cut.bottom, Vec3::Y), (cut.top, -Vec3::Y)] {
@@ -265,17 +488,17 @@ impl Mesh {
                     to_world(point(cut.from, -half), base + z),
                 ],
                 facing,
-                REVEAL_COLOR,
+                &reveal,
             );
         }
     }
 
     /// Vertical face over plan edge `p → q` (up-facing winding, so outward).
-    fn add_side(&mut self, p: Point2, q: Point2, bottom: f64, top: f64, color: [f32; 3]) {
+    fn add_side(&mut self, p: Point2, q: Point2, bottom: f64, top: f64, surface: &Surface) {
         let (pb, qb) = (to_world(p, bottom), to_world(q, bottom));
         let (pt, qt) = (to_world(p, top), to_world(q, top));
         let normal = (qb - pb).cross(Vec3::Y).normalize_or_zero();
-        self.add_quad([pb, qb, qt, pt], normal, color);
+        self.add_quad([pb, qb, qt, pt], normal, surface);
     }
 
     /// Places a catalog or imported mesh in the world.
@@ -313,11 +536,8 @@ impl Mesh {
             } else {
                 *color
             };
-            self.vertices.push(Vertex {
-                position: at.to_array(),
-                normal: world_normal.to_array(),
-                color,
-            });
+            self.vertices
+                .push(Surface::plain(color).vertex(at, world_normal));
         }
         // Mirroring flips handedness; reorder triangles so faces keep
         // pointing outward.
@@ -333,14 +553,11 @@ impl Mesh {
     }
 
     /// Horizontal face at `height` (cm); `points` must already face up.
-    fn add_cap(&mut self, points: &[Point2], height: f64, color: [f32; 3]) {
+    fn add_cap(&mut self, points: &[Point2], height: f64, surface: &Surface) {
         let base = self.next_index();
         for p in points {
-            self.vertices.push(Vertex {
-                position: to_world(*p, height).to_array(),
-                normal: Vec3::Y.to_array(),
-                color,
-            });
+            self.vertices
+                .push(surface.vertex(to_world(*p, height), Vec3::Y));
         }
         for [a, b, c] in newera_core::triangulate(points) {
             let idx = |i: usize| base + u32::try_from(i).expect("index fits in u32");
@@ -349,23 +566,19 @@ impl Mesh {
     }
 
     /// Adds a quad, fixing the corner order so it faces `normal`.
-    fn add_facing(&mut self, mut corners: [Vec3; 4], normal: Vec3, color: [f32; 3]) {
+    fn add_facing(&mut self, mut corners: [Vec3; 4], normal: Vec3, surface: &Surface) {
         let geometric = (corners[1] - corners[0]).cross(corners[2] - corners[0]);
         if geometric.dot(normal) < 0.0 {
             corners.reverse();
         }
-        self.add_quad(corners, normal, color);
+        self.add_quad(corners, normal, surface);
     }
 
     /// Adds a quad; corners must be counter-clockwise when seen from `normal`.
-    fn add_quad(&mut self, corners: [Vec3; 4], normal: Vec3, color: [f32; 3]) {
+    fn add_quad(&mut self, corners: [Vec3; 4], normal: Vec3, surface: &Surface) {
         let base = self.next_index();
         for corner in corners {
-            self.vertices.push(Vertex {
-                position: corner.to_array(),
-                normal: normal.to_array(),
-                color,
-            });
+            self.vertices.push(surface.vertex(corner, normal));
         }
         self.indices
             .extend([base, base + 1, base + 2, base, base + 2, base + 3]);

@@ -48,7 +48,7 @@ SESSION=$(grep -i '^mcp-session-id:' "$LOG.headers" | awk '{print $2}' | tr -d '
 rpc '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
 
 reply=$(rpc '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
-for tool in get_home create update delete move split_wall set_home set_background render_plan export_plan save_home open_home new_home undo redo catalog place check_layout; do
+for tool in get_home create update delete move split_wall set_home set_background render_plan export_plan save_home open_home new_home undo redo catalog place check_layout variants levels materials; do
   check "tool $tool listed" "$reply" "\"name\":\"$tool\""
 done
 
@@ -92,6 +92,13 @@ reply=$(call check_layout '{}')
 check "check_layout reports issues as JSON" "$reply" '{'
 reply=$(call render_plan '{"w":320,"h":240}')
 check "render_plan with furniture still works" "$reply" '"mimeType":"image/png"'
+
+reply=$(call materials '{}')
+check "materials lists drywall" "$reply" 'drywall-95'
+reply=$(call update '{"items":[{"id":"w22","type":"drywall-95","sides":"tiles #ffffff 30"},{"id":"r26","floor_mat":"wood"}]}')
+check "wall type and finishes apply" "$reply" 'ok rev='
+reply=$(call get_home '{}')
+check "wall reports its finish" "$reply" 'tiles #ffffff 30'
 
 TMP_PROJECT="$(mktemp -d)/casa"
 reply=$(call save_home '{"path":"'"$TMP_PROJECT"'"}')

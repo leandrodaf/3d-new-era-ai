@@ -2,8 +2,8 @@
 //! protocol types so it can be unit-tested directly.
 
 use newera_core::{
-    BackgroundImage, Command, CoreError, Dimension, Document, Element, ElementId, Label, Point2,
-    Room, Wall, detect_room, ops,
+    BackgroundImage, Command, CoreError, Dimension, Document, Element, ElementId, Label, Material,
+    Point2, Room, Wall, detect_room, ops,
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -13,6 +13,24 @@ pub(crate) type EditResult<T> = Result<T, String>;
 #[allow(clippy::needless_pass_by_value)] // used as `map_err(core)`
 fn core(err: CoreError) -> String {
     err.to_string()
+}
+
+/// Parses a material in short form; `none` means "no finish".
+pub(crate) fn material(raw: &str) -> EditResult<Option<Material>> {
+    if raw.trim() == "none" {
+        return Ok(None);
+    }
+    raw.parse().map(Some)
+}
+
+/// Resolves a wall type id; `none` clears it.
+fn wall_type(raw: &str) -> EditResult<Option<&'static newera_core::WallType>> {
+    if raw == "none" {
+        return Ok(None);
+    }
+    newera_core::wall_type(raw)
+        .map(Some)
+        .ok_or_else(|| format!("unknown wall type `{raw}` (see the materials tool)"))
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -28,6 +46,11 @@ pub(crate) struct WallPath {
     pub h: Option<f64>,
     /// Arc extent in degrees applied to every segment (positive bulges left).
     pub arc: Option<f64>,
+    /// Wall type id, e.g. `drywall-95`; sets the thickness unless `t` is given.
+    #[serde(rename = "type")]
+    pub kind: Option<String>,
+    /// Finish on both sides, e.g. `#f2efe6` or `subway 20x10`.
+    pub sides: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -37,6 +60,10 @@ pub(crate) struct RoomSpec {
     pub pts: Option<Vec<Point2>>,
     /// A point inside a space enclosed by walls (auto-detects the polygon).
     pub at: Option<Point2>,
+    /// Floor finish, e.g. `wood` or `tiles #ffffff 60`.
+    pub floor_mat: Option<String>,
+    /// Ceiling finish.
+    pub ceil_mat: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -81,17 +108,26 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
         if path.pts.len() < 2 {
             return Err("each wall path needs at least 2 points".into());
         }
+        let kind = path.kind.as_deref().map(wall_type).transpose()?.flatten();
+        let sides = path.sides.as_deref().map(material).transpose()?.flatten();
         let mut pts = path.pts;
         if path.closed && pts.len() > 2 {
             pts.push(pts[0]);
         }
         for pair in pts.windows(2) {
-            let wall = Wall {
-                thickness: path.t.unwrap_or(Wall::DEFAULT_THICKNESS),
+            let mut wall = Wall {
                 height: path.h.unwrap_or(Wall::DEFAULT_HEIGHT),
                 arc_extent: path.arc.filter(|a| *a != 0.0),
+                left_side: sides.clone(),
+                right_side: sides.clone(),
                 ..Wall::new(doc.new_wall_id(), pair[0], pair[1])
             };
+            if let Some(kind) = kind {
+                wall.apply_type(kind);
+            }
+            if let Some(t) = path.t {
+                wall.thickness = t;
+            }
             ids.push(wall.id.to_string());
             new_walls.push(wall.clone());
             commands.push(Command::insert(wall));
@@ -110,7 +146,19 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
             }
             (None, None) => return Err(format!("room `{}` needs `pts` or `at`", spec.name)),
         };
-        let room = Room::new(doc.new_room_id(), spec.name, points);
+        let mut room = Room::new(doc.new_room_id(), spec.name, points);
+        room.floor_material = spec
+            .floor_mat
+            .as_deref()
+            .map(material)
+            .transpose()?
+            .flatten();
+        room.ceiling_material = spec
+            .ceil_mat
+            .as_deref()
+            .map(material)
+            .transpose()?
+            .flatten();
         ids.push(room.id.to_string());
         commands.push(Command::insert(room));
     }
@@ -231,6 +279,24 @@ pub(crate) struct UpdateSpec {
     /// Level slab thickness cm.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub slab: Option<f64>,
+    /// Wall type id (sets thickness unless `t` is given); `none` clears.
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Wall finish on the left of a→b; `none` clears.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub left: Option<String>,
+    /// Wall finish on the right of a→b.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub right: Option<String>,
+    /// Wall finish on both sides.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sides: Option<String>,
+    /// Room floor finish.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub floor_mat: Option<String>,
+    /// Room ceiling finish.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ceil_mat: Option<String>,
 }
 
 impl UpdateSpec {
@@ -251,8 +317,18 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
             .element(id)
             .ok_or_else(|| format!("{id} not found"))?;
         let allowed: &[&str] = match element {
-            Element::Wall(_) => &["a", "b", "t", "h", "arc", "level"],
-            Element::Room(_) => &["name", "pts", "floor", "ceiling", "level"],
+            Element::Wall(_) => &[
+                "a", "b", "t", "h", "arc", "level", "type", "left", "right", "sides",
+            ],
+            Element::Room(_) => &[
+                "name",
+                "pts",
+                "floor",
+                "ceiling",
+                "level",
+                "floor_mat",
+                "ceil_mat",
+            ],
             Element::Dimension(_) => &["a", "b", "off", "level"],
             Element::Label(_) => &["text", "at", "size", "angle", "level"],
             Element::Level(_) => &["name", "elev", "h", "slab"],
@@ -302,6 +378,22 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
             Element::Wall(mut w) => {
                 w.start = spec.a.unwrap_or(w.start);
                 w.end = spec.b.unwrap_or(w.end);
+                if let Some(raw) = &spec.kind {
+                    match wall_type(raw)? {
+                        Some(kind) => w.apply_type(kind),
+                        None => w.wall_type = None,
+                    }
+                }
+                if let Some(raw) = &spec.sides {
+                    w.left_side = material(raw)?;
+                    w.right_side = w.left_side.clone();
+                }
+                if let Some(raw) = &spec.left {
+                    w.left_side = material(raw)?;
+                }
+                if let Some(raw) = &spec.right {
+                    w.right_side = material(raw)?;
+                }
                 w.thickness = spec.t.unwrap_or(w.thickness);
                 w.height = spec.h.unwrap_or(w.height);
                 if let Some(arc) = spec.arc {
@@ -314,6 +406,12 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 r.points = spec.pts.unwrap_or(r.points);
                 r.floor_visible = spec.floor.unwrap_or(r.floor_visible);
                 r.ceiling_visible = spec.ceiling.unwrap_or(r.ceiling_visible);
+                if let Some(raw) = &spec.floor_mat {
+                    r.floor_material = material(raw)?;
+                }
+                if let Some(raw) = &spec.ceil_mat {
+                    r.ceiling_material = material(raw)?;
+                }
                 Element::Room(r)
             }
             Element::Dimension(mut d) => {
@@ -479,6 +577,7 @@ mod tests {
                     name: "Sala".into(),
                     at: Some(Point2::new(200.0, 150.0)),
                     pts: None,
+                    ..RoomSpec::default()
                 }],
                 labels: vec![LabelSpec {
                     text: "Entrada".into(),
@@ -509,6 +608,7 @@ mod tests {
                     name: "X".into(),
                     at: Some(Point2::new(10.0, 10.0)),
                     pts: None,
+                    ..RoomSpec::default()
                 }],
                 ..CreateParams::default()
             },
@@ -516,6 +616,45 @@ mod tests {
         .unwrap_err();
         assert!(err.contains("no space enclosed"));
         assert!(doc.home().walls.is_empty());
+    }
+
+    #[test]
+    fn wall_types_and_finishes() {
+        let mut doc = Document::default();
+        let params: CreateParams = serde_json::from_str(
+            r##"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true,"type":"drywall-95","sides":"#f2efe6"}],
+                "rooms":[{"name":"Sala","at":[200,150],"floor_mat":"wood"}]}"##,
+        )
+        .unwrap();
+        create(&mut doc, params).unwrap();
+        let wall = &doc.home().walls[0];
+        assert_eq!(
+            (wall.wall_type.as_deref(), wall.thickness),
+            (Some("drywall-95"), 9.5)
+        );
+        assert_eq!(wall.left_side.as_ref().unwrap().to_string(), "#f2efe6");
+        assert_eq!(
+            doc.home().rooms[0].floor_material,
+            Some(Material::pattern(newera_core::Pattern::Wood))
+        );
+
+        let spec: UpdateSpec =
+            serde_json::from_str(r#"{"id":"w1","type":"tijolo-14","right":"brick","left":"none"}"#)
+                .unwrap();
+        update(&mut doc, vec![spec]).unwrap();
+        let wall = &doc.home().walls[0];
+        assert!((wall.thickness - 19.0).abs() < 1e-9);
+        assert!(wall.left_side.is_none());
+        assert_eq!(wall.right_side.as_ref().unwrap().to_string(), "brick");
+
+        let bad: UpdateSpec = serde_json::from_str(r#"{"id":"w1","type":"papelao"}"#).unwrap();
+        assert!(
+            update(&mut doc, vec![bad])
+                .unwrap_err()
+                .contains("unknown wall type")
+        );
+        let bad: UpdateSpec = serde_json::from_str(r#"{"id":"r5","floor_mat":"lava"}"#).unwrap();
+        assert!(update(&mut doc, vec![bad]).is_err());
     }
 
     #[test]

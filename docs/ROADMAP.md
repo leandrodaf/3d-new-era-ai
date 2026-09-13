@@ -73,10 +73,13 @@ The core of what makes the editor useful: placing real objects with real dimensi
       the storey below drawn faintly in the plan; stacked storeys in 3D; stairs open
       the floor above; MCP `levels` (list / add / select / delete), all reads scoped
       to the selected storey
-- [ ] **Wall types**: drywall, masonry (tijolo/bloco), concrete… with standard
-      thicknesses and layers, picked from a list and editable per wall
-- [ ] Colors and **textures** for walls (paint per side), floors and ceilings;
-      built-in procedural patterns plus imported image textures with real-size tiling
+- [x] **Wall types**: 14 standard constructions (drywall 73/95/115/120, ceramic brick
+      9/14/19, concrete block 14/19, cast concrete, steel/wood frame, glass) with
+      finished thickness; plan fill by family; MCP `materials`, `type` on walls
+- [x] Colors and **textures** for each wall side, floors and ceilings: 10 procedural
+      patterns drawn by the GPU at any distance (wood, parquet, tiles, subway, brick,
+      stone, concrete, marble, carpet, grass) plus image textures, all tiled at real
+      size in cm with tint and rotation; short text form for the MCP (`tiles #fff 60`)
 - [ ] **Electrical and plumbing plans** on top of the same floor plan: outlets,
       switches, light points, circuits; water/sewer points and pipes; each discipline
       as a toggleable layer with its own symbols, legend, export and MCP tools
