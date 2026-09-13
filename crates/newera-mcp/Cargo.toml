@@ -1,0 +1,28 @@
+[package]
+name = "newera-mcp"
+description = "Model Context Protocol server exposing the 3D New Era AI editor to AI agents"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+newera-core.workspace = true
+rmcp = { workspace = true, features = [
+    "server",
+    "macros",
+    "transport-io",
+    "transport-streamable-http-server",
+] }
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio-util.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,11 @@
+name: Linux system dependencies
+description: Headers needed to build the eframe/winit/wgpu stack on Ubuntu runners.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends \
+          libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev \
+          libxrandr-dev libxi-dev libvulkan-dev

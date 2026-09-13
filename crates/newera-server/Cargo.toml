@@ -1,0 +1,26 @@
+[package]
+name = "newera-server"
+description = "HTTP server for 3D New Era AI: REST API and Streamable HTTP MCP endpoint"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+axum.workspace = true
+newera-core.workspace = true
+newera-mcp.workspace = true
+serde.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tower = { version = "0.5", features = ["util"] }
+
+[lints]
+workspace = true

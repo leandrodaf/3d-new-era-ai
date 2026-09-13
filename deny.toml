@@ -1,0 +1,38 @@
+[graph]
+all-features = false
+
+[advisories]
+version = 2
+yanked = "warn"
+ignore = [
+  # Unmaintained notice (not a vulnerability) for a transitive dependency:
+  # winit -> sctk-adwaita -> ab_glyph -> ttf-parser. Revisit when winit moves on.
+  { id = "RUSTSEC-2026-0192", reason = "transitive via winit; no upgrade available" },
+]
+
+[licenses]
+version = 2
+confidence-threshold = 0.8
+# Permissive licenses only, all compatible with MIT OR Apache-2.0 distribution.
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "ISC",
+  "Zlib",
+  "Unicode-3.0",
+  # Fonts bundled by egui's default_fonts feature.
+  "OFL-1.1",
+  "Ubuntu-font-1.0",
+]
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

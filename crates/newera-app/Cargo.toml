@@ -1,0 +1,19 @@
+[package]
+name = "newera-app"
+description = "Desktop editor for 3D New Era AI: catalog, 2D floor plan and native 3D view"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+bytemuck.workspace = true
+eframe.workspace = true
+glam.workspace = true
+newera-core.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true
