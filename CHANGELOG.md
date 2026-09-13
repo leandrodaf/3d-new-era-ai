@@ -13,4 +13,6 @@ All notable changes to this project are documented here. The format follows
 - Walls, rooms and compass; short typed ids (`w12`, `r3`) and compact `[x, y]` points.
 - Desktop editor in the Sweet Home 3D layout: catalog and home tree, 2D floor plan, native 3D view.
 - MCP server (stdio and Streamable HTTP) with token-efficient tools; REST `GET /api/home`.
+- Wall joins (miters, T/X junctions) and concave room floors, shared by plan and 3D.
+- `scripts/mcp.sh` / `make mcp` to call MCP tools from the shell.
 - CI for formatting, clippy, tests on Linux/macOS/Windows, MCP smoke test, MSRV and cargo-deny; release builds.

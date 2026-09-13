@@ -30,8 +30,8 @@ CI runs the same checks on Linux, macOS and Windows.
 - **Units are centimeters.** Name fields after what they measure, and document units.
 - **Tests**: core logic gets unit tests; MCP tools get tests for their wire format;
   end-to-end behavior goes in `scripts/mcp-smoke.sh` when it crosses processes.
-- **Assets and third-party code**: see "Using Sweet Home 3D as a reference" in
-  [docs/ROADMAP.md](docs/ROADMAP.md). Every asset needs a known, redistributable license.
+- **No code from Sweet Home 3D** (or other GPL projects): it's a functional reference
+  only. Every asset needs a known, redistributable license.
 - Commit messages: [Conventional Commits](https://www.conventionalcommits.org)
   (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `ci:`, `chore:`).
 

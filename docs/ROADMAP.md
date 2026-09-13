@@ -24,11 +24,11 @@ Make the plan precise enough to draw a real house from measurements.
 
 - [ ] **Background image**: import a scanned plan, calibrate scale by marking a known
       length, set origin, adjust opacity; per level
-- [ ] Wall joins: mitered corners between connected walls (`wallAtStart`/`wallAtEnd`)
+- [x] Wall joins: mitered corners, T/X junctions and straight continuations (walls sharing endpoints)
 - [ ] Edit walls: move endpoints, thickness, height, split, arc walls
 - [ ] Dimension lines with offset and automatic wall-length dimensions
-- [ ] Rooms: draw polygon, auto-detect from walls (double-click), ceiling toggle,
-      concave floors (ear clipping)
+- [x] Concave room floors in plan and 3D (ear clipping)
+- [ ] Rooms: draw polygon, auto-detect from walls (double-click), ceiling toggle
 - [ ] Text labels
 - [ ] Magnetism rules: 15° angles, align to walls, length rounding by zoom level
 - [ ] Rulers and cursor coordinates; metric/imperial display
@@ -71,16 +71,12 @@ The core of what makes the editor useful: placing real objects with real dimensi
 - [ ] Plugin API on top of commands
 - [ ] i18n (UI currently in Portuguese)
 
-## Using Sweet Home 3D as a reference
+## Sweet Home 3D is a reference, not a source
 
-Sweet Home 3D is GPL-2.0-or-later and its catalogs mix licenses per model.
-This project is MIT OR Apache-2.0. To keep both sides clean:
+Sweet Home 3D (Java, GPL) is the benchmark for **what** a home design tool should
+do and how it should feel. **No code is copied or translated from it** — every
+feature here is designed and implemented from scratch in Rust, around the command
+model and the AI/MCP workflow that are this project's goal.
 
-- **Behavior and file formats** (what a feature does, `Home.xml` structure,
-  catalog `.properties` format) can be studied and reimplemented freely.
-- **Source code** must not be copied or line-by-line translated into this
-  repository unless the copyright holders grant a license compatible with
-  MIT/Apache in writing, recorded in `docs/licensing/`.
-- **Assets** (models, textures, icons) are imported only when their individual
-  license allows redistribution; creator and license travel with each asset and
-  are shown in the app's credits.
+Third-party assets (3D models, textures) are only included when their individual
+license allows redistribution, with creator and license shipped alongside.

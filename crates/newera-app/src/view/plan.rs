@@ -44,6 +44,7 @@ const GRID_MAJOR: Color32 = Color32::from_rgb(210, 214, 219);
 const WALL_FILL: Color32 = Color32::from_rgb(90, 90, 96);
 const WALL_SELECTED: Color32 = Color32::from_rgb(40, 120, 230);
 const ROOM_FILL: Color32 = Color32::from_rgb(238, 228, 212);
+const ROOM_STROKE: Color32 = Color32::from_rgb(170, 150, 120);
 const PREVIEW: Color32 = Color32::from_rgb(40, 120, 230);
 
 impl Default for PlanView {
@@ -106,23 +107,6 @@ impl PlanView {
 
         self.navigate(ui, &response, rect);
 
-        painter.rect_filled(rect, 0.0, BACKGROUND);
-        self.draw_grid(&painter, rect);
-        for room in &home.rooms {
-            self.draw_room(&painter, room);
-        }
-        if home.compass.visible {
-            self.draw_compass(&painter, rect, &home.compass);
-        }
-        for wall in &home.walls {
-            let color = if Some(wall.id) == selected {
-                WALL_SELECTED
-            } else {
-                WALL_FILL
-            };
-            self.draw_wall(&painter, wall, color);
-        }
-
         let hover = response
             .hover_pos()
             .map(|p| self.snap(home, self.to_world(rect, p)));
@@ -134,9 +118,6 @@ impl PlanView {
                 }
             }
             Tool::CreateWalls => {
-                if let Some(p) = hover {
-                    self.draw_crosshair(&painter, rect, p);
-                }
                 if response.clicked_by(egui::PointerButton::Primary)
                     && let Some(p) = hover
                 {
@@ -153,10 +134,45 @@ impl PlanView {
                 {
                     self.wall_start = None;
                 }
-                if let (Some(start), Some(end)) = (self.wall_start, hover) {
-                    self.draw_preview(&painter, rect, start, end);
-                }
             }
+        }
+
+        // The wall being drawn joins existing walls exactly like a real one.
+        let preview = match (tool, self.wall_start, hover) {
+            (Tool::CreateWalls, Some(start), Some(end)) if start.distance(end) >= 1.0 => {
+                Some(Wall::new(WallId(0), start, end))
+            }
+            _ => None,
+        };
+        let mut walls = home.walls.clone();
+        walls.extend(preview.clone());
+        let outlines = newera_core::wall_outlines(&walls);
+
+        painter.rect_filled(rect, 0.0, BACKGROUND);
+        self.draw_grid(&painter, rect);
+        for room in &home.rooms {
+            self.draw_room(&painter, rect, room);
+        }
+        if home.compass.visible {
+            self.draw_compass(&painter, rect, &home.compass);
+        }
+        for (wall, outline) in walls.iter().zip(&outlines) {
+            let color = if preview.as_ref().is_some_and(|p| p.id == wall.id) {
+                PREVIEW.gamma_multiply(0.55)
+            } else if Some(wall.id) == selected {
+                WALL_SELECTED
+            } else {
+                WALL_FILL
+            };
+            self.fill_polygon(&painter, rect, outline, color);
+        }
+        if tool == Tool::CreateWalls
+            && let Some(p) = hover
+        {
+            self.draw_crosshair(&painter, rect, p);
+        }
+        if let Some(wall) = &preview {
+            self.draw_length_label(&painter, rect, wall.start, wall.end);
         }
 
         self.draw_scale(&painter, rect);
@@ -262,44 +278,51 @@ impl PlanView {
         }
     }
 
-    fn draw_room(&self, painter: &egui::Painter, room: &newera_core::Room) {
-        let rect = painter.clip_rect();
-        let points: Vec<Pos2> = room
+    fn draw_room(&self, painter: &egui::Painter, rect: egui::Rect, room: &newera_core::Room) {
+        self.fill_polygon(painter, rect, &room.points, ROOM_FILL);
+        let mut outline: Vec<Pos2> = room
             .points
             .iter()
             .map(|p| self.to_screen(rect, *p))
             .collect();
-        painter.add(egui::Shape::convex_polygon(
-            points.clone(),
-            ROOM_FILL,
-            Stroke::new(1.0, Color32::from_rgb(170, 150, 120)),
-        ));
-        let centroid = egui::Rect::from_points(&points).center();
-        let area_m2 = room.area() / 10_000.0;
-        painter.text(
-            centroid,
-            egui::Align2::CENTER_CENTER,
-            format!("{}\n{area_m2:.2} m²", room.name),
-            egui::FontId::proportional(13.0),
-            Color32::from_rgb(90, 75, 55),
-        );
+        if let Some(&first) = outline.first() {
+            outline.push(first);
+        }
+        painter.add(egui::Shape::line(outline, Stroke::new(1.0, ROOM_STROKE)));
+
+        if let Some(center) = newera_core::polygon_centroid(&room.points) {
+            let area_m2 = room.area() / 10_000.0;
+            painter.text(
+                self.to_screen(rect, center),
+                egui::Align2::CENTER_CENTER,
+                format!("{}\n{area_m2:.2} m²", room.name),
+                egui::FontId::proportional(13.0),
+                Color32::from_rgb(90, 75, 55),
+            );
+        }
     }
 
-    #[allow(clippy::cast_possible_truncation)]
-    fn draw_wall(&self, painter: &egui::Painter, wall: &Wall, color: Color32) {
-        let rect = painter.clip_rect();
-        let (a, b) = (
-            self.to_screen(rect, wall.start),
-            self.to_screen(rect, wall.end),
-        );
-        let dir = (b - a).normalized();
-        let half = (wall.thickness as f32 * self.zoom / 2.0).max(1.0);
-        let side = Vec2::new(-dir.y, dir.x) * half;
-        painter.add(egui::Shape::convex_polygon(
-            vec![a + side, b + side, b - side, a - side],
-            color,
-            Stroke::NONE,
-        ));
+    /// Fills any simple polygon (convex or concave) given in plan coordinates.
+    fn fill_polygon(
+        &self,
+        painter: &egui::Painter,
+        rect: egui::Rect,
+        points: &[Point2],
+        color: Color32,
+    ) {
+        let triangles = newera_core::triangulate(points);
+        if triangles.is_empty() {
+            return;
+        }
+        let mut mesh = egui::Mesh::default();
+        for p in points {
+            mesh.colored_vertex(self.to_screen(rect, *p), color);
+        }
+        for [a, b, c] in triangles {
+            #[allow(clippy::cast_possible_truncation)]
+            mesh.add_triangle(a as u32, b as u32, c as u32);
+        }
+        painter.add(egui::Shape::mesh(mesh));
     }
 
     fn draw_crosshair(&self, painter: &egui::Painter, rect: egui::Rect, p: Point2) {
@@ -309,9 +332,13 @@ impl PlanView {
         painter.line_segment([s - Vec2::Y * 8.0, s + Vec2::Y * 8.0], stroke);
     }
 
-    fn draw_preview(&self, painter: &egui::Painter, rect: egui::Rect, start: Point2, end: Point2) {
-        let preview = Wall::new(WallId(0), start, end);
-        self.draw_wall(painter, &preview, PREVIEW.gamma_multiply(0.5));
+    fn draw_length_label(
+        &self,
+        painter: &egui::Painter,
+        rect: egui::Rect,
+        start: Point2,
+        end: Point2,
+    ) {
         let mid = self.to_screen(
             rect,
             Point2::new(start.x.midpoint(end.x), start.y.midpoint(end.y)),

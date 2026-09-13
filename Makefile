@@ -116,6 +116,10 @@ mcp-tools: ## Lista as ferramentas MCP expostas (precisa do editor/servidor roda
 	  | sed -n 's/^data: //p' | grep -o '"name":"[a-z_]*","[^}]*description":"[^"]*"' \
 	  | sed -E 's/"name":"([a-z_]*)".*"description":"([^"]*)"/  \1 — \2/'
 
+.PHONY: mcp
+mcp: ## Chama uma ferramenta MCP: make mcp TOOL=get_home ARGS='{}'
+	@scripts/mcp.sh $(TOOL) '$(or $(ARGS),{})'
+
 .PHONY: home
 home: ## Mostra o JSON da casa aberta (GET /api/home)
 	@curl -s http://$(ADDR)/api/home | python3 -m json.tool

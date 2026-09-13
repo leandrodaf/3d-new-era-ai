@@ -6,6 +6,7 @@ use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::geometry::{Point2, polygon_area};
+use crate::joins::wall_outlines;
 
 /// Error returned when parsing an id such as `"w12"` fails.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -215,6 +216,11 @@ impl Home {
         let id = self.next_id.max(max_used + 1);
         self.next_id = id + 1;
         id
+    }
+
+    /// Floor outline of every wall with corners joined, in `walls` order.
+    pub fn wall_outlines(&self) -> Vec<Vec<Point2>> {
+        wall_outlines(&self.walls)
     }
 
     /// Axis-aligned bounds `(min, max)` of every wall and room point.

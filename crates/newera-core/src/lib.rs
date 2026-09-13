@@ -11,10 +11,12 @@ mod command;
 mod document;
 mod error;
 mod geometry;
+mod joins;
 mod model;
 
 pub use command::Command;
 pub use document::{Document, SharedDocument};
 pub use error::{CoreError, CoreResult};
-pub use geometry::Point2;
+pub use geometry::{Point2, polygon_area, polygon_centroid, signed_area, triangulate};
+pub use joins::{JOIN_TOLERANCE, wall_outlines};
 pub use model::{Compass, Home, ParseIdError, Room, RoomId, Wall, WallId};

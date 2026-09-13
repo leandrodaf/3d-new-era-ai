@@ -5,7 +5,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use glam::Vec3;
-use newera_core::{Home, Point2, Room, Wall, WallId};
+use newera_core::{Home, Point2, Room, WallId};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
@@ -39,13 +39,13 @@ impl Mesh {
         for room in &home.rooms {
             mesh.add_room_floor(room);
         }
-        for wall in &home.walls {
+        for (wall, outline) in home.walls.iter().zip(home.wall_outlines()) {
             let color = if Some(wall.id) == selected {
                 SELECTED_WALL_COLOR
             } else {
                 WALL_COLOR
             };
-            mesh.add_wall(wall, color);
+            mesh.add_prism(&outline, 0.0, wall.height, color);
         }
         mesh
     }
@@ -62,57 +62,47 @@ impl Mesh {
         self.add_quad([a, d, c, b], Vec3::Y, GROUND_COLOR);
     }
 
-    /// Floors are triangulated as a fan, which is exact for convex rooms.
-    /// Concave rooms need ear clipping — tracked in the roadmap.
     fn add_room_floor(&mut self, room: &Room) {
-        if room.points.len() < 3 {
-            return;
-        }
-        let base = self.next_index();
-        // Plan (x, y) maps to world (x, z), which mirrors the winding: a
-        // polygon with positive shoelace area would face down. Flip it.
-        let flip = signed_area(&room.points) > 0.0;
-        for p in &room.points {
-            self.vertices.push(Vertex {
-                position: to_world(*p, 0.0).to_array(),
-                normal: Vec3::Y.to_array(),
-                color: FLOOR_COLOR,
-            });
-        }
-        let n = u32::try_from(room.points.len()).expect("room point count fits in u32");
-        for i in 1..n - 1 {
-            if flip {
-                self.indices.extend([base, base + i + 1, base + i]);
-            } else {
-                self.indices.extend([base, base + i, base + i + 1]);
-            }
-        }
+        let points = up_facing(&room.points);
+        self.add_cap(&points, 0.0, FLOOR_COLOR);
     }
 
-    /// A wall is an extruded rectangle: 4 sides plus top.
-    fn add_wall(&mut self, wall: &Wall, color: [f32; 3]) {
-        let start = to_world(wall.start, 0.0);
-        let end = to_world(wall.end, 0.0);
-        let along = (end - start).normalize_or_zero();
-        if along == Vec3::ZERO {
+    /// Extrudes a floor polygon from `bottom` to `top` (cm): side faces plus a
+    /// top cap. Works for any simple polygon, including joined wall outlines.
+    fn add_prism(&mut self, outline: &[Point2], bottom: f64, top: f64, color: [f32; 3]) {
+        if outline.len() < 3 {
             return;
         }
-        #[allow(clippy::cast_possible_truncation)]
-        let (half, height) = (
-            wall.thickness as f32 * CM_TO_M / 2.0,
-            wall.height as f32 * CM_TO_M,
-        );
-        let side = Vec3::new(-along.z, 0.0, along.x); // perpendicular on the floor
-        let up = Vec3::Y * height;
+        let points = up_facing(outline);
+        let n = points.len();
+        for k in 0..n {
+            let (p, q) = (points[k], points[(k + 1) % n]);
+            if p.distance(q) < 1e-6 {
+                continue;
+            }
+            let (pb, qb) = (to_world(p, bottom), to_world(q, bottom));
+            let (pt, qt) = (to_world(p, top), to_world(q, top));
+            // With up-facing winding, (q - p) x Y points out of the polygon.
+            let normal = (qb - pb).cross(Vec3::Y).normalize_or_zero();
+            self.add_quad([pb, qb, qt, pt], normal, color);
+        }
+        self.add_cap(&points, top, color);
+    }
 
-        let (s_l, s_r) = (start + side * half, start - side * half);
-        let (e_l, e_r) = (end + side * half, end - side * half);
-
-        self.add_quad([s_l, e_l, e_l + up, s_l + up], side, color);
-        self.add_quad([e_r, s_r, s_r + up, e_r + up], -side, color);
-        self.add_quad([s_r, s_l, s_l + up, s_r + up], -along, color);
-        self.add_quad([e_l, e_r, e_r + up, e_l + up], along, color);
-        self.add_quad([s_l + up, e_l + up, e_r + up, s_r + up], Vec3::Y, color);
+    /// Horizontal face at `height` (cm); `points` must already face up.
+    fn add_cap(&mut self, points: &[Point2], height: f64, color: [f32; 3]) {
+        let base = self.next_index();
+        for p in points {
+            self.vertices.push(Vertex {
+                position: to_world(*p, height).to_array(),
+                normal: Vec3::Y.to_array(),
+                color,
+            });
+        }
+        for [a, b, c] in newera_core::triangulate(points) {
+            let idx = |i: usize| base + u32::try_from(i).expect("index fits in u32");
+            self.indices.extend([idx(a), idx(b), idx(c)]);
+        }
     }
 
     /// Adds a quad; corners must be counter-clockwise when seen from `normal`.
@@ -134,13 +124,14 @@ impl Mesh {
     }
 }
 
-fn signed_area(points: &[Point2]) -> f64 {
-    points
-        .iter()
-        .zip(points.iter().cycle().skip(1))
-        .map(|(p, q)| p.x * q.y - q.x * p.y)
-        .sum::<f64>()
-        / 2.0
+/// Plan `(x, y)` maps to world `(x, z)`, which mirrors winding: polygons with
+/// a negative shoelace area are counter-clockwise when seen from above.
+fn up_facing(points: &[Point2]) -> Vec<Point2> {
+    if newera_core::signed_area(points) > 0.0 {
+        points.iter().rev().copied().collect()
+    } else {
+        points.to_vec()
+    }
 }
 
 #[cfg(test)]
@@ -154,22 +145,46 @@ mod tests {
         assert_eq!(mesh.indices.len(), 6);
     }
 
+    fn triangle_normal(mesh: &Mesh, tri: &[u32]) -> Vec3 {
+        let [a, b, c] = [0, 1, 2].map(|k| Vec3::from(mesh.vertices[tri[k] as usize].position));
+        (b - a).cross(c - a)
+    }
+
     #[test]
-    fn wall_produces_five_faces() {
+    fn every_triangle_agrees_with_its_vertex_normal() {
+        // An L of joined walls plus a concave room: faces must point outwards.
         let mut home = Home::default();
-        let id = home.new_wall_id();
-        home.walls.push(Wall::new(
+        for (a, b) in [((0.0, 0.0), (600.0, 0.0)), ((600.0, 0.0), (600.0, 400.0))] {
+            let id = home.new_wall_id();
+            home.walls.push(newera_core::Wall::new(
+                id,
+                Point2::new(a.0, a.1),
+                Point2::new(b.0, b.1),
+            ));
+        }
+        let id = home.new_room_id();
+        home.rooms.push(Room {
             id,
-            Point2::new(0.0, 0.0),
-            Point2::new(400.0, 0.0),
-        ));
+            name: "L".into(),
+            points: [
+                (0.0, 0.0),
+                (600.0, 0.0),
+                (600.0, 300.0),
+                (300.0, 300.0),
+                (300.0, 600.0),
+                (0.0, 600.0),
+            ]
+            .iter()
+            .map(|&(x, y)| Point2::new(x, y))
+            .collect(),
+        });
         let mesh = Mesh::from_home(&home, None);
-        assert_eq!(mesh.vertices.len(), 4 + 5 * 4);
-        assert!(
-            mesh.indices
-                .iter()
-                .all(|&i| (i as usize) < mesh.vertices.len())
-        );
+        assert!(mesh.indices.len() > 6);
+        for tri in mesh.indices.chunks(3) {
+            let geometric = triangle_normal(&mesh, tri);
+            let declared = Vec3::from(mesh.vertices[tri[0] as usize].normal);
+            assert!(geometric.dot(declared) > 0.0, "triangle faces inward");
+        }
     }
 
     #[test]
@@ -195,7 +210,7 @@ mod tests {
     fn wall_top_is_at_wall_height_in_meters() {
         let mut home = Home::default();
         let id = home.new_wall_id();
-        home.walls.push(Wall::new(
+        home.walls.push(newera_core::Wall::new(
             id,
             Point2::new(0.0, 0.0),
             Point2::new(400.0, 0.0),
