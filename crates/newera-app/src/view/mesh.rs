@@ -5,7 +5,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use glam::Vec3;
-use newera_core::{ElementId, Furniture, Home, Point2, Room, Wall, WallCut};
+use newera_core::{ElementId, Furniture, Home, LevelId, Point2, Wall, WallCut};
 
 use super::plan::Selection;
 
@@ -28,6 +28,7 @@ const WALL_COLOR: [f32; 3] = [0.92, 0.91, 0.88];
 const REVEAL_COLOR: [f32; 3] = [0.86, 0.85, 0.82];
 const SELECTED_COLOR: [f32; 3] = [0.35, 0.62, 0.95];
 const FLOOR_COLOR: [f32; 3] = [0.76, 0.64, 0.50];
+const CEILING_COLOR: [f32; 3] = [0.95, 0.95, 0.94];
 const GROUND_COLOR: [f32; 3] = [0.55, 0.62, 0.52];
 
 #[allow(clippy::cast_possible_truncation)] // centimeters fit comfortably in f32
@@ -43,24 +44,94 @@ impl Mesh {
     pub(crate) fn from_home(home: &Home, selection: &Selection, models: ModelSource<'_>) -> Self {
         let mut mesh = Self::default();
         mesh.add_ground(home);
-        for room in home.rooms.iter().filter(|r| r.floor_visible) {
-            mesh.add_room_floor(room);
-        }
-        let cuts = home.wall_cuts();
-        for ((wall, outline), wall_cuts) in home.walls.iter().zip(home.wall_outlines()).zip(&cuts) {
-            let color = if selection.contains(&ElementId::Wall(wall.id)) {
-                SELECTED_COLOR
-            } else {
-                WALL_COLOR
-            };
-            mesh.add_wall(&outline, wall, wall_cuts, color);
-        }
-        for piece in home.furniture.iter().filter(|f| f.visible) {
-            let local = models(piece).unwrap_or_else(|| newera_catalog::piece_mesh(piece));
-            let highlight = selection.contains(&ElementId::Furniture(piece.id));
-            mesh.add_piece(piece, &local, highlight);
+        // Show the storeys up to the one being edited, so its inside stays visible.
+        let current = home.elevation_of(home.current_level());
+        let levels: Vec<Option<LevelId>> = if home.levels.is_empty() {
+            vec![None]
+        } else {
+            home.sorted_levels()
+                .into_iter()
+                .filter(|l| l.elevation <= current + 1e-6)
+                .map(|l| Some(l.id))
+                .collect()
+        };
+        for level in levels {
+            let view = home.level_view(level);
+            let base = home.elevation_of(level);
+            let slab = level
+                .and_then(|id| home.level(id))
+                .map_or(0.0, |l| l.floor_thickness);
+            for shape in newera_core::floor_shapes(home, level) {
+                mesh.add_floor(&shape, base, if base > 0.0 { slab } else { 0.0 });
+            }
+            let cuts = view.wall_cuts();
+            for ((wall, outline), wall_cuts) in
+                view.walls.iter().zip(view.wall_outlines()).zip(&cuts)
+            {
+                let color = if selection.contains(&ElementId::Wall(wall.id)) {
+                    SELECTED_COLOR
+                } else {
+                    WALL_COLOR
+                };
+                mesh.add_wall(&outline, wall, wall_cuts, base, color);
+            }
+            for piece in view.furniture.iter().filter(|f| f.visible) {
+                let local = models(piece).unwrap_or_else(|| newera_catalog::piece_mesh(piece));
+                let highlight = selection.contains(&ElementId::Furniture(piece.id));
+                mesh.add_piece(piece, &local, base, highlight);
+            }
         }
         mesh
+    }
+
+    /// A floor: its top face at `base`, and for upper storeys a slab of
+    /// `thickness` below it, whose underside is the ceiling of the room below.
+    fn add_floor(&mut self, shape: &newera_core::FloorShape, base: f64, thickness: f64) {
+        for tri in &shape.triangles {
+            let mut t = *tri;
+            if newera_core::signed_area(&t) > 0.0 {
+                t.swap(1, 2);
+            }
+            let corners = t.map(|p| to_world(p, base));
+            self.add_triangle(corners, Vec3::Y, FLOOR_COLOR);
+            if thickness > 0.0 {
+                let below = [t[0], t[2], t[1]].map(|p| to_world(p, base - thickness));
+                self.add_triangle(below, -Vec3::Y, CEILING_COLOR);
+            }
+        }
+        if thickness > 0.0 {
+            // Outer edges face out, hole edges face into the hole.
+            for (ring, outward) in std::iter::once((&shape.exterior, true))
+                .chain(shape.holes.iter().map(|h| (h, false)))
+            {
+                let mut points = up_facing(ring);
+                if !outward {
+                    points.reverse();
+                }
+                let n = points.len();
+                for k in 0..n {
+                    self.add_side(
+                        points[k],
+                        points[(k + 1) % n],
+                        base - thickness,
+                        base,
+                        WALL_COLOR,
+                    );
+                }
+            }
+        }
+    }
+
+    fn add_triangle(&mut self, corners: [Vec3; 3], normal: Vec3, color: [f32; 3]) {
+        let base = self.next_index();
+        for corner in corners {
+            self.vertices.push(Vertex {
+                position: corner.to_array(),
+                normal: normal.to_array(),
+                color,
+            });
+        }
+        self.indices.extend([base, base + 1, base + 2]);
     }
 
     fn add_ground(&mut self, home: &Home) {
@@ -75,20 +146,22 @@ impl Mesh {
         self.add_quad([a, d, c, b], Vec3::Y, GROUND_COLOR);
     }
 
-    fn add_room_floor(&mut self, room: &Room) {
-        let points = up_facing(&room.points);
-        self.add_cap(&points, 0.0, FLOOR_COLOR);
-    }
-
     /// Extrudes a wall outline, leaving holes where doors and windows are:
     /// long faces are split around each opening, and the hole gets jambs, a
     /// sill and a lintel.
-    fn add_wall(&mut self, outline: &[Point2], wall: &Wall, cuts: &[WallCut], color: [f32; 3]) {
+    fn add_wall(
+        &mut self,
+        outline: &[Point2],
+        wall: &Wall,
+        cuts: &[WallCut],
+        base: f64,
+        color: [f32; 3],
+    ) {
         if outline.len() < 3 {
             return;
         }
         let points = up_facing(outline);
-        let (bottom, top) = (0.0, wall.height);
+        let (bottom, top) = (base, base + wall.height);
         let len = wall.start.distance(wall.end).max(1e-9);
         let dir = (
             (wall.end.x - wall.start.x) / len,
@@ -136,11 +209,11 @@ impl Mesh {
                 let mid = s0.midpoint(s1);
                 match cuts.iter().find(|c| c.from <= mid && c.to >= mid) {
                     Some(cut) => {
-                        if cut.bottom > bottom {
-                            self.add_side(at(s0), at(s1), bottom, cut.bottom, color);
+                        if base + cut.bottom > bottom {
+                            self.add_side(at(s0), at(s1), bottom, base + cut.bottom, color);
                         }
-                        if cut.top < top {
-                            self.add_side(at(s0), at(s1), cut.top, top, color);
+                        if base + cut.top < top {
+                            self.add_side(at(s0), at(s1), base + cut.top, top, color);
                         }
                     }
                     None => self.add_side(at(s0), at(s1), bottom, top, color),
@@ -150,13 +223,13 @@ impl Mesh {
         self.add_cap(&points, top, color);
         if !wall.is_arc() {
             for cut in cuts {
-                self.add_reveals(wall, dir, cut);
+                self.add_reveals(wall, dir, cut, base);
             }
         }
     }
 
     /// Inner faces of a hole: jambs, sill and lintel.
-    fn add_reveals(&mut self, wall: &Wall, dir: (f64, f64), cut: &WallCut) {
+    fn add_reveals(&mut self, wall: &Wall, dir: (f64, f64), cut: &WallCut, base: f64) {
         let half = wall.thickness / 2.0;
         let normal = (-dir.1, dir.0);
         let point = |s: f64, side: f64| {
@@ -171,10 +244,10 @@ impl Mesh {
             let (l, r) = (point(s, half), point(s, -half));
             self.add_facing(
                 [
-                    to_world(l, cut.bottom),
-                    to_world(r, cut.bottom),
-                    to_world(r, cut.top),
-                    to_world(l, cut.top),
+                    to_world(l, base + cut.bottom),
+                    to_world(r, base + cut.bottom),
+                    to_world(r, base + cut.top),
+                    to_world(l, base + cut.top),
                 ],
                 facing,
                 REVEAL_COLOR,
@@ -186,10 +259,10 @@ impl Mesh {
             }
             self.add_facing(
                 [
-                    to_world(point(cut.from, half), z),
-                    to_world(point(cut.to, half), z),
-                    to_world(point(cut.to, -half), z),
-                    to_world(point(cut.from, -half), z),
+                    to_world(point(cut.from, half), base + z),
+                    to_world(point(cut.to, half), base + z),
+                    to_world(point(cut.to, -half), base + z),
+                    to_world(point(cut.from, -half), base + z),
                 ],
                 facing,
                 REVEAL_COLOR,
@@ -206,11 +279,17 @@ impl Mesh {
     }
 
     /// Places a catalog or imported mesh in the world.
-    fn add_piece(&mut self, piece: &Furniture, local: &newera_catalog::Mesh, highlight: bool) {
+    fn add_piece(
+        &mut self,
+        piece: &Furniture,
+        local: &newera_catalog::Mesh,
+        floor: f64,
+        highlight: bool,
+    ) {
         let base = self.next_index();
         let world = |p: [f32; 3]| {
             let plan = piece.to_plan((f64::from(p[0]), f64::from(p[2])));
-            to_world(plan, piece.elevation + f64::from(p[1]))
+            to_world(plan, floor + piece.elevation + f64::from(p[1]))
         };
         for ((position, normal), color) in local
             .positions
@@ -309,7 +388,7 @@ fn up_facing(points: &[Point2]) -> Vec<Point2> {
 
 #[cfg(test)]
 mod tests {
-    use newera_core::align_to_wall;
+    use newera_core::{Room, align_to_wall};
 
     use super::*;
 
@@ -441,5 +520,74 @@ mod tests {
             .map(|v| v.position[1])
             .fold(f32::MIN, f32::max);
         assert!((max_y - 2.5).abs() < 1e-5);
+    }
+}
+
+#[cfg(test)]
+mod level_tests {
+    use newera_core::{Command, Document, Room, ops};
+
+    use super::*;
+
+    #[test]
+    fn storeys_stack_with_outward_slabs() {
+        let mut doc = Document::default();
+        let square = |doc: &mut Document| {
+            let pts = [(0.0, 0.0), (500.0, 0.0), (500.0, 400.0), (0.0, 400.0)];
+            let mut commands: Vec<Command> = (0..4)
+                .map(|i| {
+                    let (a, b) = (pts[i], pts[(i + 1) % 4]);
+                    Command::insert(Wall::new(
+                        doc.new_wall_id(),
+                        Point2::new(a.0, a.1),
+                        Point2::new(b.0, b.1),
+                    ))
+                })
+                .collect();
+            commands.push(Command::insert(Room::new(
+                doc.new_room_id(),
+                "Sala",
+                pts.iter().map(|&(x, y)| Point2::new(x, y)).collect(),
+            )));
+            doc.execute(Command::Batch { commands }).unwrap();
+        };
+        square(&mut doc);
+        ops::add_level(&mut doc, None, None).unwrap();
+        square(&mut doc);
+        let stairs = newera_catalog::find("stairs")
+            .unwrap()
+            .instantiate(doc.new_furniture_id(), Point2::new(250.0, 200.0));
+        doc.select_level(doc.home().base_level());
+        doc.execute(Command::insert(stairs)).unwrap();
+        doc.select_level(doc.home().sorted_levels().last().map(|l| l.id));
+
+        let mesh = Mesh::from_home(doc.home(), &Selection::new(), &|_| None);
+        let max_y = mesh
+            .vertices
+            .iter()
+            .map(|v| v.position[1])
+            .fold(f32::MIN, f32::max);
+        assert!(
+            (max_y - 5.12).abs() < 1e-3,
+            "upper walls top at 262+250 cm: {max_y}"
+        );
+        for tri in mesh.indices.chunks(3) {
+            let [a, b, c] = [0, 1, 2].map(|k| Vec3::from(mesh.vertices[tri[k] as usize].position));
+            let declared = Vec3::from(mesh.vertices[tri[0] as usize].normal);
+            assert!(
+                (b - a).cross(c - a).dot(declared) >= -1e-9,
+                "face points inward"
+            );
+        }
+        // Selecting the ground floor hides the storey above.
+        doc.select_level(doc.home().base_level());
+        let ground_only = Mesh::from_home(doc.home(), &Selection::new(), &|_| None);
+        let max_y = ground_only
+            .vertices
+            .iter()
+            .map(|v| v.position[1])
+            .fold(f32::MIN, f32::max);
+        // Only the ground storey remains; the stairs (280 cm) are its tallest piece.
+        assert!(max_y <= 2.801, "{max_y}");
     }
 }

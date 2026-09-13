@@ -243,7 +243,7 @@ impl NewEraApp {
         };
         let doc = self.document.read();
         let scene = plan_scene(
-            doc.home(),
+            &doc.home().level_view(doc.home().current_level()),
             &SceneOptions {
                 unit: self.settings.unit,
                 show_background: true,
@@ -306,6 +306,7 @@ impl NewEraApp {
                         opening: None,
                         model: Some(path.display().to_string()),
                         visible: true,
+                        level: None,
                     };
                     placed = Some(piece.id);
                     doc.execute(Command::insert(piece))
@@ -399,7 +400,12 @@ impl NewEraApp {
 
     fn select_all(&mut self) {
         let doc = self.document.read();
-        self.selection = doc.home().elements().map(|e| e.id()).collect();
+        let view = doc.home().level_view(doc.home().current_level());
+        self.selection = view
+            .elements()
+            .filter(|e| !matches!(e, Element::Level(_)))
+            .map(|e| e.id())
+            .collect();
     }
 
     fn nudge(&mut self, dx: f64, dy: f64) {
@@ -990,9 +996,16 @@ fn menu_item(ui: &mut egui::Ui, glyph: &str, label: &str, shortcut: &str, enable
 }
 
 /// A copy of `element` with a fresh id, moved by `offset` cm on both axes.
-fn shift_with_new_id(doc: &mut Document, element: Element, offset: f64) -> Element {
+/// The copy lands on the level being edited, like any new element.
+fn shift_with_new_id(doc: &mut Document, mut element: Element, offset: f64) -> Element {
     let shift = |p: Point2| Point2::new(p.x + offset, p.y + offset);
+    element.set_level(None);
     match element {
+        Element::Level(mut level) => {
+            level.id = doc.new_level_id();
+            level.name = format!("{} (cópia)", level.name);
+            Element::Level(level)
+        }
         Element::Wall(mut w) => {
             w.id = doc.new_wall_id();
             w.start = shift(w.start);
@@ -1485,6 +1498,35 @@ mod variant_tests {
         h.run_steps(3);
         assert_eq!(h.state().document.read().active_variant(), 1);
         assert!(h.state().document.read().home().walls.is_empty());
+    }
+
+    #[test]
+    fn add_level_button_creates_a_storey_and_scopes_select_all() {
+        let mut h = app();
+        h.get_by_label(&format!("{} Andar", icon::PLUS)).click();
+        h.run_steps(4);
+        {
+            let doc = h.state().document.read();
+            assert_eq!(doc.home().levels.len(), 2, "ground + first floor");
+            assert_ne!(
+                doc.home().current_level(),
+                Some(doc.home().base_level().unwrap())
+            );
+        }
+        // The upper storey is empty: select-all picks nothing from below.
+        h.key_press_modifiers(Modifiers::COMMAND, Key::A);
+        h.run_steps(2);
+        assert!(h.state().selection.is_empty(), "{:?}", h.state().selection);
+
+        let ground = h.state().document.read().home().base_level().unwrap();
+        h.state().document.write().select_level(Some(ground));
+        h.run_steps(3);
+        h.key_press_modifiers(Modifiers::COMMAND, Key::A);
+        h.run_steps(2);
+        assert_eq!(
+            h.state().selection,
+            [ElementId::Wall(newera_core::WallId(1))].into()
+        );
     }
 
     #[test]

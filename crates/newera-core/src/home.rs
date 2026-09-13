@@ -1,11 +1,11 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::elements::{BackgroundImage, Compass, Dimension, Element, Label, Room, Wall};
+use crate::elements::{BackgroundImage, Compass, Dimension, Element, Label, Level, Room, Wall};
 use crate::error::{CoreError, CoreResult};
 use crate::furniture::{Furniture, WallCut, wall_cuts};
 use crate::geometry::Point2;
-use crate::ids::{DimensionId, ElementId, FurnitureId, LabelId, RoomId, WallId};
+use crate::ids::{DimensionId, ElementId, FurnitureId, LabelId, LevelId, RoomId, WallId};
 use crate::joins::wall_outlines;
 
 /// The whole project being edited.
@@ -22,6 +22,12 @@ pub struct Home {
     pub labels: Vec<Label>,
     #[serde(default)]
     pub furniture: Vec<Furniture>,
+    /// Storeys, if the house has more than one. Empty means a single ground level.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub levels: Vec<Level>,
+    /// Storey shown in the plan and where new elements go.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_level: Option<LevelId>,
     #[serde(default)]
     pub compass: Compass,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -41,6 +47,8 @@ impl Default for Home {
             dimensions: Vec::new(),
             labels: Vec::new(),
             furniture: Vec::new(),
+            levels: Vec::new(),
+            selected_level: None,
             compass: Compass::default(),
             background: None,
             next_id: 1,
@@ -133,6 +141,7 @@ collections! {
     Dimension, Dimension, DimensionId, dimensions, dimension, new_dimension_id;
     Label, Label, LabelId, labels, label, new_label_id;
     Furniture, Furniture, FurnitureId, furniture, piece, new_furniture_id;
+    Level, Level, LevelId, levels, level, new_level_id;
 }
 
 impl Home {
@@ -153,6 +162,83 @@ impl Home {
     /// Floor outline of every wall with corners joined, in `walls` order.
     pub fn wall_outlines(&self) -> Vec<Vec<Point2>> {
         wall_outlines(&self.walls)
+    }
+
+    /// Levels sorted from the ground up.
+    pub fn sorted_levels(&self) -> Vec<&Level> {
+        let mut levels: Vec<&Level> = self.levels.iter().collect();
+        levels.sort_by(|a, b| a.elevation.total_cmp(&b.elevation));
+        levels
+    }
+
+    /// The level `None` stands for: the lowest one, if any exist.
+    pub fn base_level(&self) -> Option<LevelId> {
+        self.sorted_levels().first().map(|l| l.id)
+    }
+
+    /// Resolves an element's level to a concrete one (or `None` without levels).
+    pub fn resolve_level(&self, level: Option<LevelId>) -> Option<LevelId> {
+        level
+            .filter(|id| self.level(*id).is_some())
+            .or_else(|| self.base_level())
+    }
+
+    /// The level currently shown and edited.
+    pub fn current_level(&self) -> Option<LevelId> {
+        self.resolve_level(self.selected_level)
+    }
+
+    /// Elevation (cm) of an element's floor.
+    pub fn elevation_of(&self, level: Option<LevelId>) -> f64 {
+        self.resolve_level(level)
+            .and_then(|id| self.level(id))
+            .map_or(0.0, |l| l.elevation)
+    }
+
+    /// Whether an element on `element_level` belongs to `level`.
+    pub fn on_level(&self, element_level: Option<LevelId>, level: Option<LevelId>) -> bool {
+        self.resolve_level(element_level) == self.resolve_level(level)
+    }
+
+    /// A copy of the home keeping only the elements of one level (and the
+    /// home-wide settings). Geometry that must not mix storeys — wall joins,
+    /// room detection, plan drawing, layout checks — works on such views.
+    #[must_use]
+    pub fn level_view(&self, level: Option<LevelId>) -> Self {
+        let keep = |l: Option<LevelId>| self.on_level(l, level);
+        Self {
+            walls: self
+                .walls
+                .iter()
+                .filter(|e| keep(e.level))
+                .cloned()
+                .collect(),
+            rooms: self
+                .rooms
+                .iter()
+                .filter(|e| keep(e.level))
+                .cloned()
+                .collect(),
+            dimensions: self
+                .dimensions
+                .iter()
+                .filter(|e| keep(e.level))
+                .cloned()
+                .collect(),
+            labels: self
+                .labels
+                .iter()
+                .filter(|e| keep(e.level))
+                .cloned()
+                .collect(),
+            furniture: self
+                .furniture
+                .iter()
+                .filter(|e| keep(e.level))
+                .cloned()
+                .collect(),
+            ..self.clone()
+        }
     }
 
     /// Door and window holes in each wall, in `walls` order.
@@ -207,6 +293,7 @@ mod tests {
             position: Point2::new(10.0, 20.0),
             size: Label::DEFAULT_SIZE,
             angle: 0.0,
+            level: None,
         };
         home.insert(label.clone().into(), None).unwrap();
         assert_eq!(home.element(id.into()), Some(Element::Label(label.clone())));

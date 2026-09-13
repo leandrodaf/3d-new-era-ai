@@ -130,6 +130,7 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
                 start: a,
                 end: b,
                 offset: spec.off.unwrap_or(0.0),
+                level: None,
             },
             _ => return Err("dimension needs `a` and `b`, or `wall`".into()),
         };
@@ -144,6 +145,7 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
             position: spec.at,
             size: spec.size.unwrap_or(Label::DEFAULT_SIZE),
             angle: spec.angle.unwrap_or(0.0),
+            level: None,
         };
         ids.push(label.id.to_string());
         commands.push(Command::insert(label));
@@ -223,6 +225,12 @@ pub(crate) struct UpdateSpec {
     /// Door hinge on the right.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hinge_right: Option<bool>,
+    /// Move the element to this level id (e.g. `lv2`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub level: Option<String>,
+    /// Level slab thickness cm.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slab: Option<f64>,
 }
 
 impl UpdateSpec {
@@ -243,10 +251,11 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
             .element(id)
             .ok_or_else(|| format!("{id} not found"))?;
         let allowed: &[&str] = match element {
-            Element::Wall(_) => &["a", "b", "t", "h", "arc"],
-            Element::Room(_) => &["name", "pts", "floor", "ceiling"],
-            Element::Dimension(_) => &["a", "b", "off"],
-            Element::Label(_) => &["text", "at", "size", "angle"],
+            Element::Wall(_) => &["a", "b", "t", "h", "arc", "level"],
+            Element::Room(_) => &["name", "pts", "floor", "ceiling", "level"],
+            Element::Dimension(_) => &["a", "b", "off", "level"],
+            Element::Label(_) => &["text", "at", "size", "angle", "level"],
+            Element::Level(_) => &["name", "elev", "h", "slab"],
             Element::Furniture(_) => &[
                 "at",
                 "angle",
@@ -259,6 +268,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 "mirror",
                 "visible",
                 "hinge_right",
+                "level",
             ],
         };
         if let Some(bad) = spec
@@ -271,7 +281,24 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 allowed.join(", ")
             ));
         }
-        let updated = match element {
+        let level = match &spec.level {
+            Some(raw) => {
+                let level_id: newera_core::LevelId = raw.parse().map_err(|e| format!("{e}"))?;
+                if doc.home().level(level_id).is_none() {
+                    return Err(format!("{raw} not found"));
+                }
+                Some(Some(level_id))
+            }
+            None => None,
+        };
+        let mut updated = match element {
+            Element::Level(mut l) => {
+                l.name = spec.name.unwrap_or(l.name);
+                l.elevation = spec.elev.unwrap_or(l.elevation);
+                l.height = spec.h.unwrap_or(l.height);
+                l.floor_thickness = spec.slab.unwrap_or(l.floor_thickness);
+                Element::Level(l)
+            }
             Element::Wall(mut w) => {
                 w.start = spec.a.unwrap_or(w.start);
                 w.end = spec.b.unwrap_or(w.end);
@@ -319,6 +346,9 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 Element::Furniture(f)
             }
         };
+        if let Some(level) = level {
+            updated.set_level(level);
+        }
         commands.push(Command::Update { element: updated });
     }
     doc.execute(Command::Batch { commands }).map_err(core)
@@ -626,6 +656,7 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
                 opening: None,
                 model: Some(model.clone()),
                 visible: true,
+                level: None,
             }
         } else {
             let item = newera_catalog::find(&spec.cat).ok_or_else(|| {

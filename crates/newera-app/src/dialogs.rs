@@ -46,6 +46,11 @@ pub(crate) enum Dialog {
         name: String,
     },
     Compare(Vec<crate::tabs::VariantStats>),
+    ModifyLevel(newera_core::Level),
+    ConfirmDeleteLevel {
+        id: newera_core::LevelId,
+        name: String,
+    },
     Help,
 }
 
@@ -79,6 +84,7 @@ impl Dialog {
             [Element::Room(r)] => Some(Self::ModifyRoom(r.clone())),
             [Element::Dimension(d)] => Some(Self::ModifyDimension(d.clone())),
             [Element::Label(l)] => Some(Self::ModifyLabel(l.clone())),
+            [Element::Level(l)] => Some(Self::ModifyLevel(l.clone())),
             [Element::Furniture(f)] => Some(Self::ModifyFurniture {
                 piece: f.clone(),
                 keep_ratio: false,
@@ -363,6 +369,7 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                             position: at,
                             size,
                             angle,
+                            level: None,
                         };
                         doc.execute(Command::insert(label))
                     });
@@ -560,6 +567,56 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                 }
                 Some(false) => DialogOutcome::Close,
                 None => DialogOutcome::Keep(Dialog::ConfirmCloseVariant { index, name }),
+            }
+        }
+        Dialog::ModifyLevel(mut level) => {
+            let answer = modal(ctx, "Modificar andar", |ui| {
+                grid(ui, "level", |ui| {
+                    ui.label("Nome");
+                    ui.text_edit_singleline(&mut level.name);
+                    ui.end_row();
+                    ui.label("Elevação do piso");
+                    ui.add(cm(&mut level.elevation, -10_000.0..=100_000.0));
+                    ui.end_row();
+                    ui.label("Pé-direito");
+                    ui.add(cm(&mut level.height, 50.0..=2_000.0));
+                    ui.end_row();
+                    ui.label("Espessura da laje");
+                    ui.add(cm(&mut level.floor_thickness, 0.0..=200.0));
+                    ui.end_row();
+                });
+            });
+            finish(app, answer, Dialog::ModifyLevel(level.clone()), || {
+                Command::update(level)
+            })
+        }
+        Dialog::ConfirmDeleteLevel { id, name } => {
+            let mut choice = None;
+            egui::Modal::new(egui::Id::new("delete-level")).show(ctx, |ui| {
+                ui.set_min_width(340.0);
+                ui.heading(format!("Excluir \"{name}\"?"));
+                ui.label("O andar e tudo o que está nele serão removidos (dá para desfazer).");
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .button(format!("{} Excluir andar", icon::TRASH))
+                        .clicked()
+                    {
+                        choice = Some(true);
+                    }
+                    if ui.button("Cancelar").clicked() {
+                        choice = Some(false);
+                    }
+                });
+            });
+            match choice {
+                Some(true) => {
+                    app.run(|doc| newera_core::ops::delete_level(doc, id));
+                    app.after_variant_change();
+                    DialogOutcome::Close
+                }
+                Some(false) => DialogOutcome::Close,
+                None => DialogOutcome::Keep(Dialog::ConfirmDeleteLevel { id, name }),
             }
         }
         Dialog::Compare(rows) => {

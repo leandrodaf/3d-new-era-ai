@@ -63,3 +63,20 @@ fn variants() {
     );
     let _ = Dialog::Help;
 }
+
+#[test]
+#[ignore = "visual review; needs a GPU"]
+fn levels() {
+    let mut doc = Document::default();
+    house(&mut doc, 700.0);
+    newera_core::ops::add_level(&mut doc, Some("Superior".into()), None).unwrap();
+    house(&mut doc, 450.0);
+    let stairs = newera_catalog::find("stairs")
+        .expect("stairs in catalog")
+        .instantiate(doc.new_furniture_id(), Point2::new(300.0, 250.0));
+    let ground = doc.home().base_level();
+    let mut stairs = stairs;
+    stairs.level = ground;
+    doc.execute(Command::insert(stairs)).unwrap();
+    render("levels", SharedDocument::new(doc), |_| {});
+}

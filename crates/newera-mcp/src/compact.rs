@@ -294,6 +294,25 @@ pub(crate) fn variants(doc: &newera_core::Document) -> Value {
     )
 }
 
+/// Storey rows `[id, name, elevation, height, selected]`, ground first.
+pub(crate) fn levels(home: &Home) -> Value {
+    let current = home.current_level();
+    Value::Array(
+        home.sorted_levels()
+            .into_iter()
+            .map(|l| {
+                json!([
+                    l.id.to_string(),
+                    l.name,
+                    num(l.elevation),
+                    num(l.height),
+                    Some(l.id) == current
+                ])
+            })
+            .collect(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use newera_core::WallId;

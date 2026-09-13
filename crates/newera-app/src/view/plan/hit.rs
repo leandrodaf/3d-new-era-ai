@@ -157,6 +157,7 @@ mod tests {
             position: Point2::new(200.0, 150.0),
             size: 30.0,
             angle: 0.0,
+            level: None,
         });
         let outlines = home.wall_outlines();
         assert_eq!(

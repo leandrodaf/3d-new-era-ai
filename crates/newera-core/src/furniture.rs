@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::elements::Wall;
 use crate::error::{CoreError, CoreResult};
 use crate::geometry::Point2;
-use crate::ids::FurnitureId;
+use crate::ids::{FurnitureId, LevelId};
 
 fn yes() -> bool {
     true
@@ -95,6 +95,9 @@ pub struct Furniture {
     pub model: Option<String>,
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub visible: bool,
+    /// Storey it belongs to; `None` means the lowest level.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub level: Option<LevelId>,
 }
 
 impl Furniture {
@@ -124,6 +127,12 @@ impl Furniture {
     pub fn footprint(&self) -> [Point2; 4] {
         let (hw, hd) = (self.width / 2.0, self.depth / 2.0);
         [(-hw, -hd), (hw, -hd), (hw, hd), (-hw, hd)].map(|p| self.to_plan(p))
+    }
+
+    /// Stairs open a hole in the floor of the storey they climb to.
+    /// Catalog ids starting with `stairs` are stairs.
+    pub fn is_stairs(&self) -> bool {
+        self.catalog.starts_with("stairs")
     }
 
     pub fn is_opening(&self) -> bool {
@@ -308,6 +317,7 @@ mod tests {
             opening: None,
             model: None,
             visible: true,
+            level: None,
         }
     }
 

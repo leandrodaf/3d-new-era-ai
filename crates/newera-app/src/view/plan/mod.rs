@@ -81,11 +81,15 @@ enum Drag {
 /// What a cached scene was built from: revision, selection and unit.
 type SceneKey = (u64, Vec<ElementId>, LengthUnit);
 
+/// Wall outlines of the storey below, drawn as a faint reference.
+type Outlines = Arc<Vec<Vec<Point2>>>;
+
 #[derive(Debug, Default)]
 pub(crate) struct PlanView {
     camera: Camera,
     pending_fit: bool,
-    snapshot: Option<(u64, Arc<Home>)>,
+    /// `(revision, level view, outlines of the walls one storey below)`.
+    snapshot: Option<(u64, Arc<Home>, Outlines)>,
     scene_cache: Option<(SceneKey, Scene)>,
     textures: Textures,
     drag: Option<Drag>,
@@ -145,18 +149,30 @@ impl PlanView {
         self.wall_chain.is_some()
     }
 
-    fn home(&mut self, document: &SharedDocument) -> (Arc<Home>, u64, Option<PathBuf>) {
+    /// The storey being edited, as its own home, plus the outline of the walls
+    /// right below it (drawn faintly as a reference, like tracing paper).
+    fn home(&mut self, document: &SharedDocument) -> (Arc<Home>, u64, Option<PathBuf>, Outlines) {
         let doc = document.read();
         let revision = doc.revision();
         let path = doc.path().map(std::path::Path::to_path_buf);
-        match &self.snapshot {
-            Some((rev, home)) if *rev == revision => (home.clone(), revision, path),
-            _ => {
-                let home = Arc::new(doc.home().clone());
-                self.snapshot = Some((revision, home.clone()));
-                (home, revision, path)
-            }
+        if let Some((rev, home, below)) = &self.snapshot
+            && *rev == revision
+        {
+            return (home.clone(), revision, path, below.clone());
         }
+        let full = doc.home();
+        let current = full.current_level();
+        let view = Arc::new(full.level_view(current));
+        let below = full
+            .sorted_levels()
+            .into_iter()
+            .take_while(|l| Some(l.id) != current)
+            .last()
+            .map(|l| full.level_view(Some(l.id)).wall_outlines())
+            .unwrap_or_default();
+        let below = Arc::new(below);
+        self.snapshot = Some((revision, view.clone(), below.clone()));
+        (view, revision, path, below)
     }
 
     #[allow(clippy::needless_pass_by_value)] // the input bundles borrows for one frame
@@ -166,7 +182,7 @@ impl PlanView {
         self.rect = Some(rect);
         let response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
         let painter = ui.painter_at(rect);
-        let (home, revision, project) = self.home(input.document);
+        let (home, revision, project, below) = self.home(input.document);
         let magnetism = !ui.input(|i| i.modifiers.shift);
         let zoom = self.camera.zoom;
         let tolerance = self.camera.cm(6.0);
@@ -377,6 +393,7 @@ impl PlanView {
                                     start: a,
                                     end: b,
                                     offset,
+                                    level: None,
                                 };
                                 doc.execute(Command::insert(dim))
                             });
@@ -484,6 +501,25 @@ impl PlanView {
         };
         painter.rect_filled(rect, 0.0, color(input.palette.paper));
         paint_grid(&painter, rect, &self.camera, input.palette);
+        for outline in below.iter() {
+            let mut scene = Scene::default();
+            scene.items.push(newera_draw::Item {
+                owner: None,
+                primitive: newera_draw::Primitive::Fill {
+                    points: outline.clone(),
+                    triangles: newera_core::triangulate(outline),
+                    color: input.palette.wall.with_alpha(0.16),
+                },
+            });
+            paint_scene(
+                &painter,
+                rect,
+                &self.camera,
+                &scene,
+                &mut self.textures,
+                None,
+            );
+        }
         let shown: &Home = preview.as_ref().unwrap_or(&home);
         if preview.is_some() {
             let scene = plan_scene(shown, &options(shown));
@@ -837,6 +873,7 @@ impl PlanView {
                         start: *a,
                         end: *b,
                         offset: *offset,
+                        level: None,
                     };
                     newera_draw::dimension_items(&mut scene, &dim, unit, palette.selection);
                     let mut textures = Textures::default();

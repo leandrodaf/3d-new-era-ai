@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use crate::command::Command;
 use crate::error::{CoreError, CoreResult};
 use crate::home::Home;
-use crate::ids::{DimensionId, FurnitureId, LabelId, RoomId, WallId};
+use crate::ids::{DimensionId, FurnitureId, LabelId, LevelId, RoomId, WallId};
 
 /// One version of the project, with its own edit history.
 #[derive(Debug, Clone)]
@@ -110,6 +110,20 @@ impl Document {
 
     pub fn new_furniture_id(&mut self) -> FurnitureId {
         self.current_mut().home.new_furniture_id()
+    }
+
+    pub fn new_level_id(&mut self) -> LevelId {
+        self.current_mut().home.new_level_id()
+    }
+
+    /// Selects the storey shown in the plan and used for new elements. It is
+    /// view state: saved with the project but not part of the undo history.
+    pub fn select_level(&mut self, level: Option<LevelId>) {
+        let home = &mut self.current_mut().home;
+        if home.selected_level != level {
+            home.selected_level = level;
+            self.revision += 1;
+        }
     }
 
     pub fn can_undo(&self) -> bool {

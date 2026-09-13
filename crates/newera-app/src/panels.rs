@@ -170,7 +170,10 @@ pub(crate) fn left(app: &mut NewEraApp, ui: &mut egui::Ui) {
         });
 
     egui::CentralPanel::default().show(ui, |ui| {
-        let home = app.document.read().home().clone();
+        let home = {
+            let doc = app.document.read();
+            doc.home().level_view(doc.home().current_level())
+        };
         ui.add_space(4.0);
         ui.label(RichText::new(format!("{} {}", icon::HOUSE_LINE, home.name)).heading());
         let total: f64 = home.rooms.iter().map(newera_core::Room::area).sum();

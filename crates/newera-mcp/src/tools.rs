@@ -21,7 +21,7 @@ use crate::edit::{self, BackgroundParams, CreateParams, PlaceSpec, UpdateSpec};
 
 const INSTRUCTIONS: &str = "\
 Home design editor, live in the user's window. Units: cm. Plan axes: x right, y down. \
-Points are [x,y]. Id prefixes: w wall, r room, d dimension, t label, f furniture/door/window. \
+Points are [x,y]. Id prefixes: w wall, r room, d dimension, t label, f furniture/door/window, lv storey. \
 Reads omit defaults (wall t=15 h=250). Writes reply `ok rev=N [ids=...]`; don't re-read \
 unless needed. Every change is one undoable step. Use render_plan to check visually. \
 A project can hold several plan versions (variants tool); tools act on the active one.";
@@ -107,6 +107,17 @@ pub(crate) struct CatalogParams {
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct LevelsParams {
+    /// `list` (default), `add`, `select`, `delete`.
+    action: Option<String>,
+    /// Level id, e.g. `lv3`.
+    id: Option<String>,
+    name: Option<String>,
+    /// Storey height cm for `add`.
+    h: Option<f64>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct VariantsParams {
     /// `list` (default), `duplicate` (copy active), `new` (empty), `switch`, `rename`, `delete`.
     action: Option<String>,
@@ -139,11 +150,16 @@ impl NewEraMcp {
     #[tool(description = "Home state. detail=summary is cheapest.")]
     fn get_home(&self, Parameters(p): Parameters<GetHomeParams>) -> String {
         let doc = self.document.read();
-        match p.detail.as_deref() {
-            Some("summary") => compact::summary(doc.home(), doc.revision()),
-            _ => compact::home(doc.home(), doc.revision()),
+        let full = doc.home();
+        let view = full.level_view(full.current_level());
+        let mut out = match p.detail.as_deref() {
+            Some("summary") => compact::summary(&view, doc.revision()),
+            _ => compact::home(&view, doc.revision()),
+        };
+        if !full.levels.is_empty() {
+            out["levels"] = compact::levels(full);
         }
-        .to_string()
+        out.to_string()
     }
 
     #[tool(
@@ -261,7 +277,8 @@ impl NewEraMcp {
         let bytes = match path.extension().and_then(|e| e.to_str()) {
             Some("svg") => {
                 let doc = self.document.read();
-                let scene = plan_scene(doc.home(), &scene_options());
+                let view = doc.home().level_view(doc.home().current_level());
+                let scene = plan_scene(&view, &scene_options());
                 to_svg(&scene, &SvgOptions::default()).into_bytes()
             }
             Some("png") => self.render(p.w.unwrap_or(1600), p.h.unwrap_or(1200), None, false)?,
@@ -325,7 +342,41 @@ impl NewEraMcp {
         description = "Layout problems: overlap, in_wall, blocks_door, outside_rooms. {} means none."
     )]
     fn check_layout(&self) -> String {
-        compact::issues(self.document.read().home()).to_string()
+        let doc = self.document.read();
+        compact::issues(&doc.home().level_view(doc.home().current_level())).to_string()
+    }
+
+    #[tool(
+        description = "Storeys. list (default): rows [id,name,elev,h,selected]. add {name?,h?} adds one on top and selects it; select {id}; delete {id} removes it and its content. Other tools act on the selected storey."
+    )]
+    fn levels(&self, Parameters(p): Parameters<LevelsParams>) -> Result<String, ErrorData> {
+        let mut doc = self.document.write();
+        let id = || -> Result<newera_core::LevelId, ErrorData> {
+            p.id.as_deref()
+                .ok_or_else(|| invalid("`id` is required"))?
+                .parse()
+                .map_err(|e| invalid(format!("{e}")))
+        };
+        match p.action.as_deref().unwrap_or("list") {
+            "list" => Ok(compact::levels(doc.home()).to_string()),
+            "add" => {
+                let level = ops::add_level(&mut doc, p.name.clone(), p.h).map_err(core)?;
+                Ok(ok(&doc, &[level.to_string()]))
+            }
+            "select" => {
+                let level = id()?;
+                if doc.home().level(level).is_none() {
+                    return Err(invalid(format!("{level} not found")));
+                }
+                doc.select_level(Some(level));
+                Ok(ok(&doc, &[]))
+            }
+            "delete" => {
+                ops::delete_level(&mut doc, id()?).map_err(core)?;
+                Ok(ok(&doc, &[]))
+            }
+            other => Err(invalid(format!("unknown action `{other}`"))),
+        }
     }
 
     #[tool(
@@ -382,7 +433,8 @@ impl NewEraMcp {
     ) -> Result<Vec<u8>, ErrorData> {
         let (w, h) = (w.clamp(64, 2048), h.clamp(64, 2048));
         let doc = self.document.read();
-        let scene = plan_scene(doc.home(), &scene_options());
+        let view = doc.home().level_view(doc.home().current_level());
+        let scene = plan_scene(&view, &scene_options());
         let project = doc.path().map(Path::to_path_buf);
         drop(doc);
         let options = RenderOptions {
@@ -547,5 +599,74 @@ mod tests {
         assert_eq!(s.document.read().home().labels[0].text, "Oi");
         assert!(!s.document.read().is_modified());
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn levels_scope_edits_and_reads_to_the_selected_storey() {
+        let s = server();
+        let walls = r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}]}"#;
+        s.create(Parameters(serde_json::from_str(walls).unwrap()))
+            .unwrap();
+        let add = |name: &str| {
+            s.levels(Parameters(LevelsParams {
+                action: Some("add".into()),
+                name: Some(name.into()),
+                ..LevelsParams::default()
+            }))
+            .unwrap()
+        };
+        let reply = add("Superior");
+        assert!(reply.starts_with("ok"), "{reply}");
+        let list = s.levels(Parameters(LevelsParams::default())).unwrap();
+        let rows: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap();
+        assert_eq!(rows.len(), 2, "{list}");
+        assert_eq!(rows[1][4], true, "new storey is selected: {list}");
+
+        // The upper storey starts empty; new walls go on it.
+        let home: serde_json::Value =
+            serde_json::from_str(&s.get_home(Parameters(GetHomeParams::default()))).unwrap();
+        assert!(
+            home.get("walls")
+                .is_none_or(|w| w.as_array().unwrap().is_empty()),
+            "{home}"
+        );
+        assert_eq!(home["levels"].as_array().unwrap().len(), 2);
+        s.create(Parameters(
+            serde_json::from_str(r#"{"walls":[{"pts":[[0,0],[200,0]]}]}"#).unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(s.document.read().home().walls.len(), 5);
+
+        let ground = rows[0][0].as_str().unwrap().to_owned();
+        s.levels(Parameters(LevelsParams {
+            action: Some("select".into()),
+            id: Some(ground),
+            ..LevelsParams::default()
+        }))
+        .unwrap();
+        let home: serde_json::Value =
+            serde_json::from_str(&s.get_home(Parameters(GetHomeParams::default()))).unwrap();
+        assert_eq!(home["walls"].as_array().unwrap().len(), 4, "{home}");
+
+        let upper = rows[1][0].as_str().unwrap().to_owned();
+        s.levels(Parameters(LevelsParams {
+            action: Some("delete".into()),
+            id: Some(upper),
+            ..LevelsParams::default()
+        }))
+        .unwrap();
+        assert_eq!(
+            s.document.read().home().walls.len(),
+            4,
+            "upper walls removed with the storey"
+        );
+        assert!(
+            s.levels(Parameters(LevelsParams {
+                action: Some("select".into()),
+                id: Some("lv99".into()),
+                ..LevelsParams::default()
+            }))
+            .is_err()
+        );
     }
 }

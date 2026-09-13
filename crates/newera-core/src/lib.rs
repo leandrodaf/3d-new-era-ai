@@ -18,6 +18,7 @@ mod geometry;
 mod home;
 mod ids;
 mod joins;
+mod levels;
 pub mod ops;
 mod project;
 mod units;
@@ -26,15 +27,18 @@ pub use analysis::{Issue, check_layout, door_swing};
 pub use command::Command;
 pub use detect::detect_room;
 pub use document::{Document, FIRST_VARIANT_NAME, SharedDocument, Variant, VariantInfo};
-pub use elements::{BackgroundImage, Compass, Dimension, Element, Label, Room, Wall};
+pub use elements::{BackgroundImage, Compass, Dimension, Element, Label, Level, Room, Wall};
 pub use error::{CoreError, CoreResult};
 pub use furniture::{
     Furniture, Opening, OpeningKind, WallCut, align_to_wall, cut_outline, wall_cuts,
 };
 pub use geometry::{Point2, polygon_area, polygon_centroid, signed_area, triangulate};
 pub use home::Home;
-pub use ids::{DimensionId, ElementId, FurnitureId, LabelId, ParseIdError, RoomId, WallId};
+pub use ids::{
+    DimensionId, ElementId, FurnitureId, LabelId, LevelId, ParseIdError, RoomId, WallId,
+};
 pub use joins::{JOIN_TOLERANCE, wall_outlines};
+pub use levels::{FloorShape, floor_shapes, stair_holes};
 pub use project::{
     PROJECT_EXTENSION, Project, ProjectError, from_project_json, resolve_project_path,
     to_project_json,

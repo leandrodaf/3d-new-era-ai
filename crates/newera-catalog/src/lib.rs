@@ -812,6 +812,7 @@ impl CatalogItem {
             opening: self.opening,
             model: None,
             visible: true,
+            level: None,
         }
     }
 }

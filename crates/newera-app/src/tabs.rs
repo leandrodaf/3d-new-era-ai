@@ -120,14 +120,15 @@ pub(crate) fn bar(app: &mut NewEraApp, ui: &mut egui::Ui) {
         })
         .response
         .on_hover_text("Nova versão da planta");
-        if ui
-            .add_enabled(
-                count > 1,
-                egui::Button::new(format!("{} Comparar", icon::CHART_BAR)),
-            )
-            .on_hover_text("Comparar as versões")
-            .clicked()
-        {
+        let compare = count > 1
+            && ui
+                .button(format!("{} Comparar", icon::CHART_BAR))
+                .on_hover_text("Comparar as versões")
+                .clicked();
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            levels(app, ui);
+        });
+        if compare {
             app.open_compare();
         }
     });
@@ -146,6 +147,75 @@ pub(crate) fn bar(app: &mut NewEraApp, ui: &mut egui::Ui) {
     if let Some(index) = close {
         let name = infos[index].name.clone();
         app.set_dialog(Dialog::ConfirmCloseVariant { index, name });
+    }
+}
+
+/// Storey selector: pick, add, edit and delete levels.
+fn levels(app: &mut NewEraApp, ui: &mut egui::Ui) {
+    let (levels, current) = {
+        let doc = app.document.read();
+        let home = doc.home();
+        let levels: Vec<newera_core::Level> = home.sorted_levels().into_iter().cloned().collect();
+        (levels, home.current_level())
+    };
+    if ui
+        .button(format!("{} Andar", icon::PLUS))
+        .on_hover_text("Adicionar um andar acima do mais alto")
+        .clicked()
+    {
+        app.run(|doc| newera_core::ops::add_level(doc, None, None).map(|_| ()));
+        app.after_variant_change();
+    }
+    if levels.is_empty() {
+        ui.weak(format!("{} Térreo", icon::STACK));
+        return;
+    }
+    let current_name = levels
+        .iter()
+        .find(|l| Some(l.id) == current)
+        .map_or_else(String::new, |l| l.name.clone());
+    let mut select = None;
+    egui::ComboBox::from_id_salt("level_select")
+        .selected_text(format!("{} {current_name}", icon::STACK))
+        .show_ui(ui, |ui| {
+            for level in levels.iter().rev() {
+                let label = format!(
+                    "{} · {}",
+                    level.name,
+                    app.unit().format_length(level.elevation)
+                );
+                if ui
+                    .selectable_label(Some(level.id) == current, label)
+                    .clicked()
+                {
+                    select = Some(level.id);
+                }
+            }
+            ui.separator();
+            if ui
+                .button(format!("{} Editar andar…", icon::PENCIL_SIMPLE))
+                .clicked()
+                && let Some(id) = current
+            {
+                app.open_modify(&[id.into()]);
+            }
+            if ui
+                .add_enabled(
+                    levels.len() > 1,
+                    egui::Button::new(format!("{} Excluir andar", icon::TRASH)),
+                )
+                .clicked()
+                && let Some(level) = levels.iter().find(|l| Some(l.id) == current)
+            {
+                app.set_dialog(Dialog::ConfirmDeleteLevel {
+                    id: level.id,
+                    name: level.name.clone(),
+                });
+            }
+        });
+    if let Some(id) = select {
+        app.document.write().select_level(Some(id));
+        app.after_variant_change();
     }
 }
 

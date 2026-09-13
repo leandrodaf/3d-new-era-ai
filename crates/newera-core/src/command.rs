@@ -67,8 +67,16 @@ impl Command {
     /// On error the home is left untouched.
     pub(crate) fn apply(self, home: &mut Home) -> CoreResult<Self> {
         match self {
-            Self::Insert { element, index } => {
+            Self::Insert { mut element, index } => {
                 let id = element.id();
+                // Elements without a storey land on the one being edited.
+                if element.level().is_none()
+                    && let Some(selected) = home
+                        .selected_level
+                        .filter(|l| Some(*l) != home.base_level())
+                {
+                    element.set_level(Some(selected));
+                }
                 home.insert(element, index)?;
                 Ok(Self::Remove { id })
             }

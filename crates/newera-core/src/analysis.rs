@@ -165,6 +165,7 @@ mod tests {
             opening: None,
             model: None,
             visible: true,
+            level: None,
         }
     }
 

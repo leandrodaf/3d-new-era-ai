@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{CoreError, CoreResult};
 use crate::furniture::Furniture;
 use crate::geometry::{Point2, polygon_area};
-use crate::ids::{DimensionId, ElementId, LabelId, RoomId, WallId};
+use crate::ids::{DimensionId, ElementId, LabelId, LevelId, RoomId, WallId};
 
 fn yes() -> bool {
     true
@@ -31,6 +31,9 @@ pub struct Wall {
     /// to the left of `start → end` (in plan axes, y down).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub arc_extent: Option<f64>,
+    /// Storey it belongs to; `None` means the lowest level.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub level: Option<LevelId>,
 }
 
 impl Wall {
@@ -45,6 +48,7 @@ impl Wall {
             thickness: Self::DEFAULT_THICKNESS,
             height: Self::DEFAULT_HEIGHT,
             arc_extent: None,
+            level: None,
         }
     }
 
@@ -161,6 +165,9 @@ pub struct Room {
     /// Show the area label on the plan.
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub area_visible: bool,
+    /// Storey it belongs to; `None` means the lowest level.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub level: Option<LevelId>,
 }
 
 impl Room {
@@ -172,6 +179,7 @@ impl Room {
             floor_visible: true,
             ceiling_visible: true,
             area_visible: true,
+            level: None,
         }
     }
 
@@ -204,6 +212,9 @@ pub struct Dimension {
     /// values move it to the left of `start → end`.
     #[serde(default)]
     pub offset: f64,
+    /// Storey it belongs to; `None` means the lowest level.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub level: Option<LevelId>,
 }
 
 impl Dimension {
@@ -234,6 +245,9 @@ pub struct Label {
     /// Rotation in degrees, clockwise.
     #[serde(default)]
     pub angle: f64,
+    /// Storey it belongs to; `None` means the lowest level.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub level: Option<LevelId>,
 }
 
 impl Label {
@@ -344,6 +358,41 @@ impl BackgroundImage {
     }
 }
 
+/// A storey: a floor of the house at some elevation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Level {
+    pub id: LevelId,
+    pub name: String,
+    /// Height of its floor above the ground, cm.
+    pub elevation: f64,
+    /// Default wall height for this storey (floor to ceiling), cm.
+    pub height: f64,
+    /// Slab under this storey's floor, cm.
+    #[serde(default = "Level::default_floor_thickness")]
+    pub floor_thickness: f64,
+}
+
+impl Level {
+    pub const DEFAULT_HEIGHT: f64 = 250.0;
+    pub const DEFAULT_FLOOR_THICKNESS: f64 = 12.0;
+
+    fn default_floor_thickness() -> f64 {
+        Self::DEFAULT_FLOOR_THICKNESS
+    }
+
+    fn validate(&self) -> CoreResult<()> {
+        if self.name.trim().is_empty() {
+            return invalid("level name must not be empty");
+        }
+        if !(self.elevation.is_finite() && self.height > 0.0 && self.floor_thickness >= 0.0) {
+            return invalid(
+                "level needs a finite elevation, positive height and non-negative slab",
+            );
+        }
+        Ok(())
+    }
+}
+
 /// Any element stored in a [`crate::Home`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -353,6 +402,7 @@ pub enum Element {
     Dimension(Dimension),
     Label(Label),
     Furniture(Furniture),
+    Level(Level),
 }
 
 impl Element {
@@ -363,6 +413,7 @@ impl Element {
             Self::Dimension(e) => e.id.into(),
             Self::Label(e) => e.id.into(),
             Self::Furniture(e) => e.id.into(),
+            Self::Level(e) => e.id.into(),
         }
     }
 
@@ -373,6 +424,7 @@ impl Element {
             Self::Dimension(e) => e.validate(),
             Self::Label(e) => e.validate(),
             Self::Furniture(e) => e.validate(),
+            Self::Level(e) => e.validate(),
         }
     }
 }
@@ -386,7 +438,32 @@ macro_rules! element_from {
         })+
     };
 }
-element_from!(Wall, Room, Dimension, Label, Furniture);
+element_from!(Wall, Room, Dimension, Label, Furniture, Level);
+
+impl Element {
+    /// Storey of an element; levels themselves have none.
+    pub fn level(&self) -> Option<LevelId> {
+        match self {
+            Self::Wall(e) => e.level,
+            Self::Room(e) => e.level,
+            Self::Dimension(e) => e.level,
+            Self::Label(e) => e.level,
+            Self::Furniture(e) => e.level,
+            Self::Level(_) => None,
+        }
+    }
+
+    pub fn set_level(&mut self, level: Option<LevelId>) {
+        match self {
+            Self::Wall(e) => e.level = level,
+            Self::Room(e) => e.level = level,
+            Self::Dimension(e) => e.level = level,
+            Self::Label(e) => e.level = level,
+            Self::Furniture(e) => e.level = level,
+            Self::Level(_) => {}
+        }
+    }
+}
 
 fn invalid<T>(message: &str) -> CoreResult<T> {
     Err(CoreError::InvalidGeometry(message.to_owned()))

@@ -528,6 +528,7 @@ mod tests {
             start: Point2::new(0.0, 0.0),
             end: Point2::new(400.0, 0.0),
             offset: 40.0,
+            level: None,
         };
         doc.execute(Command::insert(wall.clone())).unwrap();
         doc.execute(Command::insert(dim.clone())).unwrap();
@@ -558,6 +559,7 @@ mod tests {
                 start: Point2::new(a.0, a.1),
                 end: Point2::new(b.0, b.1),
                 offset: 0.0,
+                level: None,
             };
             dimension_items(
                 &mut scene,

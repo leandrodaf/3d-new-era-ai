@@ -84,11 +84,13 @@ pub fn translate(
                 l.position = shift(l.position);
                 Element::Label(l)
             }
+            Element::Level(level) => Element::Level(level),
             Element::Furniture(mut f) => {
                 f.position = shift(f.position);
                 // Doors and windows stay seated in the nearest wall.
                 if f.is_opening()
-                    && let Some((wall_id, along)) = nearest_wall(home, f.position, OPENING_REACH)
+                    && let Some((wall_id, along)) =
+                        nearest_wall(&home.level_view(f.level), f.position, OPENING_REACH)
                     && let Some(wall) = home.wall(wall_id)
                 {
                     crate::furniture::align_to_wall(&mut f, wall, along);
@@ -100,7 +102,17 @@ pub fn translate(
     }
 
     if drag_joined {
-        for wall in home.walls.iter().filter(|w| !ids.contains(&w.id.into())) {
+        let moved_levels: Vec<_> = ids
+            .iter()
+            .filter_map(|id| home.element(*id))
+            .map(|e| home.resolve_level(e.level()))
+            .collect();
+        for wall in home
+            .walls
+            .iter()
+            .filter(|w| !ids.contains(&w.id.into()))
+            .filter(|w| moved_levels.contains(&home.resolve_level(w.level)))
+        {
             let near = |p: Point2| moved_points.iter().any(|q| q.distance(p) <= JOIN_TOLERANCE);
             let (s, e) = (near(wall.start), near(wall.end));
             if s || e {
@@ -126,9 +138,11 @@ pub fn move_wall_point(
     let home = doc.home();
     let wall = home.wall(id).ok_or(CoreError::NotFound(id.into()))?;
     let from = if at_start { wall.start } else { wall.end };
+    let level = wall.level;
     let commands = home
         .walls
         .iter()
+        .filter(|w| home.on_level(w.level, level))
         .filter_map(|w| {
             let s = w.start.distance(from) <= JOIN_TOLERANCE;
             let e = w.end.distance(from) <= JOIN_TOLERANCE;
@@ -166,6 +180,7 @@ pub fn wall_dimension(doc: &mut Document, id: WallId, gap: f64) -> CoreResult<Di
         start: wall.start,
         end: wall.end,
         offset: sign * (wall.thickness / 2.0 + gap),
+        level: wall.level,
     })
 }
 
@@ -204,7 +219,8 @@ pub fn snap_openings(doc: &mut Document, ids: &[ElementId], max_distance: f64) -
             _ => None,
         })
         .filter_map(|mut f| {
-            let (wall_id, along) = nearest_wall(home, f.position, max_distance)?;
+            let (wall_id, along) =
+                nearest_wall(&home.level_view(f.level), f.position, max_distance)?;
             let wall = home.wall(wall_id)?;
             crate::furniture::align_to_wall(&mut f, wall, along);
             Some(Command::update(f))
@@ -214,6 +230,75 @@ pub fn snap_openings(doc: &mut Document, ids: &[ElementId], max_distance: f64) -
         return Ok(());
     }
     doc.execute(Command::Batch { commands })
+}
+
+/// Adds a storey on top of the highest one and selects it. The first call on
+/// a single-level house also creates the ground level ("Térreo") for the
+/// existing elements. Returns the new level's id.
+///
+/// # Panics
+/// Never: the level list is non-empty once the ground level exists.
+pub fn add_level(
+    doc: &mut Document,
+    name: Option<String>,
+    height: Option<f64>,
+) -> CoreResult<crate::ids::LevelId> {
+    use crate::elements::Level;
+    let mut commands = Vec::new();
+    let mut levels: Vec<Level> = doc.home().levels.clone();
+    if levels.is_empty() {
+        let ground = Level {
+            id: doc.new_level_id(),
+            name: "Térreo".to_owned(),
+            elevation: 0.0,
+            height: crate::elements::Wall::DEFAULT_HEIGHT,
+            floor_thickness: Level::DEFAULT_FLOOR_THICKNESS,
+        };
+        levels.push(ground.clone());
+        commands.push(Command::insert(ground));
+    }
+    let top = levels
+        .iter()
+        .max_by(|a, b| a.elevation.total_cmp(&b.elevation))
+        .expect("at least one level");
+    let floor = Level::DEFAULT_FLOOR_THICKNESS;
+    let count = levels.len();
+    let level = Level {
+        id: doc.new_level_id(),
+        name: name.unwrap_or_else(|| format!("{count}º andar")),
+        elevation: top.elevation + top.height + floor,
+        height: height.unwrap_or(Level::DEFAULT_HEIGHT),
+        floor_thickness: floor,
+    };
+    let id = level.id;
+    commands.push(Command::insert(level));
+    doc.execute(Command::Batch { commands })?;
+    doc.select_level(Some(id));
+    Ok(id)
+}
+
+/// Deletes a storey and everything on it, as one undoable step.
+pub fn delete_level(doc: &mut Document, id: crate::ids::LevelId) -> CoreResult<()> {
+    let home = doc.home();
+    if home.level(id).is_none() {
+        return Err(CoreError::NotFound(id.into()));
+    }
+    let mut commands: Vec<Command> = home
+        .elements()
+        .filter(|e| !matches!(e, Element::Level(_)) && home.on_level(e.level(), Some(id)))
+        .map(|e| Command::remove(e.id()))
+        .collect();
+    commands.push(Command::remove(id));
+    doc.execute(Command::Batch { commands })?;
+    let still_selected = doc
+        .home()
+        .selected_level
+        .is_some_and(|s| doc.home().level(s).is_some());
+    if !still_selected {
+        let base = doc.home().base_level();
+        doc.select_level(base);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -281,6 +366,7 @@ mod tests {
             position: Point2::new(1.0, 2.0),
             size: 20.0,
             angle: 0.0,
+            level: None,
         };
         let id = label.id;
         doc.execute(Command::insert(label)).unwrap();
@@ -297,6 +383,52 @@ mod tests {
         move_wall_point(&mut doc, a, false, Point2::new(450.0, 20.0)).unwrap();
         assert_eq!(doc.home().wall(a).unwrap().end, Point2::new(450.0, 20.0));
         assert_eq!(doc.home().wall(b).unwrap().start, Point2::new(450.0, 20.0));
+    }
+
+    #[test]
+    fn levels_stack_and_views_keep_storeys_apart() {
+        let (mut doc, a, _) = doc_with_l();
+        let upper = add_level(&mut doc, None, None).unwrap();
+        let home = doc.home();
+        assert_eq!(
+            home.levels.len(),
+            2,
+            "ground level created for existing walls"
+        );
+        let ground = home.base_level().unwrap();
+        assert_eq!(home.selected_level, Some(upper));
+        assert!((home.level(upper).unwrap().elevation - 262.0).abs() < 1e-9);
+
+        // New wall on the upper level.
+        let mut wall = Wall::new(
+            doc.new_wall_id(),
+            Point2::new(0.0, 0.0),
+            Point2::new(100.0, 0.0),
+        );
+        wall.level = Some(upper);
+        doc.execute(Command::insert(wall)).unwrap();
+        let home = doc.home();
+        assert_eq!(
+            home.level_view(Some(ground)).walls.len(),
+            2,
+            "unassigned walls sit on the ground"
+        );
+        assert_eq!(home.level_view(Some(upper)).walls.len(), 1);
+        assert!(home.level_view(Some(upper)).wall(a).is_none());
+
+        delete_level(&mut doc, upper).unwrap();
+        assert_eq!(
+            doc.home().walls.len(),
+            2,
+            "upper walls removed with their level"
+        );
+        assert_eq!(doc.home().current_level(), Some(ground));
+        doc.undo().unwrap();
+        assert_eq!(
+            doc.home().walls.len(),
+            3,
+            "deleting a level is one undo step"
+        );
     }
 
     #[test]

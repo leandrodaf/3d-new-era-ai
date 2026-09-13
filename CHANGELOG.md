@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Levels: storeys with elevation/height/slab, level selector, faint reference of the
+  storey below, stacked 3D with stair openings; MCP `levels`.
+
 - Plan variants as tabs: duplicate (Ctrl+T), switch (Ctrl+Tab), rename, close, compare
   versions; project format v2; MCP `variants`.
 

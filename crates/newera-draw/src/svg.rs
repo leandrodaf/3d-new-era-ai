@@ -216,6 +216,7 @@ mod tests {
             position: Point2::new(200.0, 100.0),
             size: 30.0,
             angle: 0.0,
+            level: None,
         };
         doc.execute(Command::insert(wall)).unwrap();
         doc.execute(Command::insert(label)).unwrap();

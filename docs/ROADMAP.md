@@ -67,10 +67,19 @@ The core of what makes the editor useful: placing real objects with real dimensi
 - [x] Project file v2 stores every variant (v1 files still open)
 - [x] MCP: `variants` tool (list / duplicate / new / switch / rename / delete)
 
-## M3 — Levels and presentation
+## M3 — Levels, materials and presentation
 
-- [ ] Levels (floors) with elevation and height; stairs
-- [ ] Textures and colors for walls, floors, ceilings
+- [x] Levels (storeys) with elevation, height and slab; selector with add/edit/delete;
+      the storey below drawn faintly in the plan; stacked storeys in 3D; stairs open
+      the floor above; MCP `levels` (list / add / select / delete), all reads scoped
+      to the selected storey
+- [ ] **Wall types**: drywall, masonry (tijolo/bloco), concrete… with standard
+      thicknesses and layers, picked from a list and editable per wall
+- [ ] Colors and **textures** for walls (paint per side), floors and ceilings;
+      built-in procedural patterns plus imported image textures with real-size tiling
+- [ ] **Electrical and plumbing plans** on top of the same floor plan: outlets,
+      switches, light points, circuits; water/sewer points and pipes; each discipline
+      as a toggleable layer with its own symbols, legend, export and MCP tools
 - [ ] Lighting: sun from compass + date/time, light sources from furniture
 - [ ] Virtual visitor camera; stored points of view
 - [ ] Photo renderer (GPU path tracing) and video along a camera path

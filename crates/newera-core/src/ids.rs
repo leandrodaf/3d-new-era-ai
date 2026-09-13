@@ -145,6 +145,8 @@ id_types! {
     LabelId => "t", Label;
     /// Identifier of a [`crate::Furniture`] piece, door or window.
     FurnitureId => "f", Furniture;
+    /// Identifier of a [`crate::Level`] (storey).
+    LevelId => "lv", Level;
 }
 
 #[cfg(test)]
