@@ -981,6 +981,50 @@ impl Review<'_, '_> {
         }
     }
 
+    /// Screens: the sofa far enough to see the whole picture, close enough
+    /// to read it (about 1,2 to 2,5 times the diagonal).
+    fn screens(&mut self) {
+        let scene = self.scene;
+        for space in &scene.spaces {
+            let tvs = space
+                .units
+                .iter()
+                .filter(|&&i| scene.units[i].what == Use::Tv);
+            for &tv in tvs {
+                let screen = scene.units[tv].piece;
+                // Embedded TVs sit inside a panel group: use the group position.
+                let diagonal = screen.width.hypot(screen.height);
+                let Some(sofa) = space
+                    .units
+                    .iter()
+                    .filter(|&&i| matches!(scene.units[i].what, Use::Sofa(_) | Use::Armchair))
+                    .min_by(|a, b| {
+                        let d = |i: usize| scene.units[i].piece.position.distance(screen.position);
+                        d(**a).total_cmp(&d(**b))
+                    })
+                else {
+                    continue;
+                };
+                let distance = scene.units[*sofa].piece.position.distance(screen.position);
+                let (near, far) = (diagonal * 1.2, diagonal * 2.5);
+                let inches = (diagonal / 2.54).round();
+                if distance < near || distance > far {
+                    self.push(
+                        Severity::Dica,
+                        scene.units[tv].label(),
+                        format!(
+                            "{} a {} cm da TV de {inches:.0}\"; para essa tela o conforto fica entre {} e {} cm.",
+                            scene.units[*sofa].label(),
+                            cm(distance.round()),
+                            cm(near.round()),
+                            cm(far.round())
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
     fn reach(&mut self) {
         if !self.profile.wheelchair {
             return;
@@ -1132,6 +1176,7 @@ pub fn review(home: &Home, profile: &Profile) -> Report {
     review.doors();
     review.rooms();
     review.kitchen();
+    review.screens();
     review.reach();
     // The same finding on a row of modules is one finding about all of them.
     let mut findings: Vec<Finding> = Vec::new();
@@ -1354,6 +1399,31 @@ mod tests {
         named_again(&mut home);
         let scene = Scene::new(&home);
         assert_eq!(scene.overlaps().len(), 1);
+    }
+
+    #[test]
+    fn the_sofa_sits_at_a_distance_that_suits_the_screen() {
+        let mut home = Home::default();
+        square(&mut home, "Sala", 400.0, 400.0);
+        let mut tv = piece(20, "tv", (200.0, 12.0), (124.0, 8.0, 72.0), 0.0);
+        tv.elevation = 70.0;
+        home.furniture.push(tv);
+        home.furniture.push(piece(
+            21,
+            "sofa-3",
+            (200.0, 160.0),
+            (210.0, 90.0, 85.0),
+            180.0,
+        ));
+        let report = review(&home, &Profile::default());
+        // 148 cm from a 56" screen (143 cm diagonal): closer than 172 cm.
+        assert!(
+            says(&report, Severity::Dica, "entre 172 e 358 cm"),
+            "{report:#?}"
+        );
+        home.furniture[1].position.y = 230.0;
+        let report = review(&home, &Profile::default());
+        assert!(!says(&report, Severity::Dica, "da TV"), "{report:#?}");
     }
 
     #[test]

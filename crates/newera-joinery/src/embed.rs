@@ -16,6 +16,11 @@ fn num(v: f64) -> String {
     crate::num(v)
 }
 
+/// Overall depth of a build, cm.
+fn output_depth(build: &Build) -> Result<f64, String> {
+    generate(build).map(|o| o.size[1])
+}
+
 /// A length for replies, as a JSON number rounded to a millimeter.
 fn val(v: f64) -> Value {
     let r = (v * 10.0).round() / 10.0;
@@ -38,6 +43,8 @@ pub enum Fixture {
     Microwave,
     Dishwasher,
     Fridge,
+    /// A television on a panel.
+    Tv,
     /// Anything else built into a cabinet (wine cooler, safe, speaker).
     Appliance,
 }
@@ -51,6 +58,7 @@ impl Fixture {
             Self::Microwave => "microwave",
             Self::Dishwasher => "dishwasher",
             Self::Fridge => "fridge",
+            Self::Tv => "tv",
             Self::Appliance => "appliance",
         }
     }
@@ -63,6 +71,7 @@ impl Fixture {
             Self::Microwave => "o micro-ondas",
             Self::Dishwasher => "a lava-louças",
             Self::Fridge => "a geladeira",
+            Self::Tv => "a TV",
             Self::Appliance => "o aparelho",
         }
     }
@@ -87,6 +96,7 @@ pub fn fixture_of(piece: &Furniture) -> Fixture {
         "microwave" => return Fixture::Microwave,
         "dishwasher" => return Fixture::Dishwasher,
         "fridge" => return Fixture::Fridge,
+        "tv" => return Fixture::Tv,
         _ => {}
     }
     let n = plain(&piece.name);
@@ -103,6 +113,8 @@ pub fn fixture_of(piece: &Furniture) -> Fixture {
         Fixture::Dishwasher
     } else if has(&["geladeira", "refrigerador", "frigobar", "adega"]) {
         Fixture::Fridge
+    } else if has(&["televis", "smart tv"]) || n.starts_with("tv") {
+        Fixture::Tv
     } else {
         Fixture::Appliance
     }
@@ -306,6 +318,53 @@ pub fn embed(doc: &mut Document, request: &EmbedRequest) -> Result<Value, String
             });
             (Build::Cabinet(CabinetParams { ..cabinet }), place, detail)
         }
+        Build::Slats(panel) => {
+            if kind != Fixture::Tv {
+                return Err(format!(
+                    "No painel ripado vai a TV; {} vai numa bancada ou num armário.",
+                    kind.label()
+                ));
+            }
+            if item.width + 10.0 > panel.w {
+                return Err(format!(
+                    "A TV tem {} cm de largura e o painel {} cm: use w = {} no painel (5 cm de cada lado).",
+                    num(item.width),
+                    num(panel.w),
+                    num((item.width + 10.0).ceil())
+                ));
+            }
+            // Seated eyes are about 105 cm from the floor: the screen's middle there.
+            let center = request.z.unwrap_or(105.0);
+            let bottom = center - item.height / 2.0;
+            if bottom < 30.0 || center + item.height / 2.0 > panel.h - 5.0 {
+                return Err(format!(
+                    "Com o centro a {} cm a TV de {} cm de altura sai do painel de {} cm; use z entre {} e {}.",
+                    num(center),
+                    num(item.height),
+                    num(panel.h),
+                    num(30.0 + item.height / 2.0),
+                    num(panel.h - 5.0 - item.height / 2.0)
+                ));
+            }
+            let at = request.at.unwrap_or(panel.w / 2.0);
+            if at - item.width / 2.0 < 0.0 || at + item.width / 2.0 > panel.w {
+                return Err(format!(
+                    "A TV centrada em {} cm sai do painel; use at entre {} e {}.",
+                    num(at),
+                    num(item.width / 2.0),
+                    num(panel.w - item.width / 2.0)
+                ));
+            }
+            let depth = output_depth(&Build::Slats(panel.clone()))?;
+            notes.push(format!(
+                "Passa-fios atrás da TV a {} cm do chão; tomada e ponto de antena a {} cm.",
+                num(bottom + item.height * 0.3),
+                num(bottom + item.height * 0.3)
+            ));
+            let place = (at - panel.w / 2.0, depth / 2.0 + item.depth / 2.0, bottom);
+            let detail = json!({"x": val(at), "bottom": val(bottom)});
+            (Build::Slats(panel), place, detail)
+        }
         other => {
             return Err(format!(
                 "{} é um(a) {}: embuta em bancada (countertop) ou armário (cabinet).",
@@ -479,6 +538,62 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("armário com nicho"), "{err}");
+    }
+
+    #[test]
+    fn a_tv_hangs_on_a_slatted_panel_at_seated_eye_level() {
+        let mut doc = Document::default();
+        let panel = host(
+            &mut doc,
+            &Build::Slats(crate::SlatsParams {
+                w: 180.0,
+                h: 240.0,
+                ..crate::SlatsParams::default()
+            }),
+        );
+        let tv = piece(&mut doc, "tv", "Televisão 55\"", [124.0, 8.0, 72.0]);
+        let reply = embed(
+            &mut doc,
+            &EmbedRequest {
+                item: tv.clone(),
+                existing: false,
+                host: panel,
+                at: None,
+                z: None,
+                dry: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(reply["bottom"], 69);
+        assert!(reply["notes"].to_string().contains("Passa-fios"));
+        let group = doc.home().furniture.iter().find(|f| f.id == panel).unwrap();
+        let screen = group.children.iter().find(|c| c.id == tv.id).unwrap();
+        // In front of the 1,5 cm backing + 2 cm slats.
+        assert!(
+            (screen.position.y - (40.0 + 3.5 / 2.0 + 4.0)).abs() < 1e-9,
+            "{:?}",
+            screen.position
+        );
+        let small = host(
+            &mut doc,
+            &Build::Slats(crate::SlatsParams {
+                w: 120.0,
+                ..crate::SlatsParams::default()
+            }),
+        );
+        let err = embed(
+            &mut doc,
+            &EmbedRequest {
+                item: tv,
+                existing: false,
+                host: small,
+                at: None,
+                z: None,
+                dry: true,
+            },
+        )
+        .unwrap_err();
+        assert!(err.contains("use w = 134"), "{err}");
     }
 
     #[test]

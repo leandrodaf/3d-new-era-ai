@@ -40,6 +40,7 @@ pub enum Use {
     Desk,
     OfficeChair,
     Storage,
+    Tv,
     Switch,
     Outlet,
     Other,
@@ -128,6 +129,7 @@ fn classify(piece: &Furniture, params: Option<&serde_json::Value>) -> Use {
         "desk" => Use::Desk,
         "office-chair" => Use::OfficeChair,
         "bookcase" | "sideboard" | "tv-stand" => Use::Storage,
+        "tv" => Use::Tv,
         c if c.starts_with("switch") => Use::Switch,
         c if c.starts_with("outlet") || c == "data-outlet" => Use::Outlet,
         _ => by_name(piece),
@@ -393,6 +395,18 @@ impl<'a> Scene<'a> {
                 what,
                 params,
             });
+            // Items embedded in joinery count on their own (a TV on its panel).
+            for child in top
+                .children
+                .iter()
+                .filter(|c| c.visible && c.properties.contains_key("joinery:embedded"))
+            {
+                units.push(Unit {
+                    piece: child,
+                    what: classify(child, None),
+                    params: None,
+                });
+            }
         }
         let footprints: Vec<Polygon<f64>> = units
             .iter()
