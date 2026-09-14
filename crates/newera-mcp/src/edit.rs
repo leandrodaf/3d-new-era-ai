@@ -135,6 +135,33 @@ pub(crate) struct CreateParams {
     /// Free lines: annotations, arrows, electrical or plumbing runs.
     #[serde(default)]
     pub polylines: Vec<PolylineSpec>,
+    /// Pitched roofs over a rectangle, built as one group of sloping panels.
+    #[serde(default)]
+    pub roofs: Vec<RoofSpec>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct RoofSpec {
+    /// Rectangle corners in order; the ridge runs along pts[0]→pts[1].
+    pub pts: Vec<Point2>,
+    /// `gable` (two slopes, default; steep = A-frame) or `shed` (one slope rising
+    /// from the pts[0]→pts[1] side).
+    pub kind: Option<String>,
+    /// Slope in degrees (default 30), unless `ridge_h` is given.
+    pub pitch: Option<f64>,
+    /// Height of the ridge (gable) or high side (shed) above the storey floor, cm.
+    pub ridge_h: Option<f64>,
+    /// Eave height above the storey floor, cm (default 250).
+    pub h: Option<f64>,
+    /// Eave and gable overhang, cm (default 30).
+    pub overhang: Option<f64>,
+    /// Panel thickness cm (default 12).
+    pub t: Option<f64>,
+    pub color: Option<[u8; 3]>,
+    /// Also close the gable ends with sloping walls.
+    #[serde(default)]
+    pub gables: bool,
+    pub name: Option<String>,
 }
 
 /// Creates everything in one undoable step and returns the new ids in order.
@@ -275,6 +302,16 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
         };
         ids.push(label.id.to_string());
         commands.push(Command::insert(label));
+    }
+
+    for spec in params.roofs {
+        let (roof, gables) = roof(doc, &spec)?;
+        for wall in gables {
+            ids.push(wall.id.to_string());
+            commands.push(Command::insert(wall));
+        }
+        ids.push(roof.id.to_string());
+        commands.push(Command::insert(roof));
     }
 
     for spec in params.polylines {
@@ -942,6 +979,151 @@ pub(crate) struct PlaceSpec {
     pub hinge_right: Option<bool>,
     /// Doors: a point `[x,y]` on the side the leaf swings into (e.g. inside the bathroom).
     pub into: Option<Point2>,
+    /// With `cat:"beam"`: end points `[x,y,z]` cm (z above the storey floor);
+    /// `w`×`h` is the section (default 10×20).
+    pub a: Option<[f64; 3]>,
+    pub b: Option<[f64; 3]>,
+}
+
+/// A box from `a` to `b` (plan cm, height cm above the storey floor) with a
+/// `w` × `h` section: beams, rafters, posts, braces and sloping panels.
+fn beam(
+    doc: &mut Document,
+    a: [f64; 3],
+    b: [f64; 3],
+    w: f64,
+    h: f64,
+) -> EditResult<newera_core::Furniture> {
+    let (dx, dy, dz) = (b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    let horizontal = dx.hypot(dy);
+    let length = horizontal.hypot(dz);
+    if length < 0.5 {
+        return Err("a beam needs two distinct points".into());
+    }
+    let item = newera_catalog::find("box").ok_or("catalog has no box")?;
+    let center = [
+        f64::midpoint(a[0], b[0]),
+        f64::midpoint(a[1], b[1]),
+        f64::midpoint(a[2], b[2]),
+    ];
+    let mut piece = item.instantiate(doc.new_furniture_id(), Point2::new(center[0], center[1]));
+    piece.name = "Viga".into();
+    piece.width = w;
+    piece.depth = length;
+    piece.height = h;
+    // The depth axis points from a to b on the plan; pitch lifts its far end.
+    piece.angle = if horizontal > 1e-6 {
+        (-dx).atan2(dy).to_degrees()
+    } else {
+        0.0
+    };
+    piece.pitch = -(dz / length).asin().to_degrees();
+    if horizontal <= 1e-6 {
+        piece.pitch = if dz > 0.0 { -90.0 } else { 90.0 };
+    }
+    piece.elevation = center[2] - h / 2.0;
+    Ok(piece)
+}
+
+/// A pitched roof over a rectangle: a group of sloping panels, plus gable
+/// walls when asked.
+fn roof(doc: &mut Document, spec: &RoofSpec) -> EditResult<(newera_core::Furniture, Vec<Wall>)> {
+    let [p0, p1, p2, ..] = spec.pts[..] else {
+        return Err("a roof needs the 4 corners of a rectangle in `pts`".into());
+    };
+    let along = (p1.x - p0.x, p1.y - p0.y);
+    let length = along.0.hypot(along.1);
+    if length < 1.0 {
+        return Err("roof corners pts[0] and pts[1] must differ".into());
+    }
+    let u = (along.0 / length, along.1 / length);
+    // Across the ridge, toward pts[2].
+    let mut n = (-u.1, u.0);
+    let span = (p2.x - p0.x) * n.0 + (p2.y - p0.y) * n.1;
+    if span < 0.0 {
+        n = (-n.0, -n.1);
+    }
+    let span = span.abs();
+    if span < 1.0 {
+        return Err("roof rectangle has no width".into());
+    }
+    let shed = match spec.kind.as_deref().unwrap_or("gable") {
+        "gable" | "a-frame" => false,
+        "shed" => true,
+        other => return Err(format!("unknown roof kind `{other}` (gable, shed)")),
+    };
+    let eave = spec.h.unwrap_or(Wall::DEFAULT_HEIGHT);
+    let run = if shed { span } else { span / 2.0 };
+    let rise = match (spec.ridge_h, spec.pitch) {
+        (Some(ridge), _) => ridge - eave,
+        (None, pitch) => run * pitch.unwrap_or(30.0).clamp(1.0, 85.0).to_radians().tan(),
+    };
+    if rise <= 0.0 {
+        return Err("the ridge must be higher than the eaves".into());
+    }
+    let slope = rise / run;
+    let overhang = spec.overhang.unwrap_or(30.0).max(0.0);
+    let t = spec.t.unwrap_or(12.0).max(1.0);
+    let at = |s: f64, k: f64| Point2::new(p0.x + u.0 * s + n.0 * k, p0.y + u.1 * s + n.1 * k);
+    let mid = length / 2.0;
+    // Each panel runs from its eave (overhang included) up to the ridge line,
+    // with its centerline half a thickness above the rafters.
+    let slopes: Vec<(f64, f64)> = if shed {
+        vec![(0.0, span)]
+    } else {
+        vec![(0.0, span / 2.0), (span, span / 2.0)]
+    };
+    let mut panels = Vec::new();
+    for (from, to) in slopes {
+        let dir = (to - from).signum();
+        let low = from - dir * overhang;
+        let lift = t / 2.0 * (1.0 + slope * slope).sqrt();
+        let a = at(mid, low);
+        let b = at(mid, to);
+        let mut panel = beam(
+            doc,
+            [a.x, a.y, eave - overhang * slope + lift],
+            [b.x, b.y, eave + rise + lift],
+            length + 2.0 * overhang,
+            t,
+        )?;
+        panel.name = "Água do telhado".into();
+        panel.color = Some(spec.color.unwrap_or([150, 75, 55]));
+        panels.push(panel);
+    }
+    let mut gables = Vec::new();
+    if spec.gables {
+        for s in [0.0, length] {
+            let heights = if shed {
+                vec![eave, eave + rise]
+            } else {
+                vec![eave, eave + rise, eave]
+            };
+            let pts: Vec<Point2> = if shed {
+                vec![at(s, 0.0), at(s, span)]
+            } else {
+                vec![at(s, 0.0), at(s, span / 2.0), at(s, span)]
+            };
+            for (i, pair) in pts.windows(2).enumerate() {
+                let mut wall = Wall::new(doc.new_wall_id(), pair[0], pair[1]);
+                wall.height = heights[i].max(1.0);
+                wall.height_at_end = Some(heights[i + 1].max(1.0));
+                gables.push(wall);
+            }
+        }
+    }
+    let item = newera_catalog::find("box").ok_or("catalog has no box")?;
+    let center = at(mid, span / 2.0);
+    let mut group = item.instantiate(doc.new_furniture_id(), center);
+    group.catalog = "group".into();
+    group.name = spec.name.clone().unwrap_or_else(|| "Telhado".into());
+    group.angle = (-n.0).atan2(n.1).to_degrees();
+    group.width = length + 2.0 * overhang;
+    group.depth = span + 2.0 * overhang;
+    group.elevation = eave - overhang * slope;
+    group.height = rise + overhang * slope + 2.0 * t;
+    group.children = panels;
+    Ok((group, gables))
 }
 
 /// The wall of the current storey closest to `at` within snapping distance,
@@ -996,6 +1178,17 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
     let mut commands = Vec::with_capacity(items.len());
     let mut ids = Vec::with_capacity(items.len());
     for spec in items {
+        if spec.cat == "beam" {
+            let (Some(a), Some(b)) = (spec.a, spec.b) else {
+                return Err("a beam needs `a` and `b` as [x,y,z]".into());
+            };
+            let mut piece = beam(doc, a, b, spec.w.unwrap_or(10.0), spec.h.unwrap_or(20.0))?;
+            piece.name = spec.name.clone().unwrap_or(piece.name);
+            piece.color = spec.color.or(Some([176, 132, 92]));
+            ids.push(piece.id.to_string());
+            commands.push(Command::insert(piece));
+            continue;
+        }
         let mut piece = if let Some(model) = &spec.model {
             let path = doc.resolve_asset(model);
             let loaded = newera_catalog::load_model(&path)

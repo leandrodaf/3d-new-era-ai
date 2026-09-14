@@ -282,7 +282,7 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Create walls (polylines), rooms (pts, or at=[x,y] to detect from walls), dims (a+b or wall id) and labels in one atomic step."
+        description = "Create walls (polylines; hs = height per point for gables), rooms (pts, or at=[x,y] to detect from walls), dims (a+b or wall id), labels and roofs (rectangle pts, gable|shed, pitch or ridge_h, eave h, overhang, gables=true closes the ends) in one atomic step."
     )]
     fn create(&self, Parameters(p): Parameters<CreateParams>) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
@@ -599,7 +599,7 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Place catalog items: at=[x,y] center, or wall=id (+along cm) to put doors/windows in a wall or furniture against it. Sizes w/d/h override defaults."
+        description = "Place catalog items: at=[x,y] center (doors/windows near a wall snap into it; into=[x,y] picks the swing side), or wall=id (+along cm) to put doors/windows in a wall or furniture against it. Sizes w/d/h override defaults; pitch/roll tilt. cat=beam with a,b=[x,y,z] (z above the floor) and w×h section makes rafters, posts and braces."
     )]
     fn place(&self, Parameters(p): Parameters<PlaceParams>) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
@@ -1869,5 +1869,78 @@ mod tests {
             .map(|v| v.position[1])
             .fold(f32::MIN, f32::max);
         assert!((top - 3.05).abs() < 0.02, "wall top at 55 + 250 cm: {top}");
+    }
+
+    #[test]
+    fn roofs_and_beams() {
+        let s = server();
+        // A 600 × 700 cm A-frame: eaves at the floor, ridge at 675 cm.
+        let params: CreateParams = serde_json::from_str(
+            r#"{"roofs":[{"pts":[[0,0],[0,700],[600,700],[600,0]],"h":0,"ridge_h":675,"overhang":0,"gables":true}]}"#,
+        )
+        .unwrap();
+        let reply = s.create(Parameters(params)).unwrap();
+        assert!(reply.contains("ids=w"), "{reply}");
+        {
+            let doc = s.document.read();
+            let home = doc.home();
+            assert_eq!(home.walls.len(), 4, "two sloping walls per gable");
+            assert!(
+                home.walls
+                    .iter()
+                    .any(|w| (w.height.max(w.height_at_end.unwrap_or(0.0)) - 675.0).abs() < 1e-6)
+            );
+            let roof = home.furniture.iter().find(|f| f.is_group()).unwrap();
+            assert_eq!(roof.children.len(), 2);
+            let mut only = home.clone();
+            only.walls.clear();
+            let mesh =
+                newera_render::Mesh::from_home(&only, &newera_render::Selection::new(), &|_| None);
+            let points: Vec<[f32; 3]> = mesh.vertices[4..].iter().map(|v| v.position).collect();
+            let top = points.iter().map(|p| p[1]).fold(f32::MIN, f32::max);
+            assert!((6.75..6.95).contains(&top), "ridge {top}");
+            // Up at the ridge the panels meet over the middle of the span.
+            let ridge_x: Vec<f32> = points.iter().filter(|p| p[1] > 6.7).map(|p| p[0]).collect();
+            assert!(ridge_x.iter().all(|x| (x - 3.0).abs() < 0.2), "{ridge_x:?}");
+            // At the eaves they reach the long sides.
+            let low = points.iter().filter(|p| p[1] < 0.3).map(|p| p[0]);
+            let (min, max) = low.fold((f32::MAX, f32::MIN), |(a, b), x| (a.min(x), b.max(x)));
+            assert!(min < 0.1 && max > 5.9, "{min} {max}");
+        }
+        let bad: CreateParams =
+            serde_json::from_str(r#"{"roofs":[{"pts":[[0,0],[0,700]]}]}"#).unwrap();
+        assert!(s.create(Parameters(bad)).is_err());
+
+        // A brace from the floor at the origin to 300 cm up, 300 cm along y.
+        let params: PlaceParams = serde_json::from_str(
+            r#"{"items":[{"cat":"beam","a":[1000,0,0],"b":[1000,300,300],"w":8,"h":8}]}"#,
+        )
+        .unwrap();
+        s.place(Parameters(params)).unwrap();
+        let doc = s.document.read();
+        let mut only = doc.home().clone();
+        only.walls.clear();
+        only.furniture.retain(|f| !f.is_group());
+        let mesh =
+            newera_render::Mesh::from_home(&only, &newera_render::Selection::new(), &|_| None);
+        let near = |target: [f32; 3]| {
+            mesh.vertices[4..].iter().any(|v| {
+                let p = v.position;
+                (p[0] - target[0]).abs() < 0.1
+                    && (p[1] - target[1]).abs() < 0.1
+                    && (p[2] - target[2]).abs() < 0.1
+            })
+        };
+        assert!(
+            near([10.0, 0.0, 0.0]) && near([10.0, 3.0, 3.0]),
+            "ends of the brace"
+        );
+        drop(doc);
+        assert!(
+            s.place(Parameters(
+                serde_json::from_str(r#"{"items":[{"cat":"beam","a":[0,0,0]}]}"#).unwrap()
+            ))
+            .is_err()
+        );
     }
 }
