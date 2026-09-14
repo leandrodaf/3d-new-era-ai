@@ -976,7 +976,11 @@ impl Mesh {
                 .vertex_materials
                 .get(k)
                 .and_then(|&m| looks.get(usize::from(m)));
-            let alpha = look.map_or(1.0, |l| l.2).min(opacity);
+            let mut alpha = look.map_or(1.0, |l| l.2).min(opacity);
+            // Procedural window glass: seen through, and daylight comes in.
+            if local.materials.is_empty() && newera_catalog::is_glass(raw) {
+                alpha = alpha.min(0.35);
+            }
             let (mut color, mut kind, mut uv) = (raw, 0, [0.0, 0.0]);
             if let Some(c) = piece_color
                 && piece_pattern.is_none()

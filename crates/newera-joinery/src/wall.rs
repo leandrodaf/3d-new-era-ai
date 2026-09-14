@@ -361,8 +361,17 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
     };
     let mut run = newera_core::wall_run(home, wall_id, side, band, z, &skip)
         .ok_or_else(|| format!("{wall_id} can't hold a run"))?;
+    // A stove or a cooktop cabinet; a countertop only holds its cooktop in one
+    // place, handled where it matters (the hood gap).
     let heat = |id: FurnitureId, catalog: &str| {
-        catalog == "stove" || catalog == "cooktop" || piece(id).is_some_and(has_cooktop)
+        catalog == "stove"
+            || catalog == "cooktop"
+            || piece(id)
+                .is_some_and(|f| has_cooktop(f) && joinery_kind(f).as_deref() != Some("countertop"))
+    };
+    let hot_top = |id: FurnitureId| {
+        piece(id)
+            .is_some_and(|f| has_cooktop(f) && joinery_kind(f).as_deref() == Some("countertop"))
     };
     let mut notes = Vec::new();
     let mut neighbors: Vec<String> = Vec::new();
@@ -375,7 +384,9 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
             let RunBlock::Piece { id, catalog } = &o.block else {
                 continue;
             };
-            if !heat(*id, catalog) || run.obstacles.iter().any(|r| r.block == o.block) {
+            if !(heat(*id, catalog) || hot_top(*id))
+                || run.obstacles.iter().any(|r| r.block == o.block)
+            {
                 continue;
             }
             // A countertop holds its cooktop somewhere along it: only there.
@@ -401,7 +412,7 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
                 if run.obstacles.iter().any(|r| {
                     r.from < b - 5.0
                         && r.to > a + 5.0
-                        && matches!(&r.block, RunBlock::Piece { id, catalog } if heat(*id, catalog))
+                        && matches!(&r.block, RunBlock::Piece { id, catalog } if heat(*id, catalog) || hot_top(*id))
                 }) {
                     continue;
                 }
@@ -445,8 +456,11 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
                     EndKind::Heat
                 }
             } else if let Some(f) = piece(*id).filter(|f| f.properties.contains_key(PARAMS_KEY)) {
-                // Another wall's run owns the corner: fronts need a filler.
-                if other_run(f).is_some() {
+                // Another wall's run (any row) owns the corner: fronts need a filler.
+                if f.properties
+                    .get(RUN_KEY)
+                    .is_some_and(|t| !t.starts_with(&format!("{wall_id}:")))
+                {
                     EndKind::Wall
                 } else {
                     EndKind::Kept

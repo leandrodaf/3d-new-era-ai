@@ -33,6 +33,16 @@ pub struct MeshMaterial {
     pub shininess: f32,
 }
 
+/// Window and door glass of the procedural models.
+pub const GLASS: [u8; 3] = [168, 206, 226];
+
+/// Whether a procedural vertex color is window glass: renderers let light
+/// through it.
+pub fn is_glass(c: Rgb) -> bool {
+    let g = rgb(GLASS);
+    c.iter().zip(g).all(|(a, b)| (a - b).abs() < 0.002)
+}
+
 /// Converts an sRGB byte color to linear-ish floats used by the renderers.
 pub fn rgb(c: [u8; 3]) -> Rgb {
     c.map(|v| f32::from(v) / 255.0)

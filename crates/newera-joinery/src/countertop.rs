@@ -196,6 +196,86 @@ pub(crate) fn generate(p: &CountertopParams) -> Result<Output, String> {
         part.board = None;
     }
 
+    // What sits in the holes: a steel bowl and faucet, a glass cooktop.
+    for &(x0, x1, y0, y1, kind) in &holes {
+        let (w, d) = (x1 - x0, y1 - y0);
+        match kind {
+            CutoutKind::Sink => {
+                let steel = [196, 198, 202];
+                let depth = 18.0;
+                parts.push(Part::solid(
+                    "Cuba (fundo)",
+                    [x0, y0, z - depth],
+                    [w, d, 1.0],
+                    steel,
+                ));
+                for (name, at, size) in [
+                    ("Cuba (lado de trás)", [x0, y0, z - depth], [w, 1.0, depth]),
+                    (
+                        "Cuba (lado da frente)",
+                        [x0, y1 - 1.0, z - depth],
+                        [w, 1.0, depth],
+                    ),
+                    ("Cuba (lado esquerdo)", [x0, y0, z - depth], [1.0, d, depth]),
+                    (
+                        "Cuba (lado direito)",
+                        [x1 - 1.0, y0, z - depth],
+                        [1.0, d, depth],
+                    ),
+                ] {
+                    parts.push(Part::solid(name, at, size, steel));
+                }
+                let cx = f64::midpoint(x0, x1);
+                let back = (y0 - 6.0).max(1.5);
+                parts.push(Part::solid(
+                    "Torneira",
+                    [cx - 1.5, back - 1.5, p.height],
+                    [3.0, 3.0, 28.0],
+                    [170, 172, 176],
+                ));
+                parts.push(Part::solid(
+                    "Bica da torneira",
+                    [cx - 1.2, back - 1.5, p.height + 25.0],
+                    [2.4, (y0 + d / 3.0 - back).max(6.0), 2.4],
+                    [170, 172, 176],
+                ));
+            }
+            CutoutKind::Cooktop => {
+                let glass = Part::solid(
+                    "Cooktop (vidro)",
+                    [x0 - 2.0, y0 - 2.0, p.height],
+                    [w + 4.0, d + 4.0, 0.6],
+                    [22, 22, 26],
+                );
+                parts.push(glass);
+                // Four burners drawn as rings on the glass.
+                for (fx, fy, r) in [
+                    (0.28, 0.3, 7.0),
+                    (0.72, 0.3, 5.5),
+                    (0.28, 0.72, 5.5),
+                    (0.72, 0.72, 8.5),
+                ] {
+                    let (cx, cy) = (x0 + w * fx, y0 + d * fy);
+                    let ring: Vec<[f64; 2]> = (0..24)
+                        .map(|i| {
+                            let a = std::f64::consts::TAU * f64::from(i) / 24.0;
+                            [cx + r * a.cos(), cy + r * a.sin()]
+                        })
+                        .collect();
+                    let mut burner = Part::solid(
+                        "Boca do cooktop",
+                        [cx - r, cy - r, p.height + 0.6],
+                        [2.0 * r, 2.0 * r, 0.15],
+                        [70, 70, 76],
+                    );
+                    burner.outline = Some(ring);
+                    parts.push(burner);
+                }
+            }
+            CutoutKind::Grommet => {}
+        }
+    }
+
     let mut hardware = Vec::new();
     for (x0, x1, y0, y1, kind) in &holes {
         let what = match kind {
@@ -302,6 +382,22 @@ mod tests {
             out.hardware
         );
         assert!(out.parts.iter().any(|p| p.name == "Pé"));
+        // The sink bowl hangs under the top; the cooktop glass sits on it.
+        let bowl = out.parts.iter().find(|p| p.name == "Cuba (fundo)").unwrap();
+        assert!((bowl.at[2] - (90.0 - 3.0 - 18.0)).abs() < 1e-9 && bowl.board.is_none());
+        let glass = out
+            .parts
+            .iter()
+            .find(|p| p.name == "Cooktop (vidro)")
+            .unwrap();
+        assert!((glass.at[2] - 90.0).abs() < 1e-9 && (glass.size[0] - 60.0).abs() < 1e-9);
+        assert_eq!(
+            out.parts
+                .iter()
+                .filter(|p| p.name == "Boca do cooktop")
+                .count(),
+            4
+        );
         let shallow = generate(&CountertopParams {
             depth: 50.0,
             cutouts: vec![Cutout {

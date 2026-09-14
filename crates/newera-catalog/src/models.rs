@@ -7,7 +7,7 @@ use crate::Model;
 use crate::mesh::{Axis, Mesh, Rgb, rgb, shade};
 
 const METAL: [u8; 3] = [150, 154, 160];
-const GLASS: [u8; 3] = [168, 206, 226];
+use crate::mesh::GLASS;
 const DARK: [u8; 3] = [40, 42, 48];
 const LINEN: [u8; 3] = [245, 243, 236];
 
