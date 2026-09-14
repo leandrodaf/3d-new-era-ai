@@ -3,14 +3,17 @@
 //! Imported meshes are normalized to the local frame (`y` up, centered on the
 //! floor) so a piece can scale them to its exact width, depth and height.
 
+use std::fmt::Write as _;
 use std::path::Path;
 
-use crate::mesh::{Mesh, Rgb};
+use crate::mesh::{Mesh, MeshMaterial, Rgb};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ImportError {
     #[error("unsupported model format `{0}` (use .obj, .gltf or .glb)")]
     Format(String),
+    #[error("could not read the file: {0}")]
+    Io(#[from] std::io::Error),
     #[error("could not read OBJ: {0}")]
     Obj(#[from] tobj::LoadError),
     #[error("could not read glTF: {0}")]
@@ -62,16 +65,60 @@ pub fn load_model(path: &Path) -> Result<ImportedModel, ImportError> {
 }
 
 fn load_obj(path: &Path) -> Result<Mesh, ImportError> {
-    let (models, materials) = tobj::load_obj(path, &tobj::GPU_LOAD_OPTIONS)?;
+    let text = std::fs::read(path)?;
+    let has_library = text
+        .split(|&b| b == b'\n')
+        .any(|line| line.trim_ascii_start().starts_with(b"mtllib"));
+    // Files without a material library name materials from Wavefront's
+    // classic default library; supply it so their colors survive.
+    let mut source = Vec::with_capacity(text.len() + 32);
+    if !has_library {
+        source.extend_from_slice(b"mtllib __defaults__.mtl\n");
+    }
+    source.extend_from_slice(&text);
+    let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    let used: Vec<String> = String::from_utf8_lossy(&text)
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix("usemtl").map(|n| n.trim().to_owned()))
+        .collect();
+    let (models, materials) = tobj::load_obj_buf(
+        &mut std::io::Cursor::new(source),
+        &tobj::GPU_LOAD_OPTIONS,
+        |mtl| {
+            if mtl == Path::new("__defaults__.mtl") {
+                return tobj::load_mtl_buf(&mut std::io::Cursor::new(default_library(&used)));
+            }
+            let file =
+                std::fs::File::open(dir.join(mtl)).map_err(|_| tobj::LoadError::OpenFileFailed)?;
+            tobj::load_mtl_buf(&mut std::io::BufReader::new(file))
+        },
+    )?;
+    // Missing or broken material files leave the model gray rather than failing.
     let materials = materials.unwrap_or_default();
-    let mut mesh = Mesh::default();
+    let mut mesh = Mesh {
+        materials: materials
+            .iter()
+            .map(|m| MeshMaterial {
+                name: m.name.clone(),
+                color: m.diffuse.unwrap_or(DEFAULT_COLOR),
+                alpha: m.dissolve.unwrap_or(1.0).clamp(0.0, 1.0),
+                texture: m
+                    .diffuse_texture
+                    .as_ref()
+                    .filter(|t| !t.trim().is_empty())
+                    .map(|t| dir.join(t.trim())),
+                shininess: m.shininess.unwrap_or(0.0),
+            })
+            .collect(),
+        ..Mesh::default()
+    };
     for model in models {
         let m = &model.mesh;
-        let color = m
+        let material = m
             .material_id
-            .and_then(|i| materials.get(i))
-            .and_then(|mat| mat.diffuse)
-            .unwrap_or(DEFAULT_COLOR);
+            .and_then(|i| u16::try_from(i).ok())
+            .filter(|&i| usize::from(i) < mesh.materials.len());
+        let color = material.map_or(DEFAULT_COLOR, |i| mesh.materials[usize::from(i)].color);
         let positions: Vec<[f32; 3]> = m
             .positions
             .as_chunks::<3>()
@@ -86,6 +133,13 @@ fn load_obj(path: &Path) -> Result<Mesh, ImportError> {
             .iter()
             .map(|n| [n[0], n[1], n[2]])
             .collect();
+        let uvs: Vec<[f32; 2]> = m
+            .texcoords
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|t| [t[0], t[1]])
+            .collect();
         let triangles: Vec<[u32; 3]> = m
             .indices
             .as_chunks::<3>()
@@ -93,12 +147,74 @@ fn load_obj(path: &Path) -> Result<Mesh, ImportError> {
             .iter()
             .map(|t| [t[0], t[1], t[2]])
             .collect();
+        let start = mesh.positions.len();
         append_triangles(&mut mesh, &positions, &normals, &triangles, color);
+        for tri in &triangles {
+            for &k in tri {
+                mesh.uvs
+                    .push(uvs.get(k as usize).copied().unwrap_or([0.0, 0.0]));
+            }
+        }
+        mesh.uvs.truncate(mesh.positions.len());
+        mesh.vertex_materials
+            .resize(mesh.positions.len(), material.unwrap_or(u16::MAX));
+        debug_assert!(mesh.vertex_materials.len() >= start);
     }
     if mesh.indices.is_empty() {
         return Err(ImportError::Empty);
     }
     Ok(mesh)
+}
+
+/// MTL text for material names from the classic Wavefront default library
+/// (`white`, `flgrey`, `silver`…), with colors derived from their names.
+fn default_library(names: &[String]) -> String {
+    let mut out = String::new();
+    let mut seen = std::collections::HashSet::new();
+    for name in names.iter().filter(|n| seen.insert(n.as_str())) {
+        let [r, g, b, alpha] = default_material_color(name);
+        let _ = writeln!(out, "newmtl {name}\nKd {r} {g} {b}\nd {alpha}");
+    }
+    out
+}
+
+fn default_material_color(name: &str) -> [f32; 4] {
+    let key = name.to_ascii_lowercase();
+    let base = key.strip_prefix("fl").unwrap_or(&key);
+    let bright = base.ends_with("brt");
+    let base = base
+        .trim_end_matches("brt")
+        .trim_end_matches(|c: char| c.is_ascii_digit());
+    let grey = |v: f32| [v, v, v, 1.0];
+    let mut color = match base {
+        "white" | "archwhite" => grey(0.95),
+        "black" => grey(0.04),
+        "grey" | "gray" => grey(0.5),
+        "ltgrey" | "lightgrey" => grey(0.7),
+        "dkgrey" | "darkgrey" => grey(0.28),
+        "dkdkgrey" => grey(0.14),
+        "silver" | "chrome" => grey(0.76),
+        "gold" | "brass" => [0.8, 0.65, 0.3, 1.0],
+        "amber" => [0.85, 0.55, 0.12, 1.0],
+        "bone" => [0.9, 0.87, 0.78, 1.0],
+        "yellow" => [0.9, 0.82, 0.2, 1.0],
+        "tan" => [0.78, 0.66, 0.5, 1.0],
+        "lighttan" | "lttan" => [0.88, 0.8, 0.66, 1.0],
+        "blonde" => [0.86, 0.76, 0.54, 1.0],
+        "brown" => [0.45, 0.3, 0.18, 1.0],
+        "red" => [0.75, 0.1, 0.08, 1.0],
+        "green" => [0.15, 0.55, 0.2, 1.0],
+        "blue" => [0.15, 0.3, 0.75, 1.0],
+        "orange" => [0.9, 0.5, 0.1, 1.0],
+        "glass" | "clear" => [0.8, 0.88, 0.9, 0.3],
+        _ => [0.78, 0.76, 0.72, 1.0],
+    };
+    if bright {
+        for c in &mut color[..3] {
+            *c = (*c * 1.15).min(1.0);
+        }
+    }
+    color
 }
 
 type Mat4 = [[f32; 4]; 4];

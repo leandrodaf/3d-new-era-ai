@@ -94,6 +94,53 @@ impl OrbitCamera {
     }
 }
 
+/// Eye-level camera walking through the home (a stored point of view).
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Visitor {
+    pub(crate) camera: newera_core::Camera,
+}
+
+impl Visitor {
+    #[allow(clippy::cast_possible_truncation)]
+    fn eye(&self) -> Vec3 {
+        let c = &self.camera;
+        Vec3::new(c.x as f32, c.z as f32, c.y as f32) * 0.01
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn direction(&self) -> Vec3 {
+        let (dx, dy) = self.camera.direction();
+        let pitch = self.camera.pitch.to_radians() as f32;
+        Vec3::new(
+            dx as f32 * pitch.cos(),
+            -pitch.sin(),
+            dy as f32 * pitch.cos(),
+        )
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn view_proj(&self, aspect: f32) -> Mat4 {
+        let eye = self.eye();
+        let view = glam::camera::rh::view::look_at_mat4(eye, eye + self.direction(), Vec3::Y);
+        // Stored fields of view are horizontal.
+        let horizontal = (self.camera.fov.to_radians() as f32).clamp(0.1, 3.0);
+        let vertical = 2.0 * ((horizontal / 2.0).tan() / aspect).atan();
+        let proj = glam::camera::rh::proj::directx::perspective(vertical, aspect, 0.02, 500.0);
+        proj * view
+    }
+
+    fn look(&mut self, delta: egui::Vec2) {
+        self.camera.yaw += f64::from(delta.x) * 0.3;
+        self.camera.pitch = (self.camera.pitch + f64::from(delta.y) * 0.3).clamp(-85.0, 85.0);
+    }
+
+    fn walk(&mut self, forward: f64, side: f64) {
+        let (dx, dy) = self.camera.direction();
+        self.camera.x += dx * forward - dy * side;
+        self.camera.y += dy * forward + dx * side;
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 struct Uniforms {
@@ -106,6 +153,8 @@ struct GpuMesh {
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
     index_count: u32,
+    /// Transparent triangles follow the opaque ones in `indices`.
+    transparent_count: u32,
 }
 
 struct Targets {
@@ -122,6 +171,7 @@ const IMAGE_MIPS: u32 = 10;
 /// GPU resources for the viewport. Created lazily on the first frame.
 struct Gpu {
     pipeline: wgpu::RenderPipeline,
+    transparent_pipeline: wgpu::RenderPipeline,
     uniforms: wgpu::Buffer,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
@@ -135,6 +185,8 @@ struct Gpu {
 
 pub(crate) struct SceneView {
     camera: OrbitCamera,
+    /// When set, the view looks through this visitor instead of orbiting.
+    pub(crate) visitor: Option<Visitor>,
     gpu: Option<Gpu>,
     /// `(document revision, selection)` the GPU mesh was built from.
     built_for: Option<(u64, Vec<ElementId>)>,
@@ -158,6 +210,7 @@ impl SceneView {
     pub(crate) fn new() -> Self {
         Self {
             camera: OrbitCamera::default(),
+            visitor: None,
             gpu: None,
             built_for: None,
             framed_once: false,
@@ -216,6 +269,7 @@ impl SceneView {
                         }
                     })
                     .clone()?;
+                mesh.rotate(piece.model_transform.rotation);
                 mesh.fit_to(piece.width, piece.depth, piece.height);
                 Some(mesh)
             };
@@ -224,7 +278,13 @@ impl SceneView {
             gpu.upload_mesh(&rs.device, &mesh);
             self.built_for = Some(key);
         }
-        gpu.render(rs, size, &self.camera);
+        #[allow(clippy::cast_precision_loss)]
+        let aspect = size[0] as f32 / size[1] as f32;
+        let view_proj = match &self.visitor {
+            Some(visitor) => visitor.view_proj(aspect),
+            None => self.camera.view_proj(aspect),
+        };
+        gpu.render(rs, size, view_proj);
 
         if let Some(texture_id) = gpu.texture_id {
             ui.painter().image(
@@ -244,6 +304,37 @@ impl SceneView {
     }
 
     fn handle_input(&mut self, ui: &egui::Ui, response: &egui::Response, home: &Home) {
+        if let Some(visitor) = &mut self.visitor {
+            if response.dragged_by(egui::PointerButton::Primary)
+                || response.dragged_by(egui::PointerButton::Secondary)
+            {
+                visitor.look(response.drag_delta());
+            }
+            if response.hovered() {
+                let (forward, side) = ui.input(|i| {
+                    let key = |k| if i.key_down(k) { 1.0 } else { 0.0 };
+                    (
+                        f64::from(i.smooth_scroll_delta.y) * 0.5
+                            + (key(egui::Key::W) + key(egui::Key::ArrowUp)
+                                - key(egui::Key::S)
+                                - key(egui::Key::ArrowDown))
+                                * 4.0,
+                        (key(egui::Key::D) + key(egui::Key::ArrowRight)
+                            - key(egui::Key::A)
+                            - key(egui::Key::ArrowLeft))
+                            * 4.0,
+                    )
+                });
+                if forward != 0.0 || side != 0.0 {
+                    visitor.walk(forward, side);
+                    ui.ctx().request_repaint();
+                }
+                if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    self.visitor = None;
+                }
+            }
+            return;
+        }
         let panning = response.dragged_by(egui::PointerButton::Middle)
             || (response.dragged_by(egui::PointerButton::Primary)
                 && ui.input(|i| i.modifiers.shift));
@@ -331,56 +422,62 @@ impl Gpu {
             ..Default::default()
         });
 
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("scene pipeline"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[Some(wgpu::VertexBufferLayout {
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    array_stride: std::mem::size_of::<Vertex>() as u64,
-                    attributes: &wgpu::vertex_attr_array![
-                        0 => Float32x3,
-                        1 => Float32x3,
-                        2 => Float32x3,
-                        3 => Float32x2,
-                        4 => Uint32,
-                    ],
-                })],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: COLOR_FORMAT,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState {
-                cull_mode: Some(wgpu::Face::Back),
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Less),
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState {
-                count: SAMPLES,
-                ..Default::default()
-            },
-            multiview_mask: None,
-            cache: None,
-        });
+        let make_pipeline = |label: &str, transparent: bool| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_main"),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    buffers: &[Some(wgpu::VertexBufferLayout {
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        array_stride: std::mem::size_of::<Vertex>() as u64,
+                        attributes: &wgpu::vertex_attr_array![
+                            0 => Float32x3,
+                            1 => Float32x3,
+                            2 => Float32x4,
+                            3 => Float32x2,
+                            4 => Uint32,
+                        ],
+                    })],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_main"),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: COLOR_FORMAT,
+                        blend: transparent.then_some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                primitive: wgpu::PrimitiveState {
+                    // Glass panes are often single-sided; show both faces.
+                    cull_mode: (!transparent).then_some(wgpu::Face::Back),
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: Some(!transparent),
+                    depth_compare: Some(wgpu::CompareFunction::Less),
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState {
+                    count: SAMPLES,
+                    ..Default::default()
+                },
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let pipeline = make_pipeline("scene pipeline", false);
+        let transparent_pipeline = make_pipeline("scene transparent pipeline", true);
 
         Self {
             pipeline,
+            transparent_pipeline,
             uniforms,
             layout: bind_group_layout,
             sampler,
@@ -538,10 +635,14 @@ impl Gpu {
             }),
             indices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("scene indices"),
-                contents: bytemuck::cast_slice(&mesh.indices),
+                contents: bytemuck::cast_slice(
+                    &[mesh.indices.as_slice(), mesh.transparent.as_slice()].concat(),
+                ),
                 usage: wgpu::BufferUsages::INDEX,
             }),
             index_count: u32::try_from(mesh.indices.len()).expect("index count fits in u32"),
+            transparent_count: u32::try_from(mesh.transparent.len())
+                .expect("index count fits in u32"),
         });
     }
 
@@ -609,16 +710,14 @@ impl Gpu {
         self.targets = Some(targets);
     }
 
-    fn render(&mut self, rs: &RenderState, size: [u32; 2], camera: &OrbitCamera) {
+    fn render(&mut self, rs: &RenderState, size: [u32; 2], view_proj: Mat4) {
         self.ensure_targets(rs, size);
         let (Some(targets), Some(mesh)) = (&self.targets, &self.mesh) else {
             return;
         };
 
-        #[allow(clippy::cast_precision_loss)]
-        let aspect = size[0] as f32 / size[1] as f32;
         let uniforms = Uniforms {
-            view_proj: camera.view_proj(aspect).to_cols_array_2d(),
+            view_proj: view_proj.to_cols_array_2d(),
             light_dir: Vec3::new(-0.4, -1.0, -0.3).normalize().to_array(),
             _pad: 0.0,
         };
@@ -659,6 +758,14 @@ impl Gpu {
             pass.set_vertex_buffer(0, mesh.vertices.slice(..));
             pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..mesh.index_count, 0, 0..1);
+            if mesh.transparent_count > 0 {
+                pass.set_pipeline(&self.transparent_pipeline);
+                pass.draw_indexed(
+                    mesh.index_count..mesh.index_count + mesh.transparent_count,
+                    0,
+                    0..1,
+                );
+            }
         }
         rs.queue.submit([encoder.finish()]);
     }

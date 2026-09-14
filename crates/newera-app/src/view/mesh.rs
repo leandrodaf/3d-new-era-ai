@@ -15,7 +15,8 @@ use super::plan::Selection;
 pub(crate) struct Vertex {
     pub(crate) position: [f32; 3],
     pub(crate) normal: [f32; 3],
-    pub(crate) color: [f32; 3],
+    /// Linear color and opacity.
+    pub(crate) color: [f32; 4],
     /// Texture coordinates in tiles.
     pub(crate) uv: [f32; 2],
     /// 0 plain, `1..` procedural pattern, [`IMAGE_BASE`]`+n` image layer `n`.
@@ -29,6 +30,8 @@ pub(crate) const IMAGE_BASE: u32 = 100;
 pub(crate) struct Mesh {
     pub(crate) vertices: Vec<Vertex>,
     pub(crate) indices: Vec<u32>,
+    /// Triangles drawn after the opaque ones, blended (glass, curtains).
+    pub(crate) transparent: Vec<u32>,
     /// Image files referenced by materials, in layer order.
     pub(crate) images: Vec<String>,
 }
@@ -49,8 +52,10 @@ fn to_world(p: Point2, height_cm: f64) -> Vec3 {
     Vec3::new(p.x as f32, height_cm as f32, p.y as f32) * CM_TO_M
 }
 
+/// Colors are used as stored, like Sweet Home 3D does: the sRGB target then
+/// brightens them, which matches how its renders look.
 fn srgb_to_linear([r, g, b]: [u8; 3]) -> [f32; 3] {
-    [r, g, b].map(|c| (f32::from(c) / 255.0).powf(2.2))
+    [r, g, b].map(|c| f32::from(c) / 255.0)
 }
 
 /// How a face is painted: a color, a material kind and the planar mapping
@@ -125,7 +130,7 @@ impl Surface {
         Vertex {
             position: position.to_array(),
             normal: normal.to_array(),
-            color: self.color,
+            color: [self.color[0], self.color[1], self.color[2], 1.0],
             uv: self.uv(position),
             kind: self.kind,
         }
@@ -514,6 +519,10 @@ impl Mesh {
     }
 
     /// Places a catalog or imported mesh in the world.
+    ///
+    /// Looks follow the piece: its color replaces every material, else its
+    /// texture covers the whole model, else each model material applies,
+    /// with per-name overrides.
     fn add_piece(
         &mut self,
         piece: &Furniture,
@@ -521,17 +530,37 @@ impl Mesh {
         floor: f64,
         highlight: bool,
     ) {
-        let base = self.next_index();
         let world = |p: [f32; 3]| {
             let plan = piece.to_plan((f64::from(p[0]), f64::from(p[2])));
             to_world(plan, floor + piece.elevation + f64::from(p[1]))
         };
-        for ((position, normal), color) in local
-            .positions
+        let piece_color = piece.color.map(srgb_to_linear);
+        let piece_texture = piece.texture.as_ref().filter(|t| t.image.is_some());
+        let texture_layer = piece_texture
+            .map(|t| IMAGE_BASE + self.image_layer(t.image.as_deref().unwrap_or_default()));
+        // Material overrides and texture layers, resolved once per material.
+        let looks: Vec<(Option<[f32; 3]>, Option<u32>, f32)> = local
+            .materials
             .iter()
-            .zip(&local.normals)
-            .zip(&local.colors)
-        {
+            .map(|m| {
+                let over = piece.materials.iter().find(|o| o.name == m.name);
+                let color = over.and_then(|o| o.color).map(srgb_to_linear);
+                let texture = over
+                    .and_then(|o| o.texture.as_ref())
+                    .and_then(|t| t.image.clone())
+                    .or_else(|| m.texture.as_ref().map(|p| p.display().to_string()));
+                let layer = if color.is_some() {
+                    None
+                } else {
+                    texture.map(|t| IMAGE_BASE + self.image_layer(&t))
+                };
+                (color, layer, m.alpha)
+            })
+            .collect();
+
+        let base = self.next_index();
+        let mut vertex_alpha = Vec::with_capacity(local.positions.len());
+        for (k, (position, normal)) in local.positions.iter().zip(&local.normals).enumerate() {
             let tip = world([
                 position[0] + normal[0],
                 position[1] + normal[1],
@@ -539,28 +568,72 @@ impl Mesh {
             ]);
             let at = world(*position);
             let world_normal = (tip - at).normalize_or_zero();
-            let color = if highlight {
-                [
-                    color[0] * 0.55 + 0.45 * SELECTED_COLOR[0],
-                    color[1] * 0.55 + 0.45 * SELECTED_COLOR[1],
-                    color[2] * 0.55 + 0.45 * SELECTED_COLOR[2],
-                ]
-            } else {
-                *color
-            };
-            self.vertices
-                .push(Surface::plain(color).vertex(at, world_normal));
+            let raw = local.colors.get(k).copied().unwrap_or([0.8; 3]);
+            let look = local
+                .vertex_materials
+                .get(k)
+                .and_then(|&m| looks.get(usize::from(m)));
+            let alpha = look.map_or(1.0, |l| l.2);
+            let (mut color, mut kind, mut uv) = (raw, 0, [0.0, 0.0]);
+            if let Some(c) = piece_color {
+                color = c;
+            } else if let (Some(layer), Some(texture)) = (texture_layer, piece_texture) {
+                // Planar mapping on the face's dominant axis, at the texture's real size.
+                let [w, h] = texture.tile_size();
+                let n = normal.map(f32::abs);
+                let (u, v) = if n[1] >= n[0] && n[1] >= n[2] {
+                    (position[0], position[2])
+                } else if n[0] >= n[2] {
+                    (position[2], position[1])
+                } else {
+                    (position[0], position[1])
+                };
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    uv = [u / w as f32, v / h as f32];
+                }
+                color = [1.0; 3];
+                kind = layer;
+            } else if let Some((over, layer, _)) = look {
+                if let Some(c) = over {
+                    color = *c;
+                } else if let Some(layer) = layer {
+                    color = [1.0; 3];
+                    kind = *layer;
+                    // The shader flips v, matching OBJ's bottom-up convention.
+                    uv = local.uvs.get(k).copied().unwrap_or([0.0, 0.0]);
+                }
+            }
+            if highlight {
+                color = std::array::from_fn(|i| color[i] * 0.55 + 0.45 * SELECTED_COLOR[i]);
+                kind = 0;
+            }
+            vertex_alpha.push(alpha);
+            self.vertices.push(Vertex {
+                position: at.to_array(),
+                normal: world_normal.to_array(),
+                color: [color[0], color[1], color[2], alpha],
+                uv,
+                kind,
+            });
         }
         // Mirroring flips handedness; reorder triangles so faces keep
         // pointing outward.
         for tri in local.indices.chunks(3) {
-            if piece.mirrored {
-                self.indices
-                    .extend([base + tri[0], base + tri[2], base + tri[1]]);
+            let order = if piece.mirrored {
+                [tri[0], tri[2], tri[1]]
             } else {
-                self.indices
-                    .extend([base + tri[0], base + tri[1], base + tri[2]]);
-            }
+                [tri[0], tri[1], tri[2]]
+            };
+            let clear = order
+                .iter()
+                .any(|&i| vertex_alpha.get(i as usize).is_some_and(|a| *a < 0.99));
+            let target = if clear {
+                &mut self.transparent
+            } else {
+                &mut self.indices
+            };
+            target.extend(order.map(|i| base + i));
         }
     }
 

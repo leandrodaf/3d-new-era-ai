@@ -124,6 +124,12 @@ fn sh3d_import() {
     assert!(opened.warnings.is_empty(), "{:?}", opened.warnings);
     let shared = SharedDocument::new(doc);
     render("sh3d-import", shared.clone(), |_| {});
+    let cameras = shared.read().home().cameras.stored.clone();
+    for (i, camera) in cameras.into_iter().take(3).enumerate() {
+        render(&format!("sh3d-camera{i}"), shared.clone(), |app| {
+            app.scene.visitor = Some(crate::view::scene::Visitor { camera });
+        });
+    }
     let levels: Vec<_> = shared
         .read()
         .home()

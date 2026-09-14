@@ -13,6 +13,24 @@ pub struct Mesh {
     pub normals: Vec<[f32; 3]>,
     pub colors: Vec<Rgb>,
     pub indices: Vec<u32>,
+    /// Texture coordinates from the model file; empty or one per vertex.
+    pub uvs: Vec<[f32; 2]>,
+    /// Material of each vertex (index into `materials`); empty when the
+    /// mesh only has vertex colors.
+    pub vertex_materials: Vec<u16>,
+    pub materials: Vec<MeshMaterial>,
+}
+
+/// Surface of an imported model.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MeshMaterial {
+    pub name: String,
+    pub color: Rgb,
+    /// 1 opaque, 0 invisible.
+    pub alpha: f32,
+    /// Image file for the diffuse color, absolute or relative to the model.
+    pub texture: Option<std::path::PathBuf>,
+    pub shininess: f32,
 }
 
 /// Converts an sRGB byte color to linear-ish floats used by the renderers.
@@ -198,10 +216,68 @@ impl Mesh {
 
     pub fn append(&mut self, other: &Self) {
         let base = self.next();
+        let had_extra = !self.uvs.is_empty() || !self.vertex_materials.is_empty();
+        let has_extra = !other.uvs.is_empty() || !other.vertex_materials.is_empty();
+        if had_extra || has_extra {
+            let n = self.positions.len();
+            self.uvs.resize(n, [0.0, 0.0]);
+            self.vertex_materials.resize(n, u16::MAX);
+            let material_base = u16::try_from(self.materials.len()).unwrap_or(u16::MAX);
+            self.materials.extend(other.materials.iter().cloned());
+            let m = other.positions.len();
+            if other.uvs.len() == m {
+                self.uvs.extend_from_slice(&other.uvs);
+            } else {
+                self.uvs.resize(n + m, [0.0, 0.0]);
+            }
+            if other.vertex_materials.len() == m {
+                self.vertex_materials
+                    .extend(other.vertex_materials.iter().map(|&k| {
+                        if k == u16::MAX {
+                            k
+                        } else {
+                            k.saturating_add(material_base)
+                        }
+                    }));
+            } else {
+                self.vertex_materials.resize(n + m, u16::MAX);
+            }
+        }
         self.positions.extend_from_slice(&other.positions);
         self.normals.extend_from_slice(&other.normals);
         self.colors.extend_from_slice(&other.colors);
         self.indices.extend(other.indices.iter().map(|i| i + base));
+    }
+
+    /// Material of a vertex, if the mesh has materials.
+    pub fn material_of(&self, vertex: usize) -> Option<&MeshMaterial> {
+        self.vertex_materials
+            .get(vertex)
+            .and_then(|&k| self.materials.get(usize::from(k)))
+    }
+
+    /// Applies a 3×3 rotation (rows) to positions and normals.
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn rotate(&mut self, rows: [[f64; 3]; 3]) {
+        let m = rows.map(|r| r.map(|v| v as f32));
+        let apply = |p: [f32; 3]| -> [f32; 3] {
+            std::array::from_fn(|r| m[r][0] * p[0] + m[r][1] * p[1] + m[r][2] * p[2])
+        };
+        for p in &mut self.positions {
+            *p = apply(*p);
+        }
+        for n in &mut self.normals {
+            *n = normalize(apply(*n));
+        }
+        // A mirroring rotation flips triangle winding.
+        let det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+            - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+        if det < 0.0 {
+            for tri in self.indices.chunks_mut(3) {
+                tri.swap(1, 2);
+            }
+        }
     }
 
     /// Axis-aligned bounds `(min, max)` in cm.

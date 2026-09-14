@@ -17,7 +17,7 @@ const IMAGE_BASE: u32 = 100u;
 struct VertexIn {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
-    @location(2) color: vec3<f32>,
+    @location(2) color: vec4<f32>,
     @location(3) uv: vec2<f32>,
     @location(4) kind: u32,
 };
@@ -25,7 +25,7 @@ struct VertexIn {
 struct VertexOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) normal: vec3<f32>,
-    @location(1) color: vec3<f32>,
+    @location(1) color: vec4<f32>,
     @location(2) uv: vec2<f32>,
     @location(3) @interpolate(flat) kind: u32,
 };
@@ -214,15 +214,16 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     pixel = max(d.x, d.y);
     let layer = select(0u, in.kind - IMAGE_BASE, in.kind >= IMAGE_BASE);
     let texel = textureSample(images, image_sampler, vec2<f32>(in.uv.x, -in.uv.y), layer).rgb;
-    var albedo = in.color;
+    var albedo = in.color.rgb;
     if (in.kind >= IMAGE_BASE) {
-        albedo = in.color * texel;
+        albedo = in.color.rgb * texel;
     } else if (in.kind > 0u) {
-        albedo = in.color * pattern_shade(in.kind, in.uv);
+        albedo = in.color.rgb * pattern_shade(in.kind, in.uv);
     }
     let n = normalize(in.normal);
     let diffuse = max(dot(n, -u.light_dir), 0.0);
-    // Hemisphere ambient: surfaces facing up get a bit more sky light.
-    let ambient = mix(0.35, 0.5, n.y * 0.5 + 0.5);
-    return vec4<f32>(albedo * (ambient + diffuse * 0.6), 1.0);
+    // Soft indoor light: bright hemisphere ambient plus a gentle key light,
+    // so interiors read like a lit room rather than a dark box.
+    let ambient = mix(0.86, 1.0, n.y * 0.5 + 0.5);
+    return vec4<f32>(min(albedo * (ambient + diffuse * 0.22), vec3<f32>(1.0)), in.color.a);
 }

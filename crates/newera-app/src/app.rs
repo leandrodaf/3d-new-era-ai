@@ -44,7 +44,7 @@ pub(crate) struct NewEraApp {
     pub(crate) tool: Tool,
     pub(crate) selection: Selection,
     plan: PlanView,
-    scene: SceneView,
+    pub(crate) scene: SceneView,
     palette: Palette,
     settings: Settings,
     dialog: Option<Dialog>,

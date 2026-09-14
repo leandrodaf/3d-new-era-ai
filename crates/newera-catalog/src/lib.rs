@@ -11,7 +11,7 @@ mod models;
 mod symbols;
 
 pub use import::{ImportError, ImportedModel, load_model};
-pub use mesh::{Axis, Mesh, Rgb, rgb, shade};
+pub use mesh::{Axis, Mesh, MeshMaterial, Rgb, rgb, shade};
 use newera_core::{Furniture, Opening, OpeningKind};
 pub use symbols::{SymbolShape, plan_symbol};
 
