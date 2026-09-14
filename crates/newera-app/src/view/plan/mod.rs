@@ -1567,8 +1567,9 @@ mod tests {
             "{guides:?}"
         );
         assert!(guides.gaps.len() >= 2, "distances to the walls: {guides:?}");
-        if let Ok(image) = h.render()
-            && let Ok(dir) = std::env::var("NEWERA_SNAPSHOT_DIR")
+        // A picture for a human to look at, only when asked (needs a GPU).
+        if let Ok(dir) = std::env::var("NEWERA_SNAPSHOT_DIR")
+            && let Ok(image) = h.render()
         {
             image.save(format!("{dir}/guides.png")).ok();
         }
