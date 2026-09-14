@@ -2558,10 +2558,13 @@ mod tests {
         image.save(&file).unwrap();
         let s = server();
         // 2.5 cm per px across, 2 cm per px down (an unevenly resized scan).
-        let params: BackgroundParams = serde_json::from_str(&format!(
-            r#"{{"path":"{}","calibrations":[{{"a":[14,14],"b":[206,14],"cm":480}},{{"a":[14,14],"b":[14,146],"cm":264}}]}}"#,
-            file.display()
-        ))
+        let params: BackgroundParams = serde_json::from_value(serde_json::json!({
+            "path": file.display().to_string(),
+            "calibrations": [
+                {"a": [14, 14], "b": [206, 14], "cm": 480},
+                {"a": [14, 14], "b": [14, 146], "cm": 264}
+            ]
+        }))
         .unwrap();
         s.set_background(Parameters(params)).unwrap();
         {
