@@ -413,6 +413,29 @@ pub fn plan_symbol(piece: &Furniture) -> Vec<SymbolShape> {
         Model::Fridge => {
             s.line(vec![(-hw, hd - 4.0), (hw, hd - 4.0)], false, false);
         }
+        Model::Cooktop => {
+            for (sx, sy, r) in [
+                (-0.22, -0.2, 7.0),
+                (0.22, -0.2, 5.5),
+                (-0.22, 0.2, 5.5),
+                (0.22, 0.2, 8.5),
+            ] {
+                let r = f64::min(r, w * 0.12);
+                s.line(
+                    ellipse(sx * w, sy * d, r, r, 0.0, std::f64::consts::TAU, 20),
+                    true,
+                    false,
+                );
+            }
+        }
+        Model::SinkBowl => {
+            s.boxed(rect(-hw + 2.5, -hd + 2.5, hw - 2.5, hd - 2.5), true);
+            s.line(
+                ellipse(0.0, 0.0, 2.5, 2.5, 0.0, std::f64::consts::TAU, 12),
+                true,
+                false,
+            );
+        }
         Model::Stove => {
             for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
                 let r = (w * 0.09).min(7.0);
@@ -556,7 +579,12 @@ pub fn plan_symbol(piece: &Furniture) -> Vec<SymbolShape> {
             let drawer = (w * 0.35).min(45.0);
             s.line(vec![(hw - drawer, -hd), (hw - drawer, hd)], false, false);
         }
-        Model::TvStand | Model::Tv | Model::Counter | Model::WallCabinet | Model::Microwave => {
+        Model::TvStand
+        | Model::Tv
+        | Model::Counter
+        | Model::WallCabinet
+        | Model::Microwave
+        | Model::Oven => {
             s.line(vec![(-hw, hd - 3.0), (hw, hd - 3.0)], false, false);
         }
         Model::Table { round: false } => {

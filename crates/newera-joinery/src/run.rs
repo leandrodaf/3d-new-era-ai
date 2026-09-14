@@ -138,6 +138,10 @@ pub struct RunParams {
     pub cooktop_w: f64,
     /// Tall row interior (default shelves; the MCP picks wardrobe in bedrooms).
     pub interior: Option<Interior>,
+    /// A real sink bowl `[w, d]` stays in the cutout: sized from it, not drawn.
+    pub sink_real: Option<[f64; 2]>,
+    /// A real cooktop `[w, d]` stays in the cutout.
+    pub cooktop_real: Option<[f64; 2]>,
 }
 
 impl Default for RunParams {
@@ -160,6 +164,8 @@ impl Default for RunParams {
             cooktop: None,
             cooktop_w: 60.0,
             interior: None,
+            sink_real: None,
+            cooktop_real: None,
         }
     }
 }
@@ -734,11 +740,18 @@ pub fn plan_run(
                     material: p.top_material.clone(),
                     cutouts: cuts
                         .iter()
-                        .map(|(kind, at)| Cutout {
-                            kind: *kind,
-                            x: at - from,
-                            w: None,
-                            d: None,
+                        .map(|(kind, at)| {
+                            let (real, rim) = match kind {
+                                CutoutKind::Sink => (p.sink_real, 2.5),
+                                _ => (p.cooktop_real, 2.0),
+                            };
+                            Cutout {
+                                kind: *kind,
+                                x: at - from,
+                                w: real.map(|r| r[0] - 2.0 * rim),
+                                d: real.map(|r| r[1] - 2.0 * rim),
+                                drawn: real.is_none(),
+                            }
                         })
                         .collect(),
                     ..CountertopParams::default()

@@ -35,6 +35,19 @@ pub struct Cutout {
     pub w: Option<f64>,
     /// Depth, cm (defaults: sink 40, cooktop 48, grommet 6).
     pub d: Option<f64>,
+    /// Draw a generic bowl or cooktop in the hole (default true; false when a
+    /// real one is embedded there).
+    #[serde(default = "yes", skip_serializing_if = "is_yes")]
+    pub drawn: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde's signature
+fn is_yes(v: &bool) -> bool {
+    *v
 }
 
 /// A countertop. Sizes in cm.
@@ -93,6 +106,7 @@ pub(crate) fn generate(p: &CountertopParams) -> Result<Output, String> {
     let z = p.height - t;
     // Holes as rectangles (x0, x1, y0, y1), y from the back.
     let mut holes: Vec<(f64, f64, f64, f64, CutoutKind)> = Vec::new();
+    let mut drawn: Vec<bool> = Vec::new();
     for c in &p.cutouts {
         let (w, d) = match c.kind {
             CutoutKind::Sink => (c.w.unwrap_or(50.0), c.d.unwrap_or(40.0)),
@@ -138,8 +152,12 @@ pub(crate) fn generate(p: &CountertopParams) -> Result<Output, String> {
             ));
         }
         holes.push((x0, x1, y0, y0 + d, c.kind));
+        drawn.push(c.drawn);
     }
-    holes.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut order: Vec<usize> = (0..holes.len()).collect();
+    order.sort_by(|a, b| holes[*a].0.total_cmp(&holes[*b].0));
+    let holes: Vec<(f64, f64, f64, f64, CutoutKind)> = order.iter().map(|&i| holes[i]).collect();
+    let drawn: Vec<bool> = order.iter().map(|&i| drawn[i]).collect();
 
     let mut parts = Vec::new();
     let slab = |name: String, x0: f64, x1: f64, y0: f64, y1: f64, parts: &mut Vec<Part>| {
@@ -197,11 +215,29 @@ pub(crate) fn generate(p: &CountertopParams) -> Result<Output, String> {
     }
 
     // What sits in the holes: a steel bowl and faucet, a glass cooktop.
-    for &(x0, x1, y0, y1, kind) in &holes {
+    for (&(x0, x1, y0, y1, kind), &draw) in holes.iter().zip(&drawn) {
         let (w, d) = (x1 - x0, y1 - y0);
         match kind {
             CutoutKind::Sink => {
                 let steel = [196, 198, 202];
+                if !draw {
+                    // The real bowl is embedded; the faucet still goes behind it.
+                    let cx = f64::midpoint(x0, x1);
+                    let back = (y0 - 6.0).max(1.5);
+                    parts.push(Part::solid(
+                        "Torneira",
+                        [cx - 1.5, back - 1.5, p.height],
+                        [3.0, 3.0, 28.0],
+                        [170, 172, 176],
+                    ));
+                    parts.push(Part::solid(
+                        "Bica da torneira",
+                        [cx - 1.2, back - 1.5, p.height + 25.0],
+                        [2.4, (y0 + d / 3.0 - back).max(6.0), 2.4],
+                        [170, 172, 176],
+                    ));
+                    continue;
+                }
                 let depth = 18.0;
                 parts.push(Part::solid(
                     "Cuba (fundo)",
@@ -240,6 +276,7 @@ pub(crate) fn generate(p: &CountertopParams) -> Result<Output, String> {
                     [170, 172, 176],
                 ));
             }
+            CutoutKind::Cooktop if !draw => {}
             CutoutKind::Cooktop => {
                 let glass = Part::solid(
                     "Cooktop (vidro)",
@@ -351,12 +388,14 @@ mod tests {
                     x: 50.0,
                     w: None,
                     d: None,
+                    drawn: true,
                 },
                 Cutout {
                     kind: CutoutKind::Cooktop,
                     x: 140.0,
                     w: None,
                     d: None,
+                    drawn: true,
                 },
             ],
             support: Support::Legs,
@@ -405,6 +444,7 @@ mod tests {
                 x: 90.0,
                 w: None,
                 d: None,
+                drawn: true,
             }],
             ..CountertopParams::default()
         })
@@ -416,6 +456,7 @@ mod tests {
                 x: 10.0,
                 w: None,
                 d: None,
+                drawn: true,
             }],
             ..CountertopParams::default()
         })

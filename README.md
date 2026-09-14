@@ -68,6 +68,7 @@ Clients that spawn a process can use stdio instead:
 | `trace_background` | Find walls in the scanned plan and list or create them |
 | `joinery` | Parametric cabinets, slatted panels, countertops with cutouts, plaster coves, shadow gaps and modular sofas; workshop rules answer with the fix to make |
 | `cabinet_run` | Fill a wall with cabinets sized for it: even modules around corners, doors, windows, fridge and stove, drawer unit by the stove, blind corners in L kitchens |
+| `embed` | Embed a sink bowl or cooktop in a countertop (exact cutout) or an oven/microwave in a cabinet niche; the item moves with its host |
 | `ergonomics` | Review for the people living there: circulation, beds/seats/bathrooms per person, kitchen, doors, ceiling heights, windows, wheelchair use (NBR 9050, NBR 15575-1) |
 | `cut_list` | Cut list of the joinery builds (boards merged, edge banding, hardware) as CSV, or DXF/SVG sheets |
 | `render_plan` | PNG of the plan, exactly as the user sees it (`bg` overlays the scan) |

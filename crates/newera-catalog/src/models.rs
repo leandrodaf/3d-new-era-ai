@@ -74,6 +74,9 @@ pub(crate) fn build(model: Model, piece: &Furniture, color: Rgb) -> Mesh {
         Model::WallCabinet => cabinet(&mut ctx, 1, 0),
         Model::Appliance { round_door } => appliance(&mut ctx, round_door),
         Model::Microwave => microwave(&mut ctx),
+        Model::Cooktop => cooktop(&mut ctx),
+        Model::SinkBowl => sink_bowl(&mut ctx),
+        Model::Oven => oven(&mut ctx),
         Model::Toilet => toilet(&mut ctx),
         Model::Basin => basin(&mut ctx),
         Model::Shower => shower(&mut ctx),
@@ -645,6 +648,95 @@ fn microwave(ctx: &mut Ctx) {
         [d / 2.0 - 1.0, d / 2.0],
         rgb(METAL),
     );
+}
+
+fn cooktop(ctx: &mut Ctx) {
+    let (w, d, h) = (ctx.w, ctx.d, ctx.h);
+    // The burner box hangs under the counter; the glass shows on top.
+    let glass = 0.6_f64.min(h);
+    ctx.cube(
+        [-w / 2.0 + 3.0, w / 2.0 - 3.0],
+        [0.0, h - glass],
+        [-d / 2.0 + 3.0, d / 2.0 - 3.0],
+        rgb([60, 62, 66]),
+    );
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [h - glass, h],
+        [-d / 2.0, d / 2.0],
+        rgb([22, 22, 26]),
+    );
+    for (sx, sz, r) in [
+        (-0.22, -0.2, 7.0),
+        (0.22, -0.2, 5.5),
+        (-0.22, 0.2, 5.5),
+        (0.22, 0.2, 8.5),
+    ] {
+        ctx.m.cylinder(
+            [sx * w, h, sz * d],
+            Axis::Y,
+            0.15,
+            f64::min(r, w * 0.12),
+            rgb([70, 70, 76]),
+        );
+    }
+}
+
+fn sink_bowl(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let wall = 0.8;
+    // Rim on the counter, bowl below it.
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [h - 0.5, h],
+        [-d / 2.0, -d / 2.0 + 2.5],
+        c,
+    );
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [h - 0.5, h],
+        [d / 2.0 - 2.5, d / 2.0],
+        c,
+    );
+    ctx.cube(
+        [-w / 2.0, -w / 2.0 + 2.5],
+        [h - 0.5, h],
+        [-d / 2.0, d / 2.0],
+        c,
+    );
+    ctx.cube(
+        [w / 2.0 - 2.5, w / 2.0],
+        [h - 0.5, h],
+        [-d / 2.0, d / 2.0],
+        c,
+    );
+    let (iw, id) = (w / 2.0 - 2.5, d / 2.0 - 2.5);
+    ctx.cube([-iw, iw], [0.0, wall], [-id, id], shade(c, -0.15));
+    ctx.cube([-iw, iw], [0.0, h - 0.5], [-id, -id + wall], c);
+    ctx.cube([-iw, iw], [0.0, h - 0.5], [id - wall, id], c);
+    ctx.cube([-iw, -iw + wall], [0.0, h - 0.5], [-id, id], c);
+    ctx.cube([iw - wall, iw], [0.0, h - 0.5], [-id, id], c);
+    ctx.m
+        .cylinder([0.0, wall, 0.0], Axis::Y, 0.2, 2.5, rgb([120, 122, 126]));
+}
+
+fn oven(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    ctx.cube([-w / 2.0, w / 2.0], [0.0, h], [-d / 2.0, d / 2.0 - 2.0], c);
+    let front = d / 2.0 - 2.0;
+    ctx.cube(
+        [-w / 2.0 + 1.0, w / 2.0 - 1.0],
+        [2.0, h - 10.0],
+        [front, front + 2.0],
+        rgb([18, 18, 22]),
+    );
+    ctx.cube(
+        [-w / 2.0 + 1.0, w / 2.0 - 1.0],
+        [h - 9.0, h - 1.0],
+        [front, front + 1.5],
+        rgb(METAL),
+    );
+    ctx.handle(0.0, h - 13.0, front + 2.0, false);
 }
 
 fn toilet(ctx: &mut Ctx) {

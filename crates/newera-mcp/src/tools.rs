@@ -33,6 +33,27 @@ pub struct NewEraMcp {
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct EmbedParams {
+    /// Piece already in the plan to embed (id)…
+    item: Option<String>,
+    /// …or a new one from the catalog: `cooktop`, `sink-bowl`, `oven`, `microwave`.
+    cat: Option<String>,
+    /// Size of a new item, cm (a real product's measurements).
+    w: Option<f64>,
+    d: Option<f64>,
+    h: Option<f64>,
+    /// Joinery countertop (sink, cooktop) or cabinet (oven, microwave: a niche).
+    host: String,
+    /// Center along the host's width from its left end, cm (default: where the item is, or the middle).
+    at: Option<f64>,
+    /// Niche floor above the room floor, cm (default: oven 80 and microwave 145 in towers).
+    z: Option<f64>,
+    /// Check and report only.
+    #[serde(default)]
+    dry: bool,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct GetHomeParams {
     /// `summary` (counts, bounds, room areas) or `full` (default).
     detail: Option<String>,
@@ -977,11 +998,15 @@ impl NewEraMcp {
                 .and_then(|b| newera_joinery::generate(&b).ok())?;
             (g.name != before.name).then(|| g.name.clone())
         });
-        let group = newera_core::Furniture {
+        let mut group = newera_core::Furniture {
             level: existing.as_ref().and_then(|g| g.level),
             name: renamed.unwrap_or_else(|| group.name.clone()),
             ..group
         };
+        // Items embedded in it stay in their place on the host.
+        if let Some(old) = &existing {
+            newera_joinery::carry_embedded(old, &mut group);
+        }
         let command = if existing.is_some() {
             Command::update(group)
         } else {
@@ -989,6 +1014,50 @@ impl NewEraMcp {
         };
         doc.execute(command).map_err(core)?;
         Ok(summary(&group_id.to_string()).to_string())
+    }
+
+    #[tool(
+        description = "Embed an item into joinery with an exact fit: a sink bowl or cooktop into a countertop (cutout from the item's size, generic fixture not drawn), an oven, microwave or other appliance into a cabinet niche (doors above and below, boards around it). The item becomes part of the host and moves with it. item: id in the plan, or cat (+w/d/h) for a new one. Errors say what to change (e.g. use w = 61 no armário). Reply {host, item, kind, cutout|niche, x|bottom, notes}."
+    )]
+    fn embed(&self, Parameters(p): Parameters<EmbedParams>) -> Result<String, ErrorData> {
+        let mut doc = self.document.write();
+        let host: newera_core::FurnitureId = p.host.parse().map_err(|e| invalid(format!("{e}")))?;
+        let (item, existing) = match (&p.item, &p.cat) {
+            (Some(id), _) => {
+                let id: newera_core::FurnitureId =
+                    id.parse().map_err(|e| invalid(format!("{e}")))?;
+                let piece = doc
+                    .home()
+                    .furniture
+                    .iter()
+                    .find(|f| f.id == id)
+                    .cloned()
+                    .ok_or_else(|| invalid(format!("{id} not found (embed top-level pieces)")))?;
+                (piece, true)
+            }
+            (None, Some(cat)) => {
+                let entry = newera_catalog::find(cat).ok_or_else(|| {
+                    invalid(format!("unknown catalog id `{cat}` (use the catalog tool)"))
+                })?;
+                let mut piece = entry.instantiate(doc.new_furniture_id(), Point2::default());
+                piece.width = p.w.unwrap_or(piece.width);
+                piece.depth = p.d.unwrap_or(piece.depth);
+                piece.height = p.h.unwrap_or(piece.height);
+                (piece, false)
+            }
+            (None, None) => return Err(invalid("give `item` (an id) or `cat` for a new one")),
+        };
+        let request = newera_joinery::EmbedRequest {
+            item,
+            existing,
+            host,
+            at: p.at,
+            z: p.z,
+            dry: p.dry,
+        };
+        newera_joinery::embed(&mut doc, &request)
+            .map(|v| v.to_string())
+            .map_err(invalid)
     }
 
     #[tool(
@@ -3410,6 +3479,101 @@ mod tests {
                 .to_string()
                 .contains("ventilação da geladeira"),
             "{reply}"
+        );
+    }
+
+    #[test]
+    fn embedded_items_fit_their_host_and_survive_its_changes() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[420,0],[420,300],[0,300]],"closed":true}],"rooms":[{"name":"Cozinha","at":[210,150]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let run = |json: &str| -> serde_json::Value {
+            let p: newera_joinery::CabinetRunParams = serde_json::from_str(json).unwrap();
+            serde_json::from_str(&s.cabinet_run(Parameters(p)).unwrap()).unwrap()
+        };
+        let base = run(r#"{"wall":"w1","p":{"cooktop":260}}"#);
+        let top = base["modules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m[1] == "countertop")
+            .unwrap()[0]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let embed = |json: &str| -> Result<serde_json::Value, String> {
+            let p: EmbedParams = serde_json::from_str(json).unwrap();
+            s.embed(Parameters(p))
+                .map(|r| serde_json::from_str(&r).unwrap())
+                .map_err(|e| e.message.to_string())
+        };
+        // A real 5-burner cooktop, 75 × 50, where the generic one was.
+        let reply = embed(&format!(
+            r#"{{"cat":"cooktop","w":75,"d":50,"h":6,"host":"{top}","at":252.5}}"#
+        ))
+        .unwrap();
+        assert_eq!(reply["cutout"], serde_json::json!([71, 46]), "{reply}");
+        let cooktop_id = reply["item"].as_str().unwrap().to_owned();
+        let host_of = |id: &str| {
+            s.document
+                .read()
+                .home()
+                .furniture
+                .iter()
+                .find(|f| f.children.iter().any(|c| c.id.to_string() == id))
+                .map(|f| {
+                    (
+                        f.id.to_string(),
+                        f.properties[newera_joinery::PARAMS_KEY].clone(),
+                    )
+                })
+        };
+        let (host, params) = host_of(&cooktop_id).expect("embedded");
+        assert_eq!(host, top);
+        assert_eq!(
+            params.matches("\"cooktop\"").count(),
+            1,
+            "one cooktop hole: {params}"
+        );
+        // Planning the wall again keeps the real cooktop in the new countertop.
+        let again = run(r#"{"wall":"w1","p":{"drawers":2}}"#);
+        let (new_host, params) = host_of(&cooktop_id).unwrap_or_else(|| panic!("lost: {again}"));
+        assert_ne!(new_host, top);
+        assert!(params.contains("\"drawn\":false"), "{params}");
+        // An oven into a tower: too narrow first, then it fits and follows a change.
+        let tower: serde_json::Value = serde_json::from_str(
+            &s.joinery(Parameters(serde_json::from_str::<JoineryParams>(r#"{"kind":"cabinet","p":{"w":55,"h":220,"d":58,"plinth":10},"wall":"w4","along":200}"#).unwrap())).unwrap(),
+        )
+        .unwrap();
+        let tower_id = tower["id"].as_str().unwrap().to_owned();
+        let err = embed(&format!(
+            r#"{{"cat":"oven","host":"{tower_id}","dry":true}}"#
+        ))
+        .unwrap_err();
+        assert!(err.contains("use w = 61"), "{err}");
+        s.joinery(Parameters(
+            serde_json::from_str::<JoineryParams>(&format!(
+                r#"{{"id":"{tower_id}","p":{{"w":64}}}}"#
+            ))
+            .unwrap(),
+        ))
+        .unwrap();
+        let oven = embed(&format!(r#"{{"cat":"oven","host":"{tower_id}"}}"#)).unwrap();
+        let oven_id = oven["item"].as_str().unwrap().to_owned();
+        s.joinery(Parameters(
+            serde_json::from_str::<JoineryParams>(&format!(
+                r#"{{"id":"{tower_id}","p":{{"shelves":3}}}}"#
+            ))
+            .unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(
+            host_of(&oven_id).map(|h| h.0),
+            Some(tower_id.clone()),
+            "the oven stays in the tower"
         );
     }
 }

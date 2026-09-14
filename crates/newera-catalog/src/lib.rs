@@ -128,6 +128,12 @@ pub enum Model {
         round_door: bool,
     },
     Microwave,
+    /// Glass cooktop set into a countertop (its height is the part above it).
+    Cooktop,
+    /// Steel bowl set into a countertop: the rim at the top, the bowl below.
+    SinkBowl,
+    /// Built-in oven: glass door, control strip and handle.
+    Oven,
     Toilet,
     Basin,
     Shower,
@@ -534,6 +540,42 @@ pub static CATALOG: &[CatalogItem] = &[
             "microwave micro ondas",
         ),
         90.0,
+    ),
+    raised(
+        item(
+            "cooktop",
+            "Cooktop 4 bocas (embutir)",
+            C::Kitchen,
+            [60.0, 50.0, 6.0],
+            DARK,
+            Model::Cooktop,
+            "cooktop cook top embutir fogao vidro",
+        ),
+        90.0,
+    ),
+    raised(
+        item(
+            "sink-bowl",
+            "Cuba de inox (embutir)",
+            C::Kitchen,
+            [50.0, 40.0, 18.0],
+            STEEL,
+            Model::SinkBowl,
+            "sink bowl cuba pia inox embutir",
+        ),
+        72.0,
+    ),
+    raised(
+        item(
+            "oven",
+            "Forno de embutir",
+            C::Kitchen,
+            [60.0, 55.0, 60.0],
+            DARK,
+            Model::Oven,
+            "oven forno embutir eletrico",
+        ),
+        80.0,
     ),
     item(
         "kitchen-island",

@@ -59,6 +59,17 @@ pub struct CabinetParams {
     pub blind_right: f64,
     /// Wardrobe: a hanging rail under a top shelf (maleiro) instead of shelves.
     pub rod: bool,
+    /// Open niches for built-in appliances (oven, microwave): no door across them.
+    pub niches: Vec<Niche>,
+}
+
+/// A doorless opening across the cabinet's inside, cm.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Niche {
+    /// Height of its floor above the room floor.
+    pub bottom: f64,
+    /// Free height inside.
+    pub height: f64,
 }
 
 impl Default for CabinetParams {
@@ -81,6 +92,7 @@ impl Default for CabinetParams {
             blind_left: 0.0,
             blind_right: 0.0,
             rod: false,
+            niches: Vec::new(),
         }
     }
 }
@@ -99,6 +111,27 @@ const SLIDE_CLEARANCE: f64 = 1.3;
 const MAX_DOOR: f64 = 60.0;
 /// Cooktops need this much depth for their niche, cm.
 const COOKTOP_NICHE: f64 = 50.0;
+
+/// Where shelves go: the whole zone, or with niches the tallest stretch
+/// left between them. Returns `(floor, height)`.
+fn shelves_zone(niches: &[(f64, f64)], floor: f64, zone: f64, t: f64) -> (f64, f64) {
+    let mut best = (floor, if niches.is_empty() { zone } else { 0.0 });
+    let mut from = floor;
+    for &(nb, nt) in niches {
+        let height = (nb - t - from).max(0.0);
+        if height > best.1 {
+            best = (from, height);
+        }
+        from = nt + t;
+    }
+    if !niches.is_empty() {
+        let height = (floor + zone - from).max(0.0);
+        if height > best.1 {
+            best = (from, height);
+        }
+    }
+    best
+}
 
 /// Cup hinges a door of `height` cm needs.
 fn hinges(height: f64) -> u32 {
@@ -256,7 +289,10 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
     } else {
         0
     };
-    let dividers = p.dividers.unwrap_or(needed);
+    // A niche takes the whole inside: no automatic dividers through it.
+    let dividers = p
+        .dividers
+        .unwrap_or(if p.niches.is_empty() { needed } else { 0 });
     let bays = dividers + 1;
     let bay = (iw - f64::from(dividers) * t) / f64::from(bays);
     if bay < 15.0 {
@@ -400,6 +436,95 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
         ));
     }
 
+    // Niches: fixed boards around each, no shelves or doors across them.
+    let mut niches: Vec<(f64, f64)> = p
+        .niches
+        .iter()
+        .map(|n| (n.bottom, n.bottom + n.height))
+        .collect();
+    niches.sort_by(|a, b| a.0.total_cmp(&b.0));
+    if !niches.is_empty() {
+        if p.rod {
+            return Err(
+                "Cabideiro e nicho no mesmo módulo não combinam: faça dois módulos.".into(),
+            );
+        }
+        if !matches!(p.door, DoorType::Hinged | DoorType::None) {
+            return Err(
+                "Nicho só em armário com portas de giro ou aberto: use door = hinged.".into(),
+            );
+        }
+        if bays > 1 {
+            return Err(format!(
+                "O nicho ocupa o vão inteiro: use dividers = 0 (vão interno de {} cm).",
+                num(iw)
+            ));
+        }
+    }
+    let floor = plinth + t + drawer_zone;
+    for (k, &(nb, nt)) in niches.iter().enumerate() {
+        if nb < floor - 0.05 {
+            return Err(format!(
+                "O nicho começa a {} cm do chão, abaixo do fundo útil do armário ({} cm); use bottom ≥ {}.",
+                num(nb),
+                num(floor),
+                num(floor)
+            ));
+        }
+        if nt > h - t + 0.05 {
+            return Err(format!(
+                "O nicho de {} cm a partir de {} cm passa do topo interno ({} cm); use h = {} ou bottom = {}.",
+                num(nt - nb),
+                num(nb),
+                num(h - t),
+                num(nt + t),
+                num((h - t - (nt - nb)).max(floor))
+            ));
+        }
+        if let Some(&(next_b, _)) = niches.get(k + 1)
+            && next_b < nt + t - 0.05
+        {
+            return Err(format!(
+                "Os nichos a {} e {} cm do chão se sobrepõem; o de cima precisa começar em {} cm.",
+                num(nb),
+                num(next_b),
+                num(nt + t)
+            ));
+        }
+        let below_is_board = k > 0 && (nb - t - (niches[k - 1].1)).abs() < 0.5;
+        if nb - t > floor + 0.5 && !below_is_board {
+            parts.push(
+                Part::board(
+                    "Base do nicho",
+                    [t, BACK_INSET + back, nb - t],
+                    [iw, id, t],
+                    &board,
+                    carcass,
+                )
+                .banded(1, 0),
+            );
+        }
+        if nt + t < h - t - 0.5 {
+            parts.push(
+                Part::board(
+                    "Topo do nicho",
+                    [t, BACK_INSET + back, nt],
+                    [iw, id, t],
+                    &board,
+                    carcass,
+                )
+                .banded(1, 0),
+            );
+        }
+        notes.push(format!(
+            "Nicho livre de {} × {} × {} cm (largura × altura × profundidade) a {} cm do chão.",
+            num(iw),
+            num(nt - nb),
+            num(id + back + BACK_INSET),
+            num(nb)
+        ));
+    }
+
     // Shelves above the drawers, evenly spaced.
     let shelf_zone = ih
         - if p.door == DoorType::Drawers {
@@ -457,6 +582,8 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
             ));
         }
     } else if p.shelves > 0 && p.door != DoorType::Drawers {
+        let (shelf_floor, shelf_zone) =
+            shelves_zone(&niches, plinth + t + drawer_zone, shelf_zone, t);
         let step = shelf_zone / f64::from(p.shelves + 1);
         if step < 15.0 {
             return Err(format!(
@@ -469,7 +596,7 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
         for b in 0..bays {
             let x0 = t + f64::from(b) * (bay + t);
             for k in 0..p.shelves {
-                let z = plinth + t + drawer_zone + f64::from(k + 1) * step - t / 2.0;
+                let z = shelf_floor + f64::from(k + 1) * step - t / 2.0;
                 parts.push(
                     Part::board(
                         &format!(
@@ -518,25 +645,33 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
                     num(MAX_DOOR)
                 ));
             }
-            let z0 = plinth + drawer_zone + GAP;
-            let height = door_h - 2.0 * GAP;
-            for (name, x0, width) in [
-                ("Painel cego esquerdo", 0.0, blind_l),
-                ("Painel cego direito", w - blind_r, blind_r),
-            ] {
-                if width > 0.0 {
-                    let mut panel = Part::board(
-                        name,
-                        [x0 + GAP, dc, z0],
-                        [width - GAP, t, height],
-                        &board,
-                        front_color,
-                    )
-                    .banded(2, 2);
-                    panel.finish.clone_from(&front_finish);
-                    parts.push(panel);
+            // Doors cover the front, except across a niche.
+            let segments: Vec<(f64, f64, &str)> = {
+                let mut out = Vec::new();
+                let mut from = plinth + drawer_zone;
+                for (k, &(nb, nt)) in niches.iter().enumerate() {
+                    out.push((
+                        from,
+                        nb,
+                        if k == 0 {
+                            "Porta"
+                        } else {
+                            "Porta entre nichos"
+                        },
+                    ));
+                    from = nt;
                 }
-            }
+                out.push((
+                    from,
+                    plinth + hc,
+                    if niches.is_empty() {
+                        "Porta"
+                    } else {
+                        "Porta superior"
+                    },
+                ));
+                out.into_iter().filter(|(a, b, _)| b - a > 10.0).collect()
+            };
             if blind_l + blind_r > 0.0 {
                 notes.push(format!(
                     "Canto cego: {} cm de painel fixo; acesso pela porta de {} cm.",
@@ -544,22 +679,44 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
                     num(open)
                 ));
             }
-            for k in 0..n {
-                let x = blind_l + GAP + f64::from(k) * (leaf + GAP);
-                let mut door = Part::board(
-                    &format!("Porta {}", k + 1),
-                    [x, dc, z0],
-                    [leaf, t, height],
-                    &board,
-                    front_color,
-                )
-                .banded(2, 2);
-                door.finish.clone_from(&front_finish);
-                parts.push(door);
+            let mut hinge_count = 0;
+            for (bottom, top, label) in segments {
+                let z0 = bottom + GAP;
+                let height = top - bottom - 2.0 * GAP;
+                for (name, x0, width) in [
+                    ("Painel cego esquerdo", 0.0, blind_l),
+                    ("Painel cego direito", w - blind_r, blind_r),
+                ] {
+                    if width > 0.0 {
+                        let mut panel = Part::board(
+                            name,
+                            [x0 + GAP, dc, z0],
+                            [width - GAP, t, height],
+                            &board,
+                            front_color,
+                        )
+                        .banded(2, 2);
+                        panel.finish.clone_from(&front_finish);
+                        parts.push(panel);
+                    }
+                }
+                for k in 0..n {
+                    let x = blind_l + GAP + f64::from(k) * (leaf + GAP);
+                    let mut door = Part::board(
+                        &format!("{label} {}", k + 1),
+                        [x, dc, z0],
+                        [leaf, t, height],
+                        &board,
+                        front_color,
+                    )
+                    .banded(2, 2);
+                    door.finish.clone_from(&front_finish);
+                    parts.push(door);
+                }
+                hinge_count += n * hinges(height);
             }
             hardware.push(format!(
-                "{} dobradiças de caneco 35 mm (folga de 2 mm entre portas)",
-                n * hinges(height)
+                "{hinge_count} dobradiças de caneco 35 mm (folga de 2 mm entre portas)"
             ));
         }
         DoorType::Sliding if door_h > 10.0 => {
@@ -769,6 +926,47 @@ mod tests {
             .unwrap_err()
             .contains("cabideiro")
         );
+        // A tall cabinet with an oven niche: doors below and above, none across it.
+        let tower = generate(&CabinetParams {
+            w: 64.0,
+            h: 220.0,
+            d: 58.0,
+            shelves: 2,
+            niches: vec![Niche {
+                bottom: 80.0,
+                height: 62.0,
+            }],
+            ..CabinetParams::default()
+        })
+        .unwrap();
+        let below = part(&tower, "Porta 1");
+        let above = part(&tower, "Porta superior 1");
+        assert!(
+            (below.at[2] + below.size[2] - (80.0 - 0.2)).abs() < 1e-9,
+            "{below:?}"
+        );
+        assert!((above.at[2] - 142.2).abs() < 1e-9, "{above:?}");
+        assert!((part(&tower, "Base do nicho").at[2] - 78.2).abs() < 1e-9);
+        assert!((part(&tower, "Topo do nicho").at[2] - 142.0).abs() < 1e-9);
+        // Shelves in the taller part, above the niche.
+        assert!(
+            tower
+                .parts
+                .iter()
+                .filter(|p| p.name.starts_with("Prateleira"))
+                .all(|p| p.at[2] > 142.0)
+        );
+        let high = generate(&CabinetParams {
+            w: 60.0,
+            h: 120.0,
+            niches: vec![Niche {
+                bottom: 80.0,
+                height: 60.0,
+            }],
+            ..CabinetParams::default()
+        })
+        .unwrap_err();
+        assert!(high.contains("passa do topo interno"), "{high}");
         let corner = generate(&CabinetParams {
             w: 100.0,
             h: 87.0,

@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- MCP `embed`: a sink bowl or cooktop set into a joinery countertop with a cutout sized
+  from the real item, or an oven, microwave or other appliance into a cabinet niche (boards
+  around it, doors above and below, several niches per tower). The item becomes part of the
+  host and follows it through moves, edits and cabinet runs; errors give the size to use.
+  New catalog items: cooktop, sink bowl and built-in oven.
+
 - "Armários na parede…" in the editor (Planta menu, one wall selected): base, wall or tall
   row, sink and cooktop positions, front color and drawer units, with a preview of the
   modules before building them. The planning moved into `newera-joinery`, shared with MCP.

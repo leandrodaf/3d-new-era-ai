@@ -23,15 +23,17 @@ mod cabinet;
 mod ceiling;
 mod countertop;
 mod cutlist;
+mod embed;
 mod run;
 mod slats;
 mod sofa;
 mod wall;
 
-pub use cabinet::{CabinetParams, DoorType};
+pub use cabinet::{CabinetParams, DoorType, Niche};
 pub use ceiling::{CoveParams, CoveType, ShadowGapParams};
 pub use countertop::{CountertopParams, Cutout, CutoutKind, Support};
 pub use cutlist::{CutRow, cut_list, cut_list_csv, cut_list_dxf, cut_list_svg};
+pub use embed::{EMBED_KEY, EmbedRequest, Fixture, carry_embedded, embed, fixture_of};
 pub use run::{
     EndKind, FillerParams, Interior, Role, RunGap, RunModule, RunOver, RunParams, RunRow, plan_run,
 };

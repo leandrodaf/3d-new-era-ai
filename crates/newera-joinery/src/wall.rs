@@ -88,6 +88,8 @@ struct Planned {
     notes: Vec<String>,
     /// Runs of other walls meeting this one in a corner, by tag.
     neighbors: Vec<String>,
+    /// Items embedded in replaced hosts, to put in the new ones.
+    carry: Vec<Furniture>,
 }
 
 fn joinery_kind(f: &Furniture) -> Option<String> {
@@ -445,6 +447,7 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
             if name.contains("cooktop") && params.cooktop.is_none() {
                 params.cooktop = Some(center);
                 params.cooktop_w = ((f.width + 6.0) / 5.0).ceil().max(12.0) * 5.0;
+                params.cooktop_real = Some([f.width, f.depth]);
                 embedded.push(f.id);
                 found_notes.push("cooktop".to_owned());
             } else if (name.contains("pia") || name.contains("cuba") || name.starts_with("tanque"))
@@ -454,8 +457,40 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
             {
                 params.sink = Some(center);
                 params.sink_w = ((f.width + 10.0) / 5.0).ceil().max(12.0) * 5.0;
+                params.sink_real = Some([f.width, f.depth]);
                 embedded.push(f.id);
                 found_notes.push("sink".to_owned());
+            }
+        }
+    }
+    // Items embedded in the cabinets and countertops being replaced move to the
+    // new ones: a sink or cooktop keeps its spot and gets its cutout there.
+    let mut carry: Vec<Furniture> = Vec::new();
+    {
+        let along = |p: Point2| (p.x - wall.start.x) * u.0 + (p.y - wall.start.y) * u.1;
+        for id in &removed {
+            for child in piece(*id)
+                .into_iter()
+                .flat_map(|f| f.children.iter())
+                .filter(|c| c.properties.contains_key(crate::EMBED_KEY))
+            {
+                let center = along(child.position);
+                match crate::fixture_of(child) {
+                    crate::Fixture::Cooktop
+                        if params.row == RunRow::Base && params.cooktop.is_none() =>
+                    {
+                        params.cooktop = Some(center);
+                        params.cooktop_w = ((child.width + 6.0) / 5.0).ceil().max(12.0) * 5.0;
+                        params.cooktop_real = Some([child.width, child.depth]);
+                    }
+                    crate::Fixture::Sink if params.row == RunRow::Base && params.sink.is_none() => {
+                        params.sink = Some(center);
+                        params.sink_w = ((child.width + 10.0) / 5.0).ceil().max(12.0) * 5.0;
+                        params.sink_real = Some([child.width, child.depth]);
+                    }
+                    _ => {}
+                }
+                carry.push(child.clone());
             }
         }
     }
@@ -768,6 +803,7 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
         modules: pending,
         notes,
         neighbors,
+        carry,
     })
 }
 
@@ -791,6 +827,7 @@ fn commands(doc: &mut Document, planned: &Planned) -> Result<(Vec<Command>, Valu
         .map(|id| Command::remove(*id))
         .collect();
     let mut rows = Vec::new();
+    let mut groups: Vec<(crate::Role, Furniture)> = Vec::new();
     for m in &planned.modules {
         let output = crate::generate(&m.build)?;
         let group_id = doc.new_furniture_id();
@@ -806,14 +843,40 @@ fn commands(doc: &mut Document, planned: &Planned) -> Result<(Vec<Command>, Valu
         );
         group.properties.insert(RUN_KEY.into(), tag.clone());
         group.properties.insert(REQUEST_KEY.into(), stored.clone());
-        list.push(Command::insert(group));
         rows.push(json!([
             group_id.to_string(),
             m.role,
             num(m.from),
             num(m.width)
         ]));
+        groups.push((m.role, group));
     }
+    // Embedded items find their new host: sinks and cooktops the countertop
+    // over them, anything else the module around it; otherwise they stand free.
+    for child in &planned.carry {
+        let fixture = crate::fixture_of(child);
+        let on_top = matches!(fixture, crate::Fixture::Sink | crate::Fixture::Cooktop);
+        let host = groups.iter_mut().find(|(role, g)| {
+            g.contains(child.position) && (*role == crate::Role::Countertop) == on_top
+        });
+        if let Some((_, group)) = host {
+            let mut item = child.clone();
+            if on_top {
+                let lift = if fixture == crate::Fixture::Sink {
+                    0.5
+                } else {
+                    0.6
+                };
+                item.elevation = group.elevation + group.height - item.height + lift;
+            }
+            group.children.push(item);
+        } else {
+            let mut item = child.clone();
+            item.properties.remove(crate::EMBED_KEY);
+            list.push(Command::insert(item));
+        }
+    }
+    list.extend(groups.into_iter().map(|(_, g)| Command::insert(g)));
     Ok((list, Value::Array(rows)))
 }
 
