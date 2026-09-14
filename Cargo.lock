@@ -2773,6 +2773,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "newera-web"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "newera-core",
+ "newera-draw",
+ "newera-render",
+ "serde_json",
+]
+
+[[package]]
 name = "nohash-hasher"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4385,9 +4396,6 @@ name = "tobj"
 version = "4.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6eb8e04167c1c0c76b5de63226fd733485ad63ef71e40de31e16272f47b099e2"
-dependencies = [
- "ahash",
-]
 
 [[package]]
 name = "tokio"

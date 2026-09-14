@@ -253,6 +253,36 @@ pub fn save_project(doc: &Document, path: &Path) -> Result<(), ProjectError> {
     Ok(())
 }
 
+/// Files packed in a bundle, by name.
+pub type BundledFiles = Vec<(String, Vec<u8>)>;
+
+/// Reads a project from memory (JSON or bundle). Bundled asset files are
+/// returned by name, for environments without a file system.
+pub fn project_from_bytes(bytes: &[u8]) -> Result<(Project, BundledFiles), ProjectError> {
+    if !bytes.starts_with(b"PK\x03\x04") {
+        return Ok((
+            from_project_json(&String::from_utf8_lossy(bytes))?,
+            Vec::new(),
+        ));
+    }
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
+    let mut json = String::new();
+    std::io::Read::read_to_string(&mut archive.by_name(BUNDLE_JSON)?, &mut json)?;
+    let project = from_project_json(&json)?;
+    let mut files = Vec::new();
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)?;
+        if file.is_dir() || file.name() == BUNDLE_JSON {
+            continue;
+        }
+        let name = file.name().to_owned();
+        let mut data = Vec::new();
+        std::io::Read::read_to_end(&mut file, &mut data)?;
+        files.push((name, data));
+    }
+    Ok((project, files))
+}
+
 /// Opens a project file (JSON or bundle). Bundles are unpacked under
 /// `cache`; the returned directory is where their assets live.
 pub fn open_project(path: &Path, cache: &Path) -> Result<(Project, Option<PathBuf>), ProjectError> {

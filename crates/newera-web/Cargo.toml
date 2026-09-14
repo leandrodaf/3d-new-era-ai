@@ -1,0 +1,32 @@
+[package]
+name = "newera-web"
+description = "WebAssembly viewer for 3D New Era AI projects: plan SVG and software-rendered 3D"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+image.workspace = true
+newera-core.workspace = true
+newera-draw.workspace = true
+newera-render.workspace = true
+serde_json.workspace = true
+
+# The JavaScript boundary needs raw pointers, so this crate cannot forbid
+# `unsafe` like the rest of the workspace; everything else matches it.
+[lints.rust]
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"

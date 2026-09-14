@@ -534,12 +534,17 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
     };
     let (eye, exposure) = (options.view.eye, options.exposure);
     let mut pixels = vec![(Vec3::ZERO, Surface::default()); w * h];
-    let threads = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
+    // Browsers (wasm32) have no threads: work on the calling one there.
+    let threads = if cfg!(target_arch = "wasm32") {
+        1
+    } else {
+        std::thread::available_parallelism().map_or(4, std::num::NonZero::get)
+    };
     let rows_per = h.div_ceil(threads);
-    std::thread::scope(|s| {
-        for (chunk_index, chunk) in pixels.chunks_mut(rows_per * w).enumerate() {
+    let work = |chunk_index: usize, chunk: &mut [(Vec3, Surface)]| {
+        {
             let (scene, lighting) = (&scene, &lighting);
-            s.spawn(move || {
+            {
                 for (i, pixel) in chunk.iter_mut().enumerate() {
                     let (x, y) = (i % w, chunk_index * rows_per + i / w);
                     let mut rng =
@@ -569,9 +574,19 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
                         },
                     );
                 }
-            });
+            }
         }
-    });
+    };
+    if threads == 1 {
+        work(0, &mut pixels);
+    } else {
+        std::thread::scope(|s| {
+            for (chunk_index, chunk) in pixels.chunks_mut(rows_per * w).enumerate() {
+                let work = &work;
+                s.spawn(move || work(chunk_index, chunk));
+            }
+        });
+    }
 
     let denoised = denoise(&pixels, w, h);
     // Auto exposure: bring the scene's average brightness to a mid gray.

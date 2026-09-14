@@ -45,6 +45,16 @@ serve: ## Só o servidor HTTP + MCP, sem janela (headless)
 mcp-stdio: ## MCP via stdin/stdout (para clientes que iniciam o processo)
 	$(CARGO) run -q -p newera -- mcp --demo
 
+.PHONY: web
+web: ## Compila o visualizador web (WebAssembly) em web/
+	@rustup target list --installed | grep -q wasm32-unknown-unknown || rustup target add wasm32-unknown-unknown
+	$(CARGO) build -p newera-web --release --target wasm32-unknown-unknown
+	cp target/wasm32-unknown-unknown/release/newera_web.wasm web/
+
+.PHONY: web-serve
+web-serve: web ## Serve o visualizador web em http://127.0.0.1:8790
+	python3 -m http.server 8790 --bind 127.0.0.1 --directory web
+
 ##@ Qualidade
 
 .PHONY: check

@@ -79,6 +79,17 @@ jobs:
       # `+1.95` overrides rust-toolchain.toml, which pins `stable`.
       - run: cargo +1.95 check --workspace --locked
 
+  web:
+    name: Web viewer (wasm32)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p newera-web --release --target wasm32-unknown-unknown --locked
+
   deny:
     name: Licenses & advisories
     runs-on: ubuntu-latest

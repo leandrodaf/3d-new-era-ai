@@ -12,7 +12,7 @@ authors.workspace = true
 gltf = { version = "1.4.1", default-features = false, features = ["import", "utils"] }
 newera-core.workspace = true
 thiserror.workspace = true
-tobj = "4.0.5"
+tobj = { version = "4.0.5", default-features = false }
 
 [lints]
 workspace = true

@@ -126,7 +126,9 @@ The core of what makes the editor useful: placing real objects with real dimensi
 - [x] Import fidelity pass: wall hatches, furniture top views on the plan (rendered in
       the background and cached), OBJ default materials, transparency, model rotation,
       lamps in photos
-- [ ] Web build (WebGPU) sharing `newera-core`
+- [x] Web viewer (`newera-web`, WebAssembly, no GPU needed): opens `.newera` projects,
+      plan as SVG and orbitable software-rendered 3D; `make web` / `make web-serve`, CI job
+- [ ] Full editor in the browser (eframe web + WebGPU)
 - [x] Auth for exposing the server on a network: `--token`/`NEWERA_TOKEN` required beyond
       loopback (Bearer header or `?token=`), MCP host checks relaxed only then
 - [x] Live updates: `GET /api/events` (SSE revision events)

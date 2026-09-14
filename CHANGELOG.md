@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Web viewer in WebAssembly (`web/`, `make web-serve`).
+
 - Symbol legend for electrical/plumbing; sloping walls, baseboards and elevated
   polylines in 3D.
 

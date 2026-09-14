@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D New Era AI — Visualizador</title>
+<style>
+  :root { --bg: #16181d; --panel: #1f2229; --ink: #e6e8ec; --muted: #9aa1ad; --accent: #3b82f6; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+  header { display: flex; gap: 12px; align-items: center; padding: 10px 16px; background: var(--panel); flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0 12px 0 0; }
+  label.file { background: var(--accent); color: white; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+  label.file input { display: none; }
+  #status { color: var(--muted); }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 16px 16px; height: calc(100vh - 56px); }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; height: auto; } }
+  section { background: #fbfbf9; border-radius: 8px; overflow: hidden; position: relative; min-height: 300px; }
+  section h2 { position: absolute; margin: 0; top: 6px; left: 10px; font-size: 12px; color: #555; font-weight: 600; }
+  #plan svg { width: 100%; height: 100%; }
+  #view { background: #cce4fc; cursor: grab; display: flex; align-items: center; justify-content: center; }
+  #view img { width: 100%; height: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; }
+  .hint { position: absolute; bottom: 6px; left: 10px; font-size: 12px; color: #333; background: #fff9; padding: 2px 6px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>3D New Era AI</h1>
+  <label class="file">Abrir projeto (.newera)<input id="file" type="file" accept=".newera,.json"></label>
+  <span id="status">Carregando o motor…</span>
+</header>
+<main>
+  <section id="plan"><h2>Planta baixa</h2></section>
+  <section id="view"><h2>3D</h2><img id="image" alt=""><span class="hint">Arraste para girar</span></section>
+</main>
+<script type="module" src="viewer.js"></script>
+</body>
+</html>

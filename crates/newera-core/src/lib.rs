@@ -50,8 +50,9 @@ pub use joins::{JOIN_TOLERANCE, wall_outlines};
 pub use levels::{FloorShape, floor_shapes, stair_holes};
 pub use materials::{Material, Pattern, WALL_TYPES, WallFamily, WallType, wall_type};
 pub use project::{
-    PROJECT_EXTENSION, Project, ProjectError, cache_dir, from_project_json, open_project,
-    resolve_asset, resolve_project_path, save_project, to_project_json,
+    BundledFiles, PROJECT_EXTENSION, Project, ProjectError, cache_dir, from_project_json,
+    open_project, project_from_bytes, resolve_asset, resolve_project_path, save_project,
+    to_project_json,
 };
 pub use style::{
     ArrowStyle, Camera, Cameras, DashStyle, Discipline, DrawingMode, Environment, LineCap,

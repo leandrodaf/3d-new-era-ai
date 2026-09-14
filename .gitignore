@@ -7,3 +7,7 @@
 # Local projects and exports
 *.sh3d
 *.newera
+
+# Built by `make web`
+web/newera_web.wasm
+web/*.newera
