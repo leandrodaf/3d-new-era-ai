@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Joinery for AI-driven design: MCP `joinery` builds modular cabinets, slatted panels,
+  countertops with sink/cooktop cutouts, plaster coves with LED, shadow gaps and modular
+  sofas from flat parameters, edits them incrementally by id and explains broken workshop
+  rules with the value to use; `cut_list` exports CSV and DXF/SVG sheet layouts.
+
 - Plugins (external programs over the HTTP API) and multi-user sessions with presence,
   named cursors on the plan and conflict detection.
 

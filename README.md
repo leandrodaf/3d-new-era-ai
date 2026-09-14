@@ -66,6 +66,8 @@ Clients that spawn a process can use stdio instead:
 | `set_home` | Project name and compass (north) |
 | `set_background` | Scanned plan at real scale: calibrations, X/Y scale, rotation |
 | `trace_background` | Find walls in the scanned plan and list or create them |
+| `joinery` | Parametric cabinets, slatted panels, countertops with cutouts, plaster coves, shadow gaps and modular sofas; workshop rules answer with the fix to make |
+| `cut_list` | Cut list of the joinery builds (boards merged, edge banding, hardware) as CSV, or DXF/SVG sheets |
 | `render_plan` | PNG of the plan, exactly as the user sees it (`bg` overlays the scan) |
 | `render_3d` | Software 3D: aerial, visitor, stored cameras, elevations and sections |
 | `render_photo` | Path-traced photo with sun and lamps |
@@ -97,6 +99,7 @@ The server binds to loopback by default and validates the `Host` header.
 ```
 crates/
   newera-core     domain model, commands, undo/redo, geometry — no UI, no I/O
+  newera-joinery  parametric joinery and interiors: parts, workshop rules, cut lists
   newera-catalog  parametric furniture: 3D models and plan symbols at exact sizes; OBJ/glTF import
   newera-draw     plan scene shared by the editor, PNG renders and SVG export
   newera-mcp      MCP tools (rmcp), stdio and Streamable HTTP

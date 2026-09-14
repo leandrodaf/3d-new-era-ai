@@ -1448,6 +1448,27 @@ fn roof(doc: &mut Document, spec: &RoofSpec) -> EditResult<(newera_core::Furnitu
     Ok((group, gables))
 }
 
+/// Moves a piece already aligned on a wall's axis so its back touches the
+/// wall face, facing the middle of the house.
+pub(crate) fn back_to_wall(doc: &Document, piece: &mut newera_core::Furniture, wall: &Wall) {
+    let offset = wall.thickness / 2.0 + piece.depth / 2.0;
+    let a = piece.angle.to_radians();
+    let front = (-a.sin(), a.cos());
+    let center = doc.home().bounds().map_or(piece.position, |(min, max)| {
+        Point2::new(min.x.midpoint(max.x), min.y.midpoint(max.y))
+    });
+    let toward_center =
+        (center.x - piece.position.x) * front.0 + (center.y - piece.position.y) * front.1;
+    let side = if toward_center >= 0.0 { 1.0 } else { -1.0 };
+    if side < 0.0 {
+        piece.angle += 180.0;
+    }
+    piece.position = Point2::new(
+        piece.position.x + front.0 * side * offset,
+        piece.position.y + front.1 * side * offset,
+    );
+}
+
 /// The wall of the current storey closest to `at` within snapping distance,
 /// with the distance along it.
 fn nearest_wall(doc: &Document, at: Point2) -> Option<(newera_core::Wall, f64)> {
@@ -1607,23 +1628,7 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
                     piece.depth = depth;
                 }
                 if !piece.is_opening() {
-                    // Back against the wall face, facing the middle of the house.
-                    let offset = wall.thickness / 2.0 + piece.depth / 2.0;
-                    let a = piece.angle.to_radians();
-                    let front = (-a.sin(), a.cos());
-                    let center = doc.home().bounds().map_or(piece.position, |(min, max)| {
-                        Point2::new(min.x.midpoint(max.x), min.y.midpoint(max.y))
-                    });
-                    let toward_center = (center.x - piece.position.x) * front.0
-                        + (center.y - piece.position.y) * front.1;
-                    let side = if toward_center >= 0.0 { 1.0 } else { -1.0 };
-                    if side < 0.0 {
-                        piece.angle += 180.0;
-                    }
-                    piece.position = Point2::new(
-                        piece.position.x + front.0 * side * offset,
-                        piece.position.y + front.1 * side * offset,
-                    );
+                    back_to_wall(doc, &mut piece, &wall);
                 }
             }
             (None, Some(at)) => {

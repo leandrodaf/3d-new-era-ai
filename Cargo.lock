@@ -2739,6 +2739,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "newera-joinery"
+version = "0.1.0"
+dependencies = [
+ "newera-core",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "newera-mcp"
 version = "0.1.0"
 dependencies = [
@@ -2747,6 +2757,7 @@ dependencies = [
  "newera-catalog",
  "newera-core",
  "newera-draw",
+ "newera-joinery",
  "newera-plugins",
  "newera-render",
  "newera-sh3d",
