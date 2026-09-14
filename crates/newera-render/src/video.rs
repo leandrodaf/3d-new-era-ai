@@ -189,6 +189,8 @@ pub fn render_frames(
                 supersample: 2,
                 load_image: &load,
                 transparent: false,
+                outlines: true,
+                cut_color: None,
             },
         );
         on_frame(i, image);

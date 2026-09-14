@@ -14,7 +14,7 @@ pub mod video;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-pub use camera::View;
+pub use camera::{Side, View};
 pub use mesh::{IMAGE_BASE, Mesh, ModelSource, Selection, Vertex};
 pub use raster::{RenderOptions, render};
 
@@ -188,6 +188,8 @@ impl TopViews {
                 supersample: 2,
                 load_image: &load,
                 transparent: true,
+                outlines: false,
+                cut_color: None,
             },
         );
         std::fs::create_dir_all(&self.dir).ok();
@@ -424,6 +426,11 @@ pub fn render_home(
             supersample: 2,
             load_image: &load,
             transparent: false,
+            outlines: true,
+            cut_color: view
+                .near
+                .filter(|_| view.ortho.is_some())
+                .map(|_| [30, 30, 34]),
         },
     )
 }
@@ -475,5 +482,64 @@ mod tests {
             "shaded, textured pixels: {}",
             distinct.len()
         );
+    }
+
+    #[test]
+    fn elevations_sections_and_outlines() {
+        let mut home = newera_core::Home::default();
+        // A 600 × 400 cm box of walls, 300 cm high, and a slab inside at 150 cm.
+        let pts = [(0.0, 0.0), (600.0, 0.0), (600.0, 400.0), (0.0, 400.0)];
+        for i in 0..4 {
+            let (a, b) = (pts[i], pts[(i + 1) % 4]);
+            let id = home.new_wall_id();
+            let mut wall = Wall::new(id, Point2::new(a.0, a.1), Point2::new(b.0, b.1));
+            wall.height = 300.0;
+            home.walls.push(wall);
+        }
+        let id = home.new_furniture_id();
+        home.furniture.push(newera_core::Furniture {
+            id,
+            catalog: "box".into(),
+            position: Point2::new(300.0, 200.0),
+            width: 400.0,
+            depth: 200.0,
+            height: 20.0,
+            elevation: 150.0,
+            color: Some([250, 250, 250]),
+            ..newera_core::Furniture::default()
+        });
+        let (w, h) = (200, 200);
+        let pixel = |image: &image::RgbaImage, x: u32, y: u32| {
+            let p = image.get_pixel(x, y).0;
+            [p[0], p[1], p[2]]
+        };
+        // Front elevation: the wall fills a centered band 600 wide × 300 tall.
+        let front = View::orthographic(&home, Side::Front, 1.0, None);
+        let image = render_home(&home, &front, w, h, None);
+        let sky = home.environment.sky_color;
+        assert_ne!(pixel(&image, 100, 100), sky, "wall in the middle");
+        assert_eq!(pixel(&image, 100, 5), sky, "sky above the building");
+        // Outlines darken the building's silhouette edge.
+        let columns: Vec<[u8; 3]> = (0..w).map(|x| pixel(&image, x, 100)).collect();
+        let edge = columns.iter().position(|c| *c != sky).unwrap();
+        let inner = columns[edge + 10];
+        assert!(
+            columns[edge].iter().zip(inner).all(|(a, b)| *a <= b),
+            "{:?} {:?}",
+            columns[edge],
+            inner
+        );
+
+        // Section through the middle (y = 200): the slab's inside shows as the cut color.
+        let section = View::orthographic(&home, Side::Front, 1.0, Some(200.0));
+        let image = render_home(&home, &section, w, h, None);
+        let cut = (0..h)
+            .filter(|y| pixel(&image, 100, *y).iter().all(|c| *c < 45))
+            .count();
+        assert!(cut > 0, "cut faces visible");
+        // Top view with the cut below the wall tops shows the floor between walls.
+        let top = View::orthographic(&home, Side::Top, 1.0, Some(100.0));
+        let image = render_home(&home, &top, w, h, None);
+        assert_ne!(pixel(&image, 100, 100), pixel(&image, 2, 2));
     }
 }

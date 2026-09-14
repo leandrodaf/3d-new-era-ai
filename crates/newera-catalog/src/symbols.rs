@@ -353,7 +353,21 @@ pub fn plan_symbol(piece: &Furniture) -> Vec<SymbolShape> {
     } else {
         rect(-hw, -hd, hw, hd)
     };
-    s.fill(outline.clone(), false);
+    // Rugs show the floor through: outline and fringe only.
+    if model == Model::Rug {
+        s.line(
+            rect(
+                -hw + 6.0_f64.min(hw / 4.0),
+                -hd + 6.0_f64.min(hd / 4.0),
+                hw - 6.0_f64.min(hw / 4.0),
+                hd - 6.0_f64.min(hd / 4.0),
+            ),
+            true,
+            false,
+        );
+    } else {
+        s.fill(outline.clone(), false);
+    }
 
     match model {
         Model::Sofa { seats } => {

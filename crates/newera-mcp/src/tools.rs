@@ -85,6 +85,16 @@ pub(crate) struct RenderParams {
     region: Option<[Point2; 2]>,
     /// Draw the grid (default true).
     grid: Option<bool>,
+    /// Background image opacity for this render (e.g. 0.5 to compare the
+    /// drawing with the scanned reference; 0 hides it).
+    bg: Option<f64>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct CheckParams {
+    /// Expected room areas in m² by room name or id, e.g. {"Sala": 10.91};
+    /// adds rows [room, expected, actual, diff %].
+    areas: Option<std::collections::BTreeMap<String, f64>>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -135,6 +145,10 @@ pub(crate) struct Render3dParams {
     pitch: Option<f32>,
     /// Aerial distance factor: 1 frames the building, 2 twice as far.
     zoom: Option<f32>,
+    /// Elevations (front/back/left/right/top): section plane in plan cm along
+    /// the view direction (y for front/back, x for left/right, height for top);
+    /// everything nearer than it is cut away.
+    cut: Option<f64>,
     w: Option<u32>,
     h: Option<u32>,
 }
@@ -410,17 +424,18 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "PNG of the floor plan, exactly as the user sees it. Keep w/h small to save tokens."
+        description = "PNG of the floor plan, exactly as the user sees it. bg=0..1 overlays the background image to compare with the reference. Keep w/h small to save tokens."
     )]
     fn render_plan(
         &self,
         Parameters(p): Parameters<RenderParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        let png = self.render(
+        let png = self.render_with(
             p.w.unwrap_or(640),
             p.h.unwrap_or(480),
             p.region,
             p.grid.unwrap_or(true),
+            p.bg,
         )?;
         let data = base64::engine::general_purpose::STANDARD.encode(png);
         Ok(CallToolResult::success(vec![ContentBlock::image(
@@ -430,7 +445,7 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "PNG of the home in 3D (software render, no GPU needed). view: aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). Keep w/h small."
+        description = "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations (cut=cm makes a section), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). Keep w/h small."
     )]
     fn render_3d(
         &self,
@@ -462,6 +477,16 @@ impl NewEraMcp {
                 p.pitch.unwrap_or(40.0),
                 p.zoom.unwrap_or(1.0),
             ),
+            (None, Some(side @ ("front" | "back" | "left" | "right" | "top"))) => {
+                let side = match side {
+                    "front" => newera_render::Side::Front,
+                    "back" => newera_render::Side::Back,
+                    "left" => newera_render::Side::Left,
+                    "right" => newera_render::Side::Right,
+                    _ => newera_render::Side::Top,
+                };
+                newera_render::View::orthographic(home, side, aspect, p.cut)
+            }
             (None, Some(other)) => return Err(invalid(format!("unknown view `{other}`"))),
         };
         let home = home.clone();
@@ -751,11 +776,42 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Layout problems: overlap, in_wall, blocks_door, outside_rooms. {} means none."
+        description = "Layout problems: overlap, in_wall, blocks_door, outside_rooms. {} means none. areas {name|id: m²} compares room areas with the reference drawing."
     )]
-    fn check_layout(&self) -> String {
+    fn check_layout(&self, Parameters(p): Parameters<CheckParams>) -> String {
         let doc = self.document.read();
-        compact::issues(&doc.home().level_view(doc.home().current_level())).to_string()
+        let view = doc.home().level_view(doc.home().current_level());
+        let mut report = compact::issues(&view);
+        if let Some(expected) = p.areas {
+            let rows: Vec<serde_json::Value> = expected
+                .iter()
+                .map(|(key, m2)| {
+                    let room = view
+                        .rooms
+                        .iter()
+                        .find(|r| r.id.to_string() == *key || r.name.eq_ignore_ascii_case(key));
+                    match room {
+                        Some(r) => {
+                            let actual = r.area() / 10_000.0;
+                            let diff = if *m2 > 0.0 {
+                                (actual - m2) / m2 * 100.0
+                            } else {
+                                0.0
+                            };
+                            serde_json::json!([
+                                key,
+                                round2(*m2),
+                                round2(actual),
+                                (diff * 10.0).round() / 10.0
+                            ])
+                        }
+                        None => serde_json::json!([key, round2(*m2), null, null]),
+                    }
+                })
+                .collect();
+            report["areas"] = serde_json::Value::Array(rows);
+        }
+        report.to_string()
     }
 
     #[tool(
@@ -1239,9 +1295,32 @@ impl NewEraMcp {
         region: Option<[Point2; 2]>,
         grid: bool,
     ) -> Result<Vec<u8>, ErrorData> {
+        self.render_with(w, h, region, grid, None)
+    }
+
+    fn render_with(
+        &self,
+        w: u32,
+        h: u32,
+        region: Option<[Point2; 2]>,
+        grid: bool,
+        bg: Option<f64>,
+    ) -> Result<Vec<u8>, ErrorData> {
         let (w, h) = (w.clamp(64, 2048), h.clamp(64, 2048));
         let doc = self.document.read();
-        let view = doc.home().level_view(doc.home().current_level());
+        let mut view = doc.home().level_view(doc.home().current_level());
+        if let Some(opacity) = bg {
+            let opacity = opacity.clamp(0.0, 1.0);
+            let level = view.current_level();
+            let target = match level.and_then(|id| view.levels.iter_mut().find(|l| l.id == id)) {
+                Some(level) if level.background.is_some() => level.background.as_mut(),
+                _ => view.background.as_mut(),
+            };
+            if let Some(background) = target {
+                background.opacity = opacity;
+                background.visible = opacity > 0.0;
+            }
+        }
         let scene = plan_scene(&view, &scene_options_for(&doc));
         let project = doc.asset_dir();
         drop(doc);
@@ -1342,6 +1421,10 @@ fn background_scale(doc: &Document) -> Result<BackgroundScale, ErrorData> {
         offset: bg.offset,
         scale: bg.cm_per_px,
     })
+}
+
+fn round2(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
 }
 
 fn invalid(message: impl Into<String>) -> ErrorData {
@@ -2314,5 +2397,62 @@ mod tests {
         let bad: CreateParams =
             serde_json::from_str(r#"{"solids":[{"profile":[[0,0],[1,0],[0,1]]}]}"#).unwrap();
         assert!(s.create(Parameters(bad)).is_err());
+    }
+
+    #[test]
+    fn plan_overlay_and_area_comparison() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}],"rooms":[{"name":"Sala","at":[200,150]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let report: serde_json::Value =
+            serde_json::from_str(&s.check_layout(Parameters(CheckParams {
+                areas: Some([("sala".to_owned(), 10.0), ("Cozinha".to_owned(), 8.0)].into()),
+            })))
+            .unwrap();
+        let rows = report["areas"].as_array().unwrap();
+        let cozinha = rows.iter().find(|r| r[0] == "Cozinha").unwrap();
+        assert!(
+            cozinha[2].is_null(),
+            "unknown rooms are reported, not guessed"
+        );
+        let sala = rows.iter().find(|r| r[0] == "sala").unwrap();
+        // 385 × 285 cm = 10.97 m², about 9.7 % over the reference.
+        assert!((sala[2].as_f64().unwrap() - 10.97).abs() < 0.01, "{sala}");
+        assert!((sala[3].as_f64().unwrap() - 9.7).abs() < 0.1, "{sala}");
+        let plain: serde_json::Value =
+            serde_json::from_str(&s.check_layout(Parameters(CheckParams::default()))).unwrap();
+        assert!(plain.get("areas").is_none());
+
+        // Overlaying a background renders without touching the project.
+        {
+            let mut doc = s.document.write();
+            doc.execute(Command::SetBackground {
+                background: Some(newera_core::BackgroundImage {
+                    path: "missing.png".into(),
+                    size_px: [100, 100],
+                    cm_per_px: 4.0,
+                    offset: Point2::new(0.0, 0.0),
+                    opacity: 0.2,
+                    visible: false,
+                }),
+            })
+            .unwrap();
+        }
+        let result = s
+            .render_plan(Parameters(RenderParams {
+                w: Some(96),
+                h: Some(72),
+                region: None,
+                grid: None,
+                bg: Some(0.6),
+            }))
+            .unwrap();
+        assert!(matches!(&result.content[0], ContentBlock::Image(_)));
+        let doc = s.document.read();
+        let bg = doc.home().background.as_ref().unwrap();
+        assert!(!bg.visible && (bg.opacity - 0.2).abs() < 1e-9);
     }
 }

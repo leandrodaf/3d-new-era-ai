@@ -247,6 +247,8 @@ impl SceneView {
                 eye: self.camera.eye(),
                 target: self.camera.target,
                 fov_y: 45f32.to_radians(),
+                ortho: None,
+                near: None,
             },
         }
     }

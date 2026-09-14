@@ -503,8 +503,42 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
         polyline_items(&mut scene, polyline, pick(polyline.id.into(), own));
     }
 
+    // Furniture the room names should keep clear of (not rugs or ceiling lights).
+    let obstacles: Vec<[Point2; 4]> = home
+        .furniture
+        .iter()
+        .flat_map(Furniture::visible_leaves)
+        .filter(|f| {
+            !f.is_opening() && f.height > 2.0 && f.elevation < 150.0 && f.discipline.is_none()
+        })
+        .map(Furniture::footprint)
+        .collect();
     for room in &home.rooms {
-        room_texts(&mut scene, room, arch_options);
+        // Rooms drawn inside this one (a pantry in a kitchen) keep their own label room.
+        let mut around = obstacles.clone();
+        let centroid = polygon_centroid(&room.points);
+        for other in home
+            .rooms
+            .iter()
+            .filter(|o| o.id != room.id && o.points.len() >= 3)
+        {
+            let (lo, hi) =
+                other
+                    .points
+                    .iter()
+                    .fold((other.points[0], other.points[0]), |(lo, hi), p| {
+                        (
+                            Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                            Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+                        )
+                    });
+            let contains_me =
+                centroid.is_some_and(|c| c.x > lo.x && c.x < hi.x && c.y > lo.y && c.y < hi.y);
+            if !contains_me {
+                around.push([lo, Point2::new(hi.x, lo.y), hi, Point2::new(lo.x, hi.y)]);
+            }
+        }
+        room_texts(&mut scene, room, arch_options, &around);
     }
 
     for dimension in home.dimensions.iter().filter(|d| shown(d.discipline)) {
@@ -767,7 +801,90 @@ fn room_items(scene: &mut Scene, room: &Room, options: &SceneOptions, line: Colo
 }
 
 /// Name and area of a room, drawn above furniture and walls.
-fn room_texts(scene: &mut Scene, room: &Room, options: &SceneOptions) {
+/// Free space a room name needs around its anchor, cm.
+const LABEL_CLEARANCE: f64 = 60.0;
+
+/// Where to write a room's name: its centroid when that is clear, otherwise
+/// the point inside the room farthest from furniture (tables, beds and
+/// sofas usually sit in the middle).
+fn label_spot(room: &Room, obstacles: &[[Point2; 4]]) -> Option<Point2> {
+    let centroid = polygon_centroid(&room.points)?;
+    let inside = |p: Point2| {
+        let pts = &room.points;
+        let mut hit = false;
+        for i in 0..pts.len() {
+            let (a, b) = (pts[i], pts[(i + pts.len() - 1) % pts.len()]);
+            if (a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x {
+                hit = !hit;
+            }
+        }
+        hit
+    };
+    // Distance from a point to a (convex) footprint, 0 inside.
+    let clearance = |p: Point2, box_: &[Point2; 4]| {
+        let mut outside = false;
+        let mut best = f64::MAX;
+        for i in 0..4 {
+            let (a, b) = (box_[i], box_[(i + 1) % 4]);
+            let (dx, dy) = (b.x - a.x, b.y - a.y);
+            let len2 = (dx * dx + dy * dy).max(1e-9);
+            if (p.x - a.x) * dy - (p.y - a.y) * dx > 0.0 {
+                outside = true;
+            }
+            let t = (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0);
+            best = best.min(p.distance(Point2::new(a.x + dx * t, a.y + dy * t)));
+        }
+        if outside { best } else { 0.0 }
+    };
+    let nearby: Vec<&[Point2; 4]> = obstacles
+        .iter()
+        .filter(|o| {
+            o.iter().any(|p| inside(*p))
+                || inside(Point2::new(
+                    f64::midpoint(o[0].x, o[2].x),
+                    f64::midpoint(o[0].y, o[2].y),
+                ))
+        })
+        .collect();
+    let score = |p: Point2| {
+        nearby
+            .iter()
+            .map(|o| clearance(p, o))
+            .fold(f64::MAX, f64::min)
+    };
+    if nearby.is_empty() || score(centroid) >= LABEL_CLEARANCE {
+        return Some(centroid);
+    }
+    let (lo, hi) = room
+        .points
+        .iter()
+        .fold((room.points[0], room.points[0]), |(lo, hi), p| {
+            (
+                Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+            )
+        });
+    let mut best = (score(centroid), centroid);
+    for i in 1..16 {
+        for j in 1..16 {
+            let p = Point2::new(
+                lo.x + (hi.x - lo.x) * f64::from(i) / 16.0,
+                lo.y + (hi.y - lo.y) * f64::from(j) / 16.0,
+            );
+            if !inside(p) {
+                continue;
+            }
+            // Prefer clear spots, then spots near the middle.
+            let s = score(p).min(LABEL_CLEARANCE * 2.0) - p.distance(centroid) * 0.05;
+            if s > best.0 {
+                best = (s, p);
+            }
+        }
+    }
+    Some(best.1)
+}
+
+fn room_texts(scene: &mut Scene, room: &Room, options: &SceneOptions, obstacles: &[[Point2; 4]]) {
     let owner = Some(room.id.into());
     if room.points.is_empty() {
         return;
@@ -834,7 +951,7 @@ fn room_texts(scene: &mut Scene, room: &Room, options: &SceneOptions) {
         }
         return;
     }
-    let Some(center) = polygon_centroid(&room.points) else {
+    let Some(center) = label_spot(room, obstacles) else {
         return;
     };
     let mut text = room.name.clone();
@@ -1665,5 +1782,76 @@ mod reference_tests {
         })
         .unwrap();
         assert!(!texts(&doc).iter().any(|t| t == "REFERÊNCIAS"));
+    }
+}
+
+#[cfg(test)]
+mod label_tests {
+    use newera_core::{Furniture, FurnitureId, Home, Point2, Room, RoomId};
+
+    use super::*;
+
+    #[test]
+    fn room_names_keep_clear_of_furniture_and_rugs_show_the_floor() {
+        let mut home = Home::default();
+        home.rooms.push(Room::new(
+            RoomId(1),
+            "Sala",
+            vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(500.0, 0.0),
+                Point2::new(500.0, 400.0),
+                Point2::new(0.0, 400.0),
+            ],
+        ));
+        home.furniture.push(Furniture {
+            id: FurnitureId(2),
+            catalog: "dining-table-4".into(),
+            position: Point2::new(250.0, 200.0),
+            width: 160.0,
+            depth: 100.0,
+            height: 75.0,
+            ..Furniture::default()
+        });
+        let scene = plan_scene(&home, &SceneOptions::default());
+        let at = scene
+            .items
+            .iter()
+            .find_map(|i| match &i.primitive {
+                Primitive::Text { text, position, .. } if text.starts_with("Sala") => {
+                    Some(*position)
+                }
+                _ => None,
+            })
+            .unwrap();
+        let table = home.furniture[0].footprint();
+        let (lo, hi) = (table[0], table[2]);
+        let clear = at.x < lo.x.min(hi.x) - 30.0
+            || at.x > lo.x.max(hi.x) + 30.0
+            || at.y < lo.y.min(hi.y) - 30.0
+            || at.y > lo.y.max(hi.y) + 30.0;
+        assert!(clear, "label at {at:?} over the table");
+
+        // Without furniture the name stays centered.
+        home.furniture.clear();
+        let rug = newera_catalog::find("rug")
+            .unwrap()
+            .instantiate(FurnitureId(3), Point2::new(250.0, 200.0));
+        home.furniture.push(rug);
+        let scene = plan_scene(&home, &SceneOptions::default());
+        let centered = scene.items.iter().any(|i| {
+            matches!(&i.primitive, Primitive::Text { text, position, .. }
+                if text.starts_with("Sala") && position.distance(Point2::new(250.0, 200.0)) < 1.0)
+        });
+        assert!(centered, "rugs don't push the name away");
+        let rug_fills = scene
+            .items
+            .iter()
+            .filter(|i| {
+                i.owner == Some(FurnitureId(3).into())
+                    && matches!(i.primitive, Primitive::Fill { .. })
+            })
+            .count();
+        assert_eq!(rug_fills, 0, "rugs are drawn without fill");
     }
 }

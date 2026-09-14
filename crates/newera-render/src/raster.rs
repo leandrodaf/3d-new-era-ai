@@ -19,6 +19,11 @@ pub struct RenderOptions<'a> {
     pub load_image: &'a dyn Fn(&str) -> Option<RgbaImage>,
     /// Leave uncovered pixels transparent instead of painting the sky.
     pub transparent: bool,
+    /// Darken creases and silhouettes so same-colored parts stay readable.
+    pub outlines: bool,
+    /// Paint back faces with this color instead of skipping them: in a
+    /// section, the inside of what the cut opened shows as solid.
+    pub cut_color: Option<[u8; 3]>,
 }
 
 impl std::fmt::Debug for RenderOptions<'_> {
@@ -75,6 +80,9 @@ struct Target {
     height: usize,
     color: Vec<Vec3>,
     depth: Vec<f32>,
+    /// Face normal and view distance of the opaque surface at each sample.
+    normal: Vec<Vec3>,
+    distance: Vec<f32>,
 }
 
 pub(crate) struct Images<'a> {
@@ -172,6 +180,7 @@ fn raster_triangle(
     kind: u32,
     transparent: bool,
     images: &Images<'_>,
+    cut: Option<Vec3>,
 ) {
     let (w, h) = (target.width as f32, target.height as f32);
     let screen = tri.map(|v| {
@@ -187,7 +196,8 @@ fn raster_triangle(
     let [(x0, y0, z0, q0), (x1, y1, z1, q1), (x2, y2, z2, q2)] = screen;
     // Signed area in screen space (y down): front faces are negative here.
     let area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
-    if area.abs() < 1e-9 || (!transparent && area > 0.0) {
+    let back = !transparent && area > 0.0;
+    if area.abs() < 1e-9 || (back && cut.is_none()) {
         return;
     }
     let min_x = x0.min(x1).min(x2).floor().max(0.0) as usize;
@@ -235,14 +245,55 @@ fn raster_triangle(
             };
             let normal = tri[0].normal * p.0 + tri[1].normal * p.1 + tri[2].normal * p.2;
             let color = tri[0].color * p.0 + tri[1].color * p.1 + tri[2].color * p.2;
-            let lit = shade(kind, color, uv, pixel, normal, images);
+            let lit = match (back, cut) {
+                (true, Some(poche)) => poche,
+                _ => shade(kind, color, uv, pixel, normal, images),
+            };
             if transparent {
                 let alpha = color.w.clamp(0.0, 1.0);
                 target.color[index] = target.color[index].lerp(lit, alpha);
             } else {
                 target.color[index] = lit;
                 target.depth[index] = z;
+                target.normal[index] = normal.normalize_or_zero();
+                target.distance[index] = 1.0 / (b.0 * q0 + b.1 * q1 + b.2 * q2);
             }
+        }
+    }
+}
+
+/// Darkens samples where the surface turns sharply or jumps in depth.
+fn outline(target: &mut Target, ss: usize) {
+    let (w, h) = (target.width, target.height);
+    let reach = ss.max(1);
+    let mut edge = vec![false; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            let i = y * w + x;
+            let (z, n, d) = (target.depth[i], target.normal[i], target.distance[i]);
+            let differs = |j: usize| {
+                let (zj, nj, dj) = (target.depth[j], target.normal[j], target.distance[j]);
+                if z.is_finite() != zj.is_finite() {
+                    return true;
+                }
+                if !z.is_finite() {
+                    return false;
+                }
+                let jump = if d.is_finite() && dj.is_finite() && (d - 1.0).abs() > 1e-6 {
+                    (d - dj).abs() > 0.03 * d.min(dj)
+                } else {
+                    (z - zj).abs() > 0.004
+                };
+                jump || n.dot(nj) < 0.8
+            };
+            edge[i] =
+                (x + reach < w && differs(i + reach)) || (y + reach < h && differs(i + reach * w));
+        }
+    }
+    let ink = Vec3::splat(0.22);
+    for (color, e) in target.color.iter_mut().zip(edge) {
+        if e {
+            *color = color.lerp(ink, 0.55);
         }
     }
 }
@@ -265,6 +316,8 @@ pub fn render(mesh: &Mesh, options: &RenderOptions<'_>) -> RgbaImage {
         height: out_h * ss,
         color: vec![sky; out_w * ss * out_h * ss],
         depth: vec![f32::INFINITY; out_w * ss * out_h * ss],
+        normal: vec![Vec3::ZERO; out_w * ss * out_h * ss],
+        distance: vec![f32::INFINITY; out_w * ss * out_h * ss],
     };
     let images = Images {
         loaded: mesh
@@ -290,6 +343,9 @@ pub fn render(mesh: &Mesh, options: &RenderOptions<'_>) -> RgbaImage {
                 kind,
                 transparent,
                 &images,
+                options
+                    .cut_color
+                    .map(|c| Vec3::from(c.map(f32::from)) / 255.0),
             );
         }
     };
@@ -297,6 +353,9 @@ pub fn render(mesh: &Mesh, options: &RenderOptions<'_>) -> RgbaImage {
         if let Some((verts, kind)) = triangle(tri) {
             draw(&mut target, verts, kind, false);
         }
+    }
+    if options.outlines {
+        outline(&mut target, ss);
     }
     // Blended surfaces back to front.
     let mut clear: Vec<([ClipVertex; 3], u32, f32)> = mesh

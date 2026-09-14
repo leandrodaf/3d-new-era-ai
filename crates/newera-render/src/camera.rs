@@ -11,18 +11,109 @@ pub struct View {
     pub target: Vec3,
     /// Vertical field of view, radians.
     pub fov_y: f32,
+    /// Orthographic instead of perspective: half the visible height, meters.
+    pub ortho: Option<f32>,
+    /// Near clipping distance, meters: sections cut away what is closer.
+    pub near: Option<f32>,
+}
+
+/// Sides of the building seen head-on, for elevations and sections.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Side {
+    /// From the plan bottom (+y) looking up the plan.
+    Front,
+    /// From the plan top (-y).
+    Back,
+    /// From the plan left (-x).
+    Left,
+    /// From the plan right (+x).
+    Right,
+    /// From above, north up.
+    Top,
 }
 
 impl View {
     pub fn view_proj(&self, aspect: f32) -> Mat4 {
-        let view = glam::camera::rh::view::look_at_mat4(self.eye, self.target, Vec3::Y);
-        let proj = glam::camera::rh::proj::directx::perspective(
-            self.fov_y.clamp(0.05, 3.0),
-            aspect,
-            0.02,
-            500.0,
-        );
+        let forward = (self.target - self.eye).normalize_or_zero();
+        // Looking straight down, "up" on screen is the top of the plan.
+        let up = if forward.y.abs() > 0.99 {
+            -Vec3::Z
+        } else {
+            Vec3::Y
+        };
+        let view = glam::camera::rh::view::look_at_mat4(self.eye, self.target, up);
+        let near = self.near.unwrap_or(0.02).max(0.001);
+        let proj = match self.ortho {
+            Some(half) => {
+                let half = half.max(0.01);
+                glam::camera::rh::proj::directx::orthographic(
+                    -half * aspect,
+                    half * aspect,
+                    -half,
+                    half,
+                    near,
+                    near + 1000.0,
+                )
+            }
+            None => glam::camera::rh::proj::directx::perspective(
+                self.fov_y.clamp(0.05, 3.0),
+                aspect,
+                near,
+                500.0,
+            ),
+        };
         proj * view
+    }
+
+    /// A head-on orthographic view of the whole building from `side`, for an
+    /// image of `aspect`. With `cut` (plan cm along the view direction, or
+    /// height for `Top`) everything in front of that plane is cut away.
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn orthographic(home: &Home, side: Side, aspect: f32, cut: Option<f64>) -> Self {
+        let top = building_top(home).max(100.0) as f32 / 100.0;
+        let (min, max) = home
+            .building_bounds()
+            .map_or(((-5.0, -5.0), (5.0, 5.0)), |(a, b)| {
+                (
+                    (a.x as f32 / 100.0, a.y as f32 / 100.0),
+                    (b.x as f32 / 100.0, b.y as f32 / 100.0),
+                )
+            });
+        let center = Vec3::new(
+            f32::midpoint(min.0, max.0),
+            top / 2.0,
+            f32::midpoint(min.1, max.1),
+        );
+        let (wx, wz) = (max.0 - min.0, max.1 - min.1);
+        let far = 200.0;
+        let (dir, across, tall, depth) = match side {
+            Side::Front => (Vec3::Z, wx, top, wz),
+            Side::Back => (-Vec3::Z, wx, top, wz),
+            Side::Left => (-Vec3::X, wz, top, wx),
+            Side::Right => (Vec3::X, wz, top, wx),
+            Side::Top => (Vec3::Y, wx, wz, top),
+        };
+        let _ = depth;
+        let half = (tall / 2.0).max(across / 2.0 / aspect.max(0.01)) * 1.08;
+        let eye = center + dir * far;
+        let near = cut.map(|c| {
+            let c = c as f32 / 100.0;
+            match side {
+                Side::Front => eye.z - c,
+                Side::Back => c - eye.z,
+                Side::Left => c - eye.x,
+                Side::Right => eye.x - c,
+                Side::Top => eye.y - c,
+            }
+            .max(0.001)
+        });
+        Self {
+            eye,
+            target: center,
+            fov_y: 45f32.to_radians(),
+            ortho: Some(half),
+            near,
+        }
     }
 
     /// Looking through a visitor camera (horizontal field of view in degrees).
@@ -42,6 +133,8 @@ impl View {
             eye,
             target: eye + direction,
             fov_y,
+            ortho: None,
+            near: None,
         }
     }
 
@@ -86,6 +179,8 @@ impl View {
             eye: center + direction * distance,
             target: center,
             fov_y,
+            ortho: None,
+            near: None,
         }
     }
 }

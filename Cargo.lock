@@ -2778,6 +2778,7 @@ dependencies = [
  "image",
  "newera-catalog",
  "newera-core",
+ "newera-draw",
  "newera-sh3d",
  "serde_json",
  "thiserror 2.0.20",
