@@ -140,9 +140,61 @@ pub fn resolve_asset(dir: Option<&Path>, stored: &str) -> PathBuf {
     }
 }
 
+/// Files a model needs next to it: an OBJ's material libraries and the
+/// textures they name, a glTF's buffers and images. Names are relative to
+/// the model's folder.
+fn model_companions(model: &Path) -> Vec<String> {
+    let ext = model
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let Some(dir) = model.parent() else {
+        return Vec::new();
+    };
+    let text = |p: &Path| crate::vfs::read(p).map(|b| String::from_utf8_lossy(&b).into_owned());
+    let mut out = Vec::new();
+    match ext.as_str() {
+        "obj" => {
+            let Ok(obj) = text(model) else { return out };
+            for lib in obj.lines().filter_map(|l| l.trim().strip_prefix("mtllib ")) {
+                let lib = lib.trim().to_owned();
+                if let Ok(mtl) = text(&dir.join(&lib)) {
+                    for line in mtl.lines() {
+                        let line = line.trim();
+                        let is_map = ["map_", "bump", "norm", "disp", "refl"]
+                            .iter()
+                            .any(|k| line.starts_with(k));
+                        // The file name is the last token (options come first).
+                        if is_map && let Some(file) = line.split_whitespace().last() {
+                            out.push(file.to_owned());
+                        }
+                    }
+                }
+                out.push(lib);
+            }
+        }
+        "gltf" => {
+            let Ok(json) = text(model) else { return out };
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&json) {
+                for key in ["buffers", "images"] {
+                    for item in value[key].as_array().into_iter().flatten() {
+                        if let Some(uri) = item["uri"].as_str().filter(|u| !u.starts_with("data:"))
+                        {
+                            out.push(uri.to_owned());
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    out
+}
+
 /// Files referenced by every variant, resolved on disk, with the name each
-/// gets inside a bundle. Models living in their own folder bring the whole
-/// folder (materials and textures sit next to them).
+/// gets inside a bundle. Models bring the material libraries, textures and
+/// buffers they reference, kept at the same place next to them.
 fn bundle_files(doc: &Document) -> Vec<(PathBuf, String)> {
     let dir = doc.asset_dir();
     let mut out: Vec<(PathBuf, String)> = Vec::new();
@@ -160,18 +212,27 @@ fn bundle_files(doc: &Document) -> Vec<(PathBuf, String)> {
             let name = bundle_name(&stored);
             let folder = Path::new(&name)
                 .parent()
-                .filter(|p| !p.as_os_str().is_empty());
-            match (folder, source.parent()) {
-                (Some(folder), Some(source_dir)) if source_dir.is_dir() => {
-                    if let Ok(entries) = std::fs::read_dir(source_dir) {
-                        for entry in entries.flatten().filter(|e| e.path().is_file()) {
-                            let file = entry.file_name().to_string_lossy().into_owned();
-                            push(entry.path(), format!("{}/{file}", folder.display()));
-                        }
-                    }
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                .unwrap_or_default();
+            for companion in model_companions(&source) {
+                let relative = Path::new(&companion);
+                if relative.is_absolute()
+                    || relative
+                        .components()
+                        .any(|c| matches!(c, std::path::Component::ParentDir))
+                {
+                    continue;
                 }
-                _ => push(source, name),
+                let inside = if folder.is_empty() {
+                    companion.replace('\\', "/")
+                } else {
+                    format!("{folder}/{}", companion.replace('\\', "/"))
+                };
+                if let Some(source_dir) = source.parent() {
+                    push(source_dir.join(&companion), inside);
+                }
             }
+            push(source, name);
         }
     }
     out
@@ -236,7 +297,7 @@ pub fn save_project(doc: &Document, path: &Path) -> Result<(), ProjectError> {
         zip.start_file(BUNDLE_JSON, stored)?;
         std::io::Write::write_all(&mut zip, to_project_json(&copy).as_bytes())?;
         for (source, name) in files {
-            match std::fs::read(&source) {
+            match crate::vfs::read(&source) {
                 Ok(bytes) => {
                     zip.start_file(name, stored)?;
                     std::io::Write::write_all(&mut zip, &bytes)?;
@@ -393,13 +454,45 @@ mod tests {
         assert_eq!(abs, PathBuf::from("/img/a.png"));
     }
 
+    fn walk(dir: &Path) -> Vec<PathBuf> {
+        let mut out = Vec::new();
+        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                out.extend(walk(&path));
+            } else {
+                out.push(path);
+            }
+        }
+        out
+    }
+
     #[test]
     fn projects_with_files_save_as_bundles_and_reopen() {
         let root = std::env::temp_dir().join(format!("newera-bundle-{}", std::process::id()));
         let assets = root.join("assets");
         std::fs::create_dir_all(assets.join("models/chair")).unwrap();
-        std::fs::write(assets.join("models/chair/chair.obj"), "v 0 0 0\n").unwrap();
-        std::fs::write(assets.join("models/chair/chair.mtl"), "newmtl a\n").unwrap();
+        std::fs::write(
+            assets.join("models/chair/chair.obj"),
+            "mtllib chair.mtl\nv 0 0 0\n",
+        )
+        .unwrap();
+        std::fs::write(
+            assets.join("models/chair/chair.mtl"),
+            "newmtl a\nmap_Kd -s 1 1 1 wood.png\n",
+        )
+        .unwrap();
+        std::fs::write(
+            assets.join("models/chair/wood.png"),
+            [0x89, b'P', b'N', b'G'],
+        )
+        .unwrap();
+        std::fs::write(
+            assets.join("models/chair/unrelated.txt"),
+            "not part of the model",
+        )
+        .unwrap();
+        std::fs::write(root.join("neighbor.jpg"), [0xFF, 0xD8]).unwrap();
         let outside = root.join("outside.png");
         std::fs::write(&outside, [0x89, b'P', b'N', b'G']).unwrap();
 
@@ -433,8 +526,19 @@ mod tests {
         let dir = dir.expect("bundle unpacks");
         let home = &project.variants[0].1;
         assert!(
-            dir.join("models/chair/chair.mtl").exists(),
-            "model folder travels"
+            dir.join("models/chair/chair.mtl").exists()
+                && dir.join("models/chair/wood.png").exists(),
+            "the model's materials and textures travel"
+        );
+        assert!(
+            !dir.join("models/chair/unrelated.txt").exists(),
+            "unrelated files stay out"
+        );
+        let external: Vec<_> = walk(&dir.join("external"));
+        assert_eq!(
+            external.len(),
+            1,
+            "only the referenced image, not its folder: {external:?}"
         );
         let floor = home.rooms[0]
             .floor_material
