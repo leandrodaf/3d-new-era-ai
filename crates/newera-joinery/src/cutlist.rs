@@ -16,6 +16,8 @@ pub struct CutRow {
     pub size: [f64; 3],
     /// Edges to band `[long, short]`.
     pub edge: [u8; 2],
+    /// Cutouts `[x, y, w, d]` in mm from the corner, along the length first.
+    pub holes: Vec<[f64; 4]>,
 }
 
 fn mm(cm: f64) -> f64 {
@@ -28,13 +30,28 @@ fn row(part: &Part) -> Option<CutRow> {
         Some([length, width]) => [length, width, part.size[2]],
         None => part.size,
     };
+    // The board's own length runs along x when x is its longest side.
+    let along_x = part.size[0] >= part.size[1];
     dims.sort_by(|a, b| b.total_cmp(a));
+    let holes = part
+        .holes
+        .iter()
+        .map(|h| {
+            if along_x {
+                *h
+            } else {
+                [h[1], h[0], h[3], h[2]]
+            }
+        })
+        .map(|h| h.map(mm))
+        .collect();
     Some(CutRow {
         name: part.name.clone(),
         board,
         qty: 1,
         size: dims.map(mm),
         edge: part.edge,
+        holes,
     })
 }
 
@@ -47,6 +64,7 @@ pub fn cut_list(output: &Output) -> Vec<CutRow> {
         match rows.iter_mut().find(|r| {
             r.board == new.board
                 && r.edge == new.edge
+                && r.holes == new.holes
                 && r.size
                     .iter()
                     .zip(new.size)
@@ -63,13 +81,13 @@ pub fn cut_list(output: &Output) -> Vec<CutRow> {
 /// The cut list as CSV (semicolon separated, decimal comma), for spreadsheets.
 pub fn cut_list_csv(rows: &[CutRow]) -> String {
     let mut out = String::from(
-        "peca;material;qtd;comprimento_mm;largura_mm;espessura_mm;fita_longa;fita_curta\n",
+        "peca;material;qtd;comprimento_mm;largura_mm;espessura_mm;fita_longa;fita_curta;recortes_mm\n",
     );
     let n = |v: f64| format!("{v}").replace('.', ",");
     for r in rows {
         let _ = writeln!(
             out,
-            "{};{};{};{};{};{};{};{}",
+            "{};{};{};{};{};{};{};{};{}",
             r.name.replace(';', ","),
             r.board,
             r.qty,
@@ -77,7 +95,12 @@ pub fn cut_list_csv(rows: &[CutRow]) -> String {
             n(r.size[1]),
             n(r.size[2]),
             r.edge[0],
-            r.edge[1]
+            r.edge[1],
+            r.holes
+                .iter()
+                .map(|h| format!("{}x{} em {},{}", n(h[2]), n(h[3]), n(h[0]), n(h[1])))
+                .collect::<Vec<_>>()
+                .join(" | ")
         );
     }
     out
@@ -85,7 +108,10 @@ pub fn cut_list_csv(rows: &[CutRow]) -> String {
 
 /// Sheet size for a board material, mm.
 fn sheet(board: &str) -> [f64; 2] {
-    if board.starts_with("Gesso") {
+    if board.starts_with("Pedra") {
+        // Large granite and quartz slabs.
+        [3200.0, 1900.0]
+    } else if board.starts_with("Gesso") {
         [2400.0, 1200.0]
     } else if board.starts_with("Ripa") {
         [3000.0, 300.0]
@@ -100,6 +126,8 @@ struct Placed {
     label: String,
     rect: [f64; 4],
     sheet: bool,
+    /// Cutouts inside the board, placed like it.
+    holes: Vec<[f64; 4]>,
 }
 
 /// Boards laid out on sheets (shelf packing with a 4 mm saw kerf): sheet
@@ -109,8 +137,13 @@ fn pack(rows: &[CutRow]) -> (Vec<Placed>, Vec<(String, u32)>) {
     let mut placed = Vec::new();
     let mut sheets_used: Vec<(String, u32)> = Vec::new();
     let mut origin_y = 0.0;
-    let mut boards: Vec<&str> = rows.iter().map(|r| r.board.as_str()).collect();
-    boards.dedup();
+    // Each material once, in the order it first appears.
+    let mut boards: Vec<&str> = Vec::new();
+    for r in rows {
+        if !boards.contains(&r.board.as_str()) {
+            boards.push(r.board.as_str());
+        }
+    }
     for board in boards {
         let layer = board.replace([' ', ','], "_");
         let [sw, sh] = sheet(board);
@@ -119,21 +152,27 @@ fn pack(rows: &[CutRow]) -> (Vec<Placed>, Vec<(String, u32)>) {
             label: String::new(),
             rect: [x, origin_y, sw, sh],
             sheet: true,
+            holes: Vec::new(),
         };
-        let mut pieces: Vec<(String, f64, f64)> = rows
+        let mut pieces: Vec<(String, f64, f64, Vec<[f64; 4]>)> = rows
             .iter()
             .filter(|r| r.board == board)
-            .flat_map(|r| (0..r.qty).map(move |_| (r.name.clone(), r.size[0], r.size[1])))
+            .flat_map(|r| {
+                (0..r.qty).map(move |_| (r.name.clone(), r.size[0], r.size[1], r.holes.clone()))
+            })
             .collect();
         pieces.sort_by(|a, b| b.2.total_cmp(&a.2).then(b.1.total_cmp(&a.1)));
         let mut sheet_index = 0u32;
         let (mut x, mut y, mut shelf) = (0.0, 0.0, 0.0);
         let mut sheet_x = 0.0;
         placed.push(outline(sheet_x));
-        for (name, mut w, mut h) in pieces {
+        for (name, mut w, mut h, mut holes) in pieces {
             // Turn pieces that only fit sideways.
             if w > sw && h <= sw && w <= sh {
                 std::mem::swap(&mut w, &mut h);
+                for hole in &mut holes {
+                    *hole = [hole[1], hole[0], hole[3], hole[2]];
+                }
             }
             if x + w > sw {
                 x = 0.0;
@@ -150,9 +189,24 @@ fn pack(rows: &[CutRow]) -> (Vec<Placed>, Vec<(String, u32)>) {
             }
             placed.push(Placed {
                 layer: layer.clone(),
-                label: format!("{name} {w}x{h}"),
+                label: if w > sw || h > sh {
+                    format!("{name} {w}x{h} MAIOR QUE A CHAPA: prever emenda")
+                } else {
+                    format!("{name} {w}x{h}")
+                },
                 rect: [sheet_x + x, origin_y + y, w.min(sw), h.min(sh)],
                 sheet: false,
+                holes: holes
+                    .iter()
+                    .map(|hole| {
+                        [
+                            sheet_x + x + hole[0],
+                            origin_y + y + hole[1],
+                            hole[2],
+                            hole[3],
+                        ]
+                    })
+                    .collect(),
             });
             x += w + KERF;
             shelf = f64::max(shelf, h);
@@ -178,6 +232,18 @@ pub fn cut_list_dxf(rows: &[CutRow]) -> (String, Vec<(String, u32)>) {
                 "0\nLINE\n8\n{}\n10\n{}\n20\n{}\n11\n{}\n21\n{}\n",
                 p.layer, a[0], a[1], b[0], b[1]
             );
+        }
+        for hole in &p.holes {
+            let [hx, hy, hw, hh] = *hole;
+            let corners = [[hx, hy], [hx + hw, hy], [hx + hw, hy + hh], [hx, hy + hh]];
+            for i in 0..4 {
+                let (a, b) = (corners[i], corners[(i + 1) % 4]);
+                let _ = write!(
+                    entities,
+                    "0\nLINE\n8\nRECORTES\n10\n{}\n20\n{}\n11\n{}\n21\n{}\n",
+                    a[0], a[1], b[0], b[1]
+                );
+            }
         }
         if !p.sheet {
             let _ = write!(
@@ -224,6 +290,14 @@ pub fn cut_list_svg(rows: &[CutRow]) -> (String, Vec<(String, u32)>) {
                 y + 35.0,
                 (rh * 0.4).clamp(8.0, 30.0)
             );
+            // Cutouts over the board, dashed.
+            for hole in &p.holes {
+                let [hx, hy, hw, hh] = *hole;
+                let _ = writeln!(
+                    out,
+                    "<rect x=\"{hx}\" y=\"{hy}\" width=\"{hw}\" height=\"{hh}\" fill=\"#ffffff\" stroke=\"#c0392b\" stroke-width=\"3\" stroke-dasharray=\"12 6\"/>"
+                );
+            }
         }
     }
     out.push_str("</svg>\n");
@@ -268,5 +342,35 @@ mod tests {
         let (svg, same) = cut_list_svg(&rows);
         assert!(svg.starts_with("<svg") && svg.contains("Lateral esquerda 1900x532"));
         assert_eq!(same, sheets);
+        // A stone top carries its cutouts to the workshop.
+        let top = generate(&Build::Countertop(crate::CountertopParams {
+            length: 200.0,
+            cutouts: vec![crate::Cutout {
+                kind: crate::CutoutKind::Cooktop,
+                x: 120.0,
+                w: None,
+                d: None,
+                drawn: true,
+            }],
+            ..crate::CountertopParams::default()
+        }))
+        .unwrap();
+        let rows = cut_list(&top);
+        let stone = rows.iter().find(|r| r.board.starts_with("Pedra")).unwrap();
+        assert_eq!(stone.holes, vec![[920.0, 60.0, 560.0, 480.0]]);
+        assert!(cut_list_csv(&rows).contains("560x480 em 920,60"));
+        assert!(cut_list_dxf(&rows).0.contains("RECORTES"));
+        assert!(cut_list_svg(&rows).0.contains("stroke-dasharray"));
+        // Rows gathered from several builds, materials interleaved: one layout each.
+        let mut mixed = cut_list(&out);
+        mixed.extend(cut_list(&top));
+        mixed.extend(cut_list(&out));
+        let (_, used) = cut_list_dxf(&mixed);
+        let mut names: Vec<&str> = used.iter().map(|(b, _)| b.as_str()).collect();
+        let count = names.len();
+        names.dedup();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), count, "{used:?}");
     }
 }

@@ -1096,7 +1096,7 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Cut list of joinery builds: rows [part,board,qty,length,width,thickness mm,edge long+short] merged by size, hardware, sheets per board. path .csv, or .dxf/.svg (boards laid out on sheets), writes a file."
+        description = "Cut list of joinery builds: rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. path .csv, or .dxf/.svg (boards laid out on sheets), writes a file."
     )]
     fn cut_list(&self, Parameters(p): Parameters<CutListParams>) -> Result<String, ErrorData> {
         let doc = self.document.read();
@@ -1122,6 +1122,7 @@ impl NewEraMcp {
                 match rows.iter_mut().find(|r| {
                     r.board == row.board
                         && r.edge == row.edge
+                        && r.holes == row.holes
                         && r.size
                             .iter()
                             .zip(row.size)
@@ -1162,7 +1163,7 @@ impl NewEraMcp {
         let rows: Vec<serde_json::Value> = rows
             .iter()
             .map(|r| {
-                serde_json::json!([
+                let mut row = serde_json::json!([
                     r.name,
                     r.board,
                     r.qty,
@@ -1170,7 +1171,14 @@ impl NewEraMcp {
                     r.size[1],
                     r.size[2],
                     format!("{}+{}", r.edge[0], r.edge[1])
-                ])
+                ]);
+                // Cutouts `[x, y, w, d]` mm, for stone tops.
+                if !r.holes.is_empty()
+                    && let Some(cells) = row.as_array_mut()
+                {
+                    cells.push(serde_json::json!(r.holes));
+                }
+                row
             })
             .collect();
         let mut reply = serde_json::json!({ "rows": rows, "hardware": hardware });

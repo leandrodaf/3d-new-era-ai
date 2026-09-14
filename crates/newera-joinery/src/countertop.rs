@@ -358,16 +358,21 @@ pub(crate) fn generate(p: &CountertopParams) -> Result<Output, String> {
         size: [len, dep, p.height],
         hardware,
         notes: Vec::new(),
-        extra_cuts: vec![
-            Part::board(
+        extra_cuts: vec![{
+            let mut slab = Part::board(
                 "Tampo com recortes",
                 [0.0, 0.0, z],
                 [len, dep, t],
                 &format!("Pedra {} cm", num(t)),
                 [90, 90, 95],
             )
-            .banded(1, 2),
-        ],
+            .banded(1, 2);
+            slab.holes = holes
+                .iter()
+                .map(|(x0, x1, y0, y1, _)| [*x0, *y0, x1 - x0, y1 - y0])
+                .collect();
+            slab
+        }],
         name: format!("Bancada {} × {} cm", num(len), num(dep)),
     })
 }

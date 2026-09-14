@@ -103,6 +103,9 @@ pub struct Part {
     pub outline: Option<Vec<[f64; 2]>>,
     /// Length × width for the cut list when it isn't the box (mitred strips).
     pub cut: Option<[f64; 2]>,
+    /// Holes through the board for the workshop `[x, y, w, d]`, cm from its
+    /// left-back corner (sink and cooktop cutouts in a stone top).
+    pub holes: Vec<[f64; 4]>,
 }
 
 impl Part {
@@ -124,6 +127,7 @@ impl Part {
             opacity: None,
             outline: None,
             cut: None,
+            holes: Vec::new(),
         }
     }
 
