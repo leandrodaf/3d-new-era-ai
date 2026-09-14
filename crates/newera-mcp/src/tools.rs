@@ -178,6 +178,31 @@ pub(crate) struct CamerasParams {
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct VideoParams {
+    /// `list` (default), `add`, `delete`, `clear`, `orbit`, `set`, `render`.
+    action: Option<String>,
+    /// Keyframe index (`delete`, or insert position for `add`).
+    i: Option<usize>,
+    /// Stored view index to add as keyframe.
+    cam: Option<usize>,
+    x: Option<f64>,
+    y: Option<f64>,
+    z: Option<f64>,
+    yaw: Option<f64>,
+    pitch: Option<f64>,
+    fov: Option<f64>,
+    /// Keyframes for `orbit`.
+    n: Option<usize>,
+    fps: Option<u32>,
+    /// Camera speed m/s.
+    speed: Option<f64>,
+    /// Output `.avi` for `render`.
+    path: Option<String>,
+    w: Option<u32>,
+    h: Option<u32>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct LevelsParams {
     /// `list` (default), `add`, `select`, `delete`.
     action: Option<String>,
@@ -779,6 +804,126 @@ impl NewEraMcp {
             other => return Err(invalid(format!("unknown action `{other}`"))),
         }
         doc.execute(Command::SetCameras { cameras }).map_err(core)?;
+        Ok(ok(&doc, &[]))
+    }
+
+    #[tool(
+        description = "Video camera path. list (default): {fps,speed,secs,rows [i,x,y,z,yaw,pitch,fov]}. add {cam? | x?,y?,z?,yaw?,pitch?,fov?, i?} appends a keyframe (missing values from the visitor); delete {i}; clear; orbit {z?,n?} replaces the path with an aerial tour; set {fps?,speed?}; render {path .avi, w?,h?} writes a Motion-JPEG video. cm, degrees, m/s."
+    )]
+    fn video(&self, Parameters(p): Parameters<VideoParams>) -> Result<String, ErrorData> {
+        let mut doc = self.document.write();
+        let mut environment = doc.home().environment.clone();
+        let path = &mut environment.camera_path;
+        match p.action.as_deref().unwrap_or("list") {
+            "list" => {
+                let rows: Vec<serde_json::Value> = path
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| {
+                        serde_json::json!([
+                            i,
+                            compact::num(c.x),
+                            compact::num(c.y),
+                            compact::num(c.z),
+                            compact::num(c.yaw),
+                            compact::num(c.pitch),
+                            compact::num(c.fov)
+                        ])
+                    })
+                    .collect();
+                let video = &environment.video;
+                let secs: f64 = newera_render::video::segment_durations(path, video.speed)
+                    .iter()
+                    .sum();
+                return Ok(serde_json::json!({
+                    "fps": video.frame_rate,
+                    "speed": compact::num(video.speed),
+                    "secs": compact::num(secs),
+                    "rows": rows,
+                })
+                .to_string());
+            }
+            "add" => {
+                let cameras = &doc.home().cameras;
+                let base = match p.cam {
+                    Some(i) => cameras
+                        .stored
+                        .get(i)
+                        .cloned()
+                        .ok_or_else(|| invalid(format!("no stored camera {i}")))?,
+                    None => cameras.observer.clone(),
+                };
+                let camera = newera_core::Camera {
+                    name: None,
+                    x: p.x.unwrap_or(base.x),
+                    y: p.y.unwrap_or(base.y),
+                    z: p.z.unwrap_or(base.z),
+                    yaw: p.yaw.unwrap_or(base.yaw),
+                    pitch: p.pitch.unwrap_or(base.pitch),
+                    fov: p.fov.unwrap_or(base.fov),
+                    ..base
+                };
+                let at = p.i.unwrap_or(path.len()).min(path.len());
+                path.insert(at, camera);
+            }
+            "delete" => {
+                let i =
+                    p.i.filter(|i| *i < path.len())
+                        .ok_or_else(|| invalid(format!("`i` must be below {}", path.len())))?;
+                path.remove(i);
+            }
+            "clear" => path.clear(),
+            "orbit" => {
+                *path = newera_render::video::orbit_path(
+                    doc.home(),
+                    p.z.unwrap_or(800.0),
+                    p.n.unwrap_or(8),
+                );
+            }
+            "set" => {
+                if let Some(fps) = p.fps {
+                    environment.video.frame_rate = fps.clamp(1, 60);
+                }
+                if let Some(speed) = p.speed {
+                    environment.video.speed = speed.clamp(0.05, 50.0);
+                }
+            }
+            "render" => {
+                let file = PathBuf::from(
+                    p.path
+                        .as_deref()
+                        .ok_or_else(|| invalid("`path` is required"))?,
+                );
+                let home = doc.home().clone();
+                let assets = doc.asset_dir();
+                drop(doc);
+                let (w, h) = (
+                    p.w.unwrap_or(640).clamp(64, 1920),
+                    p.h.unwrap_or(360).clamp(64, 1080),
+                );
+                let video = &home.environment.video;
+                let info = newera_render::video::render_video(
+                    &home,
+                    &home.environment.camera_path,
+                    video.frame_rate,
+                    video.speed,
+                    (w, h),
+                    assets.as_deref(),
+                    &file,
+                    |_, _| {},
+                )
+                .map_err(invalid)?;
+                return Ok(serde_json::json!({
+                    "frames": info.frames,
+                    "secs": compact::num(info.seconds),
+                    "bytes": info.bytes,
+                })
+                .to_string());
+            }
+            other => return Err(invalid(format!("unknown action `{other}`"))),
+        }
+        doc.execute(Command::SetEnvironment { environment })
+            .map_err(core)?;
         Ok(ok(&doc, &[]))
     }
 
@@ -1398,5 +1543,60 @@ mod tests {
             }))
             .is_err()
         );
+    }
+
+    #[test]
+    fn video_path_keyframes_and_render() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let act = |action: &str| VideoParams {
+            action: Some(action.into()),
+            ..VideoParams::default()
+        };
+        assert!(s.video(Parameters(act("render"))).is_err());
+        s.video(Parameters(act("orbit"))).unwrap();
+        s.video(Parameters(VideoParams {
+            fps: Some(4),
+            speed: Some(20.0),
+            ..act("set")
+        }))
+        .unwrap();
+        s.video(Parameters(VideoParams {
+            x: Some(200.0),
+            y: Some(150.0),
+            i: Some(0),
+            ..act("add")
+        }))
+        .unwrap();
+        s.video(Parameters(VideoParams {
+            i: Some(0),
+            ..act("delete")
+        }))
+        .unwrap();
+        let list: serde_json::Value =
+            serde_json::from_str(&s.video(Parameters(VideoParams::default())).unwrap()).unwrap();
+        assert_eq!(list["rows"].as_array().unwrap().len(), 9);
+        assert_eq!(list["fps"], 4);
+        let dir = std::env::temp_dir().join(format!("newera-mcp-video-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("tour.avi");
+        let reply: serde_json::Value = serde_json::from_str(
+            &s.video(Parameters(VideoParams {
+                path: Some(file.display().to_string()),
+                w: Some(64),
+                h: Some(64),
+                ..act("render")
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(reply["frames"].as_u64().unwrap() >= 2, "{reply}");
+        assert!(std::fs::read(&file).unwrap().starts_with(b"RIFF"));
+        s.video(Parameters(act("clear"))).unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

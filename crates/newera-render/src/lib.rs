@@ -8,6 +8,7 @@ pub mod mesh;
 mod patterns;
 pub mod photo;
 mod raster;
+pub mod video;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

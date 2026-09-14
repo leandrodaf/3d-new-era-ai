@@ -105,7 +105,9 @@ The core of what makes the editor useful: placing real objects with real dimensi
 - [x] Photo renderer: CPU path tracer (BVH, sun from compass location and time, lamp
       sources, glass, importance-sampled lights, edge-aware denoiser, auto exposure);
       "Criar foto" window in the app and MCP `render_photo` (quality, hour)
-- [ ] Video along a camera path
+- [x] Video along a camera path: Catmull-Rom keyframes timed by the path speed,
+      Motion-JPEG AVI; "Criar vídeo" window (visitor keyframes, aerial orbit, fps,
+      speed) and MCP `video` (path editing and render)
 - [x] Export: 3D `.glb` (embedded textures) and `.obj`+`.mtl`, vector PDF plan (A3, 1:50,
       1:100 or fitted, title block) — app menus and MCP `export_plan`
 - [x] Software 3D renderer (`newera-render`): same meshes, materials and patterns as

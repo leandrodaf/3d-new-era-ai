@@ -80,6 +80,7 @@ pub(crate) struct NewEraApp {
     applied_observer: Option<(bool, newera_core::Camera)>,
     /// The "Criar foto" window, while open.
     pub(crate) photo: Option<crate::photo::PhotoWindow>,
+    pub(crate) video: Option<crate::video::VideoWindow>,
     /// Top-view provider for the plan: `(look, asset dir, provider)`.
     top_views: Option<(
         FurnitureLook,
@@ -133,6 +134,7 @@ impl NewEraApp {
             plan_rect: egui::Rect::NOTHING,
             applied_observer: None,
             photo: None,
+            video: None,
             top_views: None,
             top_view_generation: 0,
             catalog_query: String::new(),
@@ -1174,6 +1176,16 @@ impl NewEraApp {
                     self.photo.get_or_insert_with(Default::default);
                     ui.close();
                 }
+                if menu_item(
+                    ui,
+                    icon::FILM_STRIP,
+                    crate::i18n::tr("Criar vídeo…"),
+                    "",
+                    true,
+                ) {
+                    self.video.get_or_insert_with(Default::default);
+                    ui.close();
+                }
                 ui.separator();
                 self.annotations_menu(ui);
                 ui.separator();
@@ -1486,6 +1498,7 @@ impl eframe::App for NewEraApp {
             ctx.request_repaint_after(Duration::from_millis(250));
         }
         crate::photo::show(self, &ctx);
+        crate::video::show(self, &ctx);
 
         self.shortcuts(&ctx);
         self.update_title(&ctx);

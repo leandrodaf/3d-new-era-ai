@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Video along the camera path (Catmull-Rom, Motion-JPEG AVI): "Criar vídeo" window
+  and MCP `video`.
+
 - English interface (Ajuda › Idioma / Language).
 
 - Web viewer in WebAssembly (`web/`, `make web-serve`).

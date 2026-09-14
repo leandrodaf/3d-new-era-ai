@@ -12,6 +12,7 @@ mod photo;
 mod screens;
 mod tabs;
 mod theme;
+mod video;
 mod view;
 
 use std::path::PathBuf;
