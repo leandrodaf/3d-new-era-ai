@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- macOS installer that builds from source on the Mac (`scripts/install-macos.sh`): installs
+  the Command Line Tools and Rust when missing, creates `3D New Era AI.app` with an ad-hoc
+  signature, puts `newera` on the `PATH` and registers the MCP server in Claude Code.
+
+- MCP `lighting`: lux per room by photometry against NBR ISO/CIE 8995-1; `fill` places the
+  fixtures a room needs. Photos get a half-strength white balance and render on half the
+  cores by default (`NEWERA_RENDER_THREADS`).
+
 - Smart guides while moving pieces on the plan: edges and centers line up with other pieces,
   rooms and wall faces (dashed lines show what they lined up with), equal gaps between two
   neighbors, and live distances to what is around. Shift turns the magnet off.
