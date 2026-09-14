@@ -377,6 +377,21 @@ impl Furniture {
         }
     }
 
+    /// Visible pieces to draw: the piece itself, or for a group the visible
+    /// non-group pieces inside it.
+    pub fn visible_leaves(&self) -> Vec<&Self> {
+        if !self.visible {
+            return Vec::new();
+        }
+        if self.children.is_empty() {
+            return vec![self];
+        }
+        self.children
+            .iter()
+            .flat_map(Self::visible_leaves)
+            .collect()
+    }
+
     pub fn is_group(&self) -> bool {
         !self.children.is_empty()
     }

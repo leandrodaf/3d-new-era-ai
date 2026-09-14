@@ -210,10 +210,12 @@ impl Mesh {
                 let selected = selection.contains(&ElementId::Wall(wall.id));
                 mesh.add_wall(&outline, wall, wall_cuts, base, selected);
             }
-            for piece in view.furniture.iter().filter(|f| f.visible) {
-                let local = models(piece).unwrap_or_else(|| newera_catalog::piece_mesh(piece));
-                let highlight = selection.contains(&ElementId::Furniture(piece.id));
-                mesh.add_piece(piece, &local, base, highlight);
+            for top in &view.furniture {
+                let highlight = selection.contains(&ElementId::Furniture(top.id));
+                for piece in top.visible_leaves() {
+                    let local = models(piece).unwrap_or_else(|| newera_catalog::piece_mesh(piece));
+                    mesh.add_piece(piece, &local, base, highlight);
+                }
             }
         }
         mesh

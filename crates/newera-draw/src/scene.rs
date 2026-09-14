@@ -205,6 +205,8 @@ pub struct Palette {
     pub grid_major: Color,
     /// Masonry walls (and walls without a type).
     pub wall: Color,
+    /// Fill under the wall hatch.
+    pub wall_background: Color,
     pub wall_drywall: Color,
     pub wall_concrete: Color,
     pub wall_glass: Color,
@@ -228,6 +230,7 @@ impl Default for Palette {
             grid_minor: Color::rgb(234, 236, 238),
             grid_major: Color::rgb(210, 214, 219),
             wall: Color::rgb(78, 80, 88),
+            wall_background: Color::rgb(250, 250, 248),
             wall_drywall: Color::rgb(150, 155, 164),
             wall_concrete: Color::rgb(48, 50, 56),
             wall_glass: Color::rgb(150, 196, 222),
@@ -297,26 +300,57 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
     }
 
     // Furniture sits on the floor, under the walls; tall pieces over low ones.
-    let mut pieces: Vec<&Furniture> = home
+    // Groups draw their pieces, owned (and selected) as the group.
+    let mut pieces: Vec<(Furniture, bool)> = home
         .furniture
         .iter()
-        .filter(|f| f.visible && !f.is_opening())
+        .flat_map(|top| {
+            let selected = options.selected.contains(&top.id.into());
+            top.visible_leaves().into_iter().map(move |leaf| {
+                let mut piece = leaf.clone();
+                piece.id = top.id;
+                (piece, selected)
+            })
+        })
+        .filter(|(f, _)| !f.is_opening())
         .collect();
-    pieces.sort_by(|a, b| (a.elevation + a.height).total_cmp(&(b.elevation + b.height)));
-    for piece in pieces {
-        furniture_items(
-            &mut scene,
-            piece,
-            options.selected.contains(&piece.id.into()),
-            palette,
-        );
+    pieces.sort_by(|(a, _), (b, _)| (a.elevation + a.height).total_cmp(&(b.elevation + b.height)));
+    for (piece, selected) in &pieces {
+        furniture_items(&mut scene, piece, *selected, palette);
     }
 
     let cuts = home.wall_cuts();
     for ((wall, outline), wall_cuts) in home.walls.iter().zip(home.wall_outlines()).zip(&cuts) {
+        let owner = Some(wall.id.into());
         let color = pick(wall.id.into(), wall_fill(palette, wall));
         for part in cut_outline(&outline, wall, wall_cuts) {
-            scene.fill(Some(wall.id.into()), &part, color);
+            // Architectural convention: light fill, diagonal hatch, outline.
+            let background = if color == palette.selection {
+                blend(palette.paper, palette.selection, 0.25)
+            } else {
+                palette.wall_background
+            };
+            scene.fill(owner, &part, background);
+            for (a, b) in hatch(&part, WALL_HATCH_SPACING) {
+                scene.push(
+                    owner,
+                    Primitive::Line {
+                        points: vec![a, b],
+                        closed: false,
+                        color,
+                        width: Size::Px(0.8),
+                    },
+                );
+            }
+            scene.push(
+                owner,
+                Primitive::Line {
+                    points: part,
+                    closed: true,
+                    color,
+                    width: Size::Px(1.2),
+                },
+            );
         }
     }
 
@@ -331,6 +365,14 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
             options.selected.contains(&opening.id.into()),
             palette,
         );
+    }
+
+    for polyline in &home.polylines {
+        let own = {
+            let [r, g, b] = polyline.color;
+            Color::rgb(r, g, b)
+        };
+        polyline_items(&mut scene, polyline, pick(polyline.id.into(), own));
     }
 
     for room in &home.rooms {
@@ -398,6 +440,41 @@ pub fn furniture_items(scene: &mut Scene, piece: &Furniture, selected: bool, pal
             ),
         }
     }
+}
+
+/// Distance between wall hatch lines, cm.
+const WALL_HATCH_SPACING: f64 = 7.0;
+
+/// Segments of 45° hatch lines inside a polygon.
+fn hatch(polygon: &[Point2], spacing: f64) -> Vec<(Point2, Point2)> {
+    if polygon.len() < 3 {
+        return Vec::new();
+    }
+    // Lines x + y = c, stepped on a global grid so neighbors line up.
+    let sums: Vec<f64> = polygon.iter().map(|p| p.x + p.y).collect();
+    let (lo, hi) = sums
+        .iter()
+        .fold((f64::MAX, f64::MIN), |(lo, hi), s| (lo.min(*s), hi.max(*s)));
+    let mut out = Vec::new();
+    let mut c = (lo / spacing).ceil() * spacing;
+    while c < hi {
+        let mut xs: Vec<f64> = Vec::new();
+        for i in 0..polygon.len() {
+            let (p, q) = (polygon[i], polygon[(i + 1) % polygon.len()]);
+            let (sp, sq) = (p.x + p.y, q.x + q.y);
+            // Half-open test so a vertex exactly on the line counts once.
+            if (sp < c) != (sq < c) {
+                let t = (c - sp) / (sq - sp);
+                xs.push(p.x + (q.x - p.x) * t);
+            }
+        }
+        xs.sort_by(f64::total_cmp);
+        for [a, b] in xs.as_chunks::<2>().0 {
+            out.push((Point2::new(*a, c - a), Point2::new(*b, c - b)));
+        }
+        c += spacing;
+    }
+    out
 }
 
 /// Plan fill of a wall, by construction family.
@@ -551,6 +628,162 @@ fn room_texts(scene: &mut Scene, room: &Room, options: &SceneOptions) {
             },
         );
     }
+}
+
+/// A free polyline: smooth when curved, dashed by its style, with arrows.
+fn polyline_items(scene: &mut Scene, polyline: &newera_core::Polyline, color: Color) {
+    use newera_core::{ArrowStyle, DashStyle, LineJoin};
+    let owner = Some(polyline.id.into());
+    let mut points = if polyline.join == LineJoin::Curved {
+        smooth(&polyline.points, polyline.closed)
+    } else {
+        polyline.points.clone()
+    };
+    if polyline.closed && polyline.join != LineJoin::Curved && points.len() > 2 {
+        points.push(points[0]);
+    }
+    let t = polyline.thickness;
+    let pattern: Vec<f64> = match polyline.dash {
+        DashStyle::Custom => polyline.dash_pattern.clone(),
+        other => other.pattern().to_vec(),
+    };
+    let width = Size::Cm(t);
+    if pattern.iter().all(|d| *d <= 0.0) {
+        scene.push(
+            owner,
+            Primitive::Line {
+                points: points.clone(),
+                closed: false,
+                color,
+                width,
+            },
+        );
+    } else {
+        // Walk the path, emitting the "on" parts of the dash pattern.
+        let lengths: Vec<f64> = pattern.iter().map(|d| (d * t).max(0.1)).collect();
+        let mut index = 0;
+        let mut left = lengths[0] - (polyline.dash_offset * t).rem_euclid(lengths[0]);
+        let mut current: Vec<Point2> = vec![points[0]];
+        for pair in points.windows(2) {
+            let (mut a, b) = (pair[0], pair[1]);
+            let mut remaining = a.distance(b);
+            while remaining > 1e-9 {
+                let step = left.min(remaining);
+                let k = step / remaining;
+                let next = Point2::new(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k);
+                if index % 2 == 0 {
+                    current.push(next);
+                }
+                remaining -= step;
+                left -= step;
+                a = next;
+                if left <= 1e-9 {
+                    if index % 2 == 0 && current.len() > 1 {
+                        scene.push(
+                            owner,
+                            Primitive::Line {
+                                points: std::mem::take(&mut current),
+                                closed: false,
+                                color,
+                                width,
+                            },
+                        );
+                    }
+                    current.clear();
+                    index = (index + 1) % lengths.len();
+                    left = lengths[index];
+                    current.push(a);
+                }
+            }
+        }
+        if index % 2 == 0 && current.len() > 1 {
+            scene.push(
+                owner,
+                Primitive::Line {
+                    points: current,
+                    closed: false,
+                    color,
+                    width,
+                },
+            );
+        }
+    }
+    let n = points.len();
+    if n >= 2 && !polyline.closed {
+        for (style, tip, from) in [
+            (polyline.start_arrow, points[0], points[1]),
+            (polyline.end_arrow, points[n - 1], points[n - 2]),
+        ] {
+            let len = tip.distance(from).max(1e-9);
+            let (dx, dy) = ((tip.x - from.x) / len, (tip.y - from.y) / len);
+            let size = (t * 5.0).max(6.0);
+            let back = Point2::new(tip.x - dx * size, tip.y - dy * size);
+            let side =
+                |s: f64| Point2::new(back.x - dy * size * 0.5 * s, back.y + dx * size * 0.5 * s);
+            match style {
+                ArrowStyle::None => {}
+                ArrowStyle::Delta => scene.fill(owner, &[tip, side(1.0), side(-1.0)], color),
+                ArrowStyle::Open => scene.push(
+                    owner,
+                    Primitive::Line {
+                        points: vec![side(1.0), tip, side(-1.0)],
+                        closed: false,
+                        color,
+                        width,
+                    },
+                ),
+                ArrowStyle::Disc => {
+                    let r = size * 0.35;
+                    let circle: Vec<Point2> = (0..16)
+                        .map(|i| {
+                            let a = f64::from(i) / 16.0 * std::f64::consts::TAU;
+                            Point2::new(tip.x + r * a.cos(), tip.y + r * a.sin())
+                        })
+                        .collect();
+                    scene.fill(owner, &circle, color);
+                }
+            }
+        }
+    }
+}
+
+/// Catmull-Rom curve through the points.
+fn smooth(points: &[Point2], closed: bool) -> Vec<Point2> {
+    let n = points.len();
+    if n < 3 {
+        return points.to_vec();
+    }
+    let at = |i: isize| {
+        let len = isize::try_from(n).unwrap_or(isize::MAX);
+        let k = if closed {
+            i.rem_euclid(len)
+        } else {
+            i.clamp(0, len - 1)
+        };
+        points[usize::try_from(k).unwrap_or(0)]
+    };
+    let segments = if closed { n } else { n - 1 };
+    let mut out = Vec::with_capacity(segments * 8 + 1);
+    for s in 0..segments {
+        let i = isize::try_from(s).unwrap_or(0);
+        let (p0, p1, p2, p3) = (at(i - 1), at(i), at(i + 1), at(i + 2));
+        for step in 0..8 {
+            let t = f64::from(step) / 8.0;
+            let (t2, t3) = (t * t, t * t * t);
+            let blend = |a: f64, b: f64, c: f64, d: f64| {
+                0.5 * (2.0 * b
+                    + (c - a) * t
+                    + (2.0 * a - 5.0 * b + 4.0 * c - d) * t2
+                    + (3.0 * b - a - 3.0 * c + d) * t3)
+            };
+            out.push(Point2::new(
+                blend(p0.x, p1.x, p2.x, p3.x),
+                blend(p0.y, p1.y, p2.y, p3.y),
+            ));
+        }
+    }
+    out.push(if closed { points[0] } else { points[n - 1] });
+    out
 }
 
 /// Architectural dimension: extension lines, a dimension line with 45° ticks

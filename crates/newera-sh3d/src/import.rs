@@ -761,7 +761,8 @@ impl<'g> Importer<'g> {
             id: self.home.new_dimension_id(),
             start: Point2::new(d.f("xStart"), d.f("yStart")),
             end: Point2::new(d.f("xEnd"), d.f("yEnd")),
-            offset: d.f("offset"),
+            // Sweet Home 3D measures offsets toward the right of start → end.
+            offset: -d.f("offset"),
             level: self.level_of(d),
             color: d.color("color"),
             end_mark: d.num("endMarkSize").unwrap_or(Dimension::DEFAULT_END_MARK),

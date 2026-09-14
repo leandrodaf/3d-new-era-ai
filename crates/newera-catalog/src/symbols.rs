@@ -71,6 +71,29 @@ pub fn plan_symbol(piece: &Furniture) -> Vec<SymbolShape> {
     let model = find(&piece.catalog).map_or(Model::Box, |i| i.model);
     let mut s = Sym { shapes: Vec::new() };
 
+    if let Some(opening) = piece.opening.as_ref().filter(|o| !o.sashes.is_empty()) {
+        // Explicit leaves: each turns around its axis, drawn open at its end
+        // angle with the arc its edge sweeps.
+        s.line(rect(-hw, -hd, hw, hd), true, false);
+        for sash in &opening.sashes {
+            let (ax, ay) = (-hw + sash.x_axis * w, -hd + sash.y_axis * d);
+            let radius = sash.width * w;
+            let (start, end) = (sash.start_angle.to_radians(), sash.end_angle.to_radians());
+            // Sash angles turn counter-clockwise with y pointing to the back.
+            s.line(
+                vec![(ax, ay), (ax + radius * end.cos(), ay - radius * end.sin())],
+                false,
+                true,
+            );
+            s.line(
+                ellipse(ax, ay, radius, -radius, start, end, 18),
+                false,
+                false,
+            );
+        }
+        return s.shapes;
+    }
+
     if let Some(opening) = &piece.opening {
         match opening.kind {
             OpeningKind::Door if opening.sliding => {
