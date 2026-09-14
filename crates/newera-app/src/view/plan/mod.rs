@@ -154,7 +154,7 @@ impl PlanView {
     fn home(&mut self, document: &SharedDocument) -> (Arc<Home>, u64, Option<PathBuf>, Outlines) {
         let doc = document.read();
         let revision = doc.revision();
-        let path = doc.path().map(std::path::Path::to_path_buf);
+        let path = doc.asset_dir();
         if let Some((rev, home, below)) = &self.snapshot
             && *rev == revision
         {
@@ -394,6 +394,7 @@ impl PlanView {
                                     end: b,
                                     offset,
                                     level: None,
+                                    ..Default::default()
                                 };
                                 doc.execute(Command::insert(dim))
                             });
@@ -874,6 +875,7 @@ impl PlanView {
                         end: *b,
                         offset: *offset,
                         level: None,
+                        ..Default::default()
                     };
                     newera_draw::dimension_items(&mut scene, &dim, unit, palette.selection);
                     let mut textures = Textures::default();

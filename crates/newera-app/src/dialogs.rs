@@ -543,6 +543,7 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                             size,
                             angle,
                             level: None,
+                            ..Default::default()
                         };
                         doc.execute(Command::insert(label))
                     });
@@ -669,7 +670,7 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                     ui.end_row();
                 });
             });
-            let (n, c) = (name.clone(), compass);
+            let (n, c) = (name.clone(), compass.clone());
             finish(app, answer, Dialog::HomeSettings { name, compass }, || {
                 Command::Batch {
                     commands: vec![

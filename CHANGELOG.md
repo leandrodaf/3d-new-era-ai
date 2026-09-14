@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Sweet Home 3D import (`.sh3d`) with a lossless model: polylines, text styles, cameras,
+  environment, print settings, furniture metadata, groups, lights, sashes, wall
+  cut-outs, level layouts; project bundles (`.newera` ZIP with assets).
+
 - Wall types (drywall, masonry, concrete, glass…) and surface finishes for wall sides,
   floors and ceilings: procedural GPU patterns and image textures at real size; room
   ceilings in 3D; MCP `materials` and `type`/`left`/`right`/`sides`/`floor_mat`/`ceil_mat`.

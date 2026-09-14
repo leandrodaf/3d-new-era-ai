@@ -204,7 +204,7 @@ impl SceneView {
         let key = (revision, selection.iter().copied().collect::<Vec<_>>());
         if self.built_for.as_ref() != Some(&key) {
             let models = |piece: &newera_core::Furniture| {
-                let path = newera_core::resolve_project_path(project, piece.model.as_deref()?);
+                let path = newera_core::resolve_asset(project, piece.model.as_deref()?);
                 let mut cache = self.models.borrow_mut();
                 let mut mesh = cache
                     .entry(path.clone())
@@ -499,7 +499,7 @@ impl Gpu {
         let decoded: Vec<image::RgbaImage> = images
             .iter()
             .map(|file| {
-                let path = newera_core::resolve_project_path(project, file);
+                let path = newera_core::resolve_asset(project, file);
                 match image::open(&path) {
                     Ok(img) => image::imageops::resize(
                         &img.to_rgba8(),

@@ -117,6 +117,25 @@ pub enum Model {
     Box,
 }
 
+/// Opening settings a catalog door or window starts with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OpeningPreset {
+    pub kind: OpeningKind,
+    pub leaves: u8,
+    pub sliding: bool,
+}
+
+impl OpeningPreset {
+    pub fn to_opening(self) -> Opening {
+        Opening {
+            kind: self.kind,
+            leaves: self.leaves,
+            sliding: self.sliding,
+            ..Opening::default()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CatalogItem {
     pub id: &'static str,
@@ -127,7 +146,7 @@ pub struct CatalogItem {
     pub elevation: f64,
     pub color: [u8; 3],
     pub model: Model,
-    pub opening: Option<Opening>,
+    pub opening: Option<OpeningPreset>,
     /// Extra search words (synonyms, English).
     pub keywords: &'static str,
 }
@@ -165,9 +184,8 @@ const fn opening(
     leaves: u8,
     sliding: bool,
 ) -> CatalogItem {
-    item.opening = Some(Opening {
+    item.opening = Some(OpeningPreset {
         kind,
-        hinge_right: false,
         leaves,
         sliding,
     });
@@ -809,10 +827,11 @@ impl CatalogItem {
             height: self.size[2],
             mirrored: false,
             color: None,
-            opening: self.opening,
+            opening: self.opening.map(OpeningPreset::to_opening),
             model: None,
             visible: true,
             level: None,
+            ..Default::default()
         }
     }
 }

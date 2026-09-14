@@ -22,6 +22,7 @@ clap.workspace = true
 newera-app.workspace = true
 newera-catalog.workspace = true
 newera-core.workspace = true
+newera-sh3d.workspace = true
 newera-mcp.workspace = true
 newera-server.workspace = true
 tokio.workspace = true

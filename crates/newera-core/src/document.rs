@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use crate::command::Command;
 use crate::error::{CoreError, CoreResult};
 use crate::home::Home;
-use crate::ids::{DimensionId, FurnitureId, LabelId, LevelId, RoomId, WallId};
+use crate::ids::{DimensionId, FurnitureId, LabelId, LevelId, PolylineId, RoomId, WallId};
 
 /// One version of the project, with its own edit history.
 #[derive(Debug, Clone)]
@@ -52,6 +52,9 @@ pub struct Document {
     saved_revision: u64,
     /// Project file this document was loaded from or saved to.
     path: Option<PathBuf>,
+    /// Directory relative asset paths resolve against, when it isn't the
+    /// project file's directory (unpacked bundles, fresh imports).
+    asset_dir: Option<PathBuf>,
 }
 
 impl Default for Document {
@@ -70,6 +73,7 @@ impl Document {
             revision: 0,
             saved_revision: 0,
             path: None,
+            asset_dir: None,
         }
     }
 
@@ -110,6 +114,10 @@ impl Document {
 
     pub fn new_furniture_id(&mut self) -> FurnitureId {
         self.current_mut().home.new_furniture_id()
+    }
+
+    pub fn new_polyline_id(&mut self) -> PolylineId {
+        self.current_mut().home.new_polyline_id()
     }
 
     pub fn new_level_id(&mut self) -> LevelId {
@@ -216,7 +224,7 @@ impl Document {
             self.home().clone()
         } else {
             let mut home = Home::new(self.home().name.clone());
-            home.compass = self.home().compass;
+            home.compass = self.home().compass.clone();
             home
         };
         let name = name.unwrap_or_else(|| self.next_variant_name(duplicate));
@@ -304,6 +312,25 @@ impl Document {
 
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
+    }
+
+    /// Directory relative asset paths resolve against.
+    pub fn asset_dir(&self) -> Option<PathBuf> {
+        self.asset_dir.clone().or_else(|| {
+            self.path
+                .as_deref()
+                .and_then(Path::parent)
+                .map(Path::to_path_buf)
+        })
+    }
+
+    pub fn set_asset_dir(&mut self, dir: Option<PathBuf>) {
+        self.asset_dir = dir;
+    }
+
+    /// Resolves a path stored in the home to a file on disk.
+    pub fn resolve_asset(&self, stored: &str) -> PathBuf {
+        crate::project::resolve_asset(self.asset_dir().as_deref(), stored)
     }
 
     /// Sets the project file path (e.g. after opening a file).

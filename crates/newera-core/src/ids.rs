@@ -137,6 +137,8 @@ macro_rules! id_types {
 id_types! {
     /// Identifier of a [`crate::Wall`].
     WallId => "w", Wall;
+    /// Identifier of a [`crate::Polyline`].
+    PolylineId => "pl", Polyline;
     /// Identifier of a [`crate::Room`].
     RoomId => "r", Room;
     /// Identifier of a [`crate::Dimension`].

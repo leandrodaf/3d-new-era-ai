@@ -44,7 +44,7 @@ fn heights_overlap(a: &Furniture, b: &Furniture) -> bool {
 
 /// Floor area swept by a hinged door leaf, as a polygon (quarter discs).
 pub fn door_swing(door: &Furniture) -> Option<Vec<Point2>> {
-    let opening = door.opening?;
+    let opening = door.opening.as_ref()?;
     if opening.sliding || opening.kind != crate::furniture::OpeningKind::Door {
         return None;
     }
@@ -166,6 +166,7 @@ mod tests {
             model: None,
             visible: true,
             level: None,
+            ..Default::default()
         }
     }
 

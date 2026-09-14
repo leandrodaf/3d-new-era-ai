@@ -5,8 +5,11 @@ use crate::elements::{BackgroundImage, Compass, Dimension, Element, Label, Level
 use crate::error::{CoreError, CoreResult};
 use crate::furniture::{Furniture, WallCut, wall_cuts};
 use crate::geometry::Point2;
-use crate::ids::{DimensionId, ElementId, FurnitureId, LabelId, LevelId, RoomId, WallId};
+use crate::ids::{
+    DimensionId, ElementId, FurnitureId, LabelId, LevelId, PolylineId, RoomId, WallId,
+};
 use crate::joins::wall_outlines;
+use crate::style::{Cameras, Environment, Polyline, PrintSettings, Properties};
 
 /// The whole project being edited.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -32,6 +35,28 @@ pub struct Home {
     pub compass: Compass,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background: Option<BackgroundImage>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub polylines: Vec<Polyline>,
+    /// Height of new walls, cm.
+    #[serde(default = "Home::default_wall_height")]
+    pub wall_height: f64,
+    #[serde(default, skip_serializing_if = "crate::style::is_default")]
+    pub environment: Environment,
+    #[serde(default, skip_serializing_if = "crate::style::is_default")]
+    pub cameras: Cameras,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub print: Option<PrintSettings>,
+    /// Columns shown in the furniture list, e.g. `NAME`, `WIDTH`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub furniture_columns: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub furniture_sort: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub furniture_descending: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub base_plan_locked: bool,
+    #[serde(default, skip_serializing_if = "Properties::is_empty")]
+    pub properties: Properties,
     /// Next number handed out for any id. Monotonic, so ids an agent saw
     /// earlier never point to a different element later.
     #[serde(default)]
@@ -51,6 +76,16 @@ impl Default for Home {
             selected_level: None,
             compass: Compass::default(),
             background: None,
+            polylines: Vec::new(),
+            wall_height: Self::default_wall_height(),
+            environment: Environment::default(),
+            cameras: Cameras::default(),
+            print: None,
+            furniture_columns: Vec::new(),
+            furniture_sort: None,
+            furniture_descending: false,
+            base_plan_locked: false,
+            properties: Properties::new(),
             next_id: 1,
         }
     }
@@ -142,9 +177,14 @@ collections! {
     Label, Label, LabelId, labels, label, new_label_id;
     Furniture, Furniture, FurnitureId, furniture, piece, new_furniture_id;
     Level, Level, LevelId, levels, level, new_level_id;
+    Polyline, Polyline, PolylineId, polylines, polyline, new_polyline_id;
 }
 
 impl Home {
+    fn default_wall_height() -> f64 {
+        Wall::DEFAULT_HEIGHT
+    }
+
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -167,7 +207,11 @@ impl Home {
     /// Levels sorted from the ground up.
     pub fn sorted_levels(&self) -> Vec<&Level> {
         let mut levels: Vec<&Level> = self.levels.iter().collect();
-        levels.sort_by(|a, b| a.elevation.total_cmp(&b.elevation));
+        levels.sort_by(|a, b| {
+            a.elevation
+                .total_cmp(&b.elevation)
+                .then(a.elevation_index.cmp(&b.elevation_index))
+        });
         levels
     }
 
@@ -205,8 +249,30 @@ impl Home {
     /// room detection, plan drawing, layout checks — works on such views.
     #[must_use]
     pub fn level_view(&self, level: Option<LevelId>) -> Self {
-        let keep = |l: Option<LevelId>| self.on_level(l, level);
+        let level = self.resolve_level(level);
+        let keep = |l: Option<LevelId>| self.resolve_level(l) == level;
         Self {
+            name: self.name.clone(),
+            levels: self.levels.clone(),
+            selected_level: self.selected_level,
+            compass: self.compass.clone(),
+            background: self.background.clone(),
+            wall_height: self.wall_height,
+            environment: self.environment.clone(),
+            cameras: self.cameras.clone(),
+            print: self.print.clone(),
+            furniture_columns: self.furniture_columns.clone(),
+            furniture_sort: self.furniture_sort.clone(),
+            furniture_descending: self.furniture_descending,
+            base_plan_locked: self.base_plan_locked,
+            properties: self.properties.clone(),
+            next_id: self.next_id,
+            polylines: self
+                .polylines
+                .iter()
+                .filter(|e| keep(e.level))
+                .cloned()
+                .collect(),
             walls: self
                 .walls
                 .iter()
@@ -237,13 +303,78 @@ impl Home {
                 .filter(|e| keep(e.level))
                 .cloned()
                 .collect(),
-            ..self.clone()
         }
+    }
+
+    /// Visits every file path the home refers to (models, textures, icons,
+    /// background images), for packing and relocating assets.
+    pub fn for_each_asset_mut(&mut self, visit: &mut impl FnMut(&mut String)) {
+        fn material(visit: &mut impl FnMut(&mut String), m: &mut Option<crate::Material>) {
+            if let Some(path) = m.as_mut().and_then(|m| m.image.as_mut()) {
+                visit(path);
+            }
+        }
+        fn piece(visit: &mut impl FnMut(&mut String), f: &mut Furniture) {
+            for path in [&mut f.model, &mut f.info.icon, &mut f.info.plan_icon]
+                .into_iter()
+                .flatten()
+            {
+                visit(path);
+            }
+            material(visit, &mut f.texture);
+            for m in &mut f.materials {
+                material(visit, &mut m.texture);
+            }
+            for child in &mut f.children {
+                piece(visit, child);
+            }
+        }
+        if let Some(bg) = &mut self.background {
+            visit(&mut bg.path);
+        }
+        for level in &mut self.levels {
+            if let Some(bg) = &mut level.background {
+                visit(&mut bg.path);
+            }
+        }
+        for wall in &mut self.walls {
+            material(visit, &mut wall.left_side);
+            material(visit, &mut wall.right_side);
+            for b in [&mut wall.left_baseboard, &mut wall.right_baseboard]
+                .into_iter()
+                .flatten()
+            {
+                material(visit, &mut b.material);
+            }
+        }
+        for room in &mut self.rooms {
+            material(visit, &mut room.floor_material);
+            material(visit, &mut room.ceiling_material);
+        }
+        for f in &mut self.furniture {
+            piece(visit, f);
+        }
+        material(visit, &mut self.environment.ground_texture);
+        material(visit, &mut self.environment.sky_texture);
+    }
+
+    /// Every file path the home refers to.
+    pub fn asset_paths(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        self.clone()
+            .for_each_asset_mut(&mut |p| out.push(p.clone()));
+        out
     }
 
     /// Door and window holes in each wall, in `walls` order.
     pub fn wall_cuts(&self) -> Vec<Vec<WallCut>> {
-        wall_cuts(&self.walls, &self.furniture)
+        let pieces: Vec<Furniture> = self
+            .furniture
+            .iter()
+            .flat_map(Furniture::flatten)
+            .cloned()
+            .collect();
+        wall_cuts(&self.walls, &pieces)
     }
 
     /// Axis-aligned bounds `(min, max)` of the drawing.
@@ -255,6 +386,7 @@ impl Home {
             .chain(self.rooms.iter().flat_map(|r| r.points.iter().copied()))
             .chain(self.dimensions.iter().flat_map(|d| [d.start, d.end]))
             .chain(self.labels.iter().map(|l| l.position))
+            .chain(self.polylines.iter().flat_map(|p| p.points.iter().copied()))
             .chain(self.furniture.iter().flat_map(Furniture::footprint));
         points.fold(None, |acc, p| {
             let (min, max) = acc.unwrap_or((p, p));
@@ -294,6 +426,7 @@ mod tests {
             size: Label::DEFAULT_SIZE,
             angle: 0.0,
             level: None,
+            ..Default::default()
         };
         home.insert(label.clone().into(), None).unwrap();
         assert_eq!(home.element(id.into()), Some(Element::Label(label.clone())));

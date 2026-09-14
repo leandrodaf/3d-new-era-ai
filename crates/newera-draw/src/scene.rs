@@ -48,7 +48,52 @@ pub enum Align {
     Center,
     /// Horizontally centered, baseline just above the anchor.
     Above,
+    /// The last line's baseline sits on the anchor; lines start at it.
+    BaselineLeft,
+    /// The last line's baseline sits on the anchor, centered on it.
+    BaselineCenter,
+    /// The last line's baseline sits on the anchor; lines end at it.
+    BaselineRight,
 }
+
+impl Align {
+    pub fn from_text_align(align: newera_core::TextAlign) -> Self {
+        match align {
+            newera_core::TextAlign::Left => Self::BaselineLeft,
+            newera_core::TextAlign::Center => Self::BaselineCenter,
+            newera_core::TextAlign::Right => Self::BaselineRight,
+        }
+    }
+
+    /// Horizontal placement: 0 left, 0.5 center, 1 right.
+    pub fn horizontal(self) -> f32 {
+        match self {
+            Self::BaselineLeft => 0.0,
+            Self::BaselineRight => 1.0,
+            Self::Center | Self::Above | Self::BaselineCenter => 0.5,
+        }
+    }
+
+    pub fn is_baseline(self) -> bool {
+        matches!(
+            self,
+            Self::BaselineLeft | Self::BaselineCenter | Self::BaselineRight
+        )
+    }
+}
+
+/// Extra text decoration.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct TextLook {
+    pub bold: bool,
+    pub italic: bool,
+    /// Halo around the letters.
+    pub outline: Option<Color>,
+}
+
+/// Font sizes in styles are em sizes; primitives take the glyph height
+/// (ascent to descent), which is this much larger for the plan font.
+pub const EM_TO_HEIGHT: f64 = 1.12;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Primitive {
@@ -73,6 +118,7 @@ pub enum Primitive {
         align: Align,
         /// Clockwise degrees.
         angle: f64,
+        look: TextLook,
     },
     /// Background image covering `min`..`max` (plan cm).
     Image {
@@ -118,6 +164,26 @@ impl Scene {
     pub fn bounds(&self) -> Option<(Point2, Point2)> {
         let points = self.items.iter().flat_map(|item| match &item.primitive {
             Primitive::Fill { points, .. } | Primitive::Line { points, .. } => points.clone(),
+            Primitive::Text {
+                text,
+                position,
+                size: Size::Cm(size),
+                align,
+                ..
+            } => {
+                // Rough extent so fitting includes long labels.
+                let lines = text.lines().count().max(1);
+                #[allow(clippy::cast_precision_loss)]
+                let (w, h) = (
+                    text.lines().map(|l| l.chars().count()).max().unwrap_or(0) as f64 * size * 0.5,
+                    lines as f64 * size * 1.2,
+                );
+                let left = position.x - w * f64::from(align.horizontal());
+                vec![
+                    Point2::new(left, position.y - h),
+                    Point2::new(left + w, position.y + size * 0.3),
+                ]
+            }
             Primitive::Text { position, .. } => vec![*position],
             Primitive::Image { min, max, .. } => vec![*min, *max],
         });
@@ -202,7 +268,12 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
     };
 
     if options.show_background
-        && let Some(bg) = home.background.as_ref().filter(|bg| bg.visible)
+        && let Some(bg) = home
+            .current_level()
+            .and_then(|id| home.level(id))
+            .and_then(|l| l.background.as_ref())
+            .or(home.background.as_ref())
+            .filter(|bg| bg.visible)
     {
         let (min, max) = bg.bounds();
         scene.push(
@@ -262,13 +333,23 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
         );
     }
 
+    for room in &home.rooms {
+        room_texts(&mut scene, room, options);
+    }
+
     for dimension in &home.dimensions {
-        let color = pick(dimension.id.into(), palette.dimension);
+        let own = dimension
+            .color
+            .map_or(palette.dimension, |[r, g, b]| Color::rgb(r, g, b));
+        let color = pick(dimension.id.into(), own);
         dimension_items(&mut scene, dimension, options.unit, color);
     }
 
     for label in &home.labels {
-        let color = pick(label.id.into(), palette.label);
+        let own = label
+            .color
+            .map_or(palette.label, |[r, g, b]| Color::rgb(r, g, b));
+        let color = pick(label.id.into(), own);
         label_items(&mut scene, label, color);
     }
 
@@ -376,6 +457,76 @@ fn room_items(scene: &mut Scene, room: &Room, options: &SceneOptions, line: Colo
             }),
         },
     );
+}
+
+/// Name and area of a room, drawn above furniture and walls.
+fn room_texts(scene: &mut Scene, room: &Room, options: &SceneOptions) {
+    let owner = Some(room.id.into());
+    if room.points.is_empty() {
+        return;
+    }
+    let styled = room.name_style.is_some()
+        || room.area_style.is_some()
+        || room.name_offset != [0.0, 0.0]
+        || room.area_offset != [0.0, 0.0];
+    if styled {
+        // Name and area each at their own offset from the bounds center.
+        let (min, max) =
+            room.points
+                .iter()
+                .fold((room.points[0], room.points[0]), |(lo, hi), p| {
+                    (
+                        Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                        Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+                    )
+                });
+        let center = Point2::new(min.x.midpoint(max.x), min.y.midpoint(max.y));
+        let mut text = |content: String,
+                        style: Option<&newera_core::TextStyle>,
+                        offset: [f64; 2],
+                        angle: f64,
+                        default: f64| {
+            if content.is_empty() {
+                return;
+            }
+            let style = style
+                .cloned()
+                .unwrap_or_else(|| newera_core::TextStyle::new(default));
+            scene.push(
+                owner,
+                Primitive::Text {
+                    text: content,
+                    position: Point2::new(center.x + offset[0], center.y + offset[1]),
+                    size: Size::Cm(style.size * EM_TO_HEIGHT),
+                    color: options.palette.room_text,
+                    align: Align::from_text_align(style.align),
+                    angle,
+                    look: TextLook {
+                        bold: style.bold,
+                        italic: style.italic,
+                        outline: None,
+                    },
+                },
+            );
+        };
+        text(
+            room.name.clone(),
+            room.name_style.as_ref(),
+            room.name_offset,
+            room.name_angle,
+            24.0,
+        );
+        if room.area_visible {
+            text(
+                options.unit.format_area(room.area()),
+                room.area_style.as_ref(),
+                room.area_offset,
+                room.area_angle,
+                24.0,
+            );
+        }
+        return;
+    }
     let Some(center) = polygon_centroid(&room.points) else {
         return;
     };
@@ -396,6 +547,7 @@ fn room_items(scene: &mut Scene, room: &Room, options: &SceneOptions, line: Colo
                 color: options.palette.room_text,
                 align: Align::Center,
                 angle: 0.0,
+                look: TextLook::default(),
             },
         );
     }
@@ -472,10 +624,18 @@ pub fn dimension_items(scene: &mut Scene, dimension: &Dimension, unit: LengthUni
         Primitive::Text {
             text: unit.format_length(length),
             position: Point2::new(a2.x.midpoint(b2.x), a2.y.midpoint(b2.y)),
-            size: Size::Px(12.0),
+            size: dimension
+                .style
+                .as_ref()
+                .map_or(Size::Px(12.0), |s| Size::Cm(s.size * EM_TO_HEIGHT)),
             color,
             align: Align::Above,
             angle,
+            look: TextLook {
+                bold: dimension.style.as_ref().is_some_and(|s| s.bold),
+                italic: dimension.style.as_ref().is_some_and(|s| s.italic),
+                outline: None,
+            },
         },
     );
 }
@@ -486,10 +646,15 @@ fn label_items(scene: &mut Scene, label: &Label, color: Color) {
         Primitive::Text {
             text: label.text.clone(),
             position: label.position,
-            size: Size::Cm(label.size),
+            size: Size::Cm(label.size * EM_TO_HEIGHT),
             color,
-            align: Align::Center,
+            align: Align::from_text_align(label.align),
             angle: label.angle,
+            look: TextLook {
+                bold: label.bold,
+                italic: label.italic,
+                outline: label.outline.map(|[r, g, b]| Color::rgb(r, g, b)),
+            },
         },
     );
 }
@@ -539,6 +704,7 @@ pub fn compass_items(scene: &mut Scene, compass: &Compass, color: Color) {
             color,
             align: Align::Center,
             angle: 0.0,
+            look: TextLook::default(),
         },
     );
 }
@@ -563,6 +729,7 @@ mod tests {
             end: Point2::new(400.0, 0.0),
             offset: 40.0,
             level: None,
+            ..Default::default()
         };
         doc.execute(Command::insert(wall.clone())).unwrap();
         doc.execute(Command::insert(dim.clone())).unwrap();
@@ -594,6 +761,7 @@ mod tests {
                 end: Point2::new(b.0, b.1),
                 offset: 0.0,
                 level: None,
+                ..Default::default()
             };
             dimension_items(
                 &mut scene,

@@ -7,7 +7,7 @@ mod svg;
 
 pub use raster::{RenderError, RenderOptions, Viewport, render_pixmap, render_png};
 pub use scene::{
-    Align, Color, Item, Palette, Primitive, Scene, SceneOptions, Size, compass_items,
-    dimension_items, furniture_items, plan_scene,
+    Align, Color, EM_TO_HEIGHT, Item, Palette, Primitive, Scene, SceneOptions, Size, TextLook,
+    compass_items, dimension_items, furniture_items, plan_scene,
 };
 pub use svg::{SvgOptions, to_svg};

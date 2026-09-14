@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -5,7 +6,7 @@ use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText};
 use egui_phosphor::regular as icon;
 use newera_core::{
     Command, CoreResult, Document, Element, ElementId, Home, LengthUnit, Point2, SharedDocument,
-    from_project_json, ops, to_project_json,
+    ops,
 };
 use newera_draw::{
     Palette, RenderOptions, SceneOptions, SvgOptions, plan_scene, render_png, to_svg,
@@ -145,13 +146,19 @@ impl NewEraApp {
                 let mut doc = self.document.write();
                 doc.load(Home::default());
                 doc.set_path(None);
+                doc.set_asset_dir(None);
                 drop(doc);
                 self.after_load();
             }
             Pending::Open(path) => {
                 let path = path.or_else(|| {
                     rfd::FileDialog::new()
+                        .add_filter(
+                            "Projetos (3D New Era AI, Sweet Home 3D)",
+                            &[newera_core::PROJECT_EXTENSION, "sh3d"],
+                        )
                         .add_filter("3D New Era AI", &[newera_core::PROJECT_EXTENSION])
+                        .add_filter("Sweet Home 3D", &["sh3d"])
                         .pick_file()
                 });
                 if let Some(path) = path {
@@ -166,18 +173,26 @@ impl NewEraApp {
     }
 
     pub(crate) fn open_path(&mut self, path: &Path) {
-        let loaded = std::fs::read_to_string(path)
-            .map_err(|e| e.to_string())
-            .and_then(|json| from_project_json(&json).map_err(|e| e.to_string()));
+        let loaded = newera_sh3d::open_file(&mut self.document.write(), path);
         match loaded {
-            Ok(home) => {
-                let mut doc = self.document.write();
-                home.load_into(&mut doc);
-                doc.mark_saved(path);
-                drop(doc);
+            Ok(opened) => {
                 self.remember(path);
                 self.after_load();
-                self.set_status(format!("Aberto: {}", path.display()));
+                let mut status = if opened.imported {
+                    format!(
+                        "Importado de {} — salve como projeto para manter tudo num arquivo",
+                        path.display()
+                    )
+                } else {
+                    format!("Aberto: {}", path.display())
+                };
+                if !opened.warnings.is_empty() {
+                    let _ = write!(status, " · {} aviso(s)", opened.warnings.len());
+                    for warning in &opened.warnings {
+                        tracing::warn!("import: {warning}");
+                    }
+                }
+                self.set_status(status);
             }
             Err(err) => self.set_status(format!(
                 "⚠ Não foi possível abrir {}: {err}",
@@ -210,8 +225,8 @@ impl NewEraApp {
         if path.extension().is_none() {
             path.set_extension(newera_core::PROJECT_EXTENSION);
         }
-        let json = to_project_json(&self.document.read());
-        match std::fs::write(&path, json) {
+        let saved = newera_core::save_project(&self.document.read(), &path);
+        match saved {
             Ok(()) => {
                 self.document.write().mark_saved(&path);
                 self.remember(&path);
@@ -250,13 +265,13 @@ impl NewEraApp {
                 ..SceneOptions::default()
             },
         );
-        let project = doc.path().map(Path::to_path_buf);
+        let assets = doc.asset_dir();
         drop(doc);
         let bytes = if svg {
             Ok(to_svg(&scene, &SvgOptions::default()).into_bytes())
         } else {
             let load = |p: &str| {
-                image::open(newera_core::resolve_project_path(project.as_deref(), p))
+                image::open(newera_core::resolve_asset(assets.as_deref(), p))
                     .ok()
                     .map(|i| i.to_rgba8())
             };
@@ -307,6 +322,7 @@ impl NewEraApp {
                         model: Some(path.display().to_string()),
                         visible: true,
                         level: None,
+                        ..Default::default()
                     };
                     placed = Some(piece.id);
                     doc.execute(Command::insert(piece))
@@ -1030,8 +1046,13 @@ fn shift_with_new_id(doc: &mut Document, mut element: Element, offset: f64) -> E
         }
         Element::Furniture(mut f) => {
             f.id = doc.new_furniture_id();
-            f.position = shift(f.position);
+            f.translate(offset, offset);
             Element::Furniture(f)
+        }
+        Element::Polyline(mut p) => {
+            p.id = doc.new_polyline_id();
+            p.points = p.points.into_iter().map(shift).collect();
+            Element::Polyline(p)
         }
     }
 }
@@ -1112,11 +1133,7 @@ impl eframe::App for NewEraApp {
                     .show(ui, |ui| {
                         let (home, revision, project) = {
                             let doc = self.document.read();
-                            (
-                                doc.home().clone(),
-                                doc.revision(),
-                                doc.path().map(Path::to_path_buf),
-                            )
+                            (doc.home().clone(), doc.revision(), doc.asset_dir())
                         };
                         self.scene.ui(
                             ui,

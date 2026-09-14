@@ -85,8 +85,12 @@ pub fn translate(
                 Element::Label(l)
             }
             Element::Level(level) => Element::Level(level),
+            Element::Polyline(mut p) => {
+                p.points = p.points.into_iter().map(shift).collect();
+                Element::Polyline(p)
+            }
             Element::Furniture(mut f) => {
-                f.position = shift(f.position);
+                f.translate(dx, dy);
                 // Doors and windows stay seated in the nearest wall.
                 if f.is_opening()
                     && let Some((wall_id, along)) =
@@ -181,6 +185,7 @@ pub fn wall_dimension(doc: &mut Document, id: WallId, gap: f64) -> CoreResult<Di
         end: wall.end,
         offset: sign * (wall.thickness / 2.0 + gap),
         level: wall.level,
+        ..Dimension::default()
     })
 }
 
@@ -253,6 +258,7 @@ pub fn add_level(
             elevation: 0.0,
             height: crate::elements::Wall::DEFAULT_HEIGHT,
             floor_thickness: Level::DEFAULT_FLOOR_THICKNESS,
+            ..Level::default()
         };
         levels.push(ground.clone());
         commands.push(Command::insert(ground));
@@ -269,6 +275,7 @@ pub fn add_level(
         elevation: top.elevation + top.height + floor,
         height: height.unwrap_or(Level::DEFAULT_HEIGHT),
         floor_thickness: floor,
+        ..Level::default()
     };
     let id = level.id;
     commands.push(Command::insert(level));
@@ -367,6 +374,7 @@ mod tests {
             size: 20.0,
             angle: 0.0,
             level: None,
+            ..Default::default()
         };
         let id = label.id;
         doc.execute(Command::insert(label)).unwrap();

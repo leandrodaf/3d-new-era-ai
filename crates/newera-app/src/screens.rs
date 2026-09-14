@@ -113,3 +113,26 @@ fn materials() {
         app.open_modify(&[newera_core::RoomId(5).into()]);
     });
 }
+
+/// The real Sweet Home 3D project given by `NEWERA_SH3D_SAMPLE`.
+#[test]
+#[ignore = "visual review; needs a GPU and NEWERA_SH3D_SAMPLE"]
+fn sh3d_import() {
+    let path = std::env::var("NEWERA_SH3D_SAMPLE").expect("NEWERA_SH3D_SAMPLE");
+    let mut doc = Document::default();
+    let opened = newera_sh3d::open_file(&mut doc, std::path::Path::new(&path)).unwrap();
+    assert!(opened.warnings.is_empty(), "{:?}", opened.warnings);
+    let shared = SharedDocument::new(doc);
+    render("sh3d-import", shared.clone(), |_| {});
+    let levels: Vec<_> = shared
+        .read()
+        .home()
+        .sorted_levels()
+        .iter()
+        .map(|l| l.id)
+        .collect();
+    for (i, level) in levels.into_iter().enumerate() {
+        shared.write().select_level(Some(level));
+        render(&format!("sh3d-import-level{i}"), shared.clone(), |_| {});
+    }
+}

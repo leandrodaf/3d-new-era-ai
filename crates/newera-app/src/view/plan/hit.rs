@@ -158,6 +158,7 @@ mod tests {
             size: 30.0,
             angle: 0.0,
             level: None,
+            ..Default::default()
         });
         let outlines = home.wall_outlines();
         assert_eq!(

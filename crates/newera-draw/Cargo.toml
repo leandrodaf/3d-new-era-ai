@@ -19,3 +19,6 @@ tiny-skia.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+newera-sh3d.workspace = true

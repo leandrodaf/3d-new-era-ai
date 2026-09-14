@@ -22,27 +22,36 @@ mod levels;
 mod materials;
 pub mod ops;
 mod project;
+mod style;
 mod units;
 
 pub use analysis::{Issue, check_layout, door_swing};
 pub use command::Command;
 pub use detect::detect_room;
 pub use document::{Document, FIRST_VARIANT_NAME, SharedDocument, Variant, VariantInfo};
-pub use elements::{BackgroundImage, Compass, Dimension, Element, Label, Level, Room, Wall};
+pub use elements::{
+    BackgroundImage, Baseboard, Compass, Dimension, Element, Label, Level, Room, Wall,
+};
 pub use error::{CoreError, CoreResult};
 pub use furniture::{
-    Furniture, Opening, OpeningKind, WallCut, align_to_wall, cut_outline, wall_cuts,
+    Furniture, Light, LightSource, ModelMaterial, ModelTransform, Opening, OpeningKind, PieceInfo,
+    PieceLocks, Sash, WallCut, WallCutOut, align_to_wall, cut_outline, wall_cuts,
 };
 pub use geometry::{Point2, polygon_area, polygon_centroid, signed_area, triangulate};
 pub use home::Home;
 pub use ids::{
-    DimensionId, ElementId, FurnitureId, LabelId, LevelId, ParseIdError, RoomId, WallId,
+    DimensionId, ElementId, FurnitureId, LabelId, LevelId, ParseIdError, PolylineId, RoomId, WallId,
 };
 pub use joins::{JOIN_TOLERANCE, wall_outlines};
 pub use levels::{FloorShape, floor_shapes, stair_holes};
 pub use materials::{Material, Pattern, WALL_TYPES, WallFamily, WallType, wall_type};
 pub use project::{
-    PROJECT_EXTENSION, Project, ProjectError, from_project_json, resolve_project_path,
-    to_project_json,
+    PROJECT_EXTENSION, Project, ProjectError, cache_dir, from_project_json, open_project,
+    resolve_asset, resolve_project_path, save_project, to_project_json,
+};
+pub use style::{
+    ArrowStyle, Camera, Cameras, DashStyle, DrawingMode, Environment, LineCap, LineJoin,
+    PaperOrientation, PhotoSettings, Polyline, PrintSettings, Properties, TextAlign, TextStyle,
+    VideoSettings,
 };
 pub use units::LengthUnit;

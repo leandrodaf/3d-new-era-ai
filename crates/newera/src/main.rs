@@ -70,12 +70,12 @@ fn main() -> anyhow::Result<()> {
         Home::default()
     });
     if let Some(path) = &cli.file {
-        let json = std::fs::read_to_string(path)
-            .with_context(|| format!("cannot read {}", path.display()))?;
-        let home = newera_core::from_project_json(&json)
+        let opened = newera_sh3d::open_file(&mut document, path)
+            .map_err(anyhow::Error::msg)
             .with_context(|| format!("cannot open {}", path.display()))?;
-        home.load_into(&mut document);
-        document.mark_saved(path);
+        for warning in opened.warnings {
+            tracing::warn!("import: {warning}");
+        }
     }
     let document = SharedDocument::new(document);
 

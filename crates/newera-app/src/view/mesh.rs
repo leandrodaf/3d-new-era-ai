@@ -140,14 +140,26 @@ impl Mesh {
     pub(crate) fn from_home(home: &Home, selection: &Selection, models: ModelSource<'_>) -> Self {
         let mut mesh = Self::default();
         mesh.add_ground(home);
-        // Show the storeys up to the one being edited, so its inside stays visible.
-        let current = home.elevation_of(home.current_level());
+        // Show the viewable storeys up to the one being edited (in elevation,
+        // then layout order), so its inside stays visible.
         let levels: Vec<Option<LevelId>> = if home.levels.is_empty() {
             vec![None]
         } else {
-            home.sorted_levels()
-                .into_iter()
-                .filter(|l| l.elevation <= current + 1e-6)
+            let sorted = home.sorted_levels();
+            let current = home.current_level();
+            let upto = sorted
+                .iter()
+                .position(|l| Some(l.id) == current)
+                .unwrap_or(sorted.len().saturating_sub(1));
+            let shown = if home.environment.all_levels_visible {
+                sorted.len()
+            } else {
+                upto + 1
+            };
+            sorted
+                .iter()
+                .take(shown)
+                .filter(|l| l.viewable)
                 .map(|l| Some(l.id))
                 .collect()
         };

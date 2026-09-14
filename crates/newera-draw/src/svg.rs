@@ -93,18 +93,48 @@ pub fn to_svg(scene: &Scene, options: &SvgOptions) -> String {
                 color,
                 align,
                 angle,
+                look,
             } => {
                 let font_size = size(*text_size);
                 let baseline = match align {
                     Align::Center => "central",
                     Align::Above => "text-after-edge",
+                    Align::BaselineLeft | Align::BaselineCenter | Align::BaselineRight => {
+                        "alphabetic"
+                    }
+                };
+                let anchor = match align {
+                    Align::BaselineLeft => "start",
+                    Align::BaselineRight => "end",
+                    _ => "middle",
                 };
                 let lines: Vec<&str> = text.lines().collect();
                 #[allow(clippy::cast_precision_loss)]
-                let first_dy = -(lines.len() as f64 - 1.0) / 2.0 * 1.2;
+                let first_dy = if align.is_baseline() {
+                    -(lines.len() as f64 - 1.0) * 1.2
+                } else {
+                    -(lines.len() as f64 - 1.0) / 2.0 * 1.2
+                };
+                let mut decoration = String::new();
+                if look.bold {
+                    decoration.push_str(r#" font-weight="bold""#);
+                }
+                if look.italic {
+                    decoration.push_str(r#" font-style="italic""#);
+                }
+                if let Some(halo) = look.outline {
+                    let _ = write!(
+                        decoration,
+                        r#" stroke="rgb({},{},{})" stroke-width="{}" paint-order="stroke""#,
+                        halo.0[0],
+                        halo.0[1],
+                        halo.0[2],
+                        f(font_size * 0.16)
+                    );
+                }
                 let _ = write!(
                     out,
-                    r#"<text x="{}" y="{}" font-family="Ubuntu, Helvetica, Arial, sans-serif" font-size="{}" text-anchor="middle" dominant-baseline="{baseline}" {} transform="rotate({} {} {})">"#,
+                    r#"<text x="{}" y="{}" font-family="Ubuntu, Helvetica, Arial, sans-serif" font-size="{}" text-anchor="{anchor}" dominant-baseline="{baseline}"{decoration} {} transform="rotate({} {} {})">"#,
                     f(position.x),
                     f(position.y),
                     f(font_size),
@@ -217,6 +247,7 @@ mod tests {
             size: 30.0,
             angle: 0.0,
             level: None,
+            ..Default::default()
         };
         doc.execute(Command::insert(wall)).unwrap();
         doc.execute(Command::insert(label)).unwrap();

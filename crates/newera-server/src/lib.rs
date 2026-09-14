@@ -89,7 +89,7 @@ fn scene(document: &SharedDocument) -> (newera_draw::Scene, Option<std::path::Pa
     };
     (
         newera_draw::plan_scene(doc.home(), &options),
-        doc.path().map(std::path::Path::to_path_buf),
+        doc.asset_dir(),
     )
 }
 
@@ -105,7 +105,7 @@ async fn plan_png(
         ..newera_draw::RenderOptions::default()
     };
     let load = |path: &str| {
-        image::open(newera_core::resolve_project_path(project.as_deref(), path))
+        image::open(newera_core::resolve_asset(project.as_deref(), path))
             .ok()
             .map(|img| img.to_rgba8())
     };

@@ -55,7 +55,7 @@ pub(crate) fn build(model: Model, piece: &Furniture, color: Rgb) -> Mesh {
         h: piece.height,
         c: color,
     };
-    let opening = piece.opening;
+    let opening = piece.opening.as_ref();
     match model {
         Model::Sofa { seats } => sofa(&mut ctx, seats),
         Model::Bed { pillows } => bed(&mut ctx, pillows),

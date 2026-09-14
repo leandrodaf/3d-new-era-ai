@@ -179,6 +179,7 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
                 end: b,
                 offset: spec.off.unwrap_or(0.0),
                 level: None,
+                ..Default::default()
             },
             _ => return Err("dimension needs `a` and `b`, or `wall`".into()),
         };
@@ -194,6 +195,7 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
             size: spec.size.unwrap_or(Label::DEFAULT_SIZE),
             angle: spec.angle.unwrap_or(0.0),
             level: None,
+            ..Default::default()
         };
         ids.push(label.id.to_string());
         commands.push(Command::insert(label));
@@ -317,6 +319,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
             .element(id)
             .ok_or_else(|| format!("{id} not found"))?;
         let allowed: &[&str] = match element {
+            Element::Polyline(_) => &["pts", "t", "color", "level"],
             Element::Wall(_) => &[
                 "a", "b", "t", "h", "arc", "level", "type", "left", "right", "sides",
             ],
@@ -368,6 +371,14 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
             None => None,
         };
         let mut updated = match element {
+            Element::Polyline(mut p) => {
+                p.points = spec.pts.unwrap_or(p.points);
+                p.thickness = spec.t.unwrap_or(p.thickness);
+                if let Some([r, g, b]) = spec.color {
+                    p.color = [r, g, b];
+                }
+                Element::Polyline(p)
+            }
             Element::Level(mut l) => {
                 l.name = spec.name.unwrap_or(l.name);
                 l.elevation = spec.elev.unwrap_or(l.elevation);
@@ -774,7 +785,7 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
     let mut ids = Vec::with_capacity(items.len());
     for spec in items {
         let mut piece = if let Some(model) = &spec.model {
-            let path = newera_core::resolve_project_path(doc.path(), model);
+            let path = doc.resolve_asset(model);
             let loaded = newera_catalog::load_model(&path)
                 .map_err(|e| format!("{}: {e}", path.display()))?;
             let name = path
@@ -796,6 +807,7 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
                 model: Some(model.clone()),
                 visible: true,
                 level: None,
+                ..Default::default()
             }
         } else {
             let item = newera_catalog::find(&spec.cat).ok_or_else(|| {

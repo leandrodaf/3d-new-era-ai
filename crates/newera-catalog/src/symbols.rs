@@ -71,7 +71,7 @@ pub fn plan_symbol(piece: &Furniture) -> Vec<SymbolShape> {
     let model = find(&piece.catalog).map_or(Model::Box, |i| i.model);
     let mut s = Sym { shapes: Vec::new() };
 
-    if let Some(opening) = piece.opening {
+    if let Some(opening) = &piece.opening {
         match opening.kind {
             OpeningKind::Door if opening.sliding => {
                 let leaf = w / f64::from(opening.leaves.max(1));

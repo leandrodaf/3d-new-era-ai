@@ -101,6 +101,7 @@ mod tests {
             elevation: 0.0,
             height: 250.0,
             floor_thickness: 12.0,
+            ..Default::default()
         };
         let upper = Level {
             id: LevelId(2),
@@ -108,6 +109,7 @@ mod tests {
             elevation: 262.0,
             height: 250.0,
             floor_thickness: 12.0,
+            ..Default::default()
         };
         home.levels = vec![ground, upper];
         let square = |id, level| {
@@ -141,6 +143,7 @@ mod tests {
             model: None,
             visible: true,
             level: None,
+            ..Default::default()
         });
 
         let ground_floor = floor_shapes(&home, Some(LevelId(1)));

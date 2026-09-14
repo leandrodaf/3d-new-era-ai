@@ -1,8 +1,9 @@
-//! Native project file: pretty, versioned JSON (`.newera`).
+//! Native project file (`.newera`): pretty, versioned JSON.
 //!
 //! JSON keeps projects diff-friendly and readable by agents and scripts.
-//! Paths inside the home (background images) are stored as written; callers
-//! resolve relative paths against the project file's directory.
+//! Projects that use files (models, textures, images) are saved as a ZIP
+//! bundle holding `project.json` plus those files, so they travel as one
+//! file; asset paths inside are relative to the bundle root.
 
 use std::path::{Path, PathBuf};
 
@@ -24,7 +25,13 @@ pub enum ProjectError {
     TooNew(u32),
     #[error("invalid project file: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+    #[error("invalid project bundle: {0}")]
+    Zip(#[from] zip::result::ZipError),
 }
+
+const BUNDLE_JSON: &str = "project.json";
 
 #[derive(Serialize)]
 struct VariantOut<'a> {
@@ -114,6 +121,179 @@ pub fn from_project_json(json: &str) -> Result<Project, ProjectError> {
     Ok(Project { variants, active })
 }
 
+/// Per-user cache directory for unpacked bundles and imports.
+pub fn cache_dir() -> PathBuf {
+    let base = std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("LOCALAPPDATA").map(PathBuf::from))
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
+        .unwrap_or_else(std::env::temp_dir);
+    base.join("3d-new-era-ai")
+}
+
+/// Resolves a stored asset path against the asset directory.
+pub fn resolve_asset(dir: Option<&Path>, stored: &str) -> PathBuf {
+    let stored = Path::new(stored);
+    match dir {
+        Some(dir) if stored.is_relative() => dir.join(stored),
+        _ => stored.to_path_buf(),
+    }
+}
+
+/// Files referenced by every variant, resolved on disk, with the name each
+/// gets inside a bundle. Models living in their own folder bring the whole
+/// folder (materials and textures sit next to them).
+fn bundle_files(doc: &Document) -> Vec<(PathBuf, String)> {
+    let dir = doc.asset_dir();
+    let mut out: Vec<(PathBuf, String)> = Vec::new();
+    let mut push = |source: PathBuf, name: String| {
+        if !out.iter().any(|(_, n)| *n == name) {
+            out.push((source, name));
+        }
+    };
+    for variant in doc.variants() {
+        let mut home = variant.home().clone();
+        let mut paths = Vec::new();
+        home.for_each_asset_mut(&mut |p| paths.push(p.clone()));
+        for stored in paths {
+            let source = resolve_asset(dir.as_deref(), &stored);
+            let name = bundle_name(&stored);
+            let folder = Path::new(&name)
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty());
+            match (folder, source.parent()) {
+                (Some(folder), Some(source_dir)) if source_dir.is_dir() => {
+                    if let Ok(entries) = std::fs::read_dir(source_dir) {
+                        for entry in entries.flatten().filter(|e| e.path().is_file()) {
+                            let file = entry.file_name().to_string_lossy().into_owned();
+                            push(entry.path(), format!("{}/{file}", folder.display()));
+                        }
+                    }
+                }
+                _ => push(source, name),
+            }
+        }
+    }
+    out
+}
+
+/// Name of an asset inside a bundle: relative paths stay (normalized to
+/// `/`); absolute or escaping paths go to `external/<hash>/<file>`.
+fn bundle_name(stored: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let path = Path::new(stored);
+    let escapes = path.is_absolute()
+        || path.components().any(|c| {
+            matches!(
+                c,
+                std::path::Component::ParentDir | std::path::Component::Prefix(_)
+            )
+        });
+    if !escapes {
+        return path
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+    }
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    path.parent().hash(&mut hasher);
+    let file = path
+        .file_name()
+        .map_or_else(|| "asset".to_owned(), |f| f.to_string_lossy().into_owned());
+    format!("external/{:016x}/{file}", hasher.finish())
+}
+
+/// Saves a project: a plain JSON file when it uses no files, otherwise a
+/// bundle with every referenced file.
+///
+/// The document's asset paths are left untouched; the bundle stores them
+/// renamed where needed.
+pub fn save_project(doc: &Document, path: &Path) -> Result<(), ProjectError> {
+    let files = bundle_files(doc);
+    if files.is_empty() {
+        std::fs::write(path, to_project_json(doc))?;
+        return Ok(());
+    }
+    // Rewrite escaping paths to their bundle names in a copy.
+    let mut copy = Document::default();
+    let variants: Vec<(String, Home)> = doc
+        .variants()
+        .map(|v| {
+            let mut home = v.home().clone();
+            home.for_each_asset_mut(&mut |p| *p = bundle_name(p));
+            (v.name.clone(), home)
+        })
+        .collect();
+    copy.load_variants(variants, doc.active_variant());
+
+    let tmp = path.with_extension("newera.tmp");
+    {
+        let file = std::fs::File::create(&tmp)?;
+        let mut zip = zip::ZipWriter::new(std::io::BufWriter::new(file));
+        let stored = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        zip.start_file(BUNDLE_JSON, stored)?;
+        std::io::Write::write_all(&mut zip, to_project_json(&copy).as_bytes())?;
+        for (source, name) in files {
+            match std::fs::read(&source) {
+                Ok(bytes) => {
+                    zip.start_file(name, stored)?;
+                    std::io::Write::write_all(&mut zip, &bytes)?;
+                }
+                // A missing file is kept as a dangling reference rather than
+                // losing the whole save.
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => return Err(err.into()),
+            }
+        }
+        zip.finish()?;
+    }
+    std::fs::rename(tmp, path)?;
+    Ok(())
+}
+
+/// Opens a project file (JSON or bundle). Bundles are unpacked under
+/// `cache`; the returned directory is where their assets live.
+pub fn open_project(path: &Path, cache: &Path) -> Result<(Project, Option<PathBuf>), ProjectError> {
+    use std::hash::{Hash, Hasher};
+    let bytes = std::fs::read(path)?;
+    if !bytes.starts_with(b"PK\x03\x04") {
+        let json = String::from_utf8_lossy(&bytes);
+        return Ok((from_project_json(&json)?, None));
+    }
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    path.hash(&mut hasher);
+    bytes.len().hash(&mut hasher);
+    bytes.hash(&mut hasher);
+    let stem = path.file_stem().map_or_else(
+        || "project".to_owned(),
+        |s| s.to_string_lossy().into_owned(),
+    );
+    let dir = cache.join(format!("{stem}-{:016x}", hasher.finish()));
+
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
+    let mut json = String::new();
+    std::io::Read::read_to_string(&mut archive.by_name(BUNDLE_JSON)?, &mut json)?;
+    let project = from_project_json(&json)?;
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)?;
+        let Some(name) = file.enclosed_name() else {
+            continue;
+        };
+        if file.is_dir() || name == Path::new(BUNDLE_JSON) {
+            continue;
+        }
+        let target = dir.join(name);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut out = std::fs::File::create(target)?;
+        std::io::copy(&mut file, &mut out)?;
+    }
+    Ok((project, Some(dir)))
+}
+
 /// Resolves a path stored in a project relative to the project file.
 pub fn resolve_project_path(project: Option<&Path>, stored: &str) -> PathBuf {
     let stored = Path::new(stored);
@@ -181,5 +361,66 @@ mod tests {
         assert_eq!(p, PathBuf::from("/tmp/casa/planta.png"));
         let abs = resolve_project_path(Some(Path::new("/tmp/casa/projeto.newera")), "/img/a.png");
         assert_eq!(abs, PathBuf::from("/img/a.png"));
+    }
+
+    #[test]
+    fn projects_with_files_save_as_bundles_and_reopen() {
+        let root = std::env::temp_dir().join(format!("newera-bundle-{}", std::process::id()));
+        let assets = root.join("assets");
+        std::fs::create_dir_all(assets.join("models/chair")).unwrap();
+        std::fs::write(assets.join("models/chair/chair.obj"), "v 0 0 0\n").unwrap();
+        std::fs::write(assets.join("models/chair/chair.mtl"), "newmtl a\n").unwrap();
+        let outside = root.join("outside.png");
+        std::fs::write(&outside, [0x89, b'P', b'N', b'G']).unwrap();
+
+        let mut home = Home::default();
+        let mut piece = crate::Furniture {
+            model: Some("models/chair/chair.obj".into()),
+            ..crate::Furniture::default()
+        };
+        piece.id = home.new_furniture_id();
+        home.furniture.push(piece);
+        let mut room = crate::Room::new(
+            home.new_room_id(),
+            "Sala",
+            vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(100.0, 0.0),
+                Point2::new(0.0, 100.0),
+            ],
+        );
+        room.floor_material = Some(crate::Material {
+            image: Some(outside.display().to_string()),
+            ..crate::Material::default()
+        });
+        home.rooms.push(room);
+        let mut doc = Document::new(home);
+        doc.set_asset_dir(Some(assets.clone()));
+
+        let file = root.join("casa.newera");
+        save_project(&doc, &file).unwrap();
+        let (project, dir) = open_project(&file, &root.join("cache")).unwrap();
+        let dir = dir.expect("bundle unpacks");
+        let home = &project.variants[0].1;
+        assert!(
+            dir.join("models/chair/chair.mtl").exists(),
+            "model folder travels"
+        );
+        let floor = home.rooms[0]
+            .floor_material
+            .as_ref()
+            .unwrap()
+            .image
+            .clone()
+            .unwrap();
+        assert!(floor.starts_with("external/"), "{floor}");
+        assert!(dir.join(&floor).exists());
+
+        // No files: plain JSON.
+        let plain = root.join("plain.newera");
+        save_project(&Document::default(), &plain).unwrap();
+        assert!(std::fs::read_to_string(&plain).unwrap().starts_with('{'));
+        assert!(open_project(&plain, &root).unwrap().1.is_none());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

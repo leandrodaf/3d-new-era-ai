@@ -8,6 +8,7 @@ use crate::furniture::Furniture;
 use crate::geometry::{Point2, polygon_area};
 use crate::ids::{DimensionId, ElementId, LabelId, LevelId, RoomId, WallId};
 use crate::materials::Material;
+use crate::style::{Polyline, Properties, TextStyle, is_default, is_zero};
 
 fn yes() -> bool {
     true
@@ -44,6 +45,31 @@ pub struct Wall {
     /// Finish of the side on the right of `start → end`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub right_side: Option<Material>,
+    /// Height at `end` for sloping walls; `None` keeps [`Wall::height`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height_at_end: Option<f64>,
+    /// Color of the wall top in the plan and 3D.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_color: Option<[u8; 3]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub left_baseboard: Option<Baseboard>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub right_baseboard: Option<Baseboard>,
+    /// Plan hatch pattern name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<String>,
+    #[serde(default, skip_serializing_if = "Properties::is_empty")]
+    pub properties: Properties,
+}
+
+/// Skirting board along one side of a wall.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Baseboard {
+    /// Protrusion from the wall, cm.
+    pub thickness: f64,
+    pub height: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<Material>,
 }
 
 impl Wall {
@@ -62,6 +88,12 @@ impl Wall {
             wall_type: None,
             left_side: None,
             right_side: None,
+            height_at_end: None,
+            top_color: None,
+            left_baseboard: None,
+            right_baseboard: None,
+            pattern: None,
+            properties: Properties::new(),
         }
     }
 
@@ -199,6 +231,25 @@ pub struct Room {
     pub floor_material: Option<Material>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ceiling_material: Option<Material>,
+    /// Flat ceiling at the storey height; `false` follows sloping walls.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub ceiling_flat: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name_style: Option<TextStyle>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area_style: Option<TextStyle>,
+    /// Name position relative to the room center, cm.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub name_offset: [f64; 2],
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub area_offset: [f64; 2],
+    /// Clockwise degrees.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub name_angle: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub area_angle: f64,
+    #[serde(default, skip_serializing_if = "Properties::is_empty")]
+    pub properties: Properties,
 }
 
 impl Room {
@@ -213,6 +264,14 @@ impl Room {
             level: None,
             floor_material: None,
             ceiling_material: None,
+            ceiling_flat: true,
+            name_style: None,
+            area_style: None,
+            name_offset: [0.0, 0.0],
+            area_offset: [0.0, 0.0],
+            name_angle: 0.0,
+            area_angle: 0.0,
+            properties: Properties::new(),
         }
     }
 
@@ -254,9 +313,61 @@ pub struct Dimension {
     /// Storey it belongs to; `None` means the lowest level.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub level: Option<LevelId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<[u8; 3]>,
+    /// Size of the end ticks, cm.
+    #[serde(
+        default = "Dimension::default_end_mark",
+        skip_serializing_if = "Dimension::is_default_end_mark"
+    )]
+    pub end_mark: f64,
+    /// Style of the length text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<TextStyle>,
+    /// Drawn in the 3D view too.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub visible_in_3d: bool,
+    /// Heights of the measured points above the floor (3D dimensions), cm.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub elevation: [f64; 2],
+    /// Tilt of the dimension line around its axis, degrees.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub pitch: f64,
+    #[serde(default, skip_serializing_if = "Properties::is_empty")]
+    pub properties: Properties,
+}
+
+impl Default for Dimension {
+    fn default() -> Self {
+        Self {
+            id: DimensionId(0),
+            start: Point2::new(0.0, 0.0),
+            end: Point2::new(100.0, 0.0),
+            offset: 0.0,
+            level: None,
+            color: None,
+            end_mark: Self::DEFAULT_END_MARK,
+            style: None,
+            visible_in_3d: false,
+            elevation: [0.0, 0.0],
+            pitch: 0.0,
+            properties: Properties::new(),
+        }
+    }
 }
 
 impl Dimension {
+    pub const DEFAULT_END_MARK: f64 = 10.0;
+
+    fn default_end_mark() -> f64 {
+        Self::DEFAULT_END_MARK
+    }
+
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    fn is_default_end_mark(value: &f64) -> bool {
+        (*value - Self::DEFAULT_END_MARK).abs() < f64::EPSILON
+    }
+
     pub fn length(&self) -> f64 {
         self.start.distance(self.end)
     }
@@ -287,9 +398,63 @@ pub struct Label {
     /// Storey it belongs to; `None` means the lowest level.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub level: Option<LevelId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub bold: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub italic: bool,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub align: crate::style::TextAlign,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<[u8; 3]>,
+    /// Halo drawn around the letters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outline: Option<[u8; 3]>,
+    /// Height above the floor when shown in 3D, cm.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub elevation: f64,
+    /// Tilt in 3D, degrees (0 lying flat, 90 standing); `None` keeps it plan-only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pitch: Option<f64>,
+    #[serde(default, skip_serializing_if = "Properties::is_empty")]
+    pub properties: Properties,
+}
+
+impl Default for Label {
+    fn default() -> Self {
+        Self {
+            id: LabelId(0),
+            text: String::new(),
+            position: Point2::new(0.0, 0.0),
+            size: Self::DEFAULT_SIZE,
+            angle: 0.0,
+            level: None,
+            font: None,
+            bold: false,
+            italic: false,
+            align: crate::style::TextAlign::Center,
+            color: None,
+            outline: None,
+            elevation: 0.0,
+            pitch: None,
+            properties: Properties::new(),
+        }
+    }
 }
 
 impl Label {
+    /// The label's text style.
+    pub fn style(&self) -> TextStyle {
+        TextStyle {
+            font: self.font.clone(),
+            size: self.size,
+            bold: self.bold,
+            italic: self.italic,
+            align: self.align,
+        }
+    }
+
     pub const DEFAULT_SIZE: f64 = 24.0;
 
     fn default_size() -> f64 {
@@ -309,7 +474,7 @@ impl Label {
 
 /// The compass rose drawn on the plan. Its north direction will also drive
 /// sun position for lighting and renders.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Compass {
     /// Center on the plan, in centimeters.
     pub center: Point2,
@@ -318,6 +483,15 @@ pub struct Compass {
     /// Clockwise angle from the plan's "up" (-y) to geographic north, in degrees.
     pub north_degrees: f64,
     pub visible: bool,
+    /// Degrees, positive north; used for sunlight.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latitude: Option<f64>,
+    /// Degrees, positive east.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub longitude: Option<f64>,
+    /// IANA time zone, e.g. `America/Sao_Paulo`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_zone: Option<String>,
 }
 
 impl Default for Compass {
@@ -327,6 +501,9 @@ impl Default for Compass {
             diameter: 100.0,
             north_degrees: 0.0,
             visible: true,
+            latitude: None,
+            longitude: None,
+            time_zone: None,
         }
     }
 }
@@ -409,6 +586,33 @@ pub struct Level {
     /// Slab under this storey's floor, cm.
     #[serde(default = "Level::default_floor_thickness")]
     pub floor_thickness: f64,
+    /// Order among levels at the same elevation (alternative layouts).
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub elevation_index: i32,
+    /// Shown in the 3D view.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub viewable: bool,
+    /// Scanned plan drawn under this level.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background: Option<BackgroundImage>,
+    #[serde(default, skip_serializing_if = "Properties::is_empty")]
+    pub properties: Properties,
+}
+
+impl Default for Level {
+    fn default() -> Self {
+        Self {
+            id: LevelId(0),
+            name: String::new(),
+            elevation: 0.0,
+            height: Self::DEFAULT_HEIGHT,
+            floor_thickness: Self::DEFAULT_FLOOR_THICKNESS,
+            elevation_index: 0,
+            viewable: true,
+            background: None,
+            properties: Properties::new(),
+        }
+    }
 }
 
 impl Level {
@@ -423,10 +627,8 @@ impl Level {
         if self.name.trim().is_empty() {
             return invalid("level name must not be empty");
         }
-        if !(self.elevation.is_finite() && self.height > 0.0 && self.floor_thickness >= 0.0) {
-            return invalid(
-                "level needs a finite elevation, positive height and non-negative slab",
-            );
+        if !(self.elevation.is_finite() && self.height >= 0.0 && self.floor_thickness >= 0.0) {
+            return invalid("level needs a finite elevation and non-negative height and slab");
         }
         Ok(())
     }
@@ -442,11 +644,13 @@ pub enum Element {
     Label(Label),
     Furniture(Furniture),
     Level(Level),
+    Polyline(Polyline),
 }
 
 impl Element {
     pub fn id(&self) -> ElementId {
         match self {
+            Self::Polyline(e) => e.id.into(),
             Self::Wall(e) => e.id.into(),
             Self::Room(e) => e.id.into(),
             Self::Dimension(e) => e.id.into(),
@@ -458,6 +662,7 @@ impl Element {
 
     pub fn validate(&self) -> CoreResult<()> {
         match self {
+            Self::Polyline(e) => e.validate(),
             Self::Wall(e) => e.validate(),
             Self::Room(e) => e.validate(),
             Self::Dimension(e) => e.validate(),
@@ -477,7 +682,7 @@ macro_rules! element_from {
         })+
     };
 }
-element_from!(Wall, Room, Dimension, Label, Furniture, Level);
+element_from!(Wall, Room, Dimension, Label, Furniture, Level, Polyline);
 
 impl Element {
     /// Storey of an element; levels themselves have none.
@@ -488,6 +693,7 @@ impl Element {
             Self::Dimension(e) => e.level,
             Self::Label(e) => e.level,
             Self::Furniture(e) => e.level,
+            Self::Polyline(e) => e.level,
             Self::Level(_) => None,
         }
     }
@@ -499,6 +705,7 @@ impl Element {
             Self::Dimension(e) => e.level = level,
             Self::Label(e) => e.level = level,
             Self::Furniture(e) => e.level = level,
+            Self::Polyline(e) => e.level = level,
             Self::Level(_) => {}
         }
     }

@@ -21,6 +21,7 @@ newera-server = { path = "crates/newera-server", version = "0.1.0" }
 newera-app = { path = "crates/newera-app", version = "0.1.0" }
 newera-draw = { path = "crates/newera-draw", version = "0.1.0" }
 newera-catalog = { path = "crates/newera-catalog", version = "0.1.0" }
+newera-sh3d = { path = "crates/newera-sh3d", version = "0.1.0" }
 
 # External crates
 ab_glyph = "0.2.32"
@@ -43,6 +44,7 @@ tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "signal",
 tokio-util = "0.7"
 tower-http = { version = "0.7.1", features = ["cors", "trace"] }
 tracing = "0.1.44"
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 
 [workspace.lints.rust]
@@ -61,6 +63,10 @@ many_single_char_names = "allow"
 similar_names = "allow"
 # UI and tool dispatch read top to bottom; splitting them hurts more than it helps.
 too_many_lines = "allow"
+# The home model mirrors real settings (visibility flags, locks) and
+# element variants differ in size by nature; boxing them buys nothing.
+struct_excessive_bools = "allow"
+large_enum_variant = "allow"
 
 [profile.release]
 lto = "thin"

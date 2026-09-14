@@ -1,13 +1,10 @@
 //! MCP tool surface. Each tool is a thin adapter over [`crate::edit`] or
 //! `newera-core`; all of them share the document the editor is showing.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use base64::Engine as _;
-use newera_core::{
-    Command, Compass, Document, Home, Point2, SharedDocument, from_project_json, ops,
-    resolve_project_path, to_project_json,
-};
+use newera_core::{Command, Compass, Document, Home, Point2, SharedDocument, ops};
 use newera_draw::{RenderOptions, SceneOptions, SvgOptions, plan_scene, render_png, to_svg};
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
@@ -217,13 +214,14 @@ impl NewEraMcp {
             || p.compass_d.is_some()
             || p.compass_visible.is_some()
         {
-            let c = doc.home().compass;
+            let c = doc.home().compass.clone();
             commands.push(Command::SetCompass {
                 compass: Compass {
                     center: p.compass_at.unwrap_or(c.center),
                     diameter: p.compass_d.unwrap_or(c.diameter),
                     north_degrees: p.north.unwrap_or(c.north_degrees),
                     visible: p.compass_visible.unwrap_or(c.visible),
+                    ..c.clone()
                 },
             });
         }
@@ -242,9 +240,9 @@ impl NewEraMcp {
         Parameters(p): Parameters<BackgroundParams>,
     ) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
-        let project = doc.path().map(Path::to_path_buf);
+        let assets = doc.asset_dir();
         let size = |path: &str| {
-            let resolved = resolve_project_path(project.as_deref(), path);
+            let resolved = newera_core::resolve_asset(assets.as_deref(), path);
             image::image_dimensions(&resolved)
                 .map(|(w, h)| [w, h])
                 .map_err(|e| format!("cannot read image {}: {e}", resolved.display()))
@@ -299,22 +297,28 @@ impl NewEraMcp {
             (None, Some(path)) => path.to_path_buf(),
             (None, None) => return Err(invalid("`path` is required for the first save")),
         };
-        std::fs::write(&path, to_project_json(&doc))
+        newera_core::save_project(&doc, &path)
             .map_err(|e| invalid(format!("cannot write {}: {e}", path.display())))?;
         doc.mark_saved(&path);
         Ok(format!("ok {}", path.display()))
     }
 
-    #[tool(description = "Open a project (.newera), replacing the current one.")]
+    #[tool(
+        description = "Open a project (.newera) or import a Sweet Home 3D file (.sh3d), replacing the current one."
+    )]
     fn open_home(&self, Parameters(p): Parameters<PathParams>) -> Result<String, ErrorData> {
         let path = PathBuf::from(p.path.ok_or_else(|| invalid("`path` is required"))?);
-        let json = std::fs::read_to_string(&path)
-            .map_err(|e| invalid(format!("cannot read {}: {e}", path.display())))?;
-        let home = from_project_json(&json).map_err(|e| invalid(e.to_string()))?;
         let mut doc = self.document.write();
-        home.load_into(&mut doc);
-        doc.mark_saved(&path);
-        Ok(ok(&doc, &[]))
+        let opened = newera_sh3d::open_file(&mut doc, &path).map_err(invalid)?;
+        let mut reply = ok(&doc, &[]);
+        if opened.imported {
+            reply.push_str(" imported (unsaved)");
+        }
+        for warning in opened.warnings {
+            reply.push_str("\nwarning: ");
+            reply.push_str(&warning);
+        }
+        Ok(reply)
     }
 
     #[tool(description = "Start a new empty project.")]
@@ -322,6 +326,7 @@ impl NewEraMcp {
         let mut doc = self.document.write();
         doc.load(Home::default());
         doc.set_path(None);
+        doc.set_asset_dir(None);
         ok(&doc, &[])
     }
 
@@ -445,7 +450,7 @@ impl NewEraMcp {
         let doc = self.document.read();
         let view = doc.home().level_view(doc.home().current_level());
         let scene = plan_scene(&view, &scene_options());
-        let project = doc.path().map(Path::to_path_buf);
+        let project = doc.asset_dir();
         drop(doc);
         let options = RenderOptions {
             width: w,
@@ -455,7 +460,7 @@ impl NewEraMcp {
             ..RenderOptions::default()
         };
         let load = |path: &str| {
-            image::open(resolve_project_path(project.as_deref(), path))
+            image::open(newera_core::resolve_asset(project.as_deref(), path))
                 .ok()
                 .map(|img| img.to_rgba8())
         };

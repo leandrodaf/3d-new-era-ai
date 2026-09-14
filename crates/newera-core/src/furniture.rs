@@ -12,6 +12,8 @@ use crate::elements::Wall;
 use crate::error::{CoreError, CoreResult};
 use crate::geometry::Point2;
 use crate::ids::{FurnitureId, LevelId};
+use crate::materials::Material;
+use crate::style::{Properties, TextStyle, is_default, is_zero};
 
 fn yes() -> bool {
     true
@@ -37,8 +39,60 @@ pub enum OpeningKind {
     Passage,
 }
 
+/// A door or window leaf that turns around a vertical axis. Values are
+/// fractions of the piece's width (x, leaf width) and depth (y).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Sash {
+    pub x_axis: f64,
+    pub y_axis: f64,
+    pub width: f64,
+    /// Degrees.
+    pub start_angle: f64,
+    pub end_angle: f64,
+}
+
+/// Where and how a door or window cuts the wall, as fractions of the
+/// piece's size (depth for thickness/distance, width for width/left, height
+/// for height/top) plus an optional outline.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct WallCutOut {
+    pub wall_thickness: f64,
+    pub wall_distance: f64,
+    pub wall_width: f64,
+    pub wall_left: f64,
+    pub wall_height: f64,
+    pub wall_top: f64,
+    /// SVG path of the hole in a unit square (front view), when not rectangular.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shape: Option<String>,
+    /// Cut through the whole wall, not only the part the piece overlaps.
+    #[serde(default)]
+    pub both_sides: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub bound_to_wall: bool,
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub width_depth_deformable: bool,
+}
+
+impl Default for WallCutOut {
+    fn default() -> Self {
+        Self {
+            wall_thickness: 1.0,
+            wall_distance: 0.0,
+            wall_width: 1.0,
+            wall_left: 0.0,
+            wall_height: 1.0,
+            wall_top: 0.0,
+            shape: None,
+            both_sides: false,
+            bound_to_wall: false,
+            width_depth_deformable: true,
+        }
+    }
+}
+
 /// Makes a piece cut a hole through the wall it sits in.
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Opening {
     pub kind: OpeningKind,
     /// Hinges on the right side (seen from the front) instead of the left.
@@ -50,6 +104,129 @@ pub struct Opening {
     /// Sliding leaves: no swing area.
     #[serde(default, skip_serializing_if = "is_false")]
     pub sliding: bool,
+    /// Explicit leaves (imported doors); overrides `leaves`/`hinge_right` when set.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sashes: Vec<Sash>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cut_out: Option<WallCutOut>,
+}
+
+/// A light emitter inside a piece, in fractions of its size.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct LightSource {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub color: [u8; 3],
+    /// Fraction of the piece's width; `None` for a point.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diameter: Option<f64>,
+}
+
+/// Makes a piece emit light.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Light {
+    /// 0 to 1.
+    pub power: f64,
+    pub sources: Vec<LightSource>,
+    /// Model materials that glow.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_materials: Vec<String>,
+}
+
+/// Override of one material of an imported model.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ModelMaterial {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<[u8; 3]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub texture: Option<Material>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shininess: Option<f64>,
+}
+
+/// Descriptive data that doesn't affect geometry.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+pub struct PieceInfo {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub information: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub creator: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+    /// Id in the catalog it came from (e.g. `eTeks#frontDoor`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_catalog_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub price: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub currency: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vat_percentage: Option<String>,
+    /// Catalog icon image file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// Top view image drawn in the plan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_icon: Option<String>,
+}
+
+/// What the user may change on a piece.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PieceLocks {
+    pub movable: bool,
+    pub resizable: bool,
+    /// Width, depth and height can change independently.
+    pub deformable: bool,
+    pub texturable: bool,
+    /// Can be tilted (pitch/roll).
+    pub horizontally_rotatable: bool,
+}
+
+impl Default for PieceLocks {
+    fn default() -> Self {
+        Self {
+            movable: true,
+            resizable: true,
+            deformable: true,
+            texturable: true,
+            horizontally_rotatable: true,
+        }
+    }
+}
+
+/// How an imported model file maps onto the piece's box.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ModelTransform {
+    /// Rotation applied to the model before fitting it to the box, rows of
+    /// a 3×3 matrix in model axes (y up).
+    pub rotation: [[f64; 3]; 3],
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub centered_at_origin: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub back_face_shown: bool,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub flags: u32,
+    /// Size of the model file in bytes, as reported by its source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_size: Option<u64>,
+}
+
+impl Default for ModelTransform {
+    fn default() -> Self {
+        Self {
+            rotation: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            centered_at_origin: true,
+            back_face_shown: false,
+            flags: 0,
+            file_size: None,
+        }
+    }
 }
 
 impl Opening {
@@ -98,9 +275,121 @@ pub struct Furniture {
     /// Storey it belongs to; `None` means the lowest level.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub level: Option<LevelId>,
+    /// Tilt around its width axis, degrees.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub pitch: f64,
+    /// Tilt around its depth axis, degrees.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub roll: f64,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub info: PieceInfo,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub locks: PieceLocks,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub model_transform: ModelTransform,
+    /// Texture applied to the whole model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub texture: Option<Material>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shininess: Option<f64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub materials: Vec<ModelMaterial>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub light: Option<Light>,
+    /// Pieces of a group, positioned in plan coordinates like top-level ones.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<Furniture>,
+    /// Fraction of the height where pieces dropped on top rest.
+    #[serde(
+        default = "Furniture::default_drop_on_top",
+        skip_serializing_if = "Furniture::is_default_drop_on_top"
+    )]
+    pub drop_on_top: f64,
+    /// Outline of the hole stairs cut in the floor above (SVG path, unit square).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub staircase_cut_out: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub name_visible: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name_style: Option<TextStyle>,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub name_offset: [f64; 2],
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub name_angle: f64,
+    #[serde(default, skip_serializing_if = "Properties::is_empty")]
+    pub properties: Properties,
+}
+
+impl Default for Furniture {
+    fn default() -> Self {
+        Self {
+            id: FurnitureId(0),
+            catalog: String::new(),
+            name: String::new(),
+            position: Point2::new(0.0, 0.0),
+            elevation: 0.0,
+            angle: 0.0,
+            width: 100.0,
+            depth: 100.0,
+            height: 100.0,
+            mirrored: false,
+            color: None,
+            opening: None,
+            model: None,
+            visible: true,
+            level: None,
+            pitch: 0.0,
+            roll: 0.0,
+            info: PieceInfo::default(),
+            locks: PieceLocks::default(),
+            model_transform: ModelTransform::default(),
+            texture: None,
+            shininess: None,
+            materials: Vec::new(),
+            light: None,
+            children: Vec::new(),
+            drop_on_top: 1.0,
+            staircase_cut_out: None,
+            name_visible: false,
+            name_style: None,
+            name_offset: [0.0, 0.0],
+            name_angle: 0.0,
+            properties: Properties::new(),
+        }
+    }
 }
 
 impl Furniture {
+    fn default_drop_on_top() -> f64 {
+        1.0
+    }
+
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    fn is_default_drop_on_top(value: &f64) -> bool {
+        (*value - 1.0).abs() < f64::EPSILON
+    }
+
+    /// Moves the piece and, for groups, every piece inside.
+    pub fn translate(&mut self, dx: f64, dy: f64) {
+        self.position = Point2::new(self.position.x + dx, self.position.y + dy);
+        for child in &mut self.children {
+            child.translate(dx, dy);
+        }
+    }
+
+    pub fn is_group(&self) -> bool {
+        !self.children.is_empty()
+    }
+
+    /// This piece and every piece nested in its groups, depth first.
+    pub fn flatten(&self) -> Vec<&Self> {
+        let mut out = vec![self];
+        for child in &self.children {
+            out.extend(child.flatten());
+        }
+        out
+    }
+
     /// Maps a point in the piece's local frame (cm, origin at its center, x
     /// along the width, y along the depth) to plan coordinates.
     pub fn to_plan(&self, local: (f64, f64)) -> Point2 {
@@ -318,6 +607,7 @@ mod tests {
             model: None,
             visible: true,
             level: None,
+            ..Default::default()
         }
     }
 

@@ -131,7 +131,7 @@ fn is_zero(value: &f64) -> bool {
 }
 
 /// A surface finish.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Material {
     /// Color, or the tint applied to the pattern/image.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -147,6 +147,41 @@ pub struct Material {
     /// Rotation of the pattern, degrees.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub angle: f64,
+    /// Shift of the tiling origin `[x, y]`, as fractions of a tile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offset: Option<[f64; 2]>,
+    /// Specular highlight strength, 0 (matte) to 1 (glossy).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub shininess: f64,
+    /// Human name of the finish, e.g. `Porcelanato cinza`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Stretch one image over the whole surface instead of tiling it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fit: bool,
+    /// Image orientation on wall sides: `false` mirrors it on the left side.
+    #[serde(
+        default = "crate::style::yes",
+        skip_serializing_if = "crate::style::is_true"
+    )]
+    pub left_to_right: bool,
+}
+
+impl Default for Material {
+    fn default() -> Self {
+        Self {
+            color: None,
+            pattern: None,
+            image: None,
+            tile: None,
+            angle: 0.0,
+            offset: None,
+            shininess: 0.0,
+            name: None,
+            fit: false,
+            left_to_right: true,
+        }
+    }
 }
 
 impl Material {
@@ -183,6 +218,9 @@ impl Material {
         {
             return Err("material tile size must be positive".into());
         }
+        if !(0.0..=1.0).contains(&self.shininess) {
+            return Err("material shininess must be between 0 and 1".into());
+        }
         if !self.angle.is_finite() {
             return Err("material angle must be finite".into());
         }
@@ -218,6 +256,12 @@ impl FromStr for Material {
                 material.color = Some(color);
             } else if let Some(angle) = last.strip_prefix('r').and_then(|a| a.parse().ok()) {
                 material.angle = angle;
+            } else if let Some(shine) = last
+                .strip_prefix('s')
+                .and_then(|a| a.parse::<f64>().ok())
+                .filter(|v| (0.0..=1.0).contains(v))
+            {
+                material.shininess = shine;
             } else if last.starts_with(|c: char| c.is_ascii_digit())
                 && let Some(size) = parse_size(last)
             {
@@ -269,6 +313,9 @@ impl fmt::Display for Material {
         }
         if self.angle != 0.0 {
             parts.push(format!("r{}", trim_number(self.angle)));
+        }
+        if self.shininess != 0.0 {
+            parts.push(format!("s{}", trim_number(self.shininess)));
         }
         f.write_str(&parts.join(" "))
     }
@@ -416,6 +463,7 @@ mod tests {
             "subway 20x10",
             "parquet r45",
             "img:tex/piso claro.jpg 90x45 r30",
+            "marble s0.35",
         ] {
             let material: Material = text.parse().unwrap();
             assert_eq!(material.to_string(), text);

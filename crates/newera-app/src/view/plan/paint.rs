@@ -6,7 +6,7 @@ use std::path::Path;
 use eframe::egui::{
     self, Color32, FontId, Painter, Pos2, Rect, Shape, Stroke, TextureHandle, Vec2,
 };
-use newera_core::{LengthUnit, Point2, resolve_project_path};
+use newera_core::{LengthUnit, Point2, resolve_asset};
 use newera_draw::{Align, Color, Palette, Primitive, Scene, Size};
 
 use super::camera::Camera;
@@ -45,7 +45,7 @@ impl Textures {
         project: Option<&Path>,
         path: &str,
     ) -> Option<&TextureHandle> {
-        let resolved = resolve_project_path(project, path);
+        let resolved = resolve_asset(project, path);
         let key = resolved.display().to_string();
         self.loaded
             .entry(key.clone())
@@ -108,10 +108,32 @@ pub(crate) fn paint_scene(
                 color: c,
                 align,
                 angle,
+                look,
             } => {
                 let px = size_px(camera, *size);
                 if px >= 4.0 {
-                    paint_text(painter, to(*position), text, px, color(*c), *align, *angle);
+                    let anchor = to(*position);
+                    if let Some(halo) = look.outline {
+                        let r = (px * 0.08).max(1.0);
+                        for k in 0u8..8 {
+                            let t = f32::from(k) / 8.0 * std::f32::consts::TAU;
+                            let offset = Vec2::new(r * t.cos(), r * t.sin());
+                            paint_text(
+                                painter,
+                                anchor + offset,
+                                text,
+                                px,
+                                color(halo),
+                                *align,
+                                *angle,
+                            );
+                        }
+                    }
+                    paint_text(painter, anchor, text, px, color(*c), *align, *angle);
+                    if look.bold {
+                        let shift = Vec2::new((px * 0.045).max(0.6), 0.0);
+                        paint_text(painter, anchor + shift, text, px, color(*c), *align, *angle);
+                    }
                 }
             }
             Primitive::Image {
@@ -150,12 +172,20 @@ pub(crate) fn paint_text(
         color,
         f32::INFINITY,
     );
-    job.halign = egui::Align::Center;
+    job.halign = match align {
+        Align::BaselineLeft => egui::Align::LEFT,
+        Align::BaselineRight => egui::Align::RIGHT,
+        _ => egui::Align::Center,
+    };
     let galley = painter.layout_job(job);
     let rect = galley.rect;
     let local = match align {
         Align::Center => Vec2::new(0.0, -rect.height() / 2.0),
         Align::Above => Vec2::new(0.0, -rect.height() - 1.0),
+        // Descent is roughly a fifth of the font size.
+        Align::BaselineLeft | Align::BaselineCenter | Align::BaselineRight => {
+            Vec2::new(0.0, -rect.height() + size_px * 0.22)
+        }
     };
     #[allow(clippy::cast_possible_truncation)]
     let angle = angle_deg.to_radians() as f32;
