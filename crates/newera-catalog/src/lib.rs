@@ -151,6 +151,33 @@ pub enum Model {
         round: bool,
     },
     Box,
+    /// Concrete footing: wide base under a pedestal.
+    Footing,
+    /// Posts with top and middle rails.
+    Railing,
+    /// Posts with horizontal boards.
+    Fence,
+    /// Corrugated roof or wall sheet, ridges along the depth.
+    Corrugated,
+    /// Glass panel in a thin metal frame (shower screens, balustrades).
+    GlassPanel,
+    /// Sectional garage door.
+    GarageDoor,
+    /// Pool: coping around a water surface.
+    Pool,
+    /// Sun lounger with a raised back.
+    Lounger,
+    /// Masonry barbecue with a chimney.
+    Grill,
+    /// Sofa with a chaise on its right end.
+    SofaL,
+    Bench,
+    /// Table with chairs around it.
+    DiningSet {
+        chairs: u8,
+    },
+    /// Planter box with greenery.
+    Planter,
     /// A technical point drawn with a conventional plan symbol.
     Point(PointSymbol),
 }
@@ -288,6 +315,15 @@ pub static CATALOG: &[CatalogItem] = &[
         "sofa couch loveseat",
     ),
     item(
+        "sofa-l",
+        "Sofá em L (chaise)",
+        C::Living,
+        [270.0, 160.0, 85.0],
+        FABRIC,
+        Model::SofaL,
+        "sofa l chaise canto",
+    ),
+    item(
         "armchair",
         "Poltrona",
         C::Living,
@@ -380,6 +416,24 @@ pub static CATALOG: &[CatalogItem] = &[
         WOOD,
         Model::Table { round: false },
         "dining table mesa",
+    ),
+    item(
+        "dining-set-4",
+        "Mesa com 4 cadeiras",
+        C::Dining,
+        [200.0, 180.0, 90.0],
+        WOOD,
+        Model::DiningSet { chairs: 4 },
+        "dining set mesa cadeiras jantar conjunto",
+    ),
+    item(
+        "dining-set-6",
+        "Mesa com 6 cadeiras",
+        C::Dining,
+        [260.0, 180.0, 90.0],
+        WOOD,
+        Model::DiningSet { chairs: 6 },
+        "dining set mesa 6 cadeiras jantar conjunto",
     ),
     item(
         "round-table",
@@ -610,6 +664,15 @@ pub static CATALOG: &[CatalogItem] = &[
         "shower box chuveiro",
     ),
     item(
+        "shower-glass",
+        "Box de vidro",
+        C::Bathroom,
+        [120.0, 2.0, 190.0],
+        [168, 206, 226],
+        Model::GlassPanel,
+        "shower glass box vidro",
+    ),
+    item(
         "bathtub",
         "Banheira",
         C::Bathroom,
@@ -710,6 +773,20 @@ pub static CATALOG: &[CatalogItem] = &[
     ),
     opening(
         item(
+            "garage-door",
+            "Portão de garagem",
+            C::DoorsWindows,
+            [300.0, 15.0, 230.0],
+            [210, 212, 214],
+            Model::GarageDoor,
+            "garage door portao garagem basculante seccional",
+        ),
+        OpeningKind::Door,
+        1,
+        true,
+    ),
+    opening(
+        item(
             "passage",
             "Vão livre",
             C::DoorsWindows,
@@ -799,6 +876,60 @@ pub static CATALOG: &[CatalogItem] = &[
         "round column coluna",
     ),
     item(
+        "footing",
+        "Sapata",
+        C::Structure,
+        [60.0, 60.0, 50.0],
+        [170, 170, 165],
+        Model::Footing,
+        "footing sapata fundacao bloco",
+    ),
+    item(
+        "beam",
+        "Viga / caibro",
+        C::Structure,
+        [10.0, 300.0, 20.0],
+        WOOD,
+        Model::Box,
+        "beam rafter viga caibro terca barrote",
+    ),
+    item(
+        "panel",
+        "Painel",
+        C::Structure,
+        [120.0, 2.0, 240.0],
+        [214, 206, 190],
+        Model::Box,
+        "panel painel chapa placa osb compensado",
+    ),
+    item(
+        "roof-sheet",
+        "Telha ondulada",
+        C::Structure,
+        [110.0, 244.0, 5.0],
+        [150, 156, 160],
+        Model::Corrugated,
+        "roof sheet telha ondulada fibrocimento metalica",
+    ),
+    item(
+        "railing",
+        "Guarda-corpo",
+        C::Structure,
+        [300.0, 5.0, 110.0],
+        STEEL,
+        Model::Railing,
+        "railing guarda corpo corrimao parapeito",
+    ),
+    item(
+        "glass-railing",
+        "Guarda-corpo de vidro",
+        C::Structure,
+        [300.0, 3.0, 110.0],
+        [168, 206, 226],
+        Model::GlassPanel,
+        "glass railing guarda corpo vidro",
+    ),
+    item(
         "box",
         "Caixa",
         C::Structure,
@@ -816,6 +947,60 @@ pub static CATALOG: &[CatalogItem] = &[
         [70, 140, 80],
         Model::Plant,
         "plant vaso planta",
+    ),
+    item(
+        "planter",
+        "Floreira",
+        C::Decor,
+        [100.0, 40.0, 60.0],
+        [150, 110, 80],
+        Model::Planter,
+        "planter floreira jardineira canteiro vaso",
+    ),
+    item(
+        "fence",
+        "Muro / cerca",
+        C::Outdoor,
+        [300.0, 10.0, 180.0],
+        WOOD,
+        Model::Fence,
+        "fence cerca muro gradil",
+    ),
+    item(
+        "pool",
+        "Piscina",
+        C::Outdoor,
+        [600.0, 300.0, 20.0],
+        [70, 165, 210],
+        Model::Pool,
+        "pool piscina",
+    ),
+    item(
+        "lounger",
+        "Espreguiçadeira",
+        C::Outdoor,
+        [65.0, 190.0, 80.0],
+        WHITE,
+        Model::Lounger,
+        "lounger espreguicadeira chaise",
+    ),
+    item(
+        "grill",
+        "Churrasqueira",
+        C::Outdoor,
+        [120.0, 60.0, 220.0],
+        [180, 90, 60],
+        Model::Grill,
+        "grill barbecue churrasqueira",
+    ),
+    item(
+        "bench",
+        "Banco",
+        C::Outdoor,
+        [150.0, 40.0, 45.0],
+        WOOD,
+        Model::Bench,
+        "bench banco",
     ),
     item(
         "tree",
@@ -1153,9 +1338,16 @@ impl CatalogItem {
             visible: true,
             level: None,
             discipline: self.category.discipline(),
+            opacity: matches!(self.model, Model::GlassPanel).then_some(0.35),
             ..Default::default()
         }
     }
+}
+
+/// A whole, non-negative repeat count from an already rounded float.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+pub(crate) fn count(value: f64) -> u32 {
+    value.max(0.0).min(f64::from(u32::MAX)) as u32
 }
 
 /// 3D mesh of a piece in its local frame (see [`mesh`] module docs), at its

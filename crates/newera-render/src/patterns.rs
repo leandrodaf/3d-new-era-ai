@@ -121,6 +121,21 @@ pub(crate) fn shade(kind: u32, u: f32, v: f32, pixel: f32) -> f32 {
         }
         9 => 0.88 + 0.14 * noise(u * 160.0, v * 160.0) + 0.06 * fbm(u * 6.0, v * 6.0),
         10 => 0.8 + 0.25 * fbm(u * 4.0, v * 4.0) + 0.08 * (noise(u * 60.0, v * 60.0) - 0.5),
+        11 => {
+            // Water: soft caustic ripples.
+            let warp = fbm(u * 3.0, v * 3.0) * 4.0;
+            let ripple = ((u * 9.0 + warp).sin() * (v * 7.0 - warp).cos()).abs();
+            0.88 + 0.2 * ripple.powf(3.0) + 0.05 * fbm(u * 8.0, v * 8.0)
+        }
+        12 => {
+            // Deck boards with open joints.
+            let row = v.floor();
+            let x = u + hash21(row, 5.0) * 3.0;
+            let tone = 0.8 + 0.3 * hash21(x.floor(), row);
+            let grain = fbm(x * 3.0, v * 10.0);
+            let gaps = joint(v, 0.06, 1.0, pixel).max(joint(x, 0.003, 1.0, pixel));
+            tone * (0.85 + 0.15 * grain) * (1.0 - 0.7 * gaps)
+        }
         _ => 1.0,
     }
 }

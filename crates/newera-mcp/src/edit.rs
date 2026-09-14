@@ -1312,7 +1312,7 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
     let mut commands = Vec::with_capacity(items.len());
     let mut ids = Vec::with_capacity(items.len());
     for spec in items {
-        if spec.cat == "beam" {
+        if spec.cat == "beam" && (spec.a.is_some() || spec.b.is_some()) {
             let (Some(a), Some(b)) = (spec.a, spec.b) else {
                 return Err("a beam needs `a` and `b` as [x,y,z]".into());
             };

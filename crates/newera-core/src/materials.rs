@@ -32,10 +32,12 @@ pub enum Pattern {
     Marble,
     Carpet,
     Grass,
+    Water,
+    Deck,
 }
 
 impl Pattern {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 12] = [
         Self::Wood,
         Self::Parquet,
         Self::Tiles,
@@ -46,6 +48,8 @@ impl Pattern {
         Self::Marble,
         Self::Carpet,
         Self::Grass,
+        Self::Water,
+        Self::Deck,
     ];
 
     pub fn key(self) -> &'static str {
@@ -60,6 +64,8 @@ impl Pattern {
             Self::Marble => "marble",
             Self::Carpet => "carpet",
             Self::Grass => "grass",
+            Self::Water => "water",
+            Self::Deck => "deck",
         }
     }
 
@@ -75,6 +81,8 @@ impl Pattern {
             Self::Marble => "Mármore",
             Self::Carpet => "Carpete",
             Self::Grass => "Grama",
+            Self::Water => "Água (piscina)",
+            Self::Deck => "Deck de madeira",
         }
     }
 
@@ -91,6 +99,8 @@ impl Pattern {
             Self::Marble => [236, 234, 230],
             Self::Carpet => [120, 110, 100],
             Self::Grass => [96, 140, 70],
+            Self::Water => [70, 165, 210],
+            Self::Deck => [150, 108, 72],
         }
     }
 
@@ -104,6 +114,8 @@ impl Pattern {
             Self::Stone => [80.0, 80.0],
             Self::Concrete | Self::Carpet | Self::Grass => [200.0, 200.0],
             Self::Marble => [120.0, 120.0],
+            Self::Water => [150.0, 150.0],
+            Self::Deck => [200.0, 14.0],
         }
     }
 

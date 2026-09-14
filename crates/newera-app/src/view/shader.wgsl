@@ -191,6 +191,21 @@ fn grass(uv: vec2<f32>) -> f32 {
     return 0.8 + 0.25 * fbm(uv * 4.0) + 0.08 * (noise(uv * 60.0) - 0.5);
 }
 
+fn water(uv: vec2<f32>) -> f32 {
+    let warp = fbm(uv * 3.0) * 4.0;
+    let ripple = abs(sin(uv.x * 9.0 + warp) * cos(uv.y * 7.0 - warp));
+    return 0.88 + 0.2 * pow(ripple, 3.0) + 0.05 * fbm(uv * 8.0);
+}
+
+fn deck(uv: vec2<f32>) -> f32 {
+    let row = floor(uv.y);
+    let x = uv.x + hash21(vec2<f32>(row, 5.0)) * 3.0;
+    let tone = 0.8 + 0.3 * hash21(vec2<f32>(floor(x), row));
+    let grain = fbm(vec2<f32>(x * 3.0, uv.y * 10.0));
+    let gaps = max(joint(uv.y, 0.06), joint(x, 0.003));
+    return tone * (0.85 + 0.15 * grain) * (1.0 - 0.7 * gaps);
+}
+
 fn pattern_shade(kind: u32, uv: vec2<f32>) -> f32 {
     switch kind {
         case 1u: { return wood(uv); }
@@ -203,6 +218,8 @@ fn pattern_shade(kind: u32, uv: vec2<f32>) -> f32 {
         case 8u: { return marble(uv); }
         case 9u: { return carpet(uv); }
         case 10u: { return grass(uv); }
+        case 11u: { return water(uv); }
+        case 12u: { return deck(uv); }
         default: { return 1.0; }
     }
 }

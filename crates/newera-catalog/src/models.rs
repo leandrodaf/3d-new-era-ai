@@ -117,6 +117,19 @@ pub(crate) fn build(model: Model, piece: &Furniture, color: Rgb) -> Mesh {
                 );
             }
         }
+        Model::Footing => footing(&mut ctx),
+        Model::Railing => railing(&mut ctx),
+        Model::Fence => fence(&mut ctx),
+        Model::Corrugated => corrugated(&mut ctx),
+        Model::GlassPanel => glass_panel(&mut ctx),
+        Model::GarageDoor => garage_door(&mut ctx),
+        Model::Pool => pool(&mut ctx),
+        Model::Lounger => lounger(&mut ctx),
+        Model::Grill => grill(&mut ctx),
+        Model::SofaL => sofa_l(&mut ctx),
+        Model::Bench => bench(&mut ctx),
+        Model::DiningSet { chairs } => dining_set(&mut ctx, chairs),
+        Model::Planter => planter(&mut ctx),
         Model::Rug | Model::Box | Model::Point(_) => {
             let c = ctx.c;
             ctx.cube(
@@ -1097,5 +1110,362 @@ fn crib(ctx: &mut Ctx) {
             ctx.cube([x0, x1], [35.0, h - 5.0], [z, z + 2.0], c);
             z += 9.0;
         }
+    }
+}
+
+fn footing(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let base = h * 0.4;
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [0.0, base],
+        [-d / 2.0, d / 2.0],
+        shade(c, -0.1),
+    );
+    let (pw, pd) = (w * 0.45, d * 0.45);
+    ctx.cube([-pw / 2.0, pw / 2.0], [base, h], [-pd / 2.0, pd / 2.0], c);
+}
+
+fn railing(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let post = d.clamp(3.0, 6.0);
+    let spans = (w / 120.0).ceil().max(1.0);
+    for i in 0..=crate::count(spans) {
+        let x = -w / 2.0 + post / 2.0 + (w - post) * f64::from(i) / spans;
+        ctx.cube(
+            [x - post / 2.0, x + post / 2.0],
+            [0.0, h],
+            [-d / 2.0, d / 2.0],
+            c,
+        );
+    }
+    for y in [h - post, h * 0.55, 10.0] {
+        ctx.cube(
+            [-w / 2.0, w / 2.0],
+            [y, y + post * 0.6],
+            [-d / 2.0, d / 2.0],
+            c,
+        );
+    }
+}
+
+fn fence(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let post = d.clamp(6.0, 12.0);
+    let spans = (w / 200.0).ceil().max(1.0);
+    for i in 0..=crate::count(spans) {
+        let x = -w / 2.0 + post / 2.0 + (w - post) * f64::from(i) / spans;
+        ctx.cube(
+            [x - post / 2.0, x + post / 2.0],
+            [0.0, h],
+            [-d / 2.0, d / 2.0],
+            shade(c, -0.15),
+        );
+    }
+    let boards = (h / 15.0).floor().max(2.0);
+    let pitch = h / boards;
+    for i in 0..crate::count(boards) {
+        let y = f64::from(i) * pitch + 1.0;
+        ctx.cube(
+            [-w / 2.0, w / 2.0],
+            [y, y + pitch - 2.0],
+            [-d / 4.0, d / 4.0],
+            c,
+        );
+    }
+}
+
+fn corrugated(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    // Ridges every ~18 cm across the width, running along the depth.
+    let waves = (w / 18.0).round().max(2.0);
+    let step = w / waves;
+    for i in 0..crate::count(waves) {
+        let x = -w / 2.0 + f64::from(i) * step;
+        let top = [x + step * 0.25, x + step * 0.75];
+        ctx.cube(
+            [x, x + step],
+            [0.0, h * 0.35],
+            [-d / 2.0, d / 2.0],
+            shade(c, -0.08),
+        );
+        ctx.cube([top[0], top[1]], [h * 0.35, h], [-d / 2.0, d / 2.0], c);
+    }
+}
+
+fn glass_panel(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let frame = 2.0_f64.min(w / 10.0);
+    ctx.cube(
+        [-w / 2.0 + frame, w / 2.0 - frame],
+        [frame, h - frame],
+        [-d / 2.0, d / 2.0],
+        c,
+    );
+    let metal = rgb(METAL);
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [0.0, frame],
+        [-d / 2.0, d / 2.0],
+        metal,
+    );
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [h - frame, h],
+        [-d / 2.0, d / 2.0],
+        metal,
+    );
+    ctx.cube(
+        [-w / 2.0, -w / 2.0 + frame],
+        [0.0, h],
+        [-d / 2.0, d / 2.0],
+        metal,
+    );
+    ctx.cube(
+        [w / 2.0 - frame, w / 2.0],
+        [0.0, h],
+        [-d / 2.0, d / 2.0],
+        metal,
+    );
+}
+
+fn garage_door(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let panels = (h / 50.0).round().max(3.0);
+    let step = h / panels;
+    for i in 0..crate::count(panels) {
+        let y = f64::from(i) * step;
+        ctx.cube(
+            [-w / 2.0, w / 2.0],
+            [y + 0.6, y + step - 0.6],
+            [-2.0, 2.0],
+            if i % 2 == 0 { c } else { shade(c, -0.05) },
+        );
+    }
+    ctx.cube(
+        [-w / 2.0, -w / 2.0 + 5.0],
+        [0.0, h],
+        [-d / 2.0, d / 2.0],
+        rgb(DARK),
+    );
+    ctx.cube(
+        [w / 2.0 - 5.0, w / 2.0],
+        [0.0, h],
+        [-d / 2.0, d / 2.0],
+        rgb(DARK),
+    );
+    ctx.handle(0.0, h * 0.2, 2.0, false);
+}
+
+fn pool(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let coping = 30.0_f64.min(w / 6.0).min(d / 6.0);
+    let stone = rgb([225, 220, 205]);
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [0.0, h],
+        [-d / 2.0, -d / 2.0 + coping],
+        stone,
+    );
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [0.0, h],
+        [d / 2.0 - coping, d / 2.0],
+        stone,
+    );
+    ctx.cube(
+        [-w / 2.0, -w / 2.0 + coping],
+        [0.0, h],
+        [-d / 2.0 + coping, d / 2.0 - coping],
+        stone,
+    );
+    ctx.cube(
+        [w / 2.0 - coping, w / 2.0],
+        [0.0, h],
+        [-d / 2.0 + coping, d / 2.0 - coping],
+        stone,
+    );
+    ctx.cube(
+        [-w / 2.0 + coping, w / 2.0 - coping],
+        [0.0, h * 0.7],
+        [-d / 2.0 + coping, d / 2.0 - coping],
+        c,
+    );
+}
+
+fn lounger(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let seat = h * 0.4;
+    ctx.legs(3.0, seat - 5.0, 4.0, rgb(METAL));
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [seat - 5.0, seat],
+        [-d / 2.0 + d * 0.3, d / 2.0],
+        c,
+    );
+    // Raised back over the first third, as a slanted slab.
+    let (z0, z1) = (-d / 2.0, -d / 2.0 + d * 0.3);
+    let (x0, x1) = (-w / 2.0, w / 2.0);
+    #[allow(clippy::cast_possible_truncation)]
+    let v = |x: f64, y: f64, z: f64| [x as f32, y as f32, z as f32];
+    let slab = [v(x0, h, z0), v(x1, h, z0), v(x1, seat, z1), v(x0, seat, z1)];
+    ctx.m.polygon(&[slab[3], slab[2], slab[1], slab[0]], c);
+    ctx.m
+        .polygon(&[slab[0], slab[1], slab[2], slab[3]], shade(c, -0.1));
+}
+
+fn grill(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let counter = h * 0.4;
+    ctx.cube([-w / 2.0, w / 2.0], [0.0, counter], [-d / 2.0, d / 2.0], c);
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [counter, counter + 4.0],
+        [-d / 2.0, d / 2.0],
+        rgb([60, 60, 62]),
+    );
+    // Firebox opening and chimney hood.
+    ctx.cube(
+        [-w * 0.35, w * 0.35],
+        [counter + 4.0, counter + 40.0],
+        [-d / 2.0, -d / 2.0 + 10.0],
+        c,
+    );
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [counter + 40.0, counter + 70.0],
+        [-d / 2.0, d / 2.0],
+        shade(c, -0.1),
+    );
+    ctx.cube(
+        [-w * 0.2, w * 0.2],
+        [counter + 70.0, h],
+        [-d * 0.3, d * 0.2],
+        c,
+    );
+}
+
+fn sofa_l(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let seat_d = (d * 0.55).min(95.0);
+    let back = 22.0_f64.min(seat_d * 0.25);
+    let arm = 18.0_f64.min(w * 0.08);
+    let seat = h * 0.5;
+    let chaise = (w * 0.3).max(70.0).min(w * 0.5);
+    // Main seat along the back.
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [0.0, seat],
+        [-d / 2.0, -d / 2.0 + seat_d],
+        shade(c, -0.1),
+    );
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [0.0, h],
+        [-d / 2.0, -d / 2.0 + back],
+        c,
+    );
+    ctx.cube(
+        [-w / 2.0, -w / 2.0 + arm],
+        [0.0, h * 0.68],
+        [-d / 2.0, -d / 2.0 + seat_d],
+        c,
+    );
+    // Chaise running forward on the right.
+    ctx.cube(
+        [w / 2.0 - chaise, w / 2.0],
+        [0.0, seat],
+        [-d / 2.0 + seat_d, d / 2.0],
+        shade(c, -0.1),
+    );
+    ctx.cube(
+        [w / 2.0 - arm, w / 2.0],
+        [0.0, h * 0.68],
+        [-d / 2.0, d / 2.0],
+        c,
+    );
+}
+
+fn bench(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    ctx.cube([-w / 2.0, w / 2.0], [h - 5.0, h], [-d / 2.0, d / 2.0], c);
+    for x in [-w / 2.0 + 8.0, w / 2.0 - 14.0] {
+        ctx.cube(
+            [x, x + 6.0],
+            [0.0, h - 5.0],
+            [-d / 2.0 + 4.0, d / 2.0 - 4.0],
+            shade(c, -0.2),
+        );
+    }
+}
+
+fn dining_set(ctx: &mut Ctx, chairs: u8) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let chair = 45.0_f64.min(d * 0.3);
+    let (tw, td) = (w - 2.0 * chair * 0.6, d - 2.0 * chair);
+    let top = 75.0_f64.min(h * 0.85);
+    // Table in the middle.
+    ctx.cube(
+        [-tw / 2.0, tw / 2.0],
+        [top - 4.0, top],
+        [-td / 2.0, td / 2.0],
+        c,
+    );
+    ctx.legs(chair + 5.0, top - 4.0, 6.0, shade(c, -0.2));
+    let per_side = u32::from(chairs.max(2)) / 2;
+    let seat = 45.0_f64.min(top * 0.6);
+    let fabric = rgb([150, 140, 125]);
+    for side in [-1.0, 1.0] {
+        for i in 0..per_side {
+            let x = -tw / 2.0 + tw * (f64::from(i) + 0.5) / f64::from(per_side);
+            let (z0, z1) = if side < 0.0 {
+                (-d / 2.0, -d / 2.0 + chair)
+            } else {
+                (d / 2.0 - chair, d / 2.0)
+            };
+            ctx.cube(
+                [x - chair / 2.2, x + chair / 2.2],
+                [seat - 4.0, seat],
+                [z0 + 3.0, z1 - 3.0],
+                fabric,
+            );
+            let back = if side < 0.0 {
+                [z0, z0 + 4.0]
+            } else {
+                [z1 - 4.0, z1]
+            };
+            ctx.cube(
+                [x - chair / 2.2, x + chair / 2.2],
+                [seat - 4.0, h],
+                back,
+                fabric,
+            );
+            ctx.cube(
+                [x - 2.0, x + 2.0],
+                [0.0, seat - 4.0],
+                [f64::midpoint(z0, z1) - 2.0, f64::midpoint(z0, z1) + 2.0],
+                shade(c, -0.2),
+            );
+        }
+    }
+}
+
+fn planter(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let soil = h * 0.55;
+    ctx.cube([-w / 2.0, w / 2.0], [0.0, soil], [-d / 2.0, d / 2.0], c);
+    let green = rgb([70, 140, 80]);
+    let clumps = (w / 30.0).round().max(1.0);
+    for i in 0..crate::count(clumps) {
+        let x = -w / 2.0 + w * (f64::from(i) + 0.5) / clumps;
+        ctx.m.frustum(
+            [x, soil, 0.0],
+            Axis::Y,
+            h - soil,
+            (w / clumps / 2.0).min(d / 2.0),
+            2.0,
+            10,
+            shade(green, if i % 2 == 0 { 0.0 } else { 0.1 }),
+        );
     }
 }

@@ -522,6 +522,68 @@ pub fn plan_symbol(piece: &Furniture) -> Vec<SymbolShape> {
         Model::Table { round: false } => {
             s.line(rect(-hw + 5.0, -hd + 5.0, hw - 5.0, hd - 5.0), true, false);
         }
+        Model::Pool => {
+            let coping = 30.0_f64.min(w / 6.0).min(d / 6.0);
+            s.boxed(
+                rect(-hw + coping, -hd + coping, hw - coping, hd - coping),
+                true,
+            );
+        }
+        Model::DiningSet { chairs } => {
+            let chair = 45.0_f64.min(d * 0.3);
+            let tw = w - 2.0 * chair * 0.6;
+            s.boxed(rect(-tw / 2.0, -hd + chair, tw / 2.0, hd - chair), false);
+            let per_side = u32::from(chairs.max(2)) / 2;
+            for i in 0..per_side {
+                let x = -tw / 2.0 + tw * (f64::from(i) + 0.5) / f64::from(per_side);
+                let half = chair / 2.2;
+                s.line(
+                    rect(x - half, -hd + 3.0, x + half, -hd + chair - 3.0),
+                    true,
+                    false,
+                );
+                s.line(
+                    rect(x - half, hd - chair + 3.0, x + half, hd - 3.0),
+                    true,
+                    false,
+                );
+            }
+        }
+        Model::SofaL => {
+            let seat_d = (d * 0.55).min(95.0);
+            let chaise = (w * 0.3).max(70.0).min(w * 0.5);
+            let back = 22.0_f64.min(seat_d * 0.25);
+            s.line(vec![(-hw, -hd + back), (hw, -hd + back)], false, false);
+            s.line(
+                vec![
+                    (-hw, -hd + seat_d),
+                    (hw - chaise, -hd + seat_d),
+                    (hw - chaise, hd),
+                ],
+                false,
+                false,
+            );
+        }
+        Model::Railing | Model::Fence | Model::GlassPanel => {
+            s.line(vec![(-hw, 0.0), (hw, 0.0)], false, true);
+        }
+        Model::Lounger => {
+            s.line(
+                vec![(-hw, -hd + d * 0.3), (hw, -hd + d * 0.3)],
+                false,
+                false,
+            );
+        }
+        Model::Grill => {
+            s.line(rect(-w * 0.35, -hd, w * 0.35, -hd + 10.0), true, false);
+        }
+        Model::Corrugated => {
+            let waves = (w / 18.0).round().max(2.0);
+            for i in 1..crate::count(waves) {
+                let x = -hw + w * f64::from(i) / waves;
+                s.line(vec![(x, -hd), (x, hd)], false, false);
+            }
+        }
         _ => {}
     }
     s.line(outline, true, true);
