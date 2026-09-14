@@ -371,7 +371,7 @@ impl Mesh {
         } else {
             (along, side)
         };
-        let text = newera_core::LengthUnit::Centimeter.format_length(a.distance(b).into());
+        let text = newera_core::LengthUnit::Centimeter.format_dimension(a.distance(b).into());
         let origin = (a2 + b2) / 2.0 + up * 3.0;
         self.add_text(&text, size, 0.5, origin, (right, up), color);
     }
@@ -882,15 +882,32 @@ impl Mesh {
         let piece_texture = piece.texture.as_ref().filter(|t| t.image.is_some());
         let texture_layer = piece_texture
             .map(|t| IMAGE_BASE + self.image_layer(t.image.as_deref().unwrap_or_default()));
-        // Material overrides and texture layers, resolved once per material.
-        let looks: Vec<(Option<[f32; 3]>, Option<u32>, f32)> = local
+        // Materials whose vertices carry texture coordinates.
+        let mut has_uv = vec![false; local.materials.len()];
+        for (k, uv) in local.uvs.iter().enumerate() {
+            if (uv[0] != 0.0 || uv[1] != 0.0)
+                && let Some(flag) = local
+                    .vertex_materials
+                    .get(k)
+                    .and_then(|&m| has_uv.get_mut(usize::from(m)))
+            {
+                *flag = true;
+            }
+        }
+        // Material overrides and texture layers, resolved once per material:
+        // `(color, layer, alpha, planar tile size)`. An override texture on a
+        // material without texture coordinates is laid flat at its real size.
+        let looks: Vec<Look> = local
             .materials
             .iter()
-            .map(|m| {
+            .enumerate()
+            .map(|(i, m)| {
                 let over = piece.materials.iter().find(|o| o.name == m.name);
                 let color = over.and_then(|o| o.color).map(srgb_to_linear);
-                let texture = over
+                let over_texture = over
                     .and_then(|o| o.texture.as_ref())
+                    .filter(|t| t.image.is_some());
+                let texture = over_texture
                     .and_then(|t| t.image.clone())
                     .or_else(|| m.texture.as_ref().map(|p| p.display().to_string()));
                 let layer = if color.is_some() {
@@ -898,9 +915,24 @@ impl Mesh {
                 } else {
                     texture.map(|t| IMAGE_BASE + self.image_layer(&t))
                 };
-                (color, layer, m.alpha)
+                let planar = over_texture
+                    .filter(|_| !has_uv.get(i).copied().unwrap_or(false))
+                    .map(newera_core::Material::tile_size);
+                (color, layer, m.alpha, planar)
             })
             .collect();
+        let planar_uv = |position: &[f32; 3], normal: &[f32; 3], [w, h]: [f64; 2]| {
+            let n = normal.map(f32::abs);
+            let (u, v) = if n[1] >= n[0] && n[1] >= n[2] {
+                (position[0], position[2])
+            } else if n[0] >= n[2] {
+                (position[2], position[1])
+            } else {
+                (position[0], position[1])
+            };
+            #[allow(clippy::cast_possible_truncation)]
+            [u / w as f32, v / h as f32]
+        };
 
         let base = self.next_index();
         let mut vertex_alpha = Vec::with_capacity(local.positions.len());
@@ -923,29 +955,20 @@ impl Mesh {
                 color = c;
             } else if let (Some(layer), Some(texture)) = (texture_layer, piece_texture) {
                 // Planar mapping on the face's dominant axis, at the texture's real size.
-                let [w, h] = texture.tile_size();
-                let n = normal.map(f32::abs);
-                let (u, v) = if n[1] >= n[0] && n[1] >= n[2] {
-                    (position[0], position[2])
-                } else if n[0] >= n[2] {
-                    (position[2], position[1])
-                } else {
-                    (position[0], position[1])
-                };
-                #[allow(clippy::cast_possible_truncation)]
-                {
-                    uv = [u / w as f32, v / h as f32];
-                }
+                uv = planar_uv(position, normal, texture.tile_size());
                 color = [1.0; 3];
                 kind = layer;
-            } else if let Some((over, layer, _)) = look {
+            } else if let Some((over, layer, _, planar)) = look {
                 if let Some(c) = over {
                     color = *c;
                 } else if let Some(layer) = layer {
                     color = [1.0; 3];
                     kind = *layer;
-                    // The shader flips v, matching OBJ's bottom-up convention.
-                    uv = local.uvs.get(k).copied().unwrap_or([0.0, 0.0]);
+                    uv = match planar {
+                        Some(size) => planar_uv(position, normal, *size),
+                        // The shader flips v, matching OBJ's bottom-up convention.
+                        None => local.uvs.get(k).copied().unwrap_or([0.0, 0.0]),
+                    };
                 }
             }
             if highlight {
@@ -1017,6 +1040,10 @@ impl Mesh {
         u32::try_from(self.vertices.len()).expect("mesh vertex count fits in u32")
     }
 }
+
+/// How one model material is painted: `(color, image layer, alpha, planar
+/// tile size)`.
+type Look = (Option<[f32; 3]>, Option<u32>, f32, Option<[f64; 2]>);
 
 /// Plan `(x, y)` maps to world `(x, z)`, which mirrors winding: polygons with
 /// a negative shoelace area are counter-clockwise when seen from above.
@@ -1353,5 +1380,63 @@ mod annotation_tests {
         );
         // Offset to the left of start → end on the plan is -y, world -z.
         assert!(lo.z < -0.5, "{lo}");
+    }
+}
+
+#[cfg(test)]
+mod material_tests {
+    use newera_catalog::{Mesh as ModelMesh, MeshMaterial};
+    use newera_core::{Material, ModelMaterial};
+
+    use super::*;
+
+    #[test]
+    fn override_textures_without_coordinates_are_laid_flat_at_real_size() {
+        // A 100 × 50 cm top, one material, no texture coordinates in the file.
+        let model = ModelMesh {
+            positions: vec![
+                [0.0, 4.0, 0.0],
+                [100.0, 4.0, 0.0],
+                [100.0, 4.0, 50.0],
+                [0.0, 4.0, 50.0],
+            ],
+            normals: vec![[0.0, 1.0, 0.0]; 4],
+            colors: vec![[0.06; 3]; 4],
+            indices: vec![0, 2, 1, 0, 3, 2],
+            uvs: vec![[0.0, 0.0]; 4],
+            vertex_materials: vec![0; 4],
+            materials: vec![MeshMaterial {
+                name: "stone".into(),
+                color: [0.06; 3],
+                alpha: 1.0,
+                texture: None,
+                shininess: 0.0,
+            }],
+        };
+        let mut piece = Furniture {
+            width: 100.0,
+            depth: 50.0,
+            height: 4.0,
+            ..Furniture::default()
+        };
+        piece.materials.push(ModelMaterial {
+            name: "stone".into(),
+            key: None,
+            color: None,
+            texture: Some(Material {
+                image: Some("marble.png".into()),
+                tile: Some([25.0, 25.0]),
+                ..Material::default()
+            }),
+            shininess: None,
+        });
+        let mesh = Mesh::piece_alone(&piece, &model);
+        let us: Vec<f32> = mesh.vertices.iter().map(|v| v.uv[0]).collect();
+        let span = us.iter().copied().fold(f32::MIN, f32::max)
+            - us.iter().copied().fold(f32::MAX, f32::min);
+        // 100 cm across 25 cm tiles: four repetitions, textured with the image.
+        assert!((span - 4.0).abs() < 1e-3, "{us:?}");
+        assert!(mesh.vertices.iter().all(|v| v.kind == IMAGE_BASE));
+        assert_eq!(mesh.images, ["marble.png"]);
     }
 }

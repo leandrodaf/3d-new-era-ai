@@ -65,6 +65,18 @@ impl LengthUnit {
         }
     }
 
+    /// The number written on a dimension line: no unit, as drawings state
+    /// it once in a note ("cotas em cm"), with a decimal comma like Brazilian
+    /// drawings and Sweet Home 3D in Portuguese: `434`, `65,5`, `3,52`.
+    pub fn format_dimension(self, cm: f64) -> String {
+        match self {
+            Self::Centimeter => trim(cm, 1).replace('.', ","),
+            Self::Meter => trim(cm / 100.0, 2).replace('.', ","),
+            Self::Millimeter => trim(cm * 10.0, 0),
+            Self::Imperial => self.format_length(cm),
+        }
+    }
+
     /// Formats a `width × depth × height` size with the unit written once,
     /// e.g. `210 × 90 × 85 cm`.
     pub fn format_size(self, size: [f64; 3]) -> String {
@@ -127,5 +139,14 @@ mod tests {
             LengthUnit::Meter.format_size([210.0, 90.0, 85.0]),
             "2.1 × 0.9 × 0.85 m"
         );
+    }
+
+    #[test]
+    fn dimension_numbers_have_no_unit_and_a_decimal_comma() {
+        assert_eq!(LengthUnit::Centimeter.format_dimension(434.0), "434");
+        assert_eq!(LengthUnit::Centimeter.format_dimension(65.5), "65,5");
+        assert_eq!(LengthUnit::Meter.format_dimension(352.0), "3,52");
+        assert_eq!(LengthUnit::Millimeter.format_dimension(12.34), "123");
+        assert_eq!(LengthUnit::Imperial.format_dimension(30.48), "1'0\"");
     }
 }

@@ -120,13 +120,18 @@ pub(crate) fn albedo(
     pixel: f32,
     images: &Images<'_>,
 ) -> Vec3 {
-    let base = color.truncate();
+    color.truncate() * detail(kind, uv, pixel, images)
+}
+
+/// What a texture image or pattern contributes on top of the flat color
+/// (white when there is none).
+pub(crate) fn detail(kind: u32, uv: [f32; 2], pixel: f32, images: &Images<'_>) -> Vec3 {
     if kind >= IMAGE_BASE {
-        base * images.sample((kind - IMAGE_BASE) as usize, uv[0], -uv[1])
+        images.sample((kind - IMAGE_BASE) as usize, uv[0], -uv[1])
     } else if kind > 0 {
-        base * patterns::shade(kind, uv[0], uv[1], pixel)
+        Vec3::splat(patterns::shade(kind, uv[0], uv[1], pixel))
     } else {
-        base
+        Vec3::ONE
     }
 }
 

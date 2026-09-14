@@ -7,7 +7,7 @@ use image::{Rgba, RgbaImage};
 
 use crate::camera::View;
 use crate::mesh::Mesh;
-use crate::raster::{Images, albedo};
+use crate::raster::{Images, detail};
 
 /// A small spherical light (a lamp's source).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -396,8 +396,10 @@ fn radiance(
             va.uv[0] * w + vb.uv[0] * u + vc.uv[0] * v,
             va.uv[1] * w + vb.uv[1] * u + vc.uv[1] * v,
         ];
-        let base =
-            to_linear(albedo(va.kind, color, uv, 0.002, &scene.images)).min(Vec3::splat(0.95));
+        // Like Sweet Home 3D photos: material colors are linear albedo,
+        // only image textures (and patterns standing in for them) are sRGB.
+        let base = (color.truncate() * to_linear(detail(va.kind, uv, 0.002, &scene.images)))
+            .min(Vec3::splat(0.95));
 
         // Glass lets light through.
         if scene.transparent[k] && pass_through < 6 && rng.next() > color.w.clamp(0.0, 1.0) * 0.6 {

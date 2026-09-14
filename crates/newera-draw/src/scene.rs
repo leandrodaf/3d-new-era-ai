@@ -1247,7 +1247,7 @@ pub fn dimension_items(scene: &mut Scene, dimension: &Dimension, unit: LengthUni
     scene.push(
         owner,
         Primitive::Text {
-            text: unit.format_length(length),
+            text: unit.format_dimension(length),
             position: Point2::new(a2.x.midpoint(b2.x), a2.y.midpoint(b2.y)),
             size: dimension
                 .style
@@ -1372,7 +1372,7 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert!(texts.contains(&"400 cm"), "{texts:?}");
+        assert!(texts.contains(&"400"), "{texts:?}");
         assert!(texts.contains(&"N"));
     }
 

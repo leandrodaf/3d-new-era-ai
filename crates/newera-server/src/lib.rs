@@ -433,10 +433,9 @@ fn scene(document: &SharedDocument) -> (newera_draw::Scene, Option<std::path::Pa
         show_background: true,
         ..newera_draw::SceneOptions::default()
     };
-    (
-        newera_draw::plan_scene(doc.home(), &options),
-        doc.asset_dir(),
-    )
+    // Only the storey being edited, like the editor and MCP draw it.
+    let view = doc.home().level_view(doc.home().current_level());
+    (newera_draw::plan_scene(&view, &options), doc.asset_dir())
 }
 
 async fn plan_png(
@@ -820,5 +819,46 @@ echo "args=$args"
         shutdown.cancel();
         server.await.unwrap().unwrap();
         std::fs::remove_dir_all(root).ok();
+    }
+
+    #[tokio::test]
+    async fn plan_shows_only_the_current_storey() {
+        use newera_core::{Label, LabelId, Level, LevelId};
+        let mut home = newera_core::Home::default();
+        for (id, name) in [(1, "Planta original"), (2, "Novo layout")] {
+            home.levels.push(Level {
+                id: LevelId(id),
+                name: name.into(),
+                ..Level::default()
+            });
+            home.labels.push(Label {
+                id: LabelId(10 + id),
+                text: format!("texto do {name}"),
+                level: Some(LevelId(id)),
+                ..Label::default()
+            });
+        }
+        home.selected_level = Some(LevelId(2));
+        let app = router(
+            SharedDocument::new(Document::new(home)),
+            DEFAULT_ADDR,
+            CancellationToken::new(),
+        );
+        let response = app
+            .oneshot(Request::get("/api/plan.svg").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let svg = String::from_utf8(
+            to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(svg.contains("texto do Novo layout"));
+        assert!(
+            !svg.contains("texto do Planta original"),
+            "other storeys stay out"
+        );
     }
 }
