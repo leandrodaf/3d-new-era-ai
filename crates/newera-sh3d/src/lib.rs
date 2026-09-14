@@ -8,7 +8,7 @@
 mod import;
 pub mod javaser;
 
-pub use import::{ImportError, Imported, import_file};
+pub use import::{BundledFiles, ImportError, Imported, import_bytes, import_file};
 
 use std::path::Path;
 

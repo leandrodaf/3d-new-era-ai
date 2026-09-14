@@ -65,7 +65,7 @@ pub fn load_model(path: &Path) -> Result<ImportedModel, ImportError> {
 }
 
 fn load_obj(path: &Path) -> Result<Mesh, ImportError> {
-    let text = std::fs::read(path)?;
+    let text = newera_core::vfs::read(path)?;
     let has_library = text
         .split(|&b| b == b'\n')
         .any(|line| line.trim_ascii_start().starts_with(b"mtllib"));
@@ -88,9 +88,9 @@ fn load_obj(path: &Path) -> Result<Mesh, ImportError> {
             if mtl == Path::new("__defaults__.mtl") {
                 return tobj::load_mtl_buf(&mut std::io::Cursor::new(default_library(&used)));
             }
-            let file =
-                std::fs::File::open(dir.join(mtl)).map_err(|_| tobj::LoadError::OpenFileFailed)?;
-            tobj::load_mtl_buf(&mut std::io::BufReader::new(file))
+            let bytes = newera_core::vfs::read(&dir.join(mtl))
+                .map_err(|_| tobj::LoadError::OpenFileFailed)?;
+            tobj::load_mtl_buf(&mut std::io::Cursor::new(bytes))
         },
     )?;
     // Missing or broken material files leave the model gray rather than failing.
@@ -166,6 +166,32 @@ fn load_obj(path: &Path) -> Result<Mesh, ImportError> {
     Ok(mesh)
 }
 
+/// Standard base64 (glTF data URIs).
+fn decode_base64(text: &str) -> Option<Vec<u8>> {
+    let value = |c: u8| match c {
+        b'A'..=b'Z' => Some(c - b'A'),
+        b'a'..=b'z' => Some(c - b'a' + 26),
+        b'0'..=b'9' => Some(c - b'0' + 52),
+        b'+' | b'-' => Some(62),
+        b'/' | b'_' => Some(63),
+        _ => None,
+    };
+    let mut out = Vec::with_capacity(text.len() * 3 / 4);
+    let (mut acc, mut bits) = (0u32, 0);
+    for c in text
+        .bytes()
+        .filter(|c| !c.is_ascii_whitespace() && *c != b'=')
+    {
+        acc = (acc << 6) | u32::from(value(c)?);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push(u8::try_from((acc >> bits) & 0xFF).ok()?);
+        }
+    }
+    Some(out)
+}
+
 /// MTL text for material names from the classic Wavefront default library
 /// (`white`, `flgrey`, `silver`…), with colors derived from their names.
 fn default_library(names: &[String]) -> String {
@@ -238,7 +264,21 @@ fn transform_vector(m: &Mat4, v: [f32; 3]) -> [f32; 3] {
 }
 
 fn load_gltf(path: &Path) -> Result<Mesh, ImportError> {
-    let (document, buffers, _images) = gltf::import(path)?;
+    let gltf::Gltf { document, blob } = gltf::Gltf::from_slice(&newera_core::vfs::read(path)?)?;
+    let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    // Buffers: the GLB chunk, embedded data URIs or files next to the model.
+    let buffers: Vec<Vec<u8>> = document
+        .buffers()
+        .map(|buffer| match buffer.source() {
+            gltf::buffer::Source::Bin => Ok(blob.clone().unwrap_or_default()),
+            gltf::buffer::Source::Uri(uri) => match uri.split_once(";base64,") {
+                Some((_, data)) if uri.starts_with("data:") => {
+                    decode_base64(data).ok_or_else(|| std::io::Error::other("bad data URI").into())
+                }
+                _ => newera_core::vfs::read(&dir.join(uri)).map_err(ImportError::from),
+            },
+        })
+        .collect::<Result<_, ImportError>>()?;
     let mut mesh = Mesh::default();
     let identity: Mat4 = [
         [1.0, 0.0, 0.0, 0.0],
@@ -365,5 +405,42 @@ mod tests {
             Err(ImportError::Format(_))
         ));
         std::fs::remove_dir_all(dir).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod memory_tests {
+    use super::*;
+
+    #[test]
+    fn models_load_from_mounted_files_with_their_materials() {
+        let dir = Path::new("/virtual/catalog-memory-test");
+        newera_core::vfs::mount(
+            dir,
+            [
+                (
+                    "cube/cube.obj".to_owned(),
+                    b"mtllib cube.mtl\nusemtl red\nv 0 0 0\nv 100 0 0\nv 100 100 0\nv 0 0 50\nf 1 2 3\nf 1 3 4\n".to_vec(),
+                ),
+                ("cube/cube.mtl".to_owned(), b"newmtl red\nKd 0.9 0.1 0.1\n".to_vec()),
+                // A glTF whose buffer is a base64 data URI: one triangle.
+                (
+                    "tri.gltf".to_owned(),
+                    br#"{"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+                        "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],
+                        "buffers":[{"byteLength":36,"uri":"data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAADIQgAAAAAAAAAAAAAAAAAAyEIAAAAA"}],
+                        "bufferViews":[{"buffer":0,"byteLength":36}],
+                        "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[100,100,0]}]}"#
+                        .to_vec(),
+                ),
+            ],
+        );
+        let obj = load_model(&dir.join("cube/cube.obj")).unwrap();
+        assert_eq!(obj.mesh.materials[0].name, "red");
+        assert!((obj.mesh.materials[0].color[0] - 0.9).abs() < 1e-6);
+        let gltf = load_model(&dir.join("tri.gltf")).unwrap();
+        assert_eq!(gltf.mesh.indices.len(), 3);
+        newera_core::vfs::unmount(dir);
+        assert!(load_model(&dir.join("tri.gltf")).is_err());
     }
 }

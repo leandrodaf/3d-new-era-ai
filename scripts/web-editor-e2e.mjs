@@ -60,8 +60,23 @@ try {
     started = await evaluate("!document.getElementById('loading') && document.readyState === 'complete'");
   }
   if (!started) throw new Error("the editor did not start in 60 s");
-  await sleep(3000);
+  // Wait until the canvas shows something other than a blank page.
+  for (let i = 0; i < 40; i++) {
+    await sleep(500);
+    const { result } = await send("Page.captureScreenshot", { format: "png" });
+    if (result.data.length > 20000) break;
+  }
+  await sleep(1500);
   await shot("web-editor-start.png");
+  if (url.includes("project=")) {
+    // A project was given: just check it opened without errors.
+    const status = await evaluate("document.title");
+    console.log("title:", status);
+    const log = await evaluate("JSON.stringify(window.neweraLog || [])");
+    console.log("log:", log);
+    failed = JSON.parse(log).some((line) => /^(error|uncaught|rejection)/.test(line));
+    throw Object.assign(new Error("done"), { done: true });
+  }
   // Wall tool (W), then a wall drawn right of the demo house on the plan.
   await send("Input.dispatchKeyEvent", { type: "keyDown", key: "w", code: "KeyW", text: "w" });
   await send("Input.dispatchKeyEvent", { type: "keyUp", key: "w", code: "KeyW" });
@@ -73,10 +88,12 @@ try {
   await shot("web-editor-wall.png");
   const log = await evaluate("JSON.stringify(window.neweraLog || [])");
   console.log("log:", log);
-  failed = log !== "[]";
+  failed = JSON.parse(log).some((line) => /^(error|uncaught|rejection)/.test(line));
 } catch (error) {
-  console.error(error.message);
-  failed = true;
+  if (!error.done) {
+    console.error(error.message);
+    failed = true;
+  }
 } finally {
   ws.close();
   chrome.kill();

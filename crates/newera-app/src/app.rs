@@ -607,8 +607,9 @@ impl NewEraApp {
                 Ok(to_svg(&scene, &SvgOptions::default()).into_bytes())
             } else {
                 let load = |p: &str| {
-                    image::open(newera_core::resolve_asset(assets.as_deref(), p))
+                    newera_core::vfs::read(&newera_core::resolve_asset(assets.as_deref(), p))
                         .ok()
+                        .and_then(|b| image::load_from_memory(&b).ok())
                         .map(|i| i.to_rgba8())
                 };
                 let options = RenderOptions {
@@ -1506,7 +1507,15 @@ impl NewEraApp {
         );
         drop(doc);
         if title != self.title {
+            // The browser tab title is the page's; windows get a viewport command.
+            #[cfg(target_arch = "wasm32")]
+            if let Some(document) = web_sys::window().and_then(|w| w.document()) {
+                document.set_title(&title);
+            }
+            #[cfg(not(target_arch = "wasm32"))]
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
+            #[cfg(target_arch = "wasm32")]
+            let _ = ctx;
             self.title = title;
         }
     }
@@ -1727,15 +1736,45 @@ impl NewEraApp {
 }
 
 impl NewEraApp {
-    /// Loads a project from memory (JSON or bundle, without its assets).
+    /// Loads a project from memory: a `.newera` (JSON or bundle, whose models
+    /// and textures are mounted in memory) or a Sweet Home 3D `.sh3d`.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub(crate) fn open_bytes(&mut self, name: &str, bytes: &[u8]) {
+        let assets = std::path::PathBuf::from("/memory").join(name);
+        if let Some(previous) = self.document.read().asset_dir() {
+            newera_core::vfs::unmount(&previous);
+        }
+        let sh3d = name.to_ascii_lowercase().ends_with(".sh3d");
+        if sh3d {
+            let stem = name.rsplit_once('.').map_or(name, |(s, _)| s);
+            match newera_sh3d::import_bytes(bytes, stem, &assets) {
+                Ok((imported, _files)) => {
+                    let mut doc = self.document.write();
+                    doc.load(imported.home);
+                    doc.set_path(None);
+                    doc.set_asset_dir(Some(assets));
+                    drop(doc);
+                    self.after_load();
+                    let mut status = format!(
+                        "Importado de {name} — salve como projeto para manter tudo num arquivo"
+                    );
+                    if !imported.warnings.is_empty() {
+                        let _ = write!(status, " · {} aviso(s)", imported.warnings.len());
+                    }
+                    self.set_status(status);
+                }
+                Err(err) => self.set_status(format!("⚠ Não foi possível abrir {name}: {err}")),
+            }
+            return;
+        }
         match newera_core::project_from_bytes(bytes) {
-            Ok((project, _files)) => {
+            Ok((project, files)) => {
+                let bundled = !files.is_empty();
+                newera_core::vfs::mount(&assets, files);
                 let mut doc = self.document.write();
                 project.load_into(&mut doc);
                 doc.mark_saved(name);
-                doc.set_asset_dir(None);
+                doc.set_asset_dir(bundled.then_some(assets));
                 drop(doc);
                 self.after_load();
                 self.set_status(format!("Aberto: {name}"));

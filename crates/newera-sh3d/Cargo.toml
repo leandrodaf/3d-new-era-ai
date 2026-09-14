@@ -16,3 +16,6 @@ zip.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+newera-catalog.workspace = true

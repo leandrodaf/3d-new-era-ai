@@ -68,8 +68,10 @@ mod web {
     /// Opens the browser's file picker; the file shows up in [`take_picked`].
     pub(crate) fn pick(kind: PickKind, ctx: &eframe::egui::Context) {
         let dialog = match kind {
-            PickKind::Project => rfd::AsyncFileDialog::new()
-                .add_filter("3D New Era AI", &[newera_core::PROJECT_EXTENSION]),
+            PickKind::Project => rfd::AsyncFileDialog::new().add_filter(
+                "3D New Era AI / Sweet Home 3D",
+                &[newera_core::PROJECT_EXTENSION, "sh3d"],
+            ),
         };
         let ctx = ctx.clone();
         wasm_bindgen_futures::spawn_local(async move {

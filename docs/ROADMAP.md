@@ -138,7 +138,8 @@ The core of what makes the editor useful: placing real objects with real dimensi
       plan, 3D, catalog, dialogs, undo; opens `.newera` from the file picker or
       `?project=URL`, saves and exports (PDF, SVG, PNG, GLB, photos) as downloads;
       `make web-editor`, served at `/editor/`; `scripts/web-editor-e2e.mjs` draws a wall
-      in headless Chrome. Desktop-only for now: `.sh3d` import, model/image import, video
+      in headless Chrome. Opens `.sh3d` files and bundles with their models and textures in memory; desktop-only
+      for now: importing loose model/image files and video
 - [x] Auth for exposing the server on a network: `--token`/`NEWERA_TOKEN` required beyond
       loopback (Bearer header or `?token=`), MCP host checks relaxed only then
 - [x] Live updates: `GET /api/events` (SSE revision events)
@@ -171,9 +172,11 @@ renderer, separate user home) and compared with this project's output:
   as linear albedo like SunFlow (a beige sofa was rendered orange); override textures
   on model materials without texture coordinates are laid flat at real size (marble
   around the sink).
-- Known differences, by design or out of scope: our photos are brighter (auto exposure)
-  and use their own path tracer; Sweet Home 3D headless plans show furniture icons,
-  ours draw symbols or top views.
+- Photo exposure calibrated against those references (similar average brightness) and
+  the denoiser no longer leaves dark specks.
+- Known differences, by design: our photos use their own path tracer; Sweet Home 3D
+  headless plans show furniture icons, ours draw symbols or top views; ceiling lights
+  and other pieces above door heads are dashed on our plans.
 
 ## Sweet Home 3D is a reference, not a source
 

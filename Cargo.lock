@@ -2731,6 +2731,7 @@ name = "newera-editor-web"
 version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
+ "log",
  "newera-app",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -2810,6 +2811,7 @@ name = "newera-sh3d"
 version = "0.1.0"
 dependencies = [
  "image",
+ "newera-catalog",
  "newera-core",
  "thiserror 2.0.20",
  "zip",

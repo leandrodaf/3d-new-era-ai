@@ -45,6 +45,9 @@ pub enum ImportError {
     NotAHome,
 }
 
+/// Files extracted in memory, by name relative to the assets directory.
+pub type BundledFiles = Vec<(String, Vec<u8>)>;
+
 /// Result of an import.
 #[derive(Debug)]
 pub struct Imported {
@@ -56,21 +59,43 @@ pub struct Imported {
 /// Imports `path`, extracting embedded files under `assets` (created if
 /// needed). Asset paths in the returned home are relative to `assets`.
 pub fn import_file(path: &Path, assets: &Path) -> Result<Imported, ImportError> {
-    let file = std::fs::File::open(path).map_err(|source| ImportError::Io {
+    let bytes = std::fs::read(path).map_err(|source| ImportError::Io {
         path: path.to_owned(),
         source,
     })?;
-    let mut archive = zip::ZipArchive::new(file)?;
-    let mut bytes = Vec::new();
+    let name = path.file_stem().map(|s| s.to_string_lossy().into_owned());
+    let (imported, _) = import(&bytes, name, assets, false)?;
+    Ok(imported)
+}
+
+/// Imports a `.sh3d` file held in memory, without touching the disk: embedded
+/// files are mounted in [`newera_core::vfs`] under `assets` (any virtual
+/// directory) and also returned by name, e.g. to save a bundle later.
+pub fn import_bytes(
+    bytes: &[u8],
+    name: &str,
+    assets: &Path,
+) -> Result<(Imported, BundledFiles), ImportError> {
+    import(bytes, Some(name.to_owned()), assets, true)
+}
+
+fn import(
+    bytes: &[u8],
+    name: Option<String>,
+    assets: &Path,
+    in_memory: bool,
+) -> Result<(Imported, BundledFiles), ImportError> {
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec()))?;
+    let mut data = Vec::new();
     archive
         .by_name("Home")
         .map_err(|_| ImportError::NoHome)?
-        .read_to_end(&mut bytes)
+        .read_to_end(&mut data)
         .map_err(|source| ImportError::Io {
-            path: path.to_owned(),
+            path: PathBuf::from("Home"),
             source,
         })?;
-    let graph = Graph::parse(&bytes)?;
+    let graph = Graph::parse(&data)?;
     let root = graph
         .roots
         .iter()
@@ -80,6 +105,7 @@ pub fn import_file(path: &Path, assets: &Path) -> Result<Imported, ImportError> 
         graph: &graph,
         archive,
         assets: assets.to_owned(),
+        memory: in_memory.then(Vec::new),
         extracted: HashMap::new(),
         levels: HashMap::new(),
         warnings: Vec::new(),
@@ -87,13 +113,16 @@ pub fn import_file(path: &Path, assets: &Path) -> Result<Imported, ImportError> 
     };
     importer.home(root);
     let mut home = importer.home;
-    home.name = path
-        .file_stem()
-        .map_or_else(|| home.name.clone(), |s| s.to_string_lossy().into_owned());
-    Ok(Imported {
-        home,
-        warnings: importer.warnings,
-    })
+    if let Some(name) = name {
+        home.name = name;
+    }
+    Ok((
+        Imported {
+            home,
+            warnings: importer.warnings,
+        },
+        importer.memory.unwrap_or_default(),
+    ))
 }
 
 /// Typed view of a deserialized object.
@@ -329,8 +358,10 @@ const PIECE_NAME_SIZE: f64 = 18.0;
 
 struct Importer<'g> {
     graph: &'g Graph,
-    archive: zip::ZipArchive<std::fs::File>,
+    archive: zip::ZipArchive<std::io::Cursor<Vec<u8>>>,
     assets: PathBuf,
+    /// Files extracted in memory (browser editor) instead of on disk.
+    memory: Option<Vec<(String, Vec<u8>)>>,
     /// Archive entry → extracted relative path (`None` when it failed).
     extracted: HashMap<String, Option<String>>,
     levels: HashMap<usize, LevelId>,
@@ -411,21 +442,28 @@ impl<'g> Importer<'g> {
         path
     }
 
+    /// Saves an extracted file under the assets directory (or in memory).
+    fn store(&mut self, relative: &str, bytes: Vec<u8>) -> std::io::Result<()> {
+        if let Some(memory) = &mut self.memory {
+            newera_core::vfs::mount(&self.assets, [(relative.to_owned(), bytes.clone())]);
+            memory.push((relative.to_owned(), bytes));
+            return Ok(());
+        }
+        let target = self.assets.join(relative);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(target, bytes)
+    }
+
     fn extract(&mut self, entry: &str, kind: AssetKind) -> std::io::Result<String> {
-        let read = |archive: &mut zip::ZipArchive<std::fs::File>, name: &str| {
+        let read = |archive: &mut zip::ZipArchive<std::io::Cursor<Vec<u8>>>, name: &str| {
             let mut bytes = Vec::new();
             archive
                 .by_name(name)
                 .map_err(std::io::Error::other)?
                 .read_to_end(&mut bytes)?;
             Ok::<_, std::io::Error>(bytes)
-        };
-        let write = |relative: &str, bytes: &[u8]| {
-            let target = self.assets.join(relative);
-            if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            std::fs::write(target, bytes)
         };
         match entry.rsplit_once('/') {
             // A file inside a directory: models bring their MTL and textures.
@@ -441,7 +479,7 @@ impl<'g> Importer<'g> {
                 };
                 for name in names {
                     let bytes = read(&mut self.archive, &name)?;
-                    write(&name, &bytes)?;
+                    self.store(&name, bytes)?;
                 }
                 Ok(entry.to_owned())
             }
@@ -456,7 +494,7 @@ impl<'g> Importer<'g> {
                     return self.extract_nested_model(entry, &bytes);
                 }
                 let name = format!("{entry}.{ext}");
-                write(&name, &bytes)?;
+                self.store(&name, bytes)?;
                 Ok(name)
             }
         }
@@ -464,7 +502,7 @@ impl<'g> Importer<'g> {
 
     /// Some models are stored as a ZIP inside the file; unpack it and point
     /// at its first model file.
-    fn extract_nested_model(&self, entry: &str, bytes: &[u8]) -> std::io::Result<String> {
+    fn extract_nested_model(&mut self, entry: &str, bytes: &[u8]) -> std::io::Result<String> {
         let mut inner =
             zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(std::io::Error::other)?;
         let mut model = None;
@@ -474,13 +512,10 @@ impl<'g> Importer<'g> {
                 continue;
             }
             let name = format!("{entry}.d/{}", file.name());
-            let target = self.assets.join(&name);
-            if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
             let mut data = Vec::new();
             file.read_to_end(&mut data)?;
-            std::fs::write(&target, &data)?;
+            drop(file);
+            self.store(&name, data)?;
             let lower = name.to_lowercase();
             if model.is_none()
                 && [".obj", ".gltf", ".glb", ".dae", ".3ds"]
@@ -667,7 +702,16 @@ impl<'g> Importer<'g> {
 
     fn background(&mut self, b: Obj<'_>) -> Option<BackgroundImage> {
         let path = self.asset(b.obj("image"), AssetKind::Image)?;
-        let (width, height) = image::image_dimensions(self.assets.join(&path)).unwrap_or((1, 1));
+        let (width, height) = newera_core::vfs::read(&self.assets.join(&path))
+            .ok()
+            .and_then(|bytes| {
+                image::ImageReader::new(std::io::Cursor::new(bytes))
+                    .with_guessed_format()
+                    .ok()?
+                    .into_dimensions()
+                    .ok()
+            })
+            .unwrap_or((1, 1));
         let start = Point2::new(b.f("scaleDistanceXStart"), b.f("scaleDistanceYStart"));
         let end = Point2::new(b.f("scaleDistanceXEnd"), b.f("scaleDistanceYEnd"));
         let cm_per_px =
@@ -1211,6 +1255,94 @@ mod tests {
             [0x12, 0x34, 0x56]
         );
         assert_eq!(rgb(0x00B8_BB5D), [0xB8, 0xBB, 0x5D]);
+    }
+
+    /// The real project saved as a bundle and reopened keeps every file its
+    /// models and materials need.
+    #[test]
+    #[ignore = "needs NEWERA_SH3D_SAMPLE=/path/to/file.sh3d"]
+    fn a_real_home_round_trips_through_a_bundle() {
+        let path = std::env::var("NEWERA_SH3D_SAMPLE").expect("NEWERA_SH3D_SAMPLE");
+        let root = std::env::temp_dir().join(format!("newera-sh3d-bundle-{}", std::process::id()));
+        let mut doc = newera_core::Document::default();
+        crate::open_file(&mut doc, Path::new(&path)).unwrap();
+        let file = root.join("planta.newera");
+        std::fs::create_dir_all(&root).unwrap();
+        newera_core::save_project(&doc, &file).unwrap();
+        let (project, dir) = newera_core::open_project(&file, &root.join("cache")).unwrap();
+        let dir = dir.unwrap();
+        let mut home = project.variants[0].1.clone();
+        let mut missing = Vec::new();
+        let mut total = 0;
+        home.for_each_asset_mut(&mut |p| {
+            total += 1;
+            if !dir.join(p.as_str()).exists() {
+                missing.push(p.clone());
+            }
+        });
+        assert!(total > 0 && missing.is_empty(), "missing {missing:?}");
+        let models: Vec<String> = home
+            .furniture
+            .iter()
+            .flat_map(|f| f.flatten())
+            .filter_map(|f| f.model.clone())
+            .collect();
+        let broken: Vec<&String> = models
+            .iter()
+            .filter(|m| newera_catalog::load_model(&dir.join(m.as_str())).is_err())
+            .collect();
+        assert!(broken.is_empty(), "{broken:?}");
+        // Textures named by the models' material libraries came along too.
+        for model in models
+            .iter()
+            .filter(|m| m.to_ascii_lowercase().ends_with(".obj"))
+        {
+            let mesh = newera_catalog::load_model(&dir.join(model.as_str()))
+                .unwrap()
+                .mesh;
+            for texture in mesh.materials.iter().filter_map(|m| m.texture.as_ref()) {
+                assert!(texture.exists(), "{model}: {}", texture.display());
+            }
+        }
+        let size = std::fs::metadata(&file).unwrap().len();
+        println!(
+            "bundle {size} bytes, {total} assets, {} models",
+            models.len()
+        );
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    /// The same real project imported in memory matches the import on disk,
+    /// and its models load from the mounted files.
+    #[test]
+    #[ignore = "needs NEWERA_SH3D_SAMPLE=/path/to/file.sh3d"]
+    fn imports_a_real_home_in_memory() {
+        let path = std::env::var("NEWERA_SH3D_SAMPLE").expect("NEWERA_SH3D_SAMPLE");
+        let disk_dir =
+            std::env::temp_dir().join(format!("newera-sh3d-disk-{}", std::process::id()));
+        let on_disk = import_file(Path::new(&path), &disk_dir).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        let virtual_dir = Path::new("/virtual/sh3d-memory-test");
+        let (in_memory, files) = import_bytes(&bytes, "planta", virtual_dir).unwrap();
+        assert!(!files.is_empty());
+        let (mut a, mut b) = (on_disk.home.clone(), in_memory.home.clone());
+        a.name.clear();
+        b.name.clear();
+        assert_eq!(a, b, "same home either way");
+        let models: Vec<String> = in_memory
+            .home
+            .furniture
+            .iter()
+            .flat_map(|f| f.flatten())
+            .filter_map(|f| f.model.clone())
+            .collect();
+        assert!(!models.is_empty());
+        let loaded = models
+            .iter()
+            .filter(|m| newera_catalog::load_model(&virtual_dir.join(m)).is_ok())
+            .count();
+        assert_eq!(loaded, models.len(), "every model loads from memory");
+        std::fs::remove_dir_all(disk_dir).ok();
     }
 
     /// Imports the real project given by `NEWERA_SH3D_SAMPLE` and checks

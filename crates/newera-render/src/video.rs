@@ -164,8 +164,9 @@ pub fn render_frames(
             .borrow_mut()
             .entry(file.to_owned())
             .or_insert_with(|| {
-                image::open(newera_core::resolve_asset(assets, file))
+                newera_core::vfs::read(&newera_core::resolve_asset(assets, file))
                     .ok()
+                    .and_then(|b| image::load_from_memory(&b).ok())
                     .map(|i| {
                         image::imageops::resize(
                             &i.to_rgba8(),

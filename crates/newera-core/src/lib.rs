@@ -27,6 +27,7 @@ pub mod ops;
 mod project;
 mod style;
 mod units;
+pub mod vfs;
 
 pub use analysis::{Issue, check_layout, door_swing};
 pub use annotations::{

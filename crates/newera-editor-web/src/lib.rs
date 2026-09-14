@@ -4,6 +4,32 @@
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+/// Sends warnings and errors from the renderer (wgpu, eframe) to the browser
+/// console, where they would otherwise be lost.
+#[cfg(target_arch = "wasm32")]
+struct ConsoleLog;
+
+#[cfg(target_arch = "wasm32")]
+impl log::Log for ConsoleLog {
+    fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
+        metadata.level() <= log::Level::Warn
+    }
+
+    fn log(&self, record: &log::Record<'_>) {
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+        let text = JsValue::from_str(&format!("{}: {}", record.target(), record.args()));
+        if record.level() == log::Level::Error {
+            web_sys::console::error_1(&text);
+        } else {
+            web_sys::console::warn_1(&text);
+        }
+    }
+
+    fn flush(&self) {}
+}
+
 /// Starts the editor in the canvas with id `canvas_id`, opening `bytes`
 /// (a `.newera` project named `name`) when given.
 #[cfg(target_arch = "wasm32")]
@@ -15,6 +41,9 @@ pub async fn start(
 ) -> Result<(), JsValue> {
     use wasm_bindgen::JsCast;
     console_error_panic_hook::set_once();
+    if log::set_logger(&ConsoleLog).is_ok() {
+        log::set_max_level(log::LevelFilter::Warn);
+    }
     let canvas = web_sys::window()
         .and_then(|w| w.document())
         .and_then(|d| d.get_element_by_id(&canvas_id))

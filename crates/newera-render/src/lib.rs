@@ -167,8 +167,9 @@ impl TopViews {
         let proj = glam::camera::rh::proj::directx::orthographic(-hw, hw, -hd, hd, 0.01, top + 2.0);
         let assets = self.assets.clone();
         let load = |file: &str| {
-            image::open(newera_core::resolve_asset(assets.as_deref(), file))
+            newera_core::vfs::read(&newera_core::resolve_asset(assets.as_deref(), file))
                 .ok()
+                .and_then(|b| image::load_from_memory(&b).ok())
                 .map(|i| {
                     image::imageops::resize(
                         &i.to_rgba8(),
@@ -236,7 +237,7 @@ pub fn export_home(
     mesh.drop_ground();
     let images = |file: &str| {
         let path = newera_core::resolve_asset(assets, file);
-        let bytes = std::fs::read(&path).ok()?;
+        let bytes = newera_core::vfs::read(&path).ok()?;
         let ext = path
             .extension()
             .and_then(|e| e.to_str())
@@ -362,8 +363,9 @@ pub fn photo_home(
     }
     let (samples, bounces) = quality.budget();
     let load = |file: &str| {
-        image::open(newera_core::resolve_asset(assets, file))
+        newera_core::vfs::read(&newera_core::resolve_asset(assets, file))
             .ok()
+            .and_then(|b| image::load_from_memory(&b).ok())
             .map(|i| {
                 image::imageops::resize(
                     &i.to_rgba8(),
@@ -405,8 +407,9 @@ pub fn render_home(
     #[allow(clippy::cast_precision_loss)]
     let aspect = width.max(1) as f32 / height.max(1) as f32;
     let load = |file: &str| {
-        image::open(newera_core::resolve_asset(assets, file))
+        newera_core::vfs::read(&newera_core::resolve_asset(assets, file))
             .ok()
+            .and_then(|b| image::load_from_memory(&b).ok())
             .map(|i| {
                 image::imageops::resize(
                     &i.to_rgba8(),

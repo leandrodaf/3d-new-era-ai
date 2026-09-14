@@ -549,7 +549,13 @@ impl Gpu {
         queue: Option<&wgpu::Queue>,
         images: &[image::RgbaImage],
     ) -> wgpu::BindGroup {
-        let layers = u32::try_from(images.len().max(1)).expect("layer count fits in u32");
+        // GL backends (WebGL) guess the view from the layer count: one layer
+        // means plain 2D and multiples of six mean cube maps, and sampling the
+        // array then reads black. A spare layer avoids both.
+        let mut layers = u32::try_from(images.len().max(2)).expect("layer count fits in u32");
+        if layers % 6 == 0 {
+            layers += 1;
+        }
         let (size, mips) = if images.is_empty() {
             (1, 1)
         } else {
@@ -647,7 +653,10 @@ impl Gpu {
             .iter()
             .map(|file| {
                 let path = newera_core::resolve_asset(project, file);
-                match image::open(&path) {
+                match newera_core::vfs::read(&path)
+                    .map_err(|e| e.to_string())
+                    .and_then(|b| image::load_from_memory(&b).map_err(|e| e.to_string()))
+                {
                     Ok(img) => image::imageops::resize(
                         &img.to_rgba8(),
                         IMAGE_SIZE,
@@ -656,6 +665,10 @@ impl Gpu {
                     ),
                     Err(err) => {
                         tracing::warn!("cannot load texture {}: {err}", path.display());
+                        #[cfg(target_arch = "wasm32")]
+                        web_sys::console::warn_1(
+                            &format!("cannot load texture {}: {err}", path.display()).into(),
+                        );
                         image::RgbaImage::from_pixel(
                             IMAGE_SIZE,
                             IMAGE_SIZE,
