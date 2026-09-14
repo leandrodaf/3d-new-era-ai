@@ -2,8 +2,8 @@
 //! rooms sorted into how they are used, and a way to measure the free
 //! floor beside a piece.
 
-use geo::{Area, BooleanOps, Contains, Coord, LineString, Polygon};
-use newera_core::{Furniture, Home, Point2, Room};
+use geo::{Area, BooleanOps, Contains, Coord, LineString, Polygon, Translate};
+use newera_core::{Furniture, FurnitureId, Home, Point2, Room};
 
 /// What a piece is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,7 +130,122 @@ fn classify(piece: &Furniture, params: Option<&serde_json::Value>) -> Use {
         "bookcase" | "sideboard" | "tv-stand" => Use::Storage,
         c if c.starts_with("switch") => Use::Switch,
         c if c.starts_with("outlet") || c == "data-outlet" => Use::Outlet,
-        _ => Use::Other,
+        _ => by_name(piece),
+    }
+}
+
+/// Imported and grouped pieces carry no catalog id: read their name and size.
+fn by_name(piece: &Furniture) -> Use {
+    let n = plain(&piece.name);
+    // Designers number their modules: `10 — Pia: dois gavetões`.
+    let n = n
+        .split_once(" — ")
+        .filter(|(head, _)| head.chars().all(|c| c.is_ascii_alphanumeric()))
+        .map_or(n.as_str(), |(_, rest)| rest)
+        .to_owned();
+    let has = |words: &[&str]| words.iter().any(|w| n.contains(w));
+    let starts = |words: &[&str]| words.iter().any(|w| n.starts_with(w));
+    let (w, h) = (piece.width, piece.height);
+    let (lo, _) = piece.height_range();
+    let cabinet = has(&[
+        "gavet", "armario", "gabinete", "portas", "modulo", "balcao", "nicho",
+    ]);
+    if h <= 2.0
+        || has(&[
+            "tapete",
+            "luminaria",
+            "pendente",
+            "arandela",
+            "spot",
+            "livro",
+            "quadro",
+        ])
+    {
+        Use::Other
+    } else if starts(&["cama"]) {
+        if has(&["solteiro"]) || w < 120.0 {
+            Use::Bed(1)
+        } else {
+            Use::Bed(2)
+        }
+    } else if has(&["berco"]) {
+        Use::Crib
+    } else if has(&["guarda-roupa", "guarda roupa", "roupeiro"]) {
+        Use::Wardrobe
+    } else if starts(&["sofa"]) {
+        let seats = if has(&["2 lugares"]) {
+            2
+        } else if has(&["3 lugares"]) {
+            3
+        } else {
+            ((w / 70.0).floor() as u32).max(1)
+        };
+        Use::Sofa(seats)
+    } else if starts(&["poltrona"]) {
+        Use::Armchair
+    } else if has(&["cadeira"]) {
+        if has(&["escritorio"]) {
+            Use::OfficeChair
+        } else {
+            Use::Chair
+        }
+    } else if has(&["banqueta"]) {
+        Use::Stool
+    } else if has(&["cabeceira", "criado"]) {
+        Use::Nightstand
+    } else if has(&["escrivaninha"]) || (starts(&["mesa"]) && has(&["escritorio", "estudo"])) {
+        Use::Desk
+    } else if starts(&["mesa"])
+        && !has(&["lateral", "centro", "basculante"])
+        && w >= 90.0
+        && (65.0..=85.0).contains(&h)
+    {
+        Use::DiningTable(if w < 140.0 {
+            4
+        } else if w < 200.0 {
+            6
+        } else {
+            8
+        })
+    } else if starts(&["mesa"]) {
+        Use::CoffeeTable
+    } else if (starts(&["vaso", "bacia"]) || has(&["vaso sanit", "bacia sanit"])) && w <= 60.0 {
+        Use::Toilet
+    } else if has(&["lavatorio"]) {
+        Use::Basin
+    } else if (starts(&["box"]) || has(&["chuveiro"])) && h >= 150.0 {
+        Use::Shower
+    } else if has(&["banheira"]) {
+        Use::Bathtub
+    } else if has(&["geladeira", "refrigerador"]) {
+        Use::Fridge
+    } else if (has(&["cooktop"]) && h <= 15.0 && w >= 50.0 && !cabinet)
+        || (has(&["fogao"]) && h >= 70.0)
+    {
+        Use::Stove
+    } else if (starts(&["pia", "cuba"]) || has(&["pia centralizada"])) && !cabinet {
+        Use::Sink
+    } else if has(&[
+        "lava e seca",
+        "lava-roupa",
+        "maquina de lavar",
+        "lavadora",
+        "secadora",
+    ]) {
+        Use::Washer
+    } else if starts(&["tanque"]) {
+        Use::LaundrySink
+    } else if (lo >= 100.0 && cabinet) || has(&["aereo"]) {
+        Use::WallCabinet
+    } else if has(&["lava-louca", "lava louca", "lava-loucas"])
+        || (cabinet && h >= 60.0 && lo < 20.0 && h <= 100.0)
+        || (has(&["bancada", "tampo", "peninsula"]) && lo >= 60.0)
+    {
+        Use::Counter
+    } else if (cabinet && h > 150.0) || has(&["rack", "estante", "aparador", "cristaleira"]) {
+        Use::Storage
+    } else {
+        Use::Other
     }
 }
 
@@ -191,25 +306,27 @@ fn room_use_by_name(name: &str) -> Option<RoomUse> {
     let n = plain(name);
     let has = |words: &[&str]| words.iter().any(|w| n.contains(w));
     let living = has(&["sala", "estar", "living"]);
-    Some(if has(&["quarto", "dormitorio", "suite", "bedroom"]) {
-        RoomUse::Bedroom
-    } else if has(&["cozinha", "kitchen", "copa"]) && !living {
-        RoomUse::Kitchen
-    } else if has(&["banheiro", "lavabo", "wc", "bath", "sanitario"]) {
-        RoomUse::Bathroom
-    } else if has(&["servico", "lavanderia", "laundry"]) {
-        RoomUse::Laundry
-    } else if has(&["jantar", "dining"]) {
-        RoomUse::Dining
-    } else if has(&["sala", "estar", "living", "tv"]) {
-        RoomUse::Living
-    } else if has(&["escritorio", "office", "estudo", "home office"]) {
-        RoomUse::Office
-    } else if has(&["corredor", "circulacao", "hall", "passagem"]) {
-        RoomUse::Corridor
-    } else {
-        return None;
-    })
+    Some(
+        if has(&["banheiro", "banho", "lavabo", "wc", "bath", "sanitario"]) {
+            RoomUse::Bathroom
+        } else if has(&["quarto", "dormitorio", "suite", "bedroom"]) {
+            RoomUse::Bedroom
+        } else if has(&["cozinha", "kitchen", "copa"]) && !living {
+            RoomUse::Kitchen
+        } else if has(&["servico", "lavanderia", "laundry"]) {
+            RoomUse::Laundry
+        } else if has(&["jantar", "dining"]) {
+            RoomUse::Dining
+        } else if has(&["sala", "estar", "living", "tv"]) {
+            RoomUse::Living
+        } else if has(&["escritorio", "office", "estudo", "home office"]) {
+            RoomUse::Office
+        } else if has(&["corredor", "circulacao", "hall", "passagem"]) {
+            RoomUse::Corridor
+        } else {
+            return None;
+        },
+    )
 }
 
 pub(crate) fn polygon(points: &[Point2]) -> Polygon<f64> {
@@ -255,6 +372,9 @@ pub struct Scene<'a> {
     /// Plan outlines that stop movement: walls, then each unit's footprint.
     walls: Vec<Polygon<f64>>,
     footprints: Vec<Polygon<f64>>,
+    /// Floor swept by each hinged door: `(door, swing)`.
+    pub swings: Vec<(&'a Furniture, Polygon<f64>)>,
+    rooms: Vec<Polygon<f64>>,
 }
 
 impl<'a> Scene<'a> {
@@ -265,25 +385,14 @@ impl<'a> Scene<'a> {
             if top.is_opening() {
                 continue;
             }
+            // A group is one piece of furniture made of parts.
             let params = joinery(top);
-            if params.is_some() || top.children.is_empty() {
-                let what = classify(top, params.as_ref());
-                units.push(Unit {
-                    piece: top,
-                    what,
-                    params,
-                });
-            } else {
-                for leaf in top.visible_leaves() {
-                    if !leaf.is_opening() {
-                        units.push(Unit {
-                            piece: leaf,
-                            what: classify(leaf, None),
-                            params: None,
-                        });
-                    }
-                }
-            }
+            let what = classify(top, params.as_ref());
+            units.push(Unit {
+                piece: top,
+                what,
+                params,
+            });
         }
         let footprints: Vec<Polygon<f64>> = units
             .iter()
@@ -339,12 +448,21 @@ impl<'a> Scene<'a> {
                 }
             });
         }
+        let swings = home
+            .furniture
+            .iter()
+            .filter(|f| f.visible)
+            .filter_map(|door| Some((door, polygon(&newera_core::door_swing(door)?))))
+            .collect();
+        let rooms = home.rooms.iter().map(|r| polygon(&r.points)).collect();
         Self {
             home,
             units,
             spaces,
             walls,
             footprints,
+            swings,
+            rooms,
         }
     }
 
@@ -415,6 +533,8 @@ impl<'a> Scene<'a> {
         for (j, other) in self.units.iter().enumerate() {
             let (lo, hi) = other.piece.height_range();
             if j == i
+                || self.thin(j)
+                || self.embedded(j)
                 || other.what.movable()
                 || matches!(other.what, Use::Switch | Use::Outlet)
                 || other.piece.discipline.is_some()
@@ -437,6 +557,191 @@ impl<'a> Scene<'a> {
             measure(&self.footprints[j], Some(j));
         }
         (free, blocker)
+    }
+
+    /// Whether a unit stands in the way of people and other pieces.
+    pub fn solid(&self, i: usize) -> bool {
+        let u = &self.units[i];
+        let (lo, hi) = u.piece.height_range();
+        !u.what.movable()
+            && !self.thin(i)
+            && !self.embedded(i)
+            && !matches!(u.what, Use::Switch | Use::Outlet)
+            && u.piece.discipline.is_none()
+            && hi - lo >= 20.0
+            && lo < 190.0
+            && hi > 5.0
+    }
+
+    /// Panels, facings, glass and rails: parts of something else.
+    pub fn thin(&self, i: usize) -> bool {
+        let p = self.units[i].piece;
+        p.width.min(p.depth) <= 3.0
+    }
+
+    /// Sink bowls and cooktops set into a countertop.
+    pub fn embedded(&self, i: usize) -> bool {
+        let u = &self.units[i];
+        let (lo, hi) = u.piece.height_range();
+        matches!(u.what, Use::Sink | Use::Stove) && lo >= 50.0 && hi - lo <= 45.0
+    }
+
+    /// Area two outlines share, cm².
+    fn shared(a: &Polygon<f64>, b: &Polygon<f64>) -> f64 {
+        a.intersection(b).unsigned_area()
+    }
+
+    /// Whether units `i` (moved by `dx`, `dy`) and `j` collide: same heights,
+    /// real shared floor, and not one built into the other (a cooktop in its
+    /// countertop, an oven in its tower).
+    fn collide(&self, i: usize, moved: &Polygon<f64>, j: usize) -> bool {
+        if i == j || !self.solid(j) {
+            return false;
+        }
+        let ((a0, a1), (b0, b1)) = (
+            self.units[i].piece.height_range(),
+            self.units[j].piece.height_range(),
+        );
+        if a0 >= b1 - 0.5 || b0 >= a1 - 0.5 {
+            return false;
+        }
+        let shared = Self::shared(moved, &self.footprints[j]);
+        if shared <= 25.0 {
+            return false;
+        }
+        // Mostly inside a cabinet or counter, and something that goes in one
+        // (an oven in its tower, a dishwasher under the counter): built in.
+        let (area_i, area_j) = (moved.unsigned_area(), self.footprints[j].unsigned_area());
+        let (host, guest) = if area_i >= area_j { (i, j) } else { (j, i) };
+        let cabinetry = |u: Use| {
+            matches!(
+                u,
+                Use::Counter
+                    | Use::Storage
+                    | Use::Wardrobe
+                    | Use::WallCabinet
+                    | Use::Island
+                    | Use::Other
+            )
+        };
+        let fits_in = |u: Use| {
+            !matches!(
+                u,
+                Use::Toilet
+                    | Use::Basin
+                    | Use::Shower
+                    | Use::Bathtub
+                    | Use::Bed(_)
+                    | Use::Crib
+                    | Use::Sofa(_)
+                    | Use::Armchair
+                    | Use::DiningTable(_)
+                    | Use::DiningSet(_)
+                    | Use::Desk
+            )
+        };
+        let built_in = shared >= 0.5 * area_i.min(area_j)
+            && cabinetry(self.units[host].what)
+            && fits_in(self.units[guest].what);
+        !built_in
+    }
+
+    /// Problems unit `i` would have moved by `dx`, `dy`: walls it enters,
+    /// pieces it collides with, door swings it stands in.
+    pub fn conflicts(&self, i: usize, dx: f64, dy: f64) -> usize {
+        if !self.solid(i) {
+            return 0;
+        }
+        let moved = self.footprints[i].translate(dx, dy);
+        let walls = self
+            .walls
+            .iter()
+            .filter(|w| Self::shared(&moved, w) > 25.0)
+            .count();
+        let pieces = (0..self.units.len())
+            .filter(|&j| self.collide(i, &moved, j))
+            .count();
+        let low = self.units[i].piece.height_range().0 < 200.0;
+        let doors = self
+            .swings
+            .iter()
+            .filter(|(_, swing)| low && Self::shared(&moved, swing) > 25.0)
+            .count();
+        walls + pieces + doors
+    }
+
+    /// Pairs of units that collide where they stand.
+    pub fn overlaps(&self) -> Vec<(usize, usize)> {
+        let mut out = Vec::new();
+        for i in 0..self.units.len() {
+            if !self.solid(i) {
+                continue;
+            }
+            for j in i + 1..self.units.len() {
+                if self.collide(i, &self.footprints[i], j) {
+                    out.push((i, j));
+                }
+            }
+        }
+        out
+    }
+
+    /// Doors whose leaf sweeps through a unit: `(door, unit)`.
+    pub fn door_hits(&self) -> Vec<(&'a Furniture, usize)> {
+        let mut out = Vec::new();
+        for (door, swing) in &self.swings {
+            for i in 0..self.units.len() {
+                if self.solid(i)
+                    && self.units[i].piece.height_range().0 < 200.0
+                    && Self::shared(swing, &self.footprints[i]) > 25.0
+                {
+                    out.push((*door, i));
+                }
+            }
+        }
+        out
+    }
+
+    /// Whether a swing polygon is clear of every unit.
+    pub fn swing_clear(&self, swing: &[Point2]) -> bool {
+        let swing = polygon(swing);
+        (0..self.units.len()).all(|i| {
+            !self.solid(i)
+                || self.units[i].piece.height_range().0 >= 200.0
+                || Self::shared(&swing, &self.footprints[i]) <= 25.0
+        })
+    }
+
+    /// How many sides of unit `i` (moved by `dx`, `dy`) rest against a wall.
+    pub fn contacts(&self, i: usize, dx: f64, dy: f64) -> usize {
+        let piece = self.units[i].piece;
+        let (hw, hd) = (piece.width / 2.0, piece.depth / 2.0);
+        [
+            (0.0, -hd - 2.0),
+            (0.0, hd + 2.0),
+            (-hw - 2.0, 0.0),
+            (hw + 2.0, 0.0),
+        ]
+        .into_iter()
+        .filter(|&p| {
+            let at = piece.to_plan(p);
+            self.walls
+                .iter()
+                .any(|w| w.contains(&geo::Point::new(at.x + dx, at.y + dy)))
+        })
+        .count()
+    }
+
+    /// Index of the room containing a point.
+    pub fn room_at(&self, p: Point2) -> Option<usize> {
+        self.rooms
+            .iter()
+            .position(|r| r.contains(&geo::Point::new(p.x, p.y)))
+    }
+
+    /// A unit's id.
+    pub fn id(&self, i: usize) -> FurnitureId {
+        self.units[i].piece.id
     }
 
     /// Largest circle (diameter, cm) that fits on the free floor of a room,

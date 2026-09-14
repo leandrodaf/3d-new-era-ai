@@ -23,7 +23,7 @@
 
 mod scene;
 
-use newera_core::{Home, Issue, OpeningKind, Point2};
+use newera_core::{Home, OpeningKind, Point2};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -298,7 +298,7 @@ impl Review<'_, '_> {
                             let piece = scene.units[i].piece;
                             let way = piece.to_plan((0.0, 1.0));
                             let dir = (way.x - piece.position.x, way.y - piece.position.y);
-                            push_away(scene.home, scene.units[j].piece.id, dir, short.ceil())
+                            push_away(scene, j, dir, short.ceil())
                         }),
                         Side::Left | Side::Right => {
                             let (other, sign) = if side == Side::Left {
@@ -483,14 +483,35 @@ impl Review<'_, '_> {
                     "cadeira e levantar-se da mesa",
                 )),
                 Use::DiningTable(_) => {
+                    // The sides people sit on: where chairs are, or the front
+                    // and both ends of a table drawn without chairs.
+                    let piece = u.piece;
+                    let chairs: Vec<(f64, f64)> = scene
+                        .units
+                        .iter()
+                        .filter(|c| matches!(c.what, Use::Chair | Use::Stool))
+                        .map(|c| piece.to_local(c.piece.position))
+                        .filter(|(x, y)| {
+                            x.abs() < piece.width / 2.0 + 70.0 && y.abs() < piece.depth / 2.0 + 70.0
+                        })
+                        .collect();
+                    let (hw, hd) = (piece.width / 2.0, piece.depth / 2.0);
                     for side in [Side::Front, Side::Left, Side::Right] {
-                        found.extend(need(
-                            side,
-                            75.0,
-                            (0.2, 0.8),
-                            Severity::Alerta,
-                            "puxar a cadeira e sentar",
-                        ));
+                        let seated = chairs.is_empty()
+                            || chairs.iter().any(|&(x, y)| match side {
+                                Side::Front => y > hd - 10.0,
+                                Side::Left => x < -hw + 10.0,
+                                Side::Right => x > hw - 10.0,
+                            });
+                        if seated {
+                            found.extend(need(
+                                side,
+                                75.0,
+                                (0.2, 0.8),
+                                Severity::Alerta,
+                                "puxar a cadeira e sentar",
+                            ));
+                        }
                     }
                 }
                 Use::DiningSet(_) => {
@@ -552,91 +573,71 @@ impl Review<'_, '_> {
                 );
             }
         }
-        for issue in newera_core::check_layout(home) {
-            let name = |id| {
-                home.furniture
-                    .iter()
-                    .flat_map(|f| std::iter::once(f).chain(f.children.iter()))
-                    .find(|f| f.id == id)
-                    .map_or_else(|| id.to_string(), |f| format!("{} {}", f.name, f.id))
-            };
-            match issue {
-                Issue::BlocksDoor { door, by } => {
-                    // Would the leaf clear it swinging from the other jamb?
-                    let mut flipped = home.clone();
-                    let flips = flipped
-                        .furniture
-                        .iter_mut()
-                        .find(|f| f.id == door)
-                        .and_then(|f| f.opening.as_mut())
-                        .filter(|o| o.leaves < 2 && !o.sliding && o.sashes.is_empty())
-                        .map(|o| {
-                            o.hinge_right = !o.hinge_right;
-                            o.hinge_right
-                        });
-                    let fix = flips.filter(|_| {
-                        !newera_core::check_layout(&flipped)
-                            .iter()
-                            .any(|i| matches!(i, Issue::BlocksDoor { door: d, .. } if *d == door))
-                    });
-                    let moved = if fix.is_none() { nudge(home, by) } else { None };
-                    if let Some(m) = moved {
-                        self.findings.push(Finding {
-                            severity: Severity::Erro,
-                            place: name(door),
-                            message: format!(
-                                "A folha da porta bate em {}: movendo a peça {} cm a porta abre livre.",
-                                name(by),
-                                cm(m["d"].as_f64().unwrap_or_default())
-                            ),
-                            fix: Some(without_distance(m)),
-                        });
-                        continue;
-                    }
-                    self.findings.push(Finding {
-                        severity: Severity::Erro,
-                        place: name(door),
-                        message: if fix.is_some() {
-                            format!(
-                                "A folha da porta bate em {}: invertendo o lado da dobradiça ela abre livre.",
-                                name(by)
-                            )
-                        } else {
-                            format!(
-                                "A folha da porta bate em {}: mova a peça ou use porta de correr.",
-                                name(by)
-                            )
-                        },
-                        fix: fix.map(|right| {
-                            serde_json::json!({
-                                "tool": "update",
-                                "items": [{"id": door.to_string(), "hinge_right": right}],
-                            })
-                        }),
-                    });
-                }
-                Issue::Overlap(a, b) => {
-                    let fix = nudge(home, b).or_else(|| nudge(home, a));
-                    self.findings.push(Finding {
-                        severity: Severity::Erro,
-                        place: name(a),
-                        message: match &fix {
-                            Some(f) => format!(
-                                "Ocupa o mesmo lugar que {}: movendo {} {} cm fica livre.",
-                                name(b),
-                                f["ids"][0].as_str().unwrap_or_default(),
-                                cm(f["d"].as_f64().unwrap_or_default())
-                            ),
-                            None => format!(
-                                "Ocupa o mesmo lugar que {}: não há lugar livre por perto, reorganize.",
-                                name(b)
-                            ),
-                        },
-                        fix: fix.map(without_distance),
-                    });
-                }
-                _ => {}
+        let scene = self.scene;
+        for (door, unit) in scene.door_hits() {
+            let door_name = format!("{} {}", door.name, door.id);
+            let by = scene.units[unit].label();
+            // Would the leaf clear it swinging from the other jamb?
+            let flip = door
+                .opening
+                .as_ref()
+                .filter(|o| o.leaves < 2 && !o.sliding && o.sashes.is_empty())
+                .and_then(|o| {
+                    let mut flipped = door.clone();
+                    let right = !o.hinge_right;
+                    flipped.opening.as_mut()?.hinge_right = right;
+                    let swing = newera_core::door_swing(&flipped)?;
+                    scene.swing_clear(&swing).then_some(right)
+                });
+            if let Some(right) = flip {
+                self.findings.push(Finding {
+                    severity: Severity::Erro,
+                    place: door_name,
+                    message: format!(
+                        "A folha da porta bate em {by}: invertendo o lado da dobradiça ela abre livre."
+                    ),
+                    fix: Some(serde_json::json!({
+                        "tool": "update",
+                        "items": [{"id": door.id.to_string(), "hinge_right": right}],
+                    })),
+                });
+                continue;
             }
+            let moved = nudge(scene, unit);
+            self.findings.push(Finding {
+                severity: Severity::Erro,
+                place: door_name,
+                message: match &moved {
+                    Some(m) => format!(
+                        "A folha da porta bate em {by}: movendo a peça {} cm a porta abre livre.",
+                        cm(m["d"].as_f64().unwrap_or_default())
+                    ),
+                    None => format!(
+                        "A folha da porta bate em {by}: mova a peça ou use porta de correr."
+                    ),
+                },
+                fix: moved.map(without_distance),
+            });
+        }
+        for (a, b) in scene.overlaps() {
+            let fix = nudge(scene, b).or_else(|| nudge(scene, a));
+            self.findings.push(Finding {
+                severity: Severity::Erro,
+                place: scene.units[a].label(),
+                message: match &fix {
+                    Some(f) => format!(
+                        "Ocupa o mesmo lugar que {}: movendo {} {} cm fica livre.",
+                        scene.units[b].label(),
+                        f["ids"][0].as_str().unwrap_or_default(),
+                        cm(f["d"].as_f64().unwrap_or_default())
+                    ),
+                    None => format!(
+                        "Ocupa o mesmo lugar que {}: não há lugar livre por perto, reorganize.",
+                        scene.units[b].label()
+                    ),
+                },
+                fix: fix.map(without_distance),
+            });
         }
     }
 
@@ -920,7 +921,8 @@ impl Review<'_, '_> {
             let ideal = stature * 0.63 - 12.0;
             for &i in &space.units {
                 let u = &scene.units[i];
-                if !matches!(u.what, Use::Sink | Use::Counter) {
+                if !matches!(u.what, Use::Sink | Use::Counter) || scene.embedded(i) || scene.thin(i)
+                {
                     continue;
                 }
                 let top = u.piece.height_range().1;
@@ -1029,99 +1031,29 @@ impl Midpoint for Point2 {
     }
 }
 
-fn piece_after(home: &Home, id: newera_core::FurnitureId) -> Option<&newera_core::Furniture> {
-    home.furniture.iter().find(|f| f.id == id)
-}
-
-/// How many of a piece's sides rest against a wall (within 2 cm).
-fn wall_contacts(home: &Home, piece: &newera_core::Furniture) -> usize {
-    use geo::Contains;
-    let outlines: Vec<_> = home
-        .wall_outlines()
-        .iter()
-        .filter(|o| o.len() >= 3)
-        .map(|o| scene::polygon(o))
-        .collect();
-    let (hw, hd) = (piece.width / 2.0, piece.depth / 2.0);
-    [
-        (0.0, -hd - 2.0),
-        (0.0, hd + 2.0),
-        (-hw - 2.0, 0.0),
-        (hw + 2.0, 0.0),
-    ]
-    .into_iter()
-    .filter(|&p| {
-        let at = piece.to_plan(p);
-        outlines
-            .iter()
-            .any(|o| o.contains(&geo::Point::new(at.x, at.y)))
-    })
-    .count()
-}
-
-/// Layout problems a piece (or any piece inside it, for a group) is part of.
-fn troubles(home: &Home, id: newera_core::FurnitureId) -> usize {
-    fn ids(f: &newera_core::Furniture, out: &mut Vec<newera_core::FurnitureId>) {
-        out.push(f.id);
-        for c in &f.children {
-            ids(c, out);
-        }
-    }
-    let mut mine = Vec::new();
-    if let Some(top) = home.furniture.iter().find(|f| f.id == id) {
-        ids(top, &mut mine);
-    } else {
-        mine.push(id);
-    }
-    newera_core::check_layout(home)
-        .iter()
-        .filter(|i| match i {
-            Issue::Overlap(a, b) => mine.contains(a) || mine.contains(b),
-            Issue::InWall(f, _) | Issue::OutsideRooms(f) => mine.contains(f),
-            Issue::BlocksDoor { door, by } => mine.contains(door) || mine.contains(by),
-        })
-        .count()
-}
-
 /// The shortest slide (along the piece's own axes, up to 1,5 m) that leaves
-/// it clear of every layout problem without leaving its room. Returns move
-/// arguments plus the distance as `d`.
-fn nudge(home: &Home, id: newera_core::FurnitureId) -> Option<serde_json::Value> {
-    let top = home
-        .furniture
-        .iter()
-        .find(|f| f.id == id || f.children.iter().any(|c| c.id == id))?;
-    if top.is_opening() || !top.locks.movable {
+/// unit `i` clear of walls, pieces and door swings, in its room and still on
+/// the walls it rests against. Returns move arguments plus the distance as `d`.
+fn nudge(scene: &Scene<'_>, i: usize) -> Option<serde_json::Value> {
+    let piece = scene.units[i].piece;
+    if piece.is_opening() || !piece.locks.movable {
         return None;
     }
-    let room = home.rooms.iter().find(|r| {
-        use geo::Contains;
-        scene::polygon(&r.points).contains(&geo::Point::new(top.position.x, top.position.y))
-    });
+    let room = scene.room_at(piece.position);
+    let on_walls = scene.contacts(i, 0.0, 0.0);
     let mut step = 5.0;
     while step <= 150.0 {
         for (lx, ly) in [(step, 0.0), (-step, 0.0), (0.0, step), (0.0, -step)] {
-            let to = top.to_plan((lx, ly));
-            let (dx, dy) = (to.x - top.position.x, to.y - top.position.y);
-            let mut moved = home.clone();
-            let piece = moved.furniture.iter_mut().find(|f| f.id == top.id)?;
-            piece.translate(dx, dy);
-            let center = piece.position;
-            let stays = room.is_none_or(|r| {
-                use geo::Contains;
-                scene::polygon(&r.points).contains(&geo::Point::new(center.x, center.y))
-            });
-            let on_walls = wall_contacts(home, top)
-                <= moved
-                    .furniture
-                    .iter()
-                    .find(|f| f.id == top.id)
-                    .map_or(0, |f| wall_contacts(&moved, f));
-            if stays && on_walls && troubles(&moved, id) == 0 {
+            let to = piece.to_plan((lx, ly));
+            let (dx, dy) = (to.x - piece.position.x, to.y - piece.position.y);
+            if scene.room_at(to) == room
+                && scene.contacts(i, dx, dy) >= on_walls
+                && scene.conflicts(i, dx, dy) == 0
+            {
                 let round = |v: f64| (v * 10.0).round() / 10.0;
                 return Some(serde_json::json!({
                     "tool": "move",
-                    "ids": [top.id.to_string()],
+                    "ids": [piece.id.to_string()],
                     "dx": round(dx),
                     "dy": round(dy),
                     "d": step,
@@ -1133,41 +1065,24 @@ fn nudge(home: &Home, id: newera_core::FurnitureId) -> Option<serde_json::Value>
     None
 }
 
-/// Moves a piece `dist` cm along `dir` if that leaves it trouble-free and
-/// in its room: move arguments.
-fn push_away(
-    home: &Home,
-    id: newera_core::FurnitureId,
-    dir: (f64, f64),
-    dist: f64,
-) -> Option<serde_json::Value> {
-    let top = home.furniture.iter().find(|f| f.id == id)?;
-    if top.is_opening() || !top.locks.movable {
+/// Moves unit `i` `dist` cm along `dir` if that adds no problem, keeps it in
+/// its room and on its walls: move arguments.
+fn push_away(scene: &Scene<'_>, i: usize, dir: (f64, f64), dist: f64) -> Option<serde_json::Value> {
+    let piece = scene.units[i].piece;
+    if piece.is_opening() || !piece.locks.movable {
         return None;
     }
     let len = dir.0.hypot(dir.1).max(1e-9);
     let (dx, dy) = (dir.0 / len * dist, dir.1 / len * dist);
-    let mut moved = home.clone();
-    let piece = moved.furniture.iter_mut().find(|f| f.id == id)?;
-    let before = piece.position;
-    piece.translate(dx, dy);
-    let after = piece.position;
-    let room_of = |p: Point2| {
-        use geo::Contains;
-        home.rooms
-            .iter()
-            .position(|r| scene::polygon(&r.points).contains(&geo::Point::new(p.x, p.y)))
-    };
+    let to = Point2::new(piece.position.x + dx, piece.position.y + dy);
     let round = |v: f64| (v * 10.0).round() / 10.0;
-    let stays_on_walls =
-        wall_contacts(home, top) <= wall_contacts(&moved, piece_after(&moved, id)?);
-    (stays_on_walls
-        && room_of(before) == room_of(after)
-        && troubles(&moved, id) <= troubles(home, id))
+    (scene.room_at(to) == scene.room_at(piece.position)
+        && scene.contacts(i, dx, dy) >= scene.contacts(i, 0.0, 0.0)
+        && scene.conflicts(i, dx, dy) <= scene.conflicts(i, 0.0, 0.0))
     .then(|| {
         serde_json::json!({
             "tool": "move",
-            "ids": [id.to_string()],
+            "ids": [piece.id.to_string()],
             "dx": round(dx),
             "dy": round(dy),
         })
@@ -1232,14 +1147,14 @@ pub fn review(home: &Home, profile: &Profile) -> Report {
         }
     }
     findings.sort_by_key(|f| f.severity);
-    let penalty: u32 = findings
-        .iter()
-        .map(|f| match f.severity {
-            Severity::Erro => 12,
-            Severity::Alerta => 5,
-            Severity::Dica => 1,
-        })
-        .sum();
+    // Errors weigh fully; many alerts or tips of a crowded plan level off.
+    let count = |sev: Severity| findings.iter().filter(|f| f.severity == sev).count() as u32;
+    let (errors, alerts, tips) = (
+        count(Severity::Erro),
+        count(Severity::Alerta),
+        count(Severity::Dica),
+    );
+    let penalty = errors * 12 + alerts.min(6) * 5 + alerts.saturating_sub(6) + tips.min(10);
     Report {
         score: 100u32.saturating_sub(penalty),
         capacity,
@@ -1362,6 +1277,83 @@ mod tests {
             .expect("a move that frees the side");
         assert_eq!(fix["tool"], "move");
         assert_eq!(fix["dx"], 30.0, "{fix}");
+    }
+
+    fn named_again(home: &mut Home) {
+        let mut shower = piece(30, "shower", (40.0, 200.0), (90.0, 90.0, 200.0), 0.0);
+        shower.name = "Box".into();
+        home.furniture.push(shower);
+    }
+
+    #[test]
+    fn imported_pieces_are_read_by_name_and_built_in_ones_do_not_collide() {
+        let mut home = Home::default();
+        square(&mut home, "Banho suíte", 300.0, 240.0);
+        let mut named = |id: u64, name: &str, at: (f64, f64), size: (f64, f64, f64), elev: f64| {
+            let mut f = piece(id, "imported", at, size, 0.0);
+            f.name = name.into();
+            f.elevation = elev;
+            home.furniture.push(f);
+        };
+        named(
+            20,
+            "Bancada contínua junto à geladeira",
+            (150.0, 40.0),
+            (212.0, 64.0, 4.0),
+            87.0,
+        );
+        named(
+            21,
+            "Cooktop Brastemp BDS62AE — 4 bocas",
+            (150.0, 40.0),
+            (59.0, 48.5, 8.6),
+            87.0,
+        );
+        named(
+            22,
+            "10 — Gavetões sob cooktop — 65 cm",
+            (150.0, 40.0),
+            (65.0, 60.0, 87.0),
+            0.0,
+        );
+        named(
+            23,
+            "Mesa Dover — eucalipto",
+            (150.0, 170.0),
+            (120.0, 80.0, 77.0),
+            0.0,
+        );
+        named(24, "Cadeira Dover", (150.0, 140.0), (51.0, 59.0, 85.0), 0.0);
+        named(25, "Vaso suíte", (40.0, 200.0), (40.0, 63.0, 62.0), 0.0);
+        named(
+            26,
+            "Cama suíte",
+            (1000.0, 1000.0),
+            (140.0, 200.0, 70.0),
+            0.0,
+        );
+        let scene = Scene::new(&home);
+        let what = |id: u64| {
+            scene
+                .units
+                .iter()
+                .find(|u| u.piece.id == FurnitureId(id))
+                .unwrap()
+                .what
+        };
+        assert_eq!(what(21), Use::Stove);
+        assert_eq!(what(22), Use::Counter);
+        assert_eq!(what(23), Use::DiningTable(4));
+        assert_eq!(what(24), Use::Chair);
+        assert_eq!(what(25), Use::Toilet);
+        assert_eq!(what(26), Use::Bed(2));
+        assert_eq!(scene.spaces[0].what, RoomUse::Bathroom);
+        // The cooktop sits in its countertop and the chair under the table: no overlap.
+        assert!(scene.overlaps().is_empty(), "{:?}", scene.overlaps());
+        // A toilet standing inside the shower is not built in.
+        named_again(&mut home);
+        let scene = Scene::new(&home);
+        assert_eq!(scene.overlaps().len(), 1);
     }
 
     #[test]
