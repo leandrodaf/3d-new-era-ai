@@ -67,7 +67,7 @@ The core of what makes the editor useful: placing real objects with real dimensi
 - [x] Project file v2 stores every variant (v1 files still open)
 - [x] MCP: `variants` tool (list / duplicate / new / switch / rename / delete)
 
-## M3 — Levels, materials and presentation
+## ✅ M3 — Levels, materials and presentation
 
 - [x] Levels (storeys) with elevation, height and slab; selector with add/edit/delete;
       the storey below drawn faintly in the plan; stacked storeys in 3D; stairs open
@@ -119,7 +119,7 @@ The core of what makes the editor useful: placing real objects with real dimensi
       stored camera) and REST `/api/view.png` so agents see the home in 3D without a GPU
 - [x] MCP `render_photo` with global illumination and a quality budget
 
-## M4 — Interop and reach
+## ✅ M4 — Interop and reach
 
 - [x] Import `.sh3d` files: own Java serialization reader (no Home.xml needed), every
       element kind (walls with side finishes, rooms with textures and label styles,
@@ -151,6 +151,29 @@ The core of what makes the editor useful: placing real objects with real dimensi
       example `plugins/quadro-areas`
 - [x] i18n: interface in Portuguese or English (Ajuda › Idioma / Language), saved in
       preferences; project data and catalog item names stay as written
+
+## ✅ MVP review — the real `.sh3d`, side by side with Sweet Home 3D
+
+The MVP criterion is porting a real project (3 storeys, 24 walls, 20 rooms, 239 pieces,
+531 labels, 59 dimensions, 14 cameras) with nothing lost. References were rendered by
+Sweet Home 3D 7.5 itself (plan painted by its plan component, photos by its SunFlow
+renderer, separate user home) and compared with this project's output:
+
+![Plan: Sweet Home 3D (left) and 3D New Era AI (right)](images/mvp-plan-sh3d-vs-newera.jpg)
+
+![Photos of stored cameras 0 and 1: Sweet Home 3D (left) and 3D New Era AI (right)](images/mvp-photos-sh3d-vs-newera.jpg)
+
+- Plan: walls, hatching, rooms and names, door swings, furniture numbering, styled
+  labels (title, 531-line furniture index) and dimension chains match; camera framing
+  of stored views matches (same counters, sink and sofa positions).
+- Fixed by this review: REST plan images mixed every storey; dimension numbers now show
+  without unit and with a decimal comma (`434`, `65,5`); photos treat material colors
+  as linear albedo like SunFlow (a beige sofa was rendered orange); override textures
+  on model materials without texture coordinates are laid flat at real size (marble
+  around the sink).
+- Known differences, by design or out of scope: our photos are brighter (auto exposure)
+  and use their own path tracer; Sweet Home 3D headless plans show furniture icons,
+  ours draw symbols or top views.
 
 ## Sweet Home 3D is a reference, not a source
 
