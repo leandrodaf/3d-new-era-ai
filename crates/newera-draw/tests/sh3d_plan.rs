@@ -78,4 +78,12 @@ fn render_sh3d_levels() {
     };
     let png = render_png(&scene, &options, &|_| None).unwrap();
     std::fs::write(out.join("plan-annotations.png"), png).unwrap();
+    let pdf = newera_draw::to_pdf(
+        &scene,
+        &newera_draw::PdfOptions {
+            title: home.name.clone(),
+            ..newera_draw::PdfOptions::default()
+        },
+    );
+    std::fs::write(out.join("plan-annotations.pdf"), pdf).unwrap();
 }

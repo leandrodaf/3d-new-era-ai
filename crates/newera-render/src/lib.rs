@@ -3,6 +3,7 @@
 //! a graphics card.
 
 mod camera;
+pub mod export;
 pub mod mesh;
 mod patterns;
 mod raster;
@@ -38,6 +39,39 @@ impl ModelCache {
         mesh.fit_to(piece.width, piece.depth, piece.height);
         Some(mesh)
     }
+}
+
+/// Exports the home's 3D model (`.glb` or `.obj`), with models and textures
+/// resolved relative to `assets`. The ground plane is left out.
+pub fn export_home(
+    home: &newera_core::Home,
+    path: &Path,
+    assets: Option<&Path>,
+) -> Result<(), export::ExportError> {
+    let cache = ModelCache::default();
+    let models = |piece: &newera_core::Furniture| cache.piece_model(piece, assets);
+    let mut mesh = Mesh::from_home(home, &Selection::new(), &models);
+    mesh.drop_ground();
+    let images = |file: &str| {
+        let path = newera_core::resolve_asset(assets, file);
+        let bytes = std::fs::read(&path).ok()?;
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map_or_else(|| "png".to_owned(), str::to_ascii_lowercase);
+        // Formats other than PNG/JPEG are converted to PNG.
+        if matches!(ext.as_str(), "png" | "jpg" | "jpeg") {
+            Some((bytes, ext))
+        } else {
+            let image = image::load_from_memory(&bytes).ok()?;
+            let mut png = Vec::new();
+            image
+                .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+                .ok()?;
+            Some((png, "png".to_owned()))
+        }
+    };
+    export::export_mesh(&mesh, path, &images)
 }
 
 /// Renders a home from a point of view: builds the mesh, loads models and

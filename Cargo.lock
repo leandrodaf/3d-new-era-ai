@@ -2737,6 +2737,7 @@ dependencies = [
  "newera-catalog",
  "newera-core",
  "newera-sh3d",
+ "thiserror 2.0.20",
 ]
 
 [[package]]

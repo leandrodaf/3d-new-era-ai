@@ -89,10 +89,12 @@ pub(crate) struct RenderParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct ExportParams {
-    /// Output file; `.svg` or `.png`.
+    /// Output file: `.pdf`, `.svg`, `.png`, `.glb` or `.obj`.
     path: String,
     w: Option<u32>,
     h: Option<u32>,
+    /// PDF scale denominator (50 → 1:50); omitted fits the sheet.
+    scale: Option<f64>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -378,10 +380,34 @@ impl NewEraMcp {
         )]))
     }
 
-    #[tool(description = "Export the plan to a .svg (true scale, cm) or .png file.")]
+    #[tool(
+        description = "Export to a file by extension: plan .pdf (A3; scale=50/100 or fit), .svg (true scale) or .png; 3D model .glb or .obj."
+    )]
     fn export_plan(&self, Parameters(p): Parameters<ExportParams>) -> Result<String, ErrorData> {
         let path = PathBuf::from(&p.path);
         let bytes = match path.extension().and_then(|e| e.to_str()) {
+            Some("glb" | "obj") => {
+                let (home, assets) = {
+                    let doc = self.document.read();
+                    (doc.home().clone(), doc.asset_dir())
+                };
+                newera_render::export_home(&home, &path, assets.as_deref())
+                    .map_err(|e| invalid(e.to_string()))?;
+                return Ok(format!("ok {}", path.display()));
+            }
+            Some("pdf") => {
+                let doc = self.document.read();
+                let view = doc.home().level_view(doc.home().current_level());
+                let scene = plan_scene(&view, &scene_options());
+                newera_draw::to_pdf(
+                    &scene,
+                    &newera_draw::PdfOptions {
+                        scale: p.scale,
+                        title: doc.home().name.clone(),
+                        ..newera_draw::PdfOptions::default()
+                    },
+                )
+            }
             Some("svg") => {
                 let doc = self.document.read();
                 let view = doc.home().level_view(doc.home().current_level());
@@ -389,7 +415,7 @@ impl NewEraMcp {
                 to_svg(&scene, &SvgOptions::default()).into_bytes()
             }
             Some("png") => self.render(p.w.unwrap_or(1600), p.h.unwrap_or(1200), None, false)?,
-            _ => return Err(invalid("path must end with .svg or .png")),
+            _ => return Err(invalid("path must end with .pdf, .svg, .png, .glb or .obj")),
         };
         std::fs::write(&path, bytes)
             .map_err(|e| invalid(format!("cannot write {}: {e}", path.display())))?;
@@ -1222,5 +1248,36 @@ mod tests {
             }))
             .is_err()
         );
+    }
+
+    #[test]
+    fn exports_pdf_and_3d_models() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let dir = std::env::temp_dir().join(format!("newera-mcp-export-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for file in ["casa.pdf", "casa.glb", "casa.obj"] {
+            let path = dir.join(file).display().to_string();
+            let reply = s
+                .export_plan(Parameters(ExportParams {
+                    path: path.clone(),
+                    w: None,
+                    h: None,
+                    scale: Some(50.0),
+                }))
+                .unwrap();
+            assert!(reply.starts_with("ok"), "{reply}");
+            assert!(std::fs::metadata(&path).unwrap().len() > 100, "{file}");
+        }
+        assert!(
+            std::fs::read(dir.join("casa.pdf"))
+                .unwrap()
+                .starts_with(b"%PDF")
+        );
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

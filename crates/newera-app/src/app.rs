@@ -357,9 +357,36 @@ impl NewEraApp {
         self.settings.recent.truncate(8);
     }
 
-    fn export(&mut self, svg: bool) {
+    /// Exports the 3D model of the storeys shown in the 3D view.
+    fn export_3d(&mut self, ext: &str) {
         let name = self.document.read().home().name.clone();
-        let ext = if svg { "svg" } else { "png" };
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter(ext.to_uppercase(), &[ext])
+            .set_file_name(format!("{name}.{ext}"))
+            .save_file()
+        else {
+            return;
+        };
+        let (home, assets) = {
+            let doc = self.document.read();
+            (doc.home().clone(), doc.asset_dir())
+        };
+        match newera_render::export_home(&home, &path, assets.as_deref()) {
+            Ok(()) => self.set_status(format!("Modelo 3D exportado para {}", path.display())),
+            Err(err) => self.set_status(format!("⚠ Falha ao exportar: {err}")),
+        }
+    }
+
+    fn export(&mut self, format: &str) {
+        let name = self.document.read().home().name.clone();
+        let svg = format == "svg";
+        let pdf_scale = match format {
+            "pdf50" => Some(Some(50.0)),
+            "pdf100" => Some(Some(100.0)),
+            "pdf" => Some(None),
+            _ => None,
+        };
+        let ext = if pdf_scale.is_some() { "pdf" } else { format };
         let Some(path) = rfd::FileDialog::new()
             .add_filter(ext.to_uppercase(), &[ext])
             .set_file_name(format!("{name}.{ext}"))
@@ -378,7 +405,16 @@ impl NewEraApp {
         );
         let assets = doc.asset_dir();
         drop(doc);
-        let bytes = if svg {
+        let bytes = if let Some(scale) = pdf_scale {
+            Ok(newera_draw::to_pdf(
+                &scene,
+                &newera_draw::PdfOptions {
+                    scale,
+                    title: name.clone(),
+                    ..newera_draw::PdfOptions::default()
+                },
+            ))
+        } else if svg {
             Ok(to_svg(&scene, &SvgOptions::default()).into_bytes())
         } else {
             let load = |p: &str| {
@@ -753,11 +789,28 @@ impl NewEraApp {
                 }
                 ui.separator();
                 ui.menu_button(format!("{} Exportar planta", icon::EXPORT), |ui| {
+                    if ui.button("PDF (A3, ajustado à folha)…").clicked() {
+                        self.export("pdf");
+                    }
+                    if ui.button("PDF 1:50…").clicked() {
+                        self.export("pdf50");
+                    }
+                    if ui.button("PDF 1:100…").clicked() {
+                        self.export("pdf100");
+                    }
                     if ui.button("SVG em escala real…").clicked() {
-                        self.export(true);
+                        self.export("svg");
                     }
                     if ui.button("PNG…").clicked() {
-                        self.export(false);
+                        self.export("png");
+                    }
+                });
+                ui.menu_button(format!("{} Exportar 3D", icon::CUBE), |ui| {
+                    if ui.button("glTF binário (.glb)…").clicked() {
+                        self.export_3d("glb");
+                    }
+                    if ui.button("OBJ + MTL…").clicked() {
+                        self.export_3d("obj");
                     }
                 });
                 ui.separator();

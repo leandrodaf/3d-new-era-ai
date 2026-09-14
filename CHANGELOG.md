@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Exports: glTF binary and OBJ/MTL 3D models, vector PDF plans at scale.
+
 - `newera-render`: software 3D renderer; MCP `render_3d` and REST `/api/view.png`;
   precise dimension magnet; dimensions by intent over MCP; compacted tool schemas.
 

@@ -228,6 +228,18 @@ impl Mesh {
         mesh
     }
 
+    /// Removes the ground plane (the first quad), for exports.
+    pub fn drop_ground(&mut self) {
+        if self.vertices.len() < 4 || self.indices.len() < 6 {
+            return;
+        }
+        self.vertices.drain(..4);
+        self.indices.drain(..6);
+        for i in self.indices.iter_mut().chain(self.transparent.iter_mut()) {
+            *i -= 4;
+        }
+    }
+
     fn image_layer(&mut self, path: &str) -> u32 {
         let index = self
             .images
