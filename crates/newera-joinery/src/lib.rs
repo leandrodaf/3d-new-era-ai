@@ -26,6 +26,7 @@ mod cutlist;
 mod run;
 mod slats;
 mod sofa;
+mod wall;
 
 pub use cabinet::{CabinetParams, DoorType};
 pub use ceiling::{CoveParams, CoveType, ShadowGapParams};
@@ -36,6 +37,7 @@ pub use run::{
 };
 pub use slats::{Orientation, SlatsParams};
 pub use sofa::{ArmType, SofaParams};
+pub use wall::{CabinetRunParams, RUN_KEY, cabinet_run};
 
 use newera_core::{Furniture, FurnitureId, Material, Point2, Properties};
 use schemars::JsonSchema;

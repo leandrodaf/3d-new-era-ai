@@ -4,6 +4,7 @@
 //! left, the 2D floor plan on top and the native 3D view below it.
 
 mod app;
+mod cabinets;
 mod dialogs;
 mod ergonomics;
 mod files;

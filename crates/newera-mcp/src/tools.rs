@@ -1018,10 +1018,10 @@ impl NewEraMcp {
     )]
     fn cabinet_run(
         &self,
-        Parameters(p): Parameters<crate::run::CabinetRunParams>,
+        Parameters(p): Parameters<newera_joinery::CabinetRunParams>,
     ) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
-        crate::run::cabinet_run(&mut doc, &p)
+        newera_joinery::cabinet_run(&mut doc, &p)
             .map(|v| v.to_string())
             .map_err(invalid)
     }
@@ -3108,7 +3108,7 @@ mod tests {
         .unwrap();
         s.place(Parameters(place)).unwrap();
         let run = |json: &str| -> serde_json::Value {
-            let p: crate::run::CabinetRunParams = serde_json::from_str(json).unwrap();
+            let p: newera_joinery::CabinetRunParams = serde_json::from_str(json).unwrap();
             serde_json::from_str(&s.cabinet_run(Parameters(p)).unwrap()).unwrap()
         };
         let base = run(r#"{"wall":"w1"}"#);
@@ -3241,7 +3241,7 @@ mod tests {
             .map(|f| f.id.to_string())
             .collect();
         assert!(ids.contains(&modules[1][0].as_str().unwrap().to_owned()));
-        let p: crate::run::CabinetRunParams =
+        let p: newera_joinery::CabinetRunParams =
             serde_json::from_str(r#"{"wall":"w1","p":{"max":10}}"#).unwrap();
         assert!(
             s.cabinet_run(Parameters(p))
@@ -3291,7 +3291,7 @@ mod tests {
         .unwrap();
         s.place(Parameters(place)).unwrap();
         let run = |json: &str| -> serde_json::Value {
-            let p: crate::run::CabinetRunParams = serde_json::from_str(json).unwrap();
+            let p: newera_joinery::CabinetRunParams = serde_json::from_str(json).unwrap();
             serde_json::from_str(&s.cabinet_run(Parameters(p)).unwrap()).unwrap()
         };
         let base = run(r#"{"wall":"w1","p":{"sink":130,"cooktop":260}}"#);

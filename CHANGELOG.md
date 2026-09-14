@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- "Armários na parede…" in the editor (Planta menu, one wall selected): base, wall or tall
+  row, sink and cooktop positions, front color and drawer units, with a preview of the
+  modules before building them. The planning moved into `newera-joinery`, shared with MCP.
+
 - "Ergonomia…" window in the editor (Planta menu): the habitability score and findings for
   the occupants you set, kept current while you edit; a finding selects what it is about and
   its checked fix applies in one click.

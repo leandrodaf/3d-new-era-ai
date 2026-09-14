@@ -2677,6 +2677,7 @@ dependencies = [
  "newera-core",
  "newera-draw",
  "newera-ergonomics",
+ "newera-joinery",
  "newera-plugins",
  "newera-render",
  "newera-sh3d",

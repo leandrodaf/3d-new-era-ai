@@ -5,18 +5,26 @@
 //! becomes a blind corner; the other wall is planned again in the same undo
 //! step so the corner works from whichever side was drawn first.
 
+use crate::{Build, EndKind, PARAMS_KEY, RunGap, RunOver, RunParams, RunRow};
 use newera_core::{
     Command, Document, Furniture, FurnitureId, Home, Point2, RunBlock, RunObstacle, WallId,
 };
-use newera_joinery::{Build, EndKind, PARAMS_KEY, RunGap, RunOver, RunParams, RunRow};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::compact::num;
+/// A number rounded to a tenth for replies.
+fn num(v: f64) -> Value {
+    let rounded = (v * 10.0).round() / 10.0;
+    if rounded.fract() == 0.0 && rounded.abs() < 1e15 {
+        json!(rounded as i64)
+    } else {
+        json!(rounded)
+    }
+}
 
 /// Property marking the modules of a run: `w3:base`.
-pub(crate) const RUN_KEY: &str = "joinery:run";
+pub const RUN_KEY: &str = "joinery:run";
 /// Property holding the run's request, to plan it again after a neighbor changes.
 const REQUEST_KEY: &str = "joinery:run_request";
 /// Filler between a blind panel's edge and the doors beside it, cm.
@@ -25,7 +33,7 @@ const CORNER_FILLER: f64 = 3.0;
 const DOOR_SWING: f64 = 60.0;
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
-pub(crate) struct CabinetRunParams {
+pub struct CabinetRunParams {
     /// Wall whose face gets the cabinets.
     pub wall: Option<String>,
     /// Or a piece against the wall (`f12`, the fridge): its nearest wall, on its side.
@@ -65,7 +73,7 @@ struct Request {
 /// A module ready to become a furniture group.
 struct Pending {
     build: Build,
-    role: newera_joinery::Role,
+    role: crate::Role,
     from: f64,
     width: f64,
     position: Point2,
@@ -222,7 +230,7 @@ fn resolve(home: &Home, p: &CabinetRunParams) -> Result<Request, String> {
                         .any(|f| f.catalog.starts_with("bed-") && inside(&r.points, f.position))
             });
         if bedroom {
-            params.interior = Some(newera_joinery::Interior::Wardrobe);
+            params.interior = Some(crate::Interior::Wardrobe);
         }
     }
     Ok(Request {
@@ -547,7 +555,7 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
                 .collect()
         })
         .unwrap_or_default();
-    let (modules, plan_notes) = newera_joinery::plan_run(&gaps, &over, &joints, &params)?;
+    let (modules, plan_notes) = crate::plan_run(&gaps, &over, &joints, &params)?;
     notes.extend(plan_notes);
     let mut seen = std::collections::HashSet::new();
     notes.retain(|n| seen.insert(n.clone()));
@@ -615,10 +623,10 @@ fn commands(doc: &mut Document, planned: &Planned) -> Result<(Vec<Command>, Valu
         .collect();
     let mut rows = Vec::new();
     for m in &planned.modules {
-        let output = newera_joinery::generate(&m.build)?;
+        let output = crate::generate(&m.build)?;
         let group_id = doc.new_furniture_id();
         let mut next = || doc.new_furniture_id();
-        let mut group = newera_joinery::assemble(
+        let mut group = crate::assemble(
             &m.build,
             &output,
             group_id,
@@ -679,8 +687,12 @@ fn summary(planned: &Planned, modules: Value) -> Value {
 }
 
 /// Plans (and unless `dry`, builds) the cabinets for one wall, and plans
-/// again the runs it meets in a corner.
-pub(crate) fn cabinet_run(doc: &mut Document, p: &CabinetRunParams) -> Result<Value, String> {
+/// again the runs it meets in a corner. Replies with the modules as
+/// `[id, role, from, width]`, what was removed, notes and adjusted neighbors.
+///
+/// # Errors
+/// Unknown walls or pieces, curved walls, and parameters no module can satisfy.
+pub fn cabinet_run(doc: &mut Document, p: &CabinetRunParams) -> Result<Value, String> {
     let request = resolve(doc.home(), p)?;
     let planned = plan(doc.home(), &request)?;
     if p.dry {

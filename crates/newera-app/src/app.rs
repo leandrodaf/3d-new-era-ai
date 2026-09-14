@@ -85,6 +85,8 @@ pub(crate) struct NewEraApp {
     pub(crate) video: Option<crate::video::VideoWindow>,
     /// The "Ergonomia" window, while open.
     pub(crate) ergonomics: Option<crate::ergonomics::ErgonomicsWindow>,
+    /// The "Armários na parede" window, while open.
+    pub(crate) cabinets: Option<crate::cabinets::CabinetsWindow>,
     /// Top-view provider for the plan: `(look, asset dir, provider)`.
     top_views: Option<(
         FurnitureLook,
@@ -149,6 +151,7 @@ impl NewEraApp {
             photo: None,
             video: None,
             ergonomics: None,
+            cabinets: None,
             top_views: None,
             top_view_generation: 0,
             #[cfg(not(target_arch = "wasm32"))]
@@ -1168,6 +1171,17 @@ impl NewEraApp {
                 };
                 if menu_item(
                     ui,
+                    icon::SQUARES_FOUR,
+                    crate::i18n::tr("Armários na parede…"),
+                    "",
+                    single_wall.is_some(),
+                ) && let Some(id) = single_wall
+                {
+                    self.cabinets = Some(crate::cabinets::CabinetsWindow::new(id));
+                    ui.close();
+                }
+                if menu_item(
+                    ui,
                     icon::SCISSORS,
                     crate::i18n::tr("Dividir parede ao meio"),
                     "",
@@ -1834,6 +1848,7 @@ impl eframe::App for NewEraApp {
         crate::photo::show(self, &ctx);
         crate::video::show(self, &ctx);
         crate::ergonomics::show(self, &ctx);
+        crate::cabinets::show(self, &ctx);
 
         self.shortcuts(&ctx);
         self.update_title(&ctx);

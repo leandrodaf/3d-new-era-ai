@@ -7,7 +7,6 @@
 
 mod compact;
 mod edit;
-mod run;
 mod schema;
 mod tools;
 mod trace;
