@@ -297,7 +297,11 @@ impl SceneView {
         ui.painter().text(
             rect.left_bottom() + egui::vec2(8.0, -8.0),
             egui::Align2::LEFT_BOTTOM,
-            "Arraste: girar · Shift/botão do meio: mover · Scroll: zoom · F: enquadrar",
+            if self.visitor.is_some() {
+                "Visitante — arraste: olhar · W/A/S/D ou setas: andar · Scroll: avançar · Esc: visão aérea"
+            } else {
+                "Arraste: girar · Shift/botão do meio: mover · Scroll: zoom · F: enquadrar"
+            },
             egui::FontId::proportional(11.0),
             egui::Color32::from_black_alpha(160),
         );

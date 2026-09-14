@@ -87,6 +87,24 @@ pub(crate) struct LabelSpec {
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct PolylineSpec {
+    pub pts: Vec<Point2>,
+    #[serde(default)]
+    pub closed: bool,
+    /// Line width cm (default 1).
+    pub t: Option<f64>,
+    /// `[r,g,b]` (default black).
+    pub color: Option<[u8; 3]>,
+    /// `solid`, `dot`, `dash`, `dash_dot`, `dash_dot_dot`.
+    pub dash: Option<newera_core::DashStyle>,
+    /// Smooth curve through the points.
+    #[serde(default)]
+    pub curved: bool,
+    /// `[start, end]` arrows: `none`, `delta`, `open`, `disc`.
+    pub arrows: Option<[newera_core::ArrowStyle; 2]>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct CreateParams {
     #[serde(default)]
     pub walls: Vec<WallPath>,
@@ -96,6 +114,9 @@ pub(crate) struct CreateParams {
     pub dims: Vec<DimSpec>,
     #[serde(default)]
     pub labels: Vec<LabelSpec>,
+    /// Free lines: annotations, arrows, electrical or plumbing runs.
+    #[serde(default)]
+    pub polylines: Vec<PolylineSpec>,
 }
 
 /// Creates everything in one undoable step and returns the new ids in order.
@@ -201,6 +222,23 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
         commands.push(Command::insert(label));
     }
 
+    for spec in params.polylines {
+        let mut line = newera_core::Polyline::new(doc.new_polyline_id(), spec.pts);
+        line.closed = spec.closed;
+        line.thickness = spec.t.unwrap_or(1.0);
+        line.color = spec.color.unwrap_or([0, 0, 0]);
+        line.dash = spec.dash.unwrap_or_default();
+        if spec.curved {
+            line.join = newera_core::LineJoin::Curved;
+        }
+        if let Some([start, end]) = spec.arrows {
+            line.start_arrow = start;
+            line.end_arrow = end;
+        }
+        ids.push(line.id.to_string());
+        commands.push(Command::insert(line));
+    }
+
     if commands.is_empty() {
         return Err("nothing to create".into());
     }
@@ -299,6 +337,14 @@ pub(crate) struct UpdateSpec {
     /// Room ceiling finish.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ceil_mat: Option<String>,
+    /// Label bold text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bold: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub italic: Option<bool>,
+    /// Label alignment: `left`, `center`, `right`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub align: Option<newera_core::TextAlign>,
 }
 
 impl UpdateSpec {
@@ -333,7 +379,9 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 "ceil_mat",
             ],
             Element::Dimension(_) => &["a", "b", "off", "level"],
-            Element::Label(_) => &["text", "at", "size", "angle", "level"],
+            Element::Label(_) => &[
+                "text", "at", "size", "angle", "level", "bold", "italic", "align", "color",
+            ],
             Element::Level(_) => &["name", "elev", "h", "slab"],
             Element::Furniture(_) => &[
                 "at",
@@ -436,6 +484,10 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 l.position = spec.at.unwrap_or(l.position);
                 l.size = spec.size.unwrap_or(l.size);
                 l.angle = spec.angle.unwrap_or(l.angle);
+                l.bold = spec.bold.unwrap_or(l.bold);
+                l.italic = spec.italic.unwrap_or(l.italic);
+                l.align = spec.align.unwrap_or(l.align);
+                l.color = spec.color.or(l.color);
                 Element::Label(l)
             }
             Element::Furniture(mut f) => {

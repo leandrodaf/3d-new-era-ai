@@ -48,6 +48,7 @@ pub(crate) enum Dialog {
     },
     Compare(Vec<crate::tabs::VariantStats>),
     ModifyLevel(newera_core::Level),
+    ModifyPolyline(newera_core::Polyline),
     ConfirmDeleteLevel {
         id: newera_core::LevelId,
         name: String,
@@ -119,6 +120,7 @@ impl Dialog {
             [Element::Dimension(d)] => Some(Self::ModifyDimension(d.clone())),
             [Element::Label(l)] => Some(Self::ModifyLabel(l.clone())),
             [Element::Level(l)] => Some(Self::ModifyLevel(l.clone())),
+            [Element::Polyline(p)] => Some(Self::ModifyPolyline(p.clone())),
             [Element::Furniture(f)] => Some(Self::ModifyFurniture {
                 piece: f.clone(),
                 keep_ratio: false,
@@ -430,6 +432,33 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
         Dialog::ModifyLabel(mut label) => {
             let answer = modal(ctx, "Modificar texto", |ui| {
                 label_fields(ui, &mut label.text, &mut label.size, &mut label.angle);
+                ui.add_space(4.0);
+                grid(ui, "label_style", |ui| {
+                    ui.label("Estilo");
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut label.bold, "Negrito");
+                        ui.checkbox(&mut label.italic, "Itálico");
+                    });
+                    ui.end_row();
+                    ui.label("Alinhamento");
+                    ui.horizontal(|ui| {
+                        use newera_core::TextAlign;
+                        for (align, name) in [
+                            (TextAlign::Left, "Esquerda"),
+                            (TextAlign::Center, "Centro"),
+                            (TextAlign::Right, "Direita"),
+                        ] {
+                            ui.selectable_value(&mut label.align, align, name);
+                        }
+                    });
+                    ui.end_row();
+                    ui.label("Cor");
+                    optional_color(ui, &mut label.color, [40, 40, 48]);
+                    ui.end_row();
+                    ui.label("Contorno");
+                    optional_color(ui, &mut label.outline, [255, 255, 255]);
+                    ui.end_row();
+                });
             });
             finish(app, answer, Dialog::ModifyLabel(label.clone()), || {
                 Command::update(label)
@@ -500,7 +529,42 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                                 }
                             });
                             ui.end_row();
+                            if let Some(light) = &mut piece.light {
+                                ui.label("Potência da luz");
+                                ui.add(egui::Slider::new(&mut light.power, 0.0..=1.0));
+                                ui.end_row();
+                            }
+                            if piece.is_group() {
+                                ui.label("Grupo");
+                                ui.label(format!("{} peças", piece.flatten().len() - 1));
+                                ui.end_row();
+                            }
                         });
+                        egui::CollapsingHeader::new("Informações")
+                            .id_salt("piece_info")
+                            .show(ui, |ui| {
+                                grid(ui, "piece_info_grid", |ui| {
+                                    for (label, value) in [
+                                        ("Descrição", &mut piece.info.description),
+                                        ("Informações", &mut piece.info.information),
+                                        ("Autor", &mut piece.info.creator),
+                                        ("Licença", &mut piece.info.license),
+                                        ("Preço", &mut piece.info.price),
+                                    ] {
+                                        ui.label(label);
+                                        let mut text = value.clone().unwrap_or_default();
+                                        if ui.text_edit_singleline(&mut text).changed() {
+                                            *value = (!text.is_empty()).then_some(text);
+                                        }
+                                        ui.end_row();
+                                    }
+                                    if let Some(id) = &piece.info.source_catalog_id {
+                                        ui.label("Catálogo de origem");
+                                        ui.weak(id);
+                                        ui.end_row();
+                                    }
+                                });
+                            });
                     },
                 );
             if keep_ratio {
@@ -743,6 +807,69 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                 None => DialogOutcome::Keep(Dialog::ConfirmCloseVariant { index, name }),
             }
         }
+        Dialog::ModifyPolyline(mut line) => {
+            use newera_core::{ArrowStyle, DashStyle, LineJoin};
+            let answer = modal(ctx, "Modificar linha", |ui| {
+                grid(ui, "polyline", |ui| {
+                    ui.label("Espessura");
+                    ui.add(cm(&mut line.thickness, 0.1..=100.0));
+                    ui.end_row();
+                    ui.label("Cor");
+                    ui.color_edit_button_srgb(&mut line.color);
+                    ui.end_row();
+                    ui.label("Traço");
+                    egui::ComboBox::from_id_salt("dash")
+                        .selected_text(format!("{:?}", line.dash))
+                        .show_ui(ui, |ui| {
+                            for (dash, name) in [
+                                (DashStyle::Solid, "Contínuo"),
+                                (DashStyle::Dot, "Pontilhado"),
+                                (DashStyle::Dash, "Tracejado"),
+                                (DashStyle::DashDot, "Traço e ponto"),
+                                (DashStyle::DashDotDot, "Traço e dois pontos"),
+                            ] {
+                                ui.selectable_value(&mut line.dash, dash, name);
+                            }
+                        });
+                    ui.end_row();
+                    for (label, arrow, salt) in [
+                        ("Início", &mut line.start_arrow, "start_arrow"),
+                        ("Fim", &mut line.end_arrow, "end_arrow"),
+                    ] {
+                        ui.label(label);
+                        egui::ComboBox::from_id_salt(salt)
+                            .selected_text(format!("{arrow:?}"))
+                            .show_ui(ui, |ui| {
+                                for (style, name) in [
+                                    (ArrowStyle::None, "Sem seta"),
+                                    (ArrowStyle::Delta, "Seta cheia"),
+                                    (ArrowStyle::Open, "Seta aberta"),
+                                    (ArrowStyle::Disc, "Disco"),
+                                ] {
+                                    ui.selectable_value(arrow, style, name);
+                                }
+                            });
+                        ui.end_row();
+                    }
+                    ui.label("");
+                    ui.vertical(|ui| {
+                        let mut curved = line.join == LineJoin::Curved;
+                        if ui.checkbox(&mut curved, "Curva suave").changed() {
+                            line.join = if curved {
+                                LineJoin::Curved
+                            } else {
+                                LineJoin::Miter
+                            };
+                        }
+                        ui.checkbox(&mut line.closed, "Fechada");
+                    });
+                    ui.end_row();
+                });
+            });
+            finish(app, answer, Dialog::ModifyPolyline(line.clone()), || {
+                Command::update(line)
+            })
+        }
         Dialog::ModifyLevel(mut level) => {
             let answer = modal(ctx, "Modificar andar", |ui| {
                 grid(ui, "level", |ui| {
@@ -753,10 +880,18 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                     ui.add(cm(&mut level.elevation, -10_000.0..=100_000.0));
                     ui.end_row();
                     ui.label("Pé-direito");
-                    ui.add(cm(&mut level.height, 50.0..=2_000.0));
+                    ui.add(cm(&mut level.height, 0.0..=2_000.0));
                     ui.end_row();
                     ui.label("Espessura da laje");
                     ui.add(cm(&mut level.floor_thickness, 0.0..=200.0));
+                    ui.end_row();
+                    ui.label("Ordem (mesma elevação)").on_hover_text(
+                        "Níveis na mesma elevação funcionam como layouts alternativos",
+                    );
+                    ui.add(DragValue::new(&mut level.elevation_index).range(0..=99));
+                    ui.end_row();
+                    ui.label("");
+                    ui.checkbox(&mut level.viewable, "Visível no 3D");
                     ui.end_row();
                 });
             });
@@ -920,6 +1055,19 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
             }
         }
     }
+}
+
+/// A color that can be left unset (uses the default look).
+fn optional_color(ui: &mut egui::Ui, color: &mut Option<[u8; 3]>, default: [u8; 3]) {
+    ui.horizontal(|ui| {
+        let mut custom = color.is_some();
+        if ui.checkbox(&mut custom, "Personalizada").changed() {
+            *color = custom.then_some(default);
+        }
+        if let Some(c) = color {
+            ui.color_edit_button_srgb(c);
+        }
+    });
 }
 
 fn label_fields(ui: &mut egui::Ui, text: &mut String, size: &mut f64, angle: &mut f64) {

@@ -37,7 +37,18 @@ pub(crate) fn pick(
         let a = (-label.angle).to_radians();
         let (dx, dy) = (p.x - label.position.x, p.y - label.position.y);
         let (lx, ly) = (dx * a.cos() - dy * a.sin(), dx * a.sin() + dy * a.cos());
-        if lx.abs() <= hw + tolerance && ly.abs() <= hh + tolerance {
+        // The anchor is the last line's baseline, aligned left/center/right.
+        let left = match label.align {
+            newera_core::TextAlign::Left => 0.0,
+            newera_core::TextAlign::Center => -hw,
+            newera_core::TextAlign::Right => -2.0 * hw,
+        };
+        let (top, bottom) = (-2.0 * hh + label.size * 0.3, label.size * 0.3);
+        if lx >= left - tolerance
+            && lx <= left + 2.0 * hw + tolerance
+            && ly >= top - tolerance
+            && ly <= bottom + tolerance
+        {
             return Some(label.id.into());
         }
     }
@@ -50,6 +61,19 @@ pub(crate) fn pick(
         let shift = |q: Point2| Point2::new(q.x + n.0 * dim.offset, q.y + n.1 * dim.offset);
         if p.distance_to_segment(shift(dim.start), shift(dim.end)) <= tolerance.max(4.0) {
             return Some(dim.id.into());
+        }
+    }
+    for line in home.polylines.iter().rev() {
+        let mut points = line.points.clone();
+        if line.closed && points.len() > 2 {
+            points.push(points[0]);
+        }
+        let reach = line.thickness / 2.0 + tolerance.max(3.0);
+        if points
+            .windows(2)
+            .any(|s| p.distance_to_segment(s[0], s[1]) <= reach)
+        {
+            return Some(line.id.into());
         }
     }
     // Doors and windows sit inside walls, so they win over them.
@@ -123,6 +147,12 @@ pub(crate) fn in_rect(home: &Home, min: Point2, max: Point2) -> Vec<ElementId> {
             .iter()
             .filter(|f| f.footprint().iter().all(contains))
             .map(|f| ElementId::from(f.id)),
+    );
+    ids.extend(
+        home.polylines
+            .iter()
+            .filter(|l| l.points.iter().all(contains))
+            .map(|l| ElementId::from(l.id)),
     );
     ids
 }

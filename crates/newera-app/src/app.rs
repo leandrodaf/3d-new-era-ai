@@ -57,6 +57,9 @@ pub(crate) struct NewEraApp {
     pub(crate) catalog_query: String,
     /// Tab being renamed in place: `(variant index, draft name)`.
     pub(crate) renaming_variant: Option<(usize, String)>,
+    /// Visitor camera last taken from the document, to follow changes made
+    /// elsewhere (MCP) without fighting the user's own navigation.
+    applied_observer: Option<(bool, newera_core::Camera)>,
 }
 
 impl std::fmt::Debug for NewEraApp {
@@ -98,6 +101,7 @@ impl NewEraApp {
             allow_close: false,
             title: String::new(),
             plan_rect: egui::Rect::NOTHING,
+            applied_observer: None,
             catalog_query: String::new(),
             renaming_variant: None,
         }
@@ -199,6 +203,89 @@ impl NewEraApp {
                 path.display()
             )),
         }
+    }
+
+    /// Aerial/visitor switch and stored points of view.
+    fn viewpoints_menu(&mut self, ui: &mut egui::Ui) {
+        let cameras = self.document.read().home().cameras.clone();
+        let aerial = self.scene.visitor.is_none();
+        if ui
+            .radio(aerial, format!("{} Visão aérea", icon::GLOBE))
+            .clicked()
+        {
+            self.scene.visitor = None;
+            ui.close();
+        }
+        if ui
+            .radio(!aerial, format!("{} Visitante", icon::PERSON_SIMPLE_WALK))
+            .clicked()
+        {
+            self.scene.visitor = Some(crate::view::scene::Visitor {
+                camera: cameras.observer.clone(),
+            });
+            ui.close();
+        }
+        ui.menu_button(
+            format!(
+                "{} Pontos de vista ({})",
+                icon::CAMERA,
+                cameras.stored.len()
+            ),
+            |ui| {
+                if cameras.stored.is_empty() {
+                    ui.weak("Nenhum ponto de vista salvo");
+                }
+                for (i, camera) in cameras.stored.iter().enumerate() {
+                    let name = camera
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| format!("Ponto de vista {}", i + 1));
+                    if ui.button(name).clicked() {
+                        self.scene.visitor = Some(crate::view::scene::Visitor {
+                            camera: camera.clone(),
+                        });
+                        ui.close();
+                    }
+                }
+            },
+        );
+        if ui
+            .add_enabled(
+                self.scene.visitor.is_some(),
+                egui::Button::new(format!("{} Salvar ponto de vista", icon::FLOPPY_DISK)),
+            )
+            .clicked()
+            && let Some(visitor) = &self.scene.visitor
+        {
+            let mut camera = visitor.camera.clone();
+            let mut next = cameras.clone();
+            camera.name = Some(format!("Ponto de vista {}", next.stored.len() + 1));
+            next.observer = visitor.camera.clone();
+            next.stored.push(camera);
+            self.run(|doc| doc.execute(Command::SetCameras { cameras: next }));
+            ui.close();
+        }
+    }
+
+    /// Switches the 3D view when the document's active visitor camera changes
+    /// (for example when an agent picks a point of view).
+    fn follow_document_camera(&mut self) {
+        let current = {
+            let doc = self.document.read();
+            let cameras = &doc.home().cameras;
+            (cameras.observer_active, cameras.observer.clone())
+        };
+        if self.applied_observer.as_ref() == Some(&current) {
+            return;
+        }
+        let first = self.applied_observer.is_none();
+        self.applied_observer = Some(current.clone());
+        if first && !current.0 {
+            return;
+        }
+        self.scene.visitor = current
+            .0
+            .then_some(crate::view::scene::Visitor { camera: current.1 });
     }
 
     fn after_load(&mut self) {
@@ -802,6 +889,8 @@ impl NewEraApp {
                     self.scene.request_frame();
                 }
                 ui.separator();
+                self.viewpoints_menu(ui);
+                ui.separator();
                 ui.label("Unidade");
                 for unit in LengthUnit::ALL {
                     ui.radio_value(&mut self.settings.unit, unit, unit.label());
@@ -1071,6 +1160,7 @@ impl eframe::App for NewEraApp {
             self.pending = None;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
+        self.follow_document_camera();
 
         self.shortcuts(&ctx);
         self.update_title(&ctx);
@@ -1574,6 +1664,58 @@ mod variant_tests {
             h.state().selection,
             [ElementId::Wall(newera_core::WallId(1))].into()
         );
+    }
+
+    #[test]
+    fn polyline_dialog_edits_style_and_app_follows_document_camera() {
+        let mut h = app();
+        let id = {
+            let mut doc = h.state().document.write();
+            let line = newera_core::Polyline::new(
+                doc.new_polyline_id(),
+                vec![Point2::new(0.0, 0.0), Point2::new(200.0, 50.0)],
+            );
+            let id = line.id;
+            doc.execute(Command::insert(line)).unwrap();
+            id
+        };
+        h.run_steps(2);
+        h.state_mut().open_modify(&[id.into()]);
+        h.run_steps(3);
+        if let Some(Dialog::ModifyPolyline(line)) = &mut h.state_mut().dialog {
+            line.dash = newera_core::DashStyle::Dash;
+            line.thickness = 3.0;
+        } else {
+            panic!("polyline dialog should be open");
+        }
+        h.run_steps(2);
+        h.get_by_label_contains("OK").click();
+        h.run_steps(4);
+        let line = h
+            .state()
+            .document
+            .read()
+            .home()
+            .polyline(id)
+            .cloned()
+            .unwrap();
+        assert_eq!(
+            (line.dash, line.thickness),
+            (newera_core::DashStyle::Dash, 3.0)
+        );
+
+        // An agent activates a stored point of view: the 3D view follows.
+        assert!(h.state().scene.visitor.is_none());
+        {
+            let mut doc = h.state().document.write();
+            let mut cameras = doc.home().cameras.clone();
+            cameras.observer.x = 123.0;
+            cameras.observer_active = true;
+            doc.execute(Command::SetCameras { cameras }).unwrap();
+        }
+        h.run_steps(3);
+        let visitor = h.state().scene.visitor.clone().expect("visitor view");
+        assert!((visitor.camera.x - 123.0).abs() < 1e-9);
     }
 
     #[test]

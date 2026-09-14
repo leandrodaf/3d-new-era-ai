@@ -214,7 +214,14 @@ pub(crate) fn left(app: &mut NewEraApp, ui: &mut egui::Ui) {
                     .iter()
                     .map(|f| {
                         let size = unit.format_size([f.width, f.depth, f.height]);
-                        (f.id.into(), format!("{} · {size}", f.name))
+                        let kind = if f.is_group() {
+                            format!(" · grupo de {}", f.flatten().len() - 1)
+                        } else if f.light.is_some() {
+                            " · luz".to_owned()
+                        } else {
+                            String::new()
+                        };
+                        (f.id.into(), format!("{} · {size}{kind}", f.name))
                     })
                     .collect(),
             );
@@ -251,6 +258,17 @@ pub(crate) fn left(app: &mut NewEraApp, ui: &mut egui::Ui) {
                 home.labels
                     .iter()
                     .map(|l| (l.id.into(), l.text.lines().next().unwrap_or_default().to_owned()))
+                    .collect(),
+            );
+            section(
+                ui,
+                format!("{} Linhas ({})", icon::LINE_SEGMENTS, home.polylines.len()),
+                home.polylines
+                    .iter()
+                    .map(|l| {
+                        let length: f64 = l.points.windows(2).map(|p| p[0].distance(p[1])).sum();
+                        (l.id.into(), format!("{} · {}", l.id, unit.format_length(length)))
+                    })
                     .collect(),
             );
             if home.walls.is_empty() && home.rooms.is_empty() && home.furniture.is_empty() {

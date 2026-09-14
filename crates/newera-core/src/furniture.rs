@@ -392,6 +392,45 @@ impl Furniture {
             .collect()
     }
 
+    /// After a group's box was moved, turned or resized from `before`, carries
+    /// its pieces along: positions, angles, sizes and elevations follow.
+    pub fn follow_group_change(&mut self, before: &Self) {
+        fn carry(
+            piece: &mut Furniture,
+            old: &Furniture,
+            new: &Furniture,
+            s: (f64, f64, f64),
+            turn: f64,
+        ) {
+            let (lx, ly) = old.to_local(piece.position);
+            let (lx, ly) = (lx * s.0, ly * s.1);
+            // `to_local` undoes mirroring; `to_plan` redoes it for the new box.
+            piece.position = new.to_plan((lx, ly));
+            piece.angle += turn;
+            piece.width *= s.0;
+            piece.depth *= s.1;
+            piece.height *= s.2;
+            piece.elevation = new.elevation + (piece.elevation - old.elevation) * s.2;
+            for child in &mut piece.children {
+                carry(child, old, new, s, turn);
+            }
+        }
+        if self.children.is_empty() {
+            return;
+        }
+        let ratio = |new: f64, old: f64| if old.abs() > 1e-9 { new / old } else { 1.0 };
+        let (sx, sy, sz) = (
+            ratio(self.width, before.width),
+            ratio(self.depth, before.depth),
+            ratio(self.height, before.height),
+        );
+        let turn = self.angle - before.angle;
+        let (old_center, new) = (before.clone(), self.clone());
+        for child in &mut self.children {
+            carry(child, &old_center, &new, (sx, sy, sz), turn);
+        }
+    }
+
     pub fn is_group(&self) -> bool {
         !self.children.is_empty()
     }
@@ -685,5 +724,42 @@ mod tests {
             .map(|p| crate::geometry::polygon_area(p))
             .sum();
         assert!((area - (500.0 - 120.0) * 15.0).abs() < 1e-6, "{area}");
+    }
+
+    #[cfg(test)]
+    mod group_tests {
+        use super::*;
+
+        #[test]
+        fn groups_carry_their_pieces() {
+            let child = Furniture {
+                position: Point2::new(110.0, 100.0),
+                width: 20.0,
+                ..Furniture::default()
+            };
+            let before = Furniture {
+                position: Point2::new(100.0, 100.0),
+                width: 40.0,
+                children: vec![child],
+                ..Furniture::default()
+            };
+            let mut after = before.clone();
+            after.position = Point2::new(200.0, 100.0);
+            after.width = 80.0;
+            after.angle = 90.0;
+            after.follow_group_change(&before);
+            let moved = &after.children[0];
+            assert!(
+                (moved.position.x - 200.0).abs() < 1e-9,
+                "{:?}",
+                moved.position
+            );
+            assert!(
+                (moved.position.y - 120.0).abs() < 1e-9,
+                "{:?}",
+                moved.position
+            );
+            assert!((moved.width - 40.0).abs() < 1e-9 && (moved.angle - 90.0).abs() < 1e-9);
+        }
     }
 }

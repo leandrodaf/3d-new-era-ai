@@ -106,6 +106,24 @@ pub(crate) struct CatalogParams {
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct CamerasParams {
+    /// `list` (default), `view`, `aerial`, `store`, `delete`.
+    action: Option<String>,
+    /// Stored view index.
+    i: Option<usize>,
+    name: Option<String>,
+    x: Option<f64>,
+    y: Option<f64>,
+    /// Eye height cm.
+    z: Option<f64>,
+    yaw: Option<f64>,
+    /// Degrees down.
+    pitch: Option<f64>,
+    /// Horizontal field of view, degrees.
+    fov: Option<f64>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct LevelsParams {
     /// `list` (default), `add`, `select`, `delete`.
     action: Option<String>,
@@ -362,7 +380,71 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Storeys. list (default): rows [id,name,elev,h,selected]. add {name?,h?} adds one on top and selects it; select {id}; delete {id} removes it and its content. Other tools act on the selected storey."
+        description = "Points of view. list (default): {active, rows [i,name,x,y,z,yaw,pitch,fov]}. view {i} shows stored view i in the 3D window; aerial returns to the orbit view; store {name?,x?,y?,z?,yaw?,pitch?,fov?} saves one (missing values from the visitor); delete {i}. cm and degrees."
+    )]
+    fn cameras(&self, Parameters(p): Parameters<CamerasParams>) -> Result<String, ErrorData> {
+        let mut doc = self.document.write();
+        let mut cameras = doc.home().cameras.clone();
+        let index = |len: usize| -> Result<usize, ErrorData> {
+            p.i.filter(|i| *i < len)
+                .ok_or_else(|| invalid(format!("`i` must be below {len}")))
+        };
+        match p.action.as_deref().unwrap_or("list") {
+            "list" => {
+                let rows: Vec<serde_json::Value> = cameras
+                    .stored
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| {
+                        serde_json::json!([
+                            i,
+                            c.name,
+                            compact::num(c.x),
+                            compact::num(c.y),
+                            compact::num(c.z),
+                            compact::num(c.yaw),
+                            compact::num(c.pitch),
+                            compact::num(c.fov)
+                        ])
+                    })
+                    .collect();
+                return Ok(serde_json::json!({"active": if cameras.observer_active { "visitor" } else { "aerial" }, "rows": rows}).to_string());
+            }
+            "view" => {
+                let i = index(cameras.stored.len())?;
+                cameras.observer = cameras.stored[i].clone();
+                cameras.observer_active = true;
+            }
+            "aerial" => cameras.observer_active = false,
+            "store" => {
+                let base = cameras.observer.clone();
+                let camera = newera_core::Camera {
+                    name: p
+                        .name
+                        .clone()
+                        .or_else(|| Some(format!("Ponto de vista {}", cameras.stored.len() + 1))),
+                    x: p.x.unwrap_or(base.x),
+                    y: p.y.unwrap_or(base.y),
+                    z: p.z.unwrap_or(base.z),
+                    yaw: p.yaw.unwrap_or(base.yaw),
+                    pitch: p.pitch.unwrap_or(base.pitch),
+                    fov: p.fov.unwrap_or(base.fov),
+                    ..base
+                };
+                cameras.stored.push(camera);
+            }
+            "delete" => {
+                let i = index(cameras.stored.len())?;
+                cameras.stored.remove(i);
+            }
+            other => return Err(invalid(format!("unknown action `{other}`"))),
+        }
+        doc.execute(Command::SetCameras { cameras }).map_err(core)?;
+        Ok(ok(&doc, &[]))
+    }
+
+    #[tool(
+        description = "Storeys. list (default): rows [id,name,elev,h,selected,layout_index,viewable]. add {name?,h?} adds one on top and selects it; select {id}; delete {id} removes it and its content. Other tools act on the selected storey."
     )]
     fn levels(&self, Parameters(p): Parameters<LevelsParams>) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
@@ -682,6 +764,64 @@ mod tests {
                 ..LevelsParams::default()
             }))
             .is_err()
+        );
+    }
+
+    #[test]
+    fn polylines_label_styles_and_cameras() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"labels":[{"text":"Tomada","at":[10,10]}],
+                "polylines":[{"pts":[[0,0],[100,0],[100,50]],"t":2,"color":[200,0,0],"dash":"dash","arrows":["none","delta"]}]}"#,
+        )
+        .unwrap();
+        assert_eq!(s.create(Parameters(params)).unwrap(), "ok rev=1 ids=t1,pl2");
+        let spec: UpdateSpec =
+            serde_json::from_str(r#"{"id":"t1","bold":true,"align":"left","color":[0,0,255]}"#)
+                .unwrap();
+        s.update(Parameters(UpdateParams { items: vec![spec] }))
+            .unwrap();
+        let home = s.get_home(Parameters(GetHomeParams::default()));
+        assert!(
+            home.contains(r#""bold":true"#) && home.contains(r#""align":"left""#),
+            "{home}"
+        );
+        assert!(
+            home.contains(r#""dash":"dash""#) && home.contains(r#""arrows":["none","delta"]"#),
+            "{home}"
+        );
+
+        let store = |name: &str| CamerasParams {
+            action: Some("store".into()),
+            name: Some(name.into()),
+            x: Some(100.0),
+            y: Some(200.0),
+            ..CamerasParams::default()
+        };
+        s.cameras(Parameters(store("Sala"))).unwrap();
+        s.cameras(Parameters(CamerasParams {
+            action: Some("view".into()),
+            i: Some(0),
+            ..CamerasParams::default()
+        }))
+        .unwrap();
+        let list = s.cameras(Parameters(CamerasParams::default())).unwrap();
+        assert!(
+            list.contains(r#""active":"visitor""#) && list.contains("Sala"),
+            "{list}"
+        );
+        assert!(
+            s.cameras(Parameters(CamerasParams {
+                action: Some("view".into()),
+                i: Some(5),
+                ..CamerasParams::default()
+            }))
+            .is_err()
+        );
+        s.undo().unwrap();
+        assert!(
+            !s.document.read().home().cameras.observer_active,
+            "undo restores the aerial view"
         );
     }
 }

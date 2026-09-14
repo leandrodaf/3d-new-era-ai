@@ -38,6 +38,14 @@ pub enum Command {
     SetBackground {
         background: Option<BackgroundImage>,
     },
+    /// Aerial/visitor cameras and stored points of view.
+    SetCameras {
+        cameras: crate::style::Cameras,
+    },
+    /// Look of the 3D world (sky, ground, light, photo settings).
+    SetEnvironment {
+        environment: crate::style::Environment,
+    },
     /// Several commands applied atomically: either all succeed or none does.
     Batch {
         commands: Vec<Command>,
@@ -80,7 +88,17 @@ impl Command {
                 home.insert(element, index)?;
                 Ok(Self::Remove { id })
             }
-            Self::Update { element } => {
+            Self::Update { mut element } => {
+                // A group whose box changed but whose pieces weren't edited
+                // carries its pieces along.
+                if let crate::Element::Furniture(new) = &mut element
+                    && new.is_group()
+                    && let Some(old) = home.piece(new.id)
+                    && old.children == new.children
+                {
+                    let old = old.clone();
+                    new.follow_group_change(&old);
+                }
                 let previous = home.replace(element)?;
                 Ok(Self::Update { element: previous })
             }
@@ -107,6 +125,16 @@ impl Command {
                 let previous = std::mem::replace(&mut home.background, background);
                 Ok(Self::SetBackground {
                     background: previous,
+                })
+            }
+            Self::SetCameras { cameras } => {
+                let previous = std::mem::replace(&mut home.cameras, cameras);
+                Ok(Self::SetCameras { cameras: previous })
+            }
+            Self::SetEnvironment { environment } => {
+                let previous = std::mem::replace(&mut home.environment, environment);
+                Ok(Self::SetEnvironment {
+                    environment: previous,
                 })
             }
             Self::Batch { commands } => {

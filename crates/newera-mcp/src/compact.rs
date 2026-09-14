@@ -96,6 +96,45 @@ pub(crate) fn home(home: &Home, revision: u64) -> Value {
             if l.angle != 0.0 {
                 v["angle"] = num(l.angle);
             }
+            if l.bold {
+                v["bold"] = json!(true);
+            }
+            if l.italic {
+                v["italic"] = json!(true);
+            }
+            if l.align != newera_core::TextAlign::Center {
+                v["align"] = json!(l.align);
+            }
+            if let Some(color) = l.color {
+                v["color"] = json!(color);
+            }
+            v
+        })
+        .collect();
+    let polylines: Vec<Value> = home
+        .polylines
+        .iter()
+        .map(|p| {
+            let mut v = obj([
+                ("id", json!(p.id.to_string())),
+                ("pts", points(&p.points)),
+                ("t", num(p.thickness)),
+                ("color", json!(p.color)),
+            ]);
+            if p.closed {
+                v["closed"] = json!(true);
+            }
+            if p.dash != newera_core::DashStyle::Solid {
+                v["dash"] = json!(p.dash);
+            }
+            if p.join == newera_core::LineJoin::Curved {
+                v["curved"] = json!(true);
+            }
+            if p.start_arrow != newera_core::ArrowStyle::None
+                || p.end_arrow != newera_core::ArrowStyle::None
+            {
+                v["arrows"] = json!([p.start_arrow, p.end_arrow]);
+            }
             v
         })
         .collect();
@@ -113,6 +152,7 @@ pub(crate) fn home(home: &Home, revision: u64) -> Value {
         ("dims", dims),
         ("labels", labels),
         ("furniture", furniture),
+        ("polylines", polylines),
     ] {
         if !list.is_empty() {
             out[key] = Value::Array(list);
@@ -164,6 +204,12 @@ fn piece(home: &Home, cuts: &[Vec<newera_core::WallCut>], f: &newera_core::Furni
     }
     if f.mirrored {
         v["mirror"] = json!(true);
+    }
+    if f.is_group() {
+        v["parts"] = json!(f.flatten().len() - 1);
+    }
+    if let Some(light) = &f.light {
+        v["light"] = num(light.power);
     }
     if !f.visible {
         v["visible"] = json!(false);
@@ -348,7 +394,9 @@ pub(crate) fn levels(home: &Home) -> Value {
                     l.name,
                     num(l.elevation),
                     num(l.height),
-                    Some(l.id) == current
+                    Some(l.id) == current,
+                    l.elevation_index,
+                    l.viewable
                 ])
             })
             .collect(),
