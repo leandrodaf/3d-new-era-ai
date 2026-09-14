@@ -5,7 +5,9 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use web_time::Instant;
 
 use eframe::egui::{self, RichText};
 use egui_phosphor::regular as icon;
@@ -117,6 +119,7 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
         return;
     };
     let mut open = true;
+    #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
     let mut render_to = None;
     let environment = app.document.read().home().environment.clone();
     let (mut fps, mut speed) = (environment.video.frame_rate, environment.video.speed);
@@ -194,10 +197,13 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                     )
                     .clicked()
                 {
-                    render_to = rfd::FileDialog::new()
-                        .add_filter("AVI", &["avi"])
-                        .set_file_name("video.avi")
-                        .save_file();
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        render_to = rfd::FileDialog::new()
+                            .add_filter("AVI", &["avi"])
+                            .set_file_name("video.avi")
+                            .save_file();
+                    }
                 }
                 if let Some(job) = &window.job {
                     let total = job.total.load(Ordering::Relaxed).max(1);

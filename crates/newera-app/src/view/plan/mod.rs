@@ -199,7 +199,7 @@ impl PlanView {
         let zoom = self.camera.zoom;
         let tolerance = self.camera.cm(6.0);
 
-        if self.pending_fit && rect.width() > 10.0 {
+        if self.pending_fit && rect.width() > 10.0 && rect.height() > 60.0 {
             self.fit(&home, rect);
             self.pending_fit = false;
         }
@@ -1553,6 +1553,7 @@ mod furniture_tests {
 
 impl PlanView {
     /// Plan point at the middle of the view.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) fn view_center(&self) -> Point2 {
         self.camera.center
     }

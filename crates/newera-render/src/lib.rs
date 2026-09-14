@@ -254,6 +254,14 @@ pub fn export_home(
     export::export_mesh(&mesh, path, &images)
 }
 
+/// The home as a binary glTF built in memory, with catalog furniture and no
+/// image files (for environments without a file system).
+pub fn glb_home(home: &newera_core::Home) -> Vec<u8> {
+    let mut mesh = Mesh::from_home(home, &Selection::new(), &|_| None);
+    mesh.drop_ground();
+    export::glb(&mesh, &|_| None)
+}
+
 /// The same day as `time_ms` at `hour` local solar time for `longitude`.
 pub fn at_local_hour(time_ms: i64, hour: f64, longitude: f64) -> i64 {
     const DAY: i64 = 86_400_000;

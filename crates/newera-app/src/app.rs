@@ -1,6 +1,8 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use web_time::Instant;
 
 use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText};
 use egui_phosphor::regular as icon;
@@ -90,6 +92,12 @@ pub(crate) struct NewEraApp {
     )>,
     /// Background top views finished when the plan was last rebuilt.
     top_view_generation: u64,
+    /// A browser file picker to open on the next frame.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pick_request: Option<crate::files::PickKind>,
+    /// Frames drawn before the browser canvas got its real size.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    waited_frames: u32,
 }
 
 impl std::fmt::Debug for NewEraApp {
@@ -137,6 +145,8 @@ impl NewEraApp {
             video: None,
             top_views: None,
             top_view_generation: 0,
+            pick_request: None,
+            waited_frames: 0,
             catalog_query: String::new(),
             renaming_variant: None,
         }
@@ -179,6 +189,7 @@ impl NewEraApp {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", allow(clippy::needless_pass_by_value))]
     pub(crate) fn perform(&mut self, action: Pending) {
         match action {
             Pending::New => {
@@ -189,6 +200,9 @@ impl NewEraApp {
                 drop(doc);
                 self.after_load();
             }
+            #[cfg(target_arch = "wasm32")]
+            Pending::Open(_) => self.pick_request = Some(crate::files::PickKind::Project),
+            #[cfg(not(target_arch = "wasm32"))]
             Pending::Open(path) => {
                 let path = path.or_else(|| {
                     rfd::FileDialog::new()
@@ -211,6 +225,7 @@ impl NewEraApp {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) fn open_path(&mut self, path: &Path) {
         let loaded = newera_sh3d::open_file(&mut self.document.write(), path);
         match loaded {
@@ -243,7 +258,8 @@ impl NewEraApp {
     /// The plan's top-view provider for the current look and project.
     fn piece_images(&mut self) -> Option<newera_draw::PieceImages> {
         let look = self.settings.furniture_look;
-        if look == FurnitureLook::Symbols {
+        // No worker threads or disk cache in the browser.
+        if look == FurnitureLook::Symbols || cfg!(target_arch = "wasm32") {
             return None;
         }
         let assets = self.document.read().asset_dir();
@@ -442,6 +458,41 @@ impl NewEraApp {
 
     /// Saves to the current path, or asks for one. Returns true when saved.
     pub(crate) fn save(&mut self, save_as: bool) -> bool {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = save_as;
+            self.save_web()
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        self.save_native(save_as)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn save_web(&mut self) -> bool {
+        let doc = self.document.read();
+        let name = format!("{}.{}", doc.home().name, newera_core::PROJECT_EXTENSION);
+        let json = newera_core::to_project_json(&doc);
+        drop(doc);
+        match crate::files::save_bytes(
+            "3D New Era AI",
+            newera_core::PROJECT_EXTENSION,
+            &name,
+            || Ok(json.into_bytes()),
+        ) {
+            Ok(_) => {
+                self.document.write().mark_saved(&name);
+                self.set_status(format!("Salvo em {name}"));
+                true
+            }
+            Err(err) => {
+                self.set_status(format!("⚠ Não foi possível salvar: {err}"));
+                false
+            }
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn save_native(&mut self, save_as: bool) -> bool {
         let current = self.document.read().path().map(Path::to_path_buf);
         let path = match current {
             Some(path) if !save_as => Some(path),
@@ -472,6 +523,7 @@ impl NewEraApp {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn remember(&mut self, path: &Path) {
         self.settings.recent.retain(|p| p != path);
         self.settings.recent.insert(0, path.to_path_buf());
@@ -481,20 +533,37 @@ impl NewEraApp {
     /// Exports the 3D model of the storeys shown in the 3D view.
     fn export_3d(&mut self, ext: &str) {
         let name = self.document.read().home().name.clone();
-        let Some(path) = rfd::FileDialog::new()
-            .add_filter(ext.to_uppercase(), &[ext])
-            .set_file_name(format!("{name}.{ext}"))
-            .save_file()
-        else {
-            return;
-        };
         let (home, assets) = {
             let doc = self.document.read();
             (doc.home().clone(), doc.asset_dir())
         };
-        match newera_render::export_home(&home, &path, assets.as_deref()) {
-            Ok(()) => self.set_status(format!("Modelo 3D exportado para {}", path.display())),
-            Err(err) => self.set_status(format!("⚠ Falha ao exportar: {err}")),
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(path) = rfd::FileDialog::new()
+                .add_filter(ext.to_uppercase(), &[ext])
+                .set_file_name(format!("{name}.{ext}"))
+                .save_file()
+            else {
+                return;
+            };
+            match newera_render::export_home(&home, &path, assets.as_deref()) {
+                Ok(()) => self.set_status(format!("Modelo 3D exportado para {}", path.display())),
+                Err(err) => self.set_status(format!("⚠ Falha ao exportar: {err}")),
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = assets;
+            if ext != "glb" {
+                return self.set_status(crate::i18n::tr("No navegador, exporte em .glb."));
+            }
+            let saved = crate::files::save_bytes("GLB", "glb", &format!("{name}.glb"), || {
+                Ok(newera_render::glb_home(&home))
+            });
+            match saved {
+                Ok(_) => self.set_status(format!("Modelo 3D exportado para {name}.glb")),
+                Err(err) => self.set_status(format!("⚠ Falha ao exportar: {err}")),
+            }
         }
     }
 
@@ -508,13 +577,6 @@ impl NewEraApp {
             _ => None,
         };
         let ext = if pdf_scale.is_some() { "pdf" } else { format };
-        let Some(path) = rfd::FileDialog::new()
-            .add_filter(ext.to_uppercase(), &[ext])
-            .set_file_name(format!("{name}.{ext}"))
-            .save_file()
-        else {
-            return;
-        };
         let doc = self.document.read();
         let scene = plan_scene(
             &doc.home().level_view(doc.home().current_level()),
@@ -526,39 +588,48 @@ impl NewEraApp {
         );
         let assets = doc.asset_dir();
         drop(doc);
-        let bytes = if let Some(scale) = pdf_scale {
-            Ok(newera_draw::to_pdf(
-                &scene,
-                &newera_draw::PdfOptions {
-                    scale,
-                    title: name.clone(),
-                    ..newera_draw::PdfOptions::default()
-                },
-            ))
-        } else if svg {
-            Ok(to_svg(&scene, &SvgOptions::default()).into_bytes())
-        } else {
-            let load = |p: &str| {
-                image::open(newera_core::resolve_asset(assets.as_deref(), p))
-                    .ok()
-                    .map(|i| i.to_rgba8())
-            };
-            let options = RenderOptions {
-                width: 2400,
-                height: 1800,
-                grid: false,
-                ..RenderOptions::default()
-            };
-            render_png(&scene, &options, &load).map_err(|e| e.to_string())
+        let make = || {
+            if let Some(scale) = pdf_scale {
+                Ok(newera_draw::to_pdf(
+                    &scene,
+                    &newera_draw::PdfOptions {
+                        scale,
+                        title: name.clone(),
+                        ..newera_draw::PdfOptions::default()
+                    },
+                ))
+            } else if svg {
+                Ok(to_svg(&scene, &SvgOptions::default()).into_bytes())
+            } else {
+                let load = |p: &str| {
+                    image::open(newera_core::resolve_asset(assets.as_deref(), p))
+                        .ok()
+                        .map(|i| i.to_rgba8())
+                };
+                let options = RenderOptions {
+                    width: 2400,
+                    height: 1800,
+                    grid: false,
+                    ..RenderOptions::default()
+                };
+                render_png(&scene, &options, &load).map_err(|e| e.to_string())
+            }
         };
-        match bytes.and_then(|b| std::fs::write(&path, b).map_err(|e| e.to_string())) {
-            Ok(()) => self.set_status(format!("Planta exportada para {}", path.display())),
+        match crate::files::save_bytes(&ext.to_uppercase(), ext, &format!("{name}.{ext}"), make) {
+            Ok(Some(path)) => self.set_status(format!("Planta exportada para {path}")),
+            Ok(None) => {}
             Err(err) => self.set_status(format!("⚠ Falha ao exportar: {err}")),
         }
     }
 
     /// Imports an OBJ/glTF file as a piece at its natural size, placed at
     /// the middle of the plan view.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn import_model(&mut self) {
+        self.set_status(crate::i18n::tr("Disponível no aplicativo para desktop."));
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn import_model(&mut self) {
         let Some(path) = rfd::FileDialog::new()
             .add_filter(crate::i18n::tr("Modelos 3D"), &["obj", "gltf", "glb"])
@@ -608,6 +679,12 @@ impl NewEraApp {
         }
     }
 
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn import_background(&mut self) {
+        self.set_status(crate::i18n::tr("Disponível no aplicativo para desktop."));
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn import_background(&mut self) {
         let Some(path) = rfd::FileDialog::new()
             .add_filter(
@@ -1181,7 +1258,7 @@ impl NewEraApp {
                     icon::FILM_STRIP,
                     crate::i18n::tr("Criar vídeo…"),
                     "",
-                    true,
+                    !cfg!(target_arch = "wasm32"),
                 ) {
                     self.video.get_or_insert_with(Default::default);
                     ui.close();
@@ -1351,6 +1428,11 @@ impl NewEraApp {
                     RichText::new(format!("{} MCP {url}", icon::ROBOT))
                         .color(ui.visuals().hyperlink_color),
                 ),
+                None if cfg!(target_arch = "wasm32") => ui.weak(format!(
+                    "{} {}",
+                    icon::GLOBE,
+                    crate::i18n::tr("Editor no navegador")
+                )),
                 None => ui.weak(format!(
                     "{} {}",
                     icon::ROBOT,
@@ -1497,9 +1579,51 @@ fn shift_with_new_id(doc: &mut Document, mut element: Element, offset: f64) -> E
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+impl NewEraApp {
+    /// Opens requested pickers and loads the files the browser handed over.
+    fn web_files(&mut self, ctx: &egui::Context) {
+        if let Some(kind) = self.pick_request.take() {
+            crate::files::pick(kind, ctx);
+        }
+        for picked in crate::files::take_picked() {
+            match picked.kind {
+                crate::files::PickKind::Project => self.open_bytes(&picked.name, &picked.bytes),
+            }
+        }
+    }
+}
+
+impl NewEraApp {
+    /// Loads a project from memory (JSON or bundle, without its assets).
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) fn open_bytes(&mut self, name: &str, bytes: &[u8]) {
+        match newera_core::project_from_bytes(bytes) {
+            Ok((project, _files)) => {
+                let mut doc = self.document.write();
+                project.load_into(&mut doc);
+                doc.mark_saved(name);
+                doc.set_asset_dir(None);
+                drop(doc);
+                self.after_load();
+                self.set_status(format!("Aberto: {name}"));
+            }
+            Err(err) => self.set_status(format!("⚠ Não foi possível abrir {name}: {err}")),
+        }
+    }
+}
+
 impl eframe::App for NewEraApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        // A browser canvas starts at 300×150 until the page lays it out; panel
+        // sizes chosen then would stick, so wait for the real size.
+        #[cfg(target_arch = "wasm32")]
+        if ctx.content_rect().height() < 300.0 && self.waited_frames < 120 {
+            self.waited_frames += 1;
+            ctx.request_repaint();
+            return;
+        }
 
         // Closing the window with unsaved changes asks first.
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close && self.is_modified()
@@ -1511,6 +1635,8 @@ impl eframe::App for NewEraApp {
             self.pending = None;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
+        #[cfg(target_arch = "wasm32")]
+        self.web_files(&ctx);
         self.follow_document_camera();
         if self
             .top_views
@@ -1544,6 +1670,8 @@ impl eframe::App for NewEraApp {
                 egui::Panel::top("plan")
                     .resizable(true)
                     .default_size(ui.available_height() / 2.0)
+                    // Never collapse, e.g. when a browser canvas starts tiny.
+                    .min_size(120.0)
                     .frame(egui::Frame::NONE)
                     .show(ui, |ui| {
                         self.plan_rect = ui.available_rect_before_wrap();
@@ -1654,6 +1782,33 @@ mod tests {
 
     fn walls(h: &Harness<'_, NewEraApp>) -> Vec<Wall> {
         h.state().document.read().home().walls.clone()
+    }
+
+    #[test]
+    fn opens_projects_from_memory_like_the_browser_editor() {
+        let mut h = app_with_wall();
+        let mut other = Document::default();
+        for x in [0.0, 500.0] {
+            let wall = Wall::new(
+                other.new_wall_id(),
+                Point2::new(x, 0.0),
+                Point2::new(x, 300.0),
+            );
+            other.execute(Command::insert(wall)).unwrap();
+        }
+        let json = newera_core::to_project_json(&other);
+        h.state_mut().open_bytes("outra.newera", json.as_bytes());
+        h.run_steps(2);
+        assert_eq!(walls(&h).len(), 2);
+        assert!(!h.state().is_modified());
+        h.state_mut().open_bytes("ruim.newera", b"not a project");
+        assert_eq!(walls(&h).len(), 2, "a bad file leaves the project alone");
+        assert!(
+            h.state()
+                .status
+                .as_ref()
+                .is_some_and(|(s, _)| s.starts_with('⚠'))
+        );
     }
 
     #[test]

@@ -51,8 +51,15 @@ web: ## Compila o visualizador web (WebAssembly) em web/
 	$(CARGO) build -p newera-web --release --target wasm32-unknown-unknown
 	cp target/wasm32-unknown-unknown/release/newera_web.wasm web/
 
+.PHONY: web-editor
+web-editor: ## Compila o editor completo para o navegador em web/editor/
+	@rustup target list --installed | grep -q wasm32-unknown-unknown || rustup target add wasm32-unknown-unknown
+	@command -v wasm-bindgen >/dev/null || cargo install wasm-bindgen-cli --version 0.2.128 --locked
+	$(CARGO) build -p newera-editor-web --release --target wasm32-unknown-unknown
+	wasm-bindgen --target web --no-typescript --out-dir web/editor/pkg target/wasm32-unknown-unknown/release/newera_editor_web.wasm
+
 .PHONY: web-serve
-web-serve: web ## Serve o visualizador web em http://127.0.0.1:8790
+web-serve: web web-editor ## Serve o visualizador (/) e o editor (/editor/) em http://127.0.0.1:8790
 	python3 -m http.server 8790 --bind 127.0.0.1 --directory web
 
 ##@ Qualidade

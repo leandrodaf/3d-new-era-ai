@@ -213,7 +213,9 @@ pub(crate) fn material_editor(
                         *material = Some(Material::pattern(pattern));
                     }
                 }
+                #[cfg_attr(target_arch = "wasm32", allow(unused_variables))]
                 let image = material.as_ref().is_some_and(|m| m.image.is_some());
+                #[cfg(not(target_arch = "wasm32"))]
                 if ui
                     .selectable_label(image, crate::i18n::tr("Imagem…"))
                     .clicked()

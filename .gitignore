@@ -10,4 +10,5 @@
 
 # Built by `make web`
 web/newera_web.wasm
+web/editor/pkg/
 web/*.newera

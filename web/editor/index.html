@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D New Era AI — Editor</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #16181d; }
+  #newera { width: 100%; height: 100%; display: block; }
+  #loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #9aa1ad; font: 15px system-ui, sans-serif; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="newera"></canvas>
+<script>
+  // Last messages, for diagnosing the page from automation.
+  window.neweraLog = [];
+  for (const level of ["error", "warn"]) {
+    const original = console[level];
+    console[level] = (...args) => { window.neweraLog.push(level + ": " + args.join(" ")); original(...args); };
+  }
+  addEventListener("error", (e) => window.neweraLog.push("uncaught: " + e.message));
+  addEventListener("unhandledrejection", (e) => window.neweraLog.push("rejection: " + e.reason));
+</script>
+<div id="loading">Carregando o editor…</div>
+<script type="module">
+  import init, { start } from "./pkg/newera_editor_web.js";
+
+  const loading = document.getElementById("loading");
+  // ?project=URL opens a project; without it the demo home is shown.
+  const url = new URLSearchParams(location.search).get("project") ?? "../demo.newera";
+  let name = null, bytes = null;
+  try {
+    const response = await fetch(url);
+    if (response.ok) {
+      bytes = new Uint8Array(await response.arrayBuffer());
+      name = decodeURIComponent(url.split("/").pop());
+    }
+  } catch (_) { /* start empty */ }
+  await init();
+  loading.remove();
+  await start("newera", name, bytes);
+</script>
+</body>
+</html>

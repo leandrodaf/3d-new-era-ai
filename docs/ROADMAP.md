@@ -134,7 +134,11 @@ The core of what makes the editor useful: placing real objects with real dimensi
       lamps in photos
 - [x] Web viewer (`newera-web`, WebAssembly, no GPU needed): opens `.newera` projects,
       plan as SVG and orbitable software-rendered 3D; `make web` / `make web-serve`, CI job
-- [ ] Full editor in the browser (eframe web + WebGPU)
+- [x] Full editor in the browser (`newera-editor-web`: the same eframe app on WebGPU):
+      plan, 3D, catalog, dialogs, undo; opens `.newera` from the file picker or
+      `?project=URL`, saves and exports (PDF, SVG, PNG, GLB, photos) as downloads;
+      `make web-editor`, served at `/editor/`; `scripts/web-editor-e2e.mjs` draws a wall
+      in headless Chrome. Desktop-only for now: `.sh3d` import, model/image import, video
 - [x] Auth for exposing the server on a network: `--token`/`NEWERA_TOKEN` required beyond
       loopback (Bearer header or `?token=`), MCP host checks relaxed only then
 - [x] Live updates: `GET /api/events` (SSE revision events)

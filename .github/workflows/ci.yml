@@ -80,7 +80,7 @@ jobs:
       - run: cargo +1.95 check --workspace --locked
 
   web:
-    name: Web viewer (wasm32)
+    name: Web viewer and editor (wasm32)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -89,6 +89,7 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: cargo build -p newera-web --release --target wasm32-unknown-unknown --locked
+      - run: cargo clippy -p newera-app -p newera-editor-web --target wasm32-unknown-unknown --locked -- -D warnings
 
   deny:
     name: Licenses & advisories

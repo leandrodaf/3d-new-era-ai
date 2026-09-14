@@ -5,6 +5,7 @@
 
 mod app;
 mod dialogs;
+mod files;
 mod i18n;
 mod panels;
 mod photo;
@@ -29,6 +30,7 @@ pub struct AppOptions {
 }
 
 /// Opens the editor window and blocks until it is closed.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run(document: SharedDocument, options: AppOptions) -> eframe::Result {
     let native = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
@@ -48,4 +50,30 @@ pub fn run(document: SharedDocument, options: AppOptions) -> eframe::Result {
             Ok(Box::new(app))
         }),
     )
+}
+
+/// Starts the editor in a browser canvas, optionally with a project
+/// (`.newera` JSON or bundle bytes) already open.
+///
+/// # Errors
+/// When the canvas can't get a graphics context.
+#[cfg(target_arch = "wasm32")]
+pub async fn start_web(
+    canvas: web_sys::HtmlCanvasElement,
+    project: Option<(String, Vec<u8>)>,
+) -> Result<(), wasm_bindgen::JsValue> {
+    let document = SharedDocument::default();
+    eframe::WebRunner::new()
+        .start(
+            canvas,
+            eframe::WebOptions::default(),
+            Box::new(move |cc| {
+                let mut app = app::NewEraApp::new(cc, document, None);
+                if let Some((name, bytes)) = project {
+                    app.open_bytes(&name, &bytes);
+                }
+                Ok(Box::new(app))
+            }),
+        )
+        .await
 }

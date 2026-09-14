@@ -2,7 +2,9 @@
 //! a background thread so the editor stays responsive.
 
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use web_time::Instant;
 
 use eframe::egui::{self, RichText};
 use egui_phosphor::regular as icon;
@@ -64,13 +66,18 @@ impl PhotoWindow {
         let quality = self.quality;
         let slot = Arc::new(Mutex::new(None));
         let out = Arc::clone(&slot);
-        std::thread::spawn(move || {
+        let work = move || {
             let image =
                 newera_render::photo_home(&home, &view, time, w, h, assets.as_deref(), quality);
             if let Ok(mut guard) = out.lock() {
                 *guard = Some(image);
             }
-        });
+        };
+        // Browsers have no threads here: the page waits for the photo.
+        #[cfg(target_arch = "wasm32")]
+        work();
+        #[cfg(not(target_arch = "wasm32"))]
+        std::thread::spawn(work);
         self.job = Some((Instant::now(), slot));
         self.result = None;
     }
@@ -190,15 +197,20 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
     if start {
         window.start(app);
     }
-    if save
-        && let Some((image, _, _)) = &window.result
-        && let Some(path) = rfd::FileDialog::new()
-            .add_filter("PNG", &["png"])
-            .set_file_name("foto.png")
-            .save_file()
-    {
-        match image.save(&path) {
-            Ok(()) => app.set_status(format!("Foto salva em {}", path.display())),
+    if save && let Some((image, _, _)) = &window.result {
+        let png = || {
+            let mut bytes = Vec::new();
+            image
+                .write_to(
+                    &mut std::io::Cursor::new(&mut bytes),
+                    image::ImageFormat::Png,
+                )
+                .map_err(|e| e.to_string())?;
+            Ok(bytes)
+        };
+        match crate::files::save_bytes("PNG", "png", "foto.png", png) {
+            Ok(Some(path)) => app.set_status(format!("Foto salva em {path}")),
+            Ok(None) => {}
             Err(err) => app.set_status(format!("⚠ Não foi possível salvar: {err}")),
         }
     }
