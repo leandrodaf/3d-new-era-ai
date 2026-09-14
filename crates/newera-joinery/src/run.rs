@@ -86,6 +86,19 @@ pub struct RunOver {
     pub bottom: f64,
 }
 
+/// Inside tall cabinets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Interior {
+    /// Shelves (pantry, linen).
+    #[default]
+    Shelves,
+    /// Hanging rails under a top shelf.
+    Hanging,
+    /// A wardrobe: hanging modules alternating with shelves and drawers.
+    Wardrobe,
+}
+
 /// Choices for a run. Sizes in cm; unset ones follow the row.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
@@ -123,6 +136,8 @@ pub struct RunParams {
     pub cooktop: Option<f64>,
     /// Cooktop cabinet width, cm (default 60; 75 or 90 for 5 burners).
     pub cooktop_w: f64,
+    /// Tall row interior (default shelves; the MCP picks wardrobe in bedrooms).
+    pub interior: Option<Interior>,
 }
 
 impl Default for RunParams {
@@ -144,6 +159,7 @@ impl Default for RunParams {
             sink_w: 80.0,
             cooktop: None,
             cooktop_w: 60.0,
+            interior: None,
         }
     }
 }
@@ -191,6 +207,8 @@ pub enum Role {
     Slim,
     /// Blind corner: a fixed panel where the other wall's run meets it.
     Corner,
+    /// Tall module with a hanging rail.
+    Hanging,
     /// Above a fridge.
     Over,
     /// Under the sink.
@@ -431,6 +449,7 @@ pub fn plan_run(
     let mut modules: Vec<RunModule> = Vec::new();
     let mut notes = Vec::new();
     let mut tops: Vec<Top> = Vec::new();
+    let mut tall_count = 0u32;
     // Where a drawer unit helps most: next to the stove.
     let mut heat_ends: Vec<f64> = Vec::new();
     for g in gaps {
@@ -595,11 +614,28 @@ pub fn plan_run(
                     let left = if (from - a).abs() < 0.05 { b0 } else { 0.0 };
                     let right = if (from + w - b).abs() < 0.05 { b1 } else { 0.0 };
                     let mut c = cabinet(w, DoorType::Hinged, 0, h, shelves);
+                    if p.row == RunRow::Tall {
+                        let hang = match p.interior.unwrap_or_default() {
+                            Interior::Shelves => false,
+                            Interior::Hanging => true,
+                            Interior::Wardrobe => tall_count.is_multiple_of(2),
+                        };
+                        tall_count += 1;
+                        if hang {
+                            c.rod = true;
+                            c.shelves = 0;
+                        } else if p.interior == Some(Interior::Wardrobe) {
+                            c.shelves = 3;
+                            c.drawers = 2;
+                        }
+                    }
                     c.blind_left = left;
                     c.blind_right = right;
                     if left + right > 0.0 {
                         blind_note = true;
                         (Role::Corner, Build::Cabinet(c))
+                    } else if c.rod {
+                        (Role::Hanging, Build::Cabinet(c))
                     } else {
                         (Role::Doors, Build::Cabinet(c))
                     }
@@ -925,6 +961,44 @@ mod tests {
         )
         .unwrap();
         assert!(modules.iter().all(|m| (m.from - 35.0).abs() > 1.0));
+    }
+
+    #[test]
+    fn wardrobes_alternate_hanging_and_shelves() {
+        let params = RunParams {
+            row: RunRow::Tall,
+            interior: Some(Interior::Wardrobe),
+            ..RunParams::default()
+        };
+        let (modules, _) = plan_run(
+            &[gap(0.0, 240.0, EndKind::Wall, EndKind::Wall)],
+            &[],
+            &[],
+            &params,
+        )
+        .unwrap();
+        let roles: Vec<Role> = modules.iter().map(|m| m.role).collect();
+        assert_eq!(
+            roles.iter().filter(|r| **r == Role::Hanging).count(),
+            2,
+            "{roles:?}"
+        );
+        let shelves = modules
+            .iter()
+            .filter_map(|m| match &m.build {
+                Build::Cabinet(c) if !c.rod && m.role == Role::Doors => Some(c.drawers),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            shelves.iter().all(|d| *d == 2) && !shelves.is_empty(),
+            "{roles:?}"
+        );
+        assert!(
+            roles
+                .iter()
+                .all(|r| *r != Role::Drawers && *r != Role::Countertop)
+        );
     }
 
     #[test]

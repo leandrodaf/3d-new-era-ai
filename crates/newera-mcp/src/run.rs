@@ -35,7 +35,8 @@ pub(crate) struct CabinetRunParams {
     /// Flat choices, all optional: row base|wall|tall, h, d, elev, t (mm), front,
     /// color [r,g,b], drawers (drawer units), max (widest module, 90), target (60),
     /// top (base countertop, true), `top_material`, sink / cooktop (center cm along
-    /// the wall: cabinet under it and the countertop cutout), `sink_w` (80), `cooktop_w` (60).
+    /// the wall: cabinet under it and the countertop cutout), `sink_w` (80), `cooktop_w` (60),
+    /// interior shelves|hanging|wardrobe (tall rows; wardrobe by default facing a bedroom).
     pub p: Option<serde_json::Map<String, Value>>,
     /// Stretch to fill, cm from the wall start (default: all of it).
     pub from: Option<f64>,
@@ -104,6 +105,19 @@ fn row_key(row: RunRow) -> &'static str {
         RunRow::Wall => "wall",
         RunRow::Tall => "tall",
     }
+}
+
+/// Whether `p` is inside a polygon (ray casting).
+fn inside(points: &[Point2], p: Point2) -> bool {
+    let mut odd = false;
+    let n = points.len();
+    for i in 0..n {
+        let (a, b) = (points[i], points[(i + 1) % n]);
+        if (a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x {
+            odd = !odd;
+        }
+    }
+    odd
 }
 
 /// Distance from a point to a wall's centerline segment, cm.
@@ -188,6 +202,29 @@ fn resolve(home: &Home, p: &CabinetRunParams) -> Result<Request, String> {
     } else {
         -1.0
     };
+    // Tall cabinets facing a bedroom are a wardrobe.
+    let mut params = params;
+    if params.row == RunRow::Tall && params.interior.is_none() {
+        let normal = (-u.1 * side, u.0 * side);
+        let front = Point2::new(mid.x + normal.0 * 60.0, mid.y + normal.1 * 60.0);
+        let bedroom = home
+            .rooms
+            .iter()
+            .find(|r| inside(&r.points, front))
+            .is_some_and(|r| {
+                let name = r.name.to_lowercase();
+                ["quarto", "dormit", "suíte", "suite", "closet", "bedroom"]
+                    .iter()
+                    .any(|w| name.contains(w))
+                    || home
+                        .furniture
+                        .iter()
+                        .any(|f| f.catalog.starts_with("bed-") && inside(&r.points, f.position))
+            });
+        if bedroom {
+            params.interior = Some(newera_joinery::Interior::Wardrobe);
+        }
+    }
     Ok(Request {
         wall: wall_id,
         side,

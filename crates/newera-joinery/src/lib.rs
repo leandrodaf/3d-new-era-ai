@@ -32,7 +32,7 @@ pub use ceiling::{CoveParams, CoveType, ShadowGapParams};
 pub use countertop::{CountertopParams, Cutout, CutoutKind, Support};
 pub use cutlist::{CutRow, cut_list, cut_list_csv, cut_list_dxf, cut_list_svg};
 pub use run::{
-    EndKind, FillerParams, Role, RunGap, RunModule, RunOver, RunParams, RunRow, plan_run,
+    EndKind, FillerParams, Interior, Role, RunGap, RunModule, RunOver, RunParams, RunRow, plan_run,
 };
 pub use slats::{Orientation, SlatsParams};
 pub use sofa::{ArmType, SofaParams};

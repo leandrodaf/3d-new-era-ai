@@ -57,6 +57,8 @@ pub struct CabinetParams {
     pub blind_left: f64,
     /// Blind corner on the right, cm.
     pub blind_right: f64,
+    /// Wardrobe: a hanging rail under a top shelf (maleiro) instead of shelves.
+    pub rod: bool,
 }
 
 impl Default for CabinetParams {
@@ -78,6 +80,7 @@ impl Default for CabinetParams {
             front: None,
             blind_left: 0.0,
             blind_right: 0.0,
+            rod: false,
         }
     }
 }
@@ -242,7 +245,13 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
     } else {
         70.0
     };
-    let needed = if p.shelves > 0 {
+    // Hanging rails sag past about a meter.
+    let span_limit = if p.rod {
+        f64::min(span_limit, 100.0)
+    } else {
+        span_limit
+    };
+    let needed = if p.shelves > 0 || p.rod {
         (((iw + t) / (span_limit + t)).ceil() as u32).saturating_sub(1)
     } else {
         0
@@ -258,7 +267,7 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
             (((iw + t) / (15.0 + t)).floor() as u32).saturating_sub(1)
         ));
     }
-    if bay > span_limit && p.shelves > 0 {
+    if bay > span_limit && (p.shelves > 0 || p.rod) {
         return Err(format!(
             "Prateleiras de {} mm vencem no máximo {} cm; cada vão tem {} cm. Use dividers = {} ou chapa mais grossa.",
             num(p.t),
@@ -398,7 +407,56 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
         } else {
             drawer_zone
         };
-    if p.shelves > 0 && p.door != DoorType::Drawers {
+    if p.rod && p.door != DoorType::Drawers {
+        // Top shelf for suitcases, the rail 6 cm under it.
+        let shelf_z = plinth + hc - t - 35.0;
+        let rail_z = shelf_z - 6.0;
+        let hanging = rail_z - (plinth + t + drawer_zone);
+        if hanging < 95.0 {
+            return Err(format!(
+                "O cabideiro ficaria com {} cm de altura livre (mínimo 95 cm para camisas); aumente h para {} ou use menos gavetas.",
+                num(hanging),
+                num(h + 95.0 - hanging)
+            ));
+        }
+        for b in 0..bays {
+            let x0 = t + f64::from(b) * (bay + t);
+            let suffix = if bays > 1 {
+                format!(" {}", b + 1)
+            } else {
+                String::new()
+            };
+            parts.push(
+                Part::board(
+                    &format!("Maleiro{suffix}"),
+                    [x0 + 0.1, BACK_INSET + back, shelf_z],
+                    [bay - 0.2, id - 1.0, t],
+                    &board,
+                    carcass,
+                )
+                .banded(1, 0),
+            );
+            let mut rail = Part::solid(
+                &format!("Tubo cabideiro{suffix}"),
+                [x0 + 0.2, BACK_INSET + back + (id - 2.5) / 2.0, rail_z],
+                [bay - 0.4, 2.5, 1.5],
+                [180, 180, 185],
+            );
+            rail.finish = "#b4b4b9".parse().ok();
+            parts.push(rail);
+        }
+        hardware.push(format!(
+            "{bays} tubo(s) oblongo(s) de {} cm com {} suportes",
+            num(bay - 0.4),
+            bays * 2
+        ));
+        if hanging < 140.0 {
+            notes.push(format!(
+                "Cabideiro com {} cm livres: bom para camisas; vestidos e casacos longos pedem 150 cm.",
+                num(hanging)
+            ));
+        }
+    } else if p.shelves > 0 && p.door != DoorType::Drawers {
         let step = shelf_zone / f64::from(p.shelves + 1);
         if step < 15.0 {
             return Err(format!(
@@ -680,6 +738,37 @@ mod tests {
         })
         .unwrap_err();
         assert!(shallow.contains("corrediça"), "{shallow}");
+        let wardrobe = generate(&CabinetParams {
+            w: 90.0,
+            h: 230.0,
+            d: 58.0,
+            rod: true,
+            drawers: 2,
+            ..CabinetParams::default()
+        })
+        .unwrap();
+        let rail = part(&wardrobe, "Tubo cabideiro");
+        let shelf = part(&wardrobe, "Maleiro");
+        // Shelf 35 cm under the top inside, rail 6 cm below it, over 2 drawers of 18 cm.
+        assert!((shelf.at[2] - (230.0 - 1.8 - 35.0)).abs() < 1e-9);
+        assert!((rail.at[2] - (shelf.at[2] - 6.0)).abs() < 1e-9 && rail.board.is_none());
+        assert!(
+            wardrobe
+                .parts
+                .iter()
+                .all(|p| !p.name.starts_with("Prateleira"))
+        );
+        assert!(wardrobe.hardware.iter().any(|h| h.contains("tubo")));
+        assert!(
+            generate(&CabinetParams {
+                h: 150.0,
+                rod: true,
+                drawers: 2,
+                ..CabinetParams::default()
+            })
+            .unwrap_err()
+            .contains("cabideiro")
+        );
         let corner = generate(&CabinetParams {
             w: 100.0,
             h: 87.0,

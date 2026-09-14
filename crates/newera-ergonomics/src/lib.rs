@@ -160,6 +160,7 @@ impl Review<'_, '_> {
                 _ => {}
             }
         }
+        c.wardrobe_cm = c.wardrobe_cm.round();
         c.bedrooms = scene
             .spaces
             .iter()
@@ -410,7 +411,11 @@ impl Review<'_, '_> {
                         min,
                         whole,
                         Severity::Alerta,
-                        "abrir as portas e circular diante do guarda-roupa",
+                        if leaf > 0.0 {
+                            "abrir as portas e circular diante do guarda-roupa; portas de correr pedem menos"
+                        } else {
+                            "abrir as portas e circular diante do guarda-roupa"
+                        },
                     ));
                 }
                 Use::Dresser => found.extend(need(
@@ -1054,14 +1059,26 @@ fn wall_contacts(home: &Home, piece: &newera_core::Furniture) -> usize {
     .count()
 }
 
-/// Layout problems a piece is part of.
+/// Layout problems a piece (or any piece inside it, for a group) is part of.
 fn troubles(home: &Home, id: newera_core::FurnitureId) -> usize {
+    fn ids(f: &newera_core::Furniture, out: &mut Vec<newera_core::FurnitureId>) {
+        out.push(f.id);
+        for c in &f.children {
+            ids(c, out);
+        }
+    }
+    let mut mine = Vec::new();
+    if let Some(top) = home.furniture.iter().find(|f| f.id == id) {
+        ids(top, &mut mine);
+    } else {
+        mine.push(id);
+    }
     newera_core::check_layout(home)
         .iter()
         .filter(|i| match i {
-            Issue::Overlap(a, b) => *a == id || *b == id,
-            Issue::InWall(f, _) | Issue::OutsideRooms(f) => *f == id,
-            Issue::BlocksDoor { door, by } => *door == id || *by == id,
+            Issue::Overlap(a, b) => mine.contains(a) || mine.contains(b),
+            Issue::InWall(f, _) | Issue::OutsideRooms(f) => mine.contains(f),
+            Issue::BlocksDoor { door, by } => mine.contains(door) || mine.contains(by),
         })
         .count()
 }
