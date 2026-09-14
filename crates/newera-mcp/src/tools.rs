@@ -108,6 +108,22 @@ pub(crate) struct CatalogParams {
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct PhotoParams {
+    /// `aerial` (default) or `visitor`.
+    view: Option<String>,
+    /// Stored point of view index.
+    cam: Option<usize>,
+    yaw: Option<f32>,
+    pitch: Option<f32>,
+    /// `draft` (default), `good`, `best`.
+    quality: Option<String>,
+    /// Local solar hour, 0–24.
+    hour: Option<f64>,
+    w: Option<u32>,
+    h: Option<u32>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct Render3dParams {
     /// `aerial` (default) or `visitor`.
     view: Option<String>,
@@ -369,6 +385,66 @@ impl NewEraMcp {
         let assets = doc.asset_dir();
         drop(doc);
         let image = newera_render::render_home(&home, &view, w, h, assets.as_deref());
+        let mut png = Vec::new();
+        image::DynamicImage::ImageRgba8(image)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .map_err(|e| invalid(e.to_string()))?;
+        let data = base64::engine::general_purpose::STANDARD.encode(png);
+        Ok(CallToolResult::success(vec![ContentBlock::image(
+            data,
+            "image/png",
+        )]))
+    }
+
+    #[tool(
+        description = "Realistic photo (path traced: sun from compass location and time, lamps, glass). cam=i stored view, or view=visitor/aerial (yaw,pitch). quality draft (~10 s) | good | best; hour = local solar time (e.g. 9, 15.5, 20); w/h small. Returns PNG."
+    )]
+    fn render_photo(
+        &self,
+        Parameters(p): Parameters<PhotoParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let (w, h) = (
+            p.w.unwrap_or(480).clamp(64, 1600),
+            p.h.unwrap_or(360).clamp(64, 1200),
+        );
+        #[allow(clippy::cast_precision_loss)]
+        let aspect = w as f32 / h as f32;
+        let quality = match p.quality.as_deref() {
+            None | Some("draft") => newera_render::PhotoQuality::Draft,
+            Some("good") => newera_render::PhotoQuality::Good,
+            Some("best") => newera_render::PhotoQuality::Best,
+            Some(other) => return Err(invalid(format!("unknown quality `{other}`"))),
+        };
+        let doc = self.document.read();
+        let home = doc.home().clone();
+        let assets = doc.asset_dir();
+        drop(doc);
+        let (view, time) = match (p.cam, p.view.as_deref()) {
+            (Some(i), _) => {
+                let camera = home
+                    .cameras
+                    .stored
+                    .get(i)
+                    .ok_or_else(|| invalid(format!("no stored camera {i}")))?;
+                (
+                    newera_render::View::from_camera(camera, aspect),
+                    camera.time,
+                )
+            }
+            (None, Some("visitor")) => (
+                newera_render::View::from_camera(&home.cameras.observer, aspect),
+                home.cameras.observer.time,
+            ),
+            (None, None | Some("aerial")) => (
+                newera_render::View::aerial(&home, p.yaw.unwrap_or(-60.0), p.pitch.unwrap_or(45.0)),
+                home.cameras.top.time,
+            ),
+            (None, Some(other)) => return Err(invalid(format!("unknown view `{other}`"))),
+        };
+        let time = p.hour.map_or(time, |hour| {
+            newera_render::at_local_hour(time, hour, home.compass.longitude.unwrap_or(-46.63))
+        });
+        let image = newera_render::photo_home(&home, &view, time, w, h, assets.as_deref(), quality);
         let mut png = Vec::new();
         image::DynamicImage::ImageRgba8(image)
             .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
@@ -1279,5 +1355,33 @@ mod tests {
                 .starts_with(b"%PDF")
         );
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn render_photo_returns_a_png_at_any_hour() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[300,0],[300,200],[0,200]],"closed":true}],"rooms":[{"name":"Sala","at":[150,100]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        for hour in [9.0, 22.0] {
+            let result = s
+                .render_photo(Parameters(PhotoParams {
+                    w: Some(48),
+                    h: Some(36),
+                    hour: Some(hour),
+                    ..PhotoParams::default()
+                }))
+                .unwrap();
+            assert!(matches!(&result.content[0], ContentBlock::Image(_)));
+        }
+        assert!(
+            s.render_photo(Parameters(PhotoParams {
+                quality: Some("ultra".into()),
+                ..PhotoParams::default()
+            }))
+            .is_err()
+        );
     }
 }

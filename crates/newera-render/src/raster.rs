@@ -75,13 +75,13 @@ struct Target {
     depth: Vec<f32>,
 }
 
-struct Images<'a> {
-    loaded: Vec<Option<RgbaImage>>,
-    _source: std::marker::PhantomData<&'a ()>,
+pub(crate) struct Images<'a> {
+    pub(crate) loaded: Vec<Option<RgbaImage>>,
+    pub(crate) _source: std::marker::PhantomData<&'a ()>,
 }
 
 impl Images<'_> {
-    fn sample(&self, layer: usize, u: f32, v: f32) -> Vec3 {
+    pub(crate) fn sample(&self, layer: usize, u: f32, v: f32) -> Vec3 {
         let Some(Some(image)) = self.loaded.get(layer) else {
             return Vec3::splat(0.7);
         };
@@ -110,6 +110,24 @@ fn light_dir() -> Vec3 {
     Vec3::new(-0.4, -1.0, -0.3).normalize()
 }
 
+/// Surface color before lighting: vertex color times pattern or texture.
+pub(crate) fn albedo(
+    kind: u32,
+    color: Vec4,
+    uv: [f32; 2],
+    pixel: f32,
+    images: &Images<'_>,
+) -> Vec3 {
+    let base = color.truncate();
+    if kind >= IMAGE_BASE {
+        base * images.sample((kind - IMAGE_BASE) as usize, uv[0], -uv[1])
+    } else if kind > 0 {
+        base * patterns::shade(kind, uv[0], uv[1], pixel)
+    } else {
+        base
+    }
+}
+
 /// Albedo times light, exactly like the GPU fragment shader.
 fn shade(
     kind: u32,
@@ -119,14 +137,7 @@ fn shade(
     normal: Vec3,
     images: &Images<'_>,
 ) -> Vec3 {
-    let base = color.truncate();
-    let albedo = if kind >= IMAGE_BASE {
-        base * images.sample((kind - IMAGE_BASE) as usize, uv[0], -uv[1])
-    } else if kind > 0 {
-        base * patterns::shade(kind, uv[0], uv[1], pixel)
-    } else {
-        base
-    };
+    let albedo = albedo(kind, color, uv, pixel, images);
     let n = normal.normalize_or_zero();
     let diffuse = n.dot(-light_dir()).max(0.0);
     let ambient = 0.86 + (1.0 - 0.86) * (n.y * 0.5 + 0.5);

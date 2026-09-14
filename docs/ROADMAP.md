@@ -101,13 +101,16 @@ The core of what makes the editor useful: placing real objects with real dimensi
 - [x] Leaner MCP: tool schemas compacted at startup (−18% tokens for the tool list)
 - [ ] Lighting: sun from compass + date/time, light sources from furniture
 - [x] Virtual visitor camera; stored points of view
-- [ ] Photo renderer (GPU path tracing) and video along a camera path
+- [x] Photo renderer: CPU path tracer (BVH, sun from compass location and time, lamp
+      sources, glass, importance-sampled lights, edge-aware denoiser, auto exposure);
+      "Criar foto" window in the app and MCP `render_photo` (quality, hour)
+- [ ] Video along a camera path
 - [x] Export: 3D `.glb` (embedded textures) and `.obj`+`.mtl`, vector PDF plan (A3, 1:50,
       1:100 or fitted, title block) — app menus and MCP `export_plan`
 - [x] Software 3D renderer (`newera-render`): same meshes, materials and patterns as
       the GPU view, z-buffered and supersampled; MCP `render_3d` (aerial, visitor or
       stored camera) and REST `/api/view.png` so agents see the home in 3D without a GPU
-- [ ] MCP `render_photo` with global illumination (path tracing) and quality budget
+- [x] MCP `render_photo` with global illumination and a quality budget
 
 ## M4 — Interop and reach
 

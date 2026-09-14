@@ -34,4 +34,27 @@ fn render_stored_cameras_in_software() {
         assets.as_deref(),
     );
     image.save(out.join("soft-aerial.png")).unwrap();
+
+    for (i, camera) in home.cameras.stored.iter().take(2).enumerate() {
+        let started = std::time::Instant::now();
+        let view = View::from_camera(camera, 640.0 / 480.0);
+        let quality = if std::env::var("NEWERA_PHOTO_GOOD").is_ok() {
+            newera_render::PhotoQuality::Good
+        } else {
+            newera_render::PhotoQuality::Draft
+        };
+        let image = newera_render::photo_home(
+            home,
+            &view,
+            camera.time,
+            640,
+            480,
+            assets.as_deref(),
+            quality,
+        );
+        println!("photo {i}: {:?}", started.elapsed());
+        image
+            .save(out.join(format!("photo-camera{i}.png")))
+            .unwrap();
+    }
 }

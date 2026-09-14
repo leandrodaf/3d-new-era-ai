@@ -219,6 +219,18 @@ impl SceneView {
     }
 
     /// Frames the whole home on the next frame.
+    /// The current point of view, for photos and exports.
+    pub(crate) fn current_view(&self) -> newera_render::View {
+        match &self.visitor {
+            Some(visitor) => newera_render::View::from_camera(&visitor.camera, 4.0 / 3.0),
+            None => newera_render::View {
+                eye: self.camera.eye(),
+                target: self.camera.target,
+                fov_y: 45f32.to_radians(),
+            },
+        }
+    }
+
     pub(crate) fn request_frame(&mut self) {
         self.framed_once = false;
     }

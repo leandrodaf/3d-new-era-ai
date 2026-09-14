@@ -6,6 +6,7 @@ mod camera;
 pub mod export;
 pub mod mesh;
 mod patterns;
+pub mod photo;
 mod raster;
 
 use std::collections::HashMap;
@@ -72,6 +73,124 @@ pub fn export_home(
         }
     };
     export::export_mesh(&mesh, path, &images)
+}
+
+/// The same day as `time_ms` at `hour` local solar time for `longitude`.
+pub fn at_local_hour(time_ms: i64, hour: f64, longitude: f64) -> i64 {
+    const DAY: i64 = 86_400_000;
+    #[allow(clippy::cast_possible_truncation)]
+    let offset = ((hour - longitude / 15.0) * 3_600_000.0) as i64;
+    time_ms.div_euclid(DAY) * DAY + offset
+}
+
+/// How long a photo may take: samples per pixel and bounces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PhotoQuality {
+    Draft,
+    Good,
+    Best,
+}
+
+impl PhotoQuality {
+    fn budget(self) -> (u32, u32) {
+        match self {
+            Self::Draft => (8, 2),
+            Self::Good => (48, 3),
+            Self::Best => (192, 4),
+        }
+    }
+}
+
+/// A photo of the home: sunlight from the compass location at the camera's
+/// time (`time_ms`), light from lamps and glass-filtered daylight.
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+pub fn photo_home(
+    home: &newera_core::Home,
+    view: &View,
+    time_ms: i64,
+    width: u32,
+    height: u32,
+    assets: Option<&Path>,
+    quality: PhotoQuality,
+) -> image::RgbaImage {
+    use glam::Vec3;
+    let cache = ModelCache::default();
+    let models = |piece: &newera_core::Furniture| cache.piece_model(piece, assets);
+    let mesh = Mesh::from_home(home, &Selection::new(), &models);
+
+    // Sun: azimuth is clockwise from north; the compass says where north is.
+    let compass = &home.compass;
+    let (azimuth, elevation) = photo::sun_position(
+        time_ms,
+        compass.latitude.unwrap_or(-23.55),
+        compass.longitude.unwrap_or(-46.63),
+    );
+    let sun = (elevation > -2.0).then(|| {
+        let heading = (compass.north_degrees + azimuth).to_radians();
+        let el = elevation.max(0.5).to_radians();
+        let dir = Vec3::new(
+            (heading.sin() * el.cos()) as f32,
+            el.sin() as f32,
+            (-heading.cos() * el.cos()) as f32,
+        )
+        .normalize();
+        let strength = (elevation / 20.0).clamp(0.15, 1.0) as f32;
+        (dir, Vec3::new(1.0, 0.95, 0.88) * 3.2 * strength)
+    });
+    let daylight = sun.map_or(0.05, |(d, _)| 0.35 + 0.65 * d.y);
+    let sky_color = Vec3::from(home.environment.sky_color.map(f32::from)) / 255.0;
+    let sky = sky_color.powf(2.2) * 1.4 * daylight;
+
+    // Lamps of the storeys shown.
+    let mut lights = Vec::new();
+    for top in &home.furniture {
+        for piece in top.visible_leaves() {
+            let Some(light) = &piece.light else { continue };
+            let floor = home.elevation_of(piece.level);
+            for source in &light.sources {
+                let at = piece.to_plan((
+                    (source.x - 0.5) * piece.width,
+                    (source.y - 0.5) * piece.depth,
+                ));
+                let z = floor + piece.elevation + source.z.clamp(0.0, 1.0) * piece.height;
+                let color = Vec3::from(source.color.map(f32::from)) / 255.0;
+                let share = light.sources.len().max(1) as f32;
+                lights.push(photo::PointLight {
+                    position: Vec3::new(at.x as f32, z as f32, at.y as f32) * 0.01,
+                    intensity: color.powf(2.2) * (light.power as f32 * 6.0 / share),
+                    radius: 0.05,
+                });
+            }
+        }
+    }
+    let (samples, bounces) = quality.budget();
+    let load = |file: &str| {
+        image::open(newera_core::resolve_asset(assets, file))
+            .ok()
+            .map(|i| {
+                image::imageops::resize(
+                    &i.to_rgba8(),
+                    256,
+                    256,
+                    image::imageops::FilterType::Triangle,
+                )
+            })
+    };
+    photo::render_photo(
+        &mesh,
+        &photo::PhotoOptions {
+            width,
+            height,
+            view: *view,
+            samples,
+            bounces,
+            sun,
+            sky,
+            lights,
+            exposure: 1.1,
+            load_image: &load,
+        },
+    )
 }
 
 /// Renders a home from a point of view: builds the mesh, loads models and

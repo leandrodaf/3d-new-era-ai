@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Photo renderer (path tracing with sun, lamps, glass, denoising): app window and MCP
+  `render_photo`.
+
 - Exports: glTF binary and OBJ/MTL 3D models, vector PDF plans at scale.
 
 - `newera-render`: software 3D renderer; MCP `render_3d` and REST `/api/view.png`;

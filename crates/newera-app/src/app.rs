@@ -60,6 +60,8 @@ pub(crate) struct NewEraApp {
     /// Visitor camera last taken from the document, to follow changes made
     /// elsewhere (MCP) without fighting the user's own navigation.
     applied_observer: Option<(bool, newera_core::Camera)>,
+    /// The "Criar foto" window, while open.
+    pub(crate) photo: Option<crate::photo::PhotoWindow>,
 }
 
 impl std::fmt::Debug for NewEraApp {
@@ -102,6 +104,7 @@ impl NewEraApp {
             title: String::new(),
             plan_rect: egui::Rect::NOTHING,
             applied_observer: None,
+            photo: None,
             catalog_query: String::new(),
             renaming_variant: None,
         }
@@ -966,6 +969,10 @@ impl NewEraApp {
                 if menu_item(ui, icon::CUBE, "Enquadrar 3D", "", true) {
                     self.scene.request_frame();
                 }
+                if menu_item(ui, icon::CAMERA, "Criar foto…", "", true) {
+                    self.photo.get_or_insert_with(Default::default);
+                    ui.close();
+                }
                 ui.separator();
                 self.annotations_menu(ui);
                 ui.separator();
@@ -1245,6 +1252,7 @@ impl eframe::App for NewEraApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
         self.follow_document_camera();
+        crate::photo::show(self, &ctx);
 
         self.shortcuts(&ctx);
         self.update_title(&ctx);

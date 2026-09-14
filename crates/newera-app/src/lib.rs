@@ -6,6 +6,7 @@
 mod app;
 mod dialogs;
 mod panels;
+mod photo;
 #[cfg(test)]
 mod screens;
 mod tabs;
