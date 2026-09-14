@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D New Era AI — projete casas conversando com a sua IA</title>
+<meta name="description" content="Editor de arquitetura e interiores de código aberto com servidor MCP embutido. Sua IA desenha, mobilia, ilumina pela NBR e fotografa — ao vivo na sua tela. Windows, macOS e Linux.">
+<meta name="theme-color" content="#f4f1ea">
+<link rel="canonical" href="https://leandrodaf.github.io/3d-new-era-ai/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="3D New Era AI">
+<meta property="og:title" content="3D New Era AI — projete casas conversando com a sua IA">
+<meta property="og:description" content="Editor de arquitetura de código aberto com MCP embutido. A IA desenha, mobilia, ilumina e fotografa. Grátis para Windows, macOS e Linux.">
+<meta property="og:url" content="https://leandrodaf.github.io/3d-new-era-ai/">
+<meta property="og:image" content="https://leandrodaf.github.io/3d-new-era-ai/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://leandrodaf.github.io/3d-new-era-ai/og.jpg">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main" data-i18n="skip">Pular para o conteúdo</a>
+
+<header class="nav" id="top">
+  <div class="wrap nav__row">
+    <a class="brand" href="#top" aria-label="3D New Era AI">
+      <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M4 4h24v24H4z" fill="none" stroke="currentColor" stroke-width="2.4"/>
+        <path d="M4 17h11V28" fill="none" stroke="currentColor" stroke-width="2.4"/>
+        <path d="M15 17a9 9 0 0 1 9-9" fill="none" stroke="var(--accent)" stroke-width="2"/>
+      </svg>
+      <span>3D New Era <em>AI</em></span>
+    </a>
+    <nav class="nav__links" aria-label="Seções">
+      <a href="#como" data-i18n="nav.how">Como funciona</a>
+      <a href="#galeria" data-i18n="nav.gallery">Galeria</a>
+      <a href="#ia" data-i18n="nav.ai">Conectar IA</a>
+      <a href="#faq" data-i18n="nav.faq">Dúvidas</a>
+    </nav>
+    <div class="nav__actions">
+      <div class="lang" role="group" aria-label="Idioma / Language">
+        <button type="button" data-lang="pt" aria-pressed="true">PT</button>
+        <button type="button" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+      <a class="btn btn--ghost btn--sm hide-sm" href="https://github.com/leandrodaf/3d-new-era-ai" rel="noopener">GitHub</a>
+      <a class="btn btn--ink btn--sm" href="#baixar" data-i18n="nav.download">Baixar</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- HERO -->
+  <section class="hero wrap">
+    <figure class="hero__frame">
+      <img src="images/showcase/09-jantar-noite.jpg" alt="Sala de jantar ao anoitecer, renderizada pelo app" width="1280" height="800" fetchpriority="high">
+      <div class="hero__shade" aria-hidden="true"></div>
+      <div class="hero__copy">
+        <p class="eyebrow eyebrow--light"><span class="dot"></span><span data-i18n="hero.eyebrow">Código aberto · grátis · Windows, macOS e Linux</span></p>
+        <h1 class="hero__title">
+          <span data-i18n="hero.title1">Projete casas conversando com a sua IA.</span>
+          <span class="muted" data-i18n="hero.title2">Ela desenha, mobilia e fotografa. Você aprova.</span>
+        </h1>
+        <div class="hero__cta">
+          <a class="btn btn--light" href="#baixar" data-download-primary>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10m0 0l-4-4m4 4l4-4M4 16h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span data-download-label data-i18n="hero.download">Baixar grátis</span>
+          </a>
+          <a class="btn btn--glass" href="#como" data-i18n="hero.see">Ver como funciona</a>
+        </div>
+      </div>
+      <figcaption class="fig fig--light"><span data-i18n="hero.fig">FIG. 01 — Jantar ao anoitecer, render do próprio app</span> <span class="fig__dim">1280 × 800</span></figcaption>
+    </figure>
+
+    <div class="works">
+      <span class="works__label" data-i18n="works">Funciona com</span>
+      <ul>
+        <li>Claude</li><li>Codex</li><li>Gemini</li><li>Cursor</li><li>VS Code</li><li>DeepSeek</li><li data-i18n="works.more">e outras via MCP</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- STATEMENT -->
+  <section class="statement wrap" id="como">
+    <p class="section-no">01</p>
+    <p class="statement__text">
+      <strong data-i18n="st.strong">Um editor de arquitetura com um servidor MCP dentro.</strong>
+      <span data-i18n="st.rest">Você descreve o que quer; o agente usa as mesmas ferramentas que você — paredes, portas, marcenaria, iluminação, câmera — e cada mudança aparece na tela, com Ctrl+Z para desfazer.</span>
+    </p>
+  </section>
+
+  <!-- PRODUCT -->
+  <section class="product wrap">
+    <div class="dim dim--top" aria-hidden="true"><span>1600</span></div>
+    <figure class="product__shot">
+      <img src="images/editor.png" alt="O editor com catálogo, planta humanizada e vista 3D" width="1600" height="1000" loading="lazy">
+    </figure>
+    <div class="dim dim--side" aria-hidden="true"><span>1000</span></div>
+    <p class="fig" data-i18n="product.fig">FIG. 02 — O editor: catálogo, planta humanizada e 3D ao vivo, com a IA trabalhando pelo MCP</p>
+
+    <div class="triad">
+      <div>
+        <h3 data-i18n="t1.h">A IA mexe no mesmo arquivo</h3>
+        <p data-i18n="t1.p">Não é um gerador de imagem. O agente edita o projeto de verdade, em centímetros, e você vê cada parede nascer.</p>
+      </div>
+      <div>
+        <h3 data-i18n="t2.h">Tudo tem medida real</h3>
+        <p data-i18n="t2.p">Uma cama de 158 × 208 cm é exatamente isso na planta, no 3D e na conferência de colisões.</p>
+      </div>
+      <div>
+        <h3 data-i18n="t3.h">Roda no seu computador</h3>
+        <p data-i18n="t3.p">Seu projeto fica com você. Sem conta, sem assinatura, sem nuvem. Renderiza fotos até sem placa de vídeo.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONVERSATION -->
+  <section class="convo" aria-labelledby="convo-title">
+    <div class="wrap">
+      <header class="head">
+        <p class="section-no">02</p>
+        <h2 id="convo-title" class="head__title"><span data-i18n="cv.h1">Uma conversa, um apartamento.</span> <span class="muted" data-i18n="cv.h2">Uma planta real de 105 m², montada inteira pela IA.</span></h2>
+      </header>
+
+      <div class="convo__grid">
+        <div class="term" data-reveal>
+          <div class="term__bar"><span></span><span></span><span></span><em>newera · MCP</em></div>
+          <div class="term__body">
+            <p class="term__you"><span class="term__who" data-i18n="cv.you">você</span><span data-i18n="cv.prompt">Monte esta planta do FOCSA em escala real, mobilie como um apê moderno e ilumine pela norma.</span></p>
+            <ol class="term__calls">
+              <li><b>set_background</b><span class="args">{cm_per_px: 2.4}</span><i data-i18n="cv.c1">planta na escala</i></li>
+              <li><b>create</b><span class="args">{walls: 26, rooms: 11}</span><i data-i18n="cv.c2">paredes e cômodos</i></li>
+              <li><b>place</b><span class="args">{doors: 10, windows: 6}</span><i data-i18n="cv.c3">abrindo pro lado certo</i></li>
+              <li><b>update</b><span class="args">{floor_mat: "Travertine 120×120"}</span><i data-i18n="cv.c4">acabamentos</i></li>
+              <li><b>joinery</b><span class="args">{slats: 46, embed: "tv"}</span><i data-i18n="cv.c5">painel ripado</i></li>
+              <li><b>cabinet_run</b><span class="args">{kitchen: "L"}</span><i data-i18n="cv.c6">cozinha e armários</i></li>
+              <li><b>lighting</b><span class="args">{fill: "downlight"}</span><i class="ok">218 lx ≥ 200 lx ✓</i></li>
+              <li><b>check_layout</b><span class="args">{}</span><i class="ok" data-i18n="cv.c8">nada bloqueado ✓</i></li>
+              <li><b>render_photo</b><span class="args">{hour: 19.5}</span><i data-i18n="cv.c9">foto do jantar</i></li>
+            </ol>
+          </div>
+        </div>
+        <figure class="plan" data-reveal>
+          <img src="images/showcase/13-planta-humanizada.jpg" alt="Planta humanizada do apartamento" width="1600" height="2000" loading="lazy">
+          <figcaption class="fig" data-i18n="cv.fig">FIG. 03 — Planta humanizada gerada pelo app</figcaption>
+        </figure>
+      </div>
+
+      <dl class="stats">
+        <div><dt>105<small>m²</small></dt><dd data-i18n="s1">de planta real, traçada da imagem</dd></div>
+        <div><dt>119</dt><dd data-i18n="s2">móveis e peças no lugar certo</dd></div>
+        <div><dt>11</dt><dd data-i18n="s3">cômodos com luz calculada pela NBR</dd></div>
+        <div><dt>40</dt><dd data-i18n="s4">ferramentas MCP à disposição da IA</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- DAY / NIGHT -->
+  <section class="daynight wrap" aria-labelledby="dn-title">
+    <header class="head head--split">
+      <div>
+        <p class="section-no">03</p>
+        <h2 id="dn-title" class="head__title"><span data-i18n="dn.h1">Sol das 15h ou luzes acesas.</span> <span class="muted" data-i18n="dn.h2">A mesma câmera, a luz que você colocou.</span></h2>
+      </div>
+      <div class="chips" role="tablist" aria-label="Ambiente">
+        <button type="button" role="tab" aria-selected="true" data-scene="jantar" data-i18n="dn.dining">Jantar</button>
+        <button type="button" role="tab" aria-selected="false" data-scene="cozinha" data-i18n="dn.kitchen">Cozinha</button>
+        <button type="button" role="tab" aria-selected="false" data-scene="suite" data-i18n="dn.suite">Suíte</button>
+      </div>
+    </header>
+    <div class="compare" style="--pos:50%">
+      <img class="compare__img" data-day src="images/showcase/02-jantar-estar.jpg" alt="De dia" width="1280" height="800" loading="lazy">
+      <div class="compare__night"><img class="compare__img" data-night src="images/showcase/09-jantar-noite.jpg" alt="À noite" width="1280" height="800" loading="lazy"></div>
+      <span class="compare__tag compare__tag--l">15:00</span>
+      <span class="compare__tag compare__tag--r">19:30</span>
+      <div class="compare__handle" aria-hidden="true"><span></span></div>
+      <input class="compare__range" type="range" min="0" max="100" value="50" aria-label="Comparar dia e noite" data-i18n-aria="dn.aria">
+    </div>
+    <p class="fig" data-i18n="dn.fig">FIG. 04 — Arraste para comparar · path tracing com sol pela bússola e luminárias em lúmens</p>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features wrap" aria-labelledby="ft-title">
+    <header class="head">
+      <p class="section-no">04</p>
+      <h2 id="ft-title" class="head__title"><span data-i18n="ft.h1">Feito para quem projeta de verdade.</span> <span class="muted" data-i18n="ft.h2">E para a IA que trabalha junto.</span></h2>
+    </header>
+    <div class="grid6">
+      <article>
+        <svg viewBox="0 0 120 80" aria-hidden="true"><path d="M10 70V10h100v60H10z M10 42h46v28"/><path class="a" d="M56 42a22 22 0 0 1 22-22"/><path class="d" d="M10 76h100"/></svg>
+        <p class="fig">FIG. A</p>
+        <h3 data-i18n="f1.h">Planta a partir de uma foto</h3>
+        <p data-i18n="f1.p">Coloque a imagem de uma planta em escala e a IA encontra as paredes. Abre projetos do Sweet Home 3D.</p>
+      </article>
+      <article>
+        <svg viewBox="0 0 120 80" aria-hidden="true"><path d="M14 16h92v48H14z M44 16v48 M74 16v48 M14 40h30"/><path class="a" d="M58 36v12 M88 36v12"/></svg>
+        <p class="fig">FIG. B</p>
+        <h3 data-i18n="f2.h">Marcenaria que a oficina fabrica</h3>
+        <p data-i18n="f2.p">Armários, painéis ripados, bancadas com recorte de cuba e cooktop. Sai lista de corte em CSV e DXF.</p>
+      </article>
+      <article>
+        <svg viewBox="0 0 120 80" aria-hidden="true"><path d="M60 10v8 M40 18l38 0"/><path class="a" d="M59 18L28 70 M61 18L92 70"/><path class="d" d="M20 70h80"/></svg>
+        <p class="fig">FIG. C</p>
+        <h3 data-i18n="f3.h">Luz calculada pela NBR</h3>
+        <p data-i18n="f3.p">Lux por cômodo por fotometria, contra a NBR ISO/CIE 8995-1. A IA coloca as luminárias que faltam.</p>
+      </article>
+      <article>
+        <svg viewBox="0 0 120 80" aria-hidden="true"><path d="M20 66V30l40-20 40 20v36z"/><path class="a" d="M46 66V44h28v22"/><circle cx="60" cy="30" r="5"/></svg>
+        <p class="fig">FIG. D</p>
+        <h3 data-i18n="f4.h">Ergonomia para quem mora</h3>
+        <p data-i18n="f4.p">Circulação, giro de cadeira de rodas, triângulo da cozinha — NBR 9050 e 15575, com a correção pronta.</p>
+      </article>
+      <article>
+        <svg viewBox="0 0 120 80" aria-hidden="true"><path d="M16 20h68v44H16z"/><path class="a" d="M84 34l20-10v36l-20-10"/><path d="M28 54l14-14 10 10 8-6 14 10"/></svg>
+        <p class="fig">FIG. E</p>
+        <h3 data-i18n="f5.h">Fotos, cortes e vídeos</h3>
+        <p data-i18n="f5.p">Planta humanizada, vistas, cortes, aéreas, fotos realistas e vídeo percorrendo o projeto.</p>
+      </article>
+      <article>
+        <svg viewBox="0 0 120 80" aria-hidden="true"><circle cx="30" cy="40" r="12"/><circle cx="90" cy="20" r="9"/><circle cx="90" cy="60" r="9"/><path class="a" d="M42 36l39-13 M42 44l39 13"/></svg>
+        <p class="fig">FIG. F</p>
+        <h3 data-i18n="f6.h">Desktop, navegador e equipe</h3>
+        <p data-i18n="f6.p">Editor no computador ou no navegador, plugins em qualquer linguagem e várias pessoas no mesmo projeto.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- GALLERY -->
+  <section class="gallery" id="galeria" aria-labelledby="gl-title">
+    <div class="wrap">
+      <header class="head head--split">
+        <div>
+          <p class="section-no">05</p>
+          <h2 id="gl-title" class="head__title"><span data-i18n="gl.h1">Tudo aqui saiu do app.</span> <span class="muted" data-i18n="gl.h2">Sem Photoshop, sem render farm.</span></h2>
+        </div>
+        <a class="link-arrow" href="https://github.com/leandrodaf/3d-new-era-ai/blob/main/docs/SHOWCASE.md" rel="noopener" data-i18n="gl.how">Como foi feito →</a>
+      </header>
+      <div class="mosaic">
+        <figure class="m-wide"><img src="images/showcase/12-aerea.jpg" alt="Vista aérea em corte" loading="lazy" width="1280" height="800"><figcaption data-i18n="g1">Aérea em corte</figcaption></figure>
+        <figure><img src="images/showcase/03-painel-tv.jpg" alt="Painel ripado com TV" loading="lazy" width="1280" height="800"><figcaption data-i18n="g2">Painel ripado com TV embutida</figcaption></figure>
+        <figure><img src="images/showcase/04-cozinha.jpg" alt="Cozinha em L" loading="lazy" width="1280" height="800"><figcaption data-i18n="g3">Cozinha em L, granilite</figcaption></figure>
+        <figure><img src="images/showcase/05-escritorio.jpg" alt="Escritório" loading="lazy" width="1280" height="800"><figcaption data-i18n="g4">Escritório</figcaption></figure>
+        <figure><img src="images/showcase/11-suite-noite.jpg" alt="Suíte à noite" loading="lazy" width="1280" height="800"><figcaption data-i18n="g5">Suíte à noite</figcaption></figure>
+        <figure class="m-wide m-right"><img src="images/showcase/01-estar-janela.jpg" alt="Estar com painel ripado" loading="lazy" width="1280" height="800"><figcaption data-i18n="g6">Estar e jantar, 33 m²</figcaption></figure>
+        <figure><img src="images/showcase/10-cozinha-noite.jpg" alt="Cozinha à noite" loading="lazy" width="1280" height="800"><figcaption data-i18n="g7">Cozinha à noite</figcaption></figure>
+        <figure><img src="images/showcase/08-banheiro.jpg" alt="Banheiro" loading="lazy" width="1280" height="800"><figcaption data-i18n="g8">Banheiro, mármore Nero</figcaption></figure>
+        <figure><img src="images/showcase/07-suite.jpg" alt="Suíte de dia" loading="lazy" width="1280" height="800"><figcaption data-i18n="g9">Suíte com armários</figcaption></figure>
+        <figure><img src="images/showcase/02-jantar-estar.jpg" alt="Jantar de dia" loading="lazy" width="1280" height="800"><figcaption data-i18n="g10">Jantar às 15h</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONNECT AI -->
+  <section class="connect wrap" id="ia" aria-labelledby="ai-title">
+    <header class="head">
+      <p class="section-no">06</p>
+      <h2 id="ai-title" class="head__title"><span data-i18n="ai.h1">Conecte a IA que você já usa.</span> <span class="muted" data-i18n="ai.h2">Um comando, e ela passa a enxergar o seu projeto.</span></h2>
+    </header>
+    <div class="connect__grid">
+      <ol class="steps">
+        <li><b>1</b><div><h3 data-i18n="ai.s1h">Abra o 3D New Era AI</h3><p data-i18n="ai.s1p">O servidor MCP sobe junto, em <code>http://127.0.0.1:7878/mcp</code>.</p></div></li>
+        <li><b>2</b><div><h3 data-i18n="ai.s2h">Rode o comando da sua IA</h3><p data-i18n="ai.s2p">Só uma vez. Os instaladores já fazem isso sozinhos para Claude Code e Codex.</p></div></li>
+        <li><b>3</b><div><h3 data-i18n="ai.s3h">Peça</h3><p data-i18n="ai.s3p">“Desenhe um quarto de 4 × 5 m com porta e janela, mobilie e gere uma foto.”</p></div></li>
+      </ol>
+      <div class="tabs">
+        <div class="tabs__list" role="tablist" aria-label="Cliente de IA">
+          <button role="tab" aria-selected="true" data-tab="claude">Claude Code</button>
+          <button role="tab" aria-selected="false" data-tab="codex">Codex</button>
+          <button role="tab" aria-selected="false" data-tab="gemini">Gemini CLI</button>
+          <button role="tab" aria-selected="false" data-tab="vscode">VS Code</button>
+          <button role="tab" aria-selected="false" data-tab="cursor">Cursor</button>
+          <button role="tab" aria-selected="false" data-tab="desktop">Claude Desktop</button>
+          <button role="tab" aria-selected="false" data-tab="other" data-i18n="ai.other">DeepSeek e outras</button>
+        </div>
+        <div class="tabs__panel" role="tabpanel">
+          <p class="tabs__where" data-where></p>
+          <div class="code"><pre><code data-code></code></pre><button class="copy" type="button" data-copy data-i18n="copy">Copiar</button></div>
+          <p class="tabs__note" data-note></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOWNLOAD -->
+  <section class="download" id="baixar" aria-labelledby="dl-title">
+    <div class="wrap">
+      <header class="head">
+        <p class="section-no section-no--light">07</p>
+        <h2 id="dl-title" class="head__title"><span data-i18n="dl.h1">Baixe e comece agora.</span> <span class="muted" data-i18n="dl.h2">Grátis, sem conta e sem senha de administrador.</span></h2>
+      </header>
+
+      <div class="dl__grid">
+        <div class="dl__main">
+          <div class="os" role="tablist" aria-label="Sistema">
+            <button role="tab" aria-selected="true" data-os="windows">Windows</button>
+            <button role="tab" aria-selected="false" data-os="mac">macOS</button>
+            <button role="tab" aria-selected="false" data-os="linux">Linux</button>
+          </div>
+          <p class="dl__lead" data-os-lead></p>
+          <div class="code code--dark"><pre><code data-os-code></code></pre><button class="copy" type="button" data-copy-os data-i18n="copy">Copiar</button></div>
+          <p class="dl__after" data-os-after></p>
+        </div>
+        <div class="dl__files">
+          <p class="fig fig--light" data-i18n="dl.files">OU BAIXE O ARQUIVO</p>
+          <a class="file" href="https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-windows-x64.zip"><span>Windows</span><small>64 bits · .zip</small></a>
+          <a class="file" href="https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-macos-apple-silicon.zip"><span>macOS Apple Silicon</span><small>M1, M2, M3, M4 · .zip</small></a>
+          <a class="file" href="https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-macos-intel.zip"><span>macOS Intel</span><small>.zip</small></a>
+          <a class="file" href="https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-linux-x64.tar.gz"><span>Linux</span><small>x64 · .tar.gz</small></a>
+          <details class="first">
+            <summary data-i18n="dl.first">Primeira abertura do arquivo baixado</summary>
+            <p data-i18n="dl.firstp">Os programas não têm certificado pago da Apple ou da Microsoft, então o sistema pergunta uma vez. <b>Windows:</b> abra o <code>newera-gui.exe</code> e, se aparecer o SmartScreen, clique em <i>Mais informações → Executar assim mesmo</i>. <b>macOS:</b> mova o app para Aplicativos, clique com o botão direito → <i>Abrir</i> (no macOS 15+: <i>Ajustes → Privacidade e Segurança → Abrir Mesmo Assim</i>). O comando acima evita esses avisos.</p>
+          </details>
+          <p class="dl__meta"><span data-version>v1.0.0</span> · <a href="https://github.com/leandrodaf/3d-new-era-ai/releases/latest" rel="noopener" data-i18n="dl.notes">notas da versão</a> · <span data-i18n="dl.license">MIT ou Apache 2.0</span></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="faq wrap" id="faq" aria-labelledby="faq-title">
+    <header class="head">
+      <p class="section-no">08</p>
+      <h2 id="faq-title" class="head__title" data-i18n="faq.h">Dúvidas</h2>
+    </header>
+    <div class="faq__list">
+      <details><summary data-i18n="q1">É grátis mesmo?</summary><p data-i18n="a1">Sim. É código aberto (MIT ou Apache 2.0), sem conta e sem assinatura. Você só paga pela IA que escolher usar, se ela for paga.</p></details>
+      <details><summary data-i18n="q2">Preciso saber programar?</summary><p data-i18n="a2">Não. Instale com um comando, abra o app e desenhe com o mouse como em qualquer editor. A IA é opcional — e quando você conecta, é só conversar.</p></details>
+      <details><summary data-i18n="q3">Qual IA funciona?</summary><p data-i18n="a3">Qualquer app que fale MCP: Claude Code, Claude Desktop, Codex, Gemini CLI, Cursor, VS Code, Windsurf e apps como Cline e Cherry Studio, que rodam DeepSeek, Qwen, Llama e outros modelos.</p></details>
+      <details><summary data-i18n="q4">Meu projeto vai para a nuvem?</summary><p data-i18n="a4">Não. O app e o servidor MCP rodam no seu computador e só aceitam conexões da própria máquina. O projeto é um arquivo <code>.newera</code> seu.</p></details>
+      <details><summary data-i18n="q5">Precisa de placa de vídeo?</summary><p data-i18n="a5">Não. O 3D usa a GPU se tiver, e as fotos são renderizadas no processador — até num servidor sem tela.</p></details>
+      <details><summary data-i18n="q6">Abre meus projetos do Sweet Home 3D?</summary><p data-i18n="a6">Sim, arquivos <code>.sh3d</code> abrem com paredes, cômodos, móveis, luzes, câmeras e pavimentos.</p></details>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap footer__row">
+    <div>
+      <a class="brand brand--foot" href="#top">
+        <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M4 4h24v24H4z" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M4 17h11V28" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M15 17a9 9 0 0 1 9-9" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>
+        <span>3D New Era <em>AI</em></span>
+      </a>
+      <p class="footer__by" data-i18n="foot.by">Feito em Rust por Leandro Ferreira.</p>
+    </div>
+    <nav class="footer__links" aria-label="Links">
+      <a href="https://github.com/leandrodaf/3d-new-era-ai" rel="noopener">GitHub</a>
+      <a href="https://github.com/leandrodaf/3d-new-era-ai/releases/latest" rel="noopener" data-i18n="foot.releases">Versões</a>
+      <a href="https://github.com/leandrodaf/3d-new-era-ai/blob/main/docs/SHOWCASE.md" rel="noopener" data-i18n="foot.showcase">Vitrine</a>
+      <a href="https://github.com/leandrodaf/3d-new-era-ai/issues" rel="noopener" data-i18n="foot.issues">Reportar problema</a>
+    </nav>
+  </div>
+  <div class="wrap footer__credits">
+    <p data-i18n="foot.credits">Planta de referência: <i>Typical apartment floor plan FOCSA Building</i>, Osvaldo Valdes, CC BY-SA 4.0. Texturas: ambientCG, CC0.</p>
+  </div>
+</footer>
+
+<script src="app.js" defer></script>
+</body>
+</html>
