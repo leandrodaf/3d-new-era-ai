@@ -26,6 +26,9 @@ struct Cli {
     /// Address for the HTTP + MCP server.
     #[arg(long, global = true, env = "NEWERA_ADDR", default_value_t = newera_server::DEFAULT_ADDR)]
     addr: SocketAddr,
+    /// Token required by the HTTP + MCP server; needed to listen beyond loopback.
+    #[arg(long, global = true, env = "NEWERA_TOKEN")]
+    token: Option<String>,
 
     /// Start with a sample house instead of an empty project.
     #[arg(long, global = true)]
@@ -80,8 +83,8 @@ fn main() -> anyhow::Result<()> {
     let document = SharedDocument::new(document);
 
     match mode {
-        Mode::Gui { no_server } => run_gui(document, cli.addr, no_server),
-        Mode::Serve => runtime()?.block_on(serve_until_ctrl_c(document, cli.addr)),
+        Mode::Gui { no_server } => run_gui(document, cli.addr, cli.token.as_deref(), no_server),
+        Mode::Serve => runtime()?.block_on(serve_until_ctrl_c(document, cli.addr, cli.token)),
         Mode::Mcp => runtime()?
             .block_on(newera_mcp::serve_stdio(document))
             .context("MCP stdio server failed"),
@@ -95,21 +98,38 @@ fn runtime() -> anyhow::Result<tokio::runtime::Runtime> {
         .context("failed to start async runtime")
 }
 
-async fn serve_until_ctrl_c(document: SharedDocument, addr: SocketAddr) -> anyhow::Result<()> {
+async fn serve_until_ctrl_c(
+    document: SharedDocument,
+    addr: SocketAddr,
+    token: Option<String>,
+) -> anyhow::Result<()> {
     let shutdown = CancellationToken::new();
     let trigger = shutdown.clone();
     tokio::spawn(async move {
         let _ = tokio::signal::ctrl_c().await;
         trigger.cancel();
     });
-    newera_server::serve(document, addr, shutdown)
+    let listener = tokio::net::TcpListener::bind(addr)
         .await
-        .with_context(|| format!("HTTP server failed on {addr}"))
+        .with_context(|| format!("cannot bind {addr}"))?;
+    newera_server::serve_listener_with(
+        document,
+        listener,
+        shutdown,
+        newera_server::ServerOptions { token },
+    )
+    .await
+    .with_context(|| format!("HTTP server failed on {addr}"))
 }
 
 /// The window owns the main thread (required on macOS); the server runs on a
 /// background runtime sharing the same document.
-fn run_gui(document: SharedDocument, addr: SocketAddr, no_server: bool) -> anyhow::Result<()> {
+fn run_gui(
+    document: SharedDocument,
+    addr: SocketAddr,
+    token: Option<&str>,
+    no_server: bool,
+) -> anyhow::Result<()> {
     let shutdown = CancellationToken::new();
     let mut server_thread = None;
     let mut mcp_url = None;
@@ -120,12 +140,18 @@ fn run_gui(document: SharedDocument, addr: SocketAddr, no_server: bool) -> anyho
         let listener = runtime
             .block_on(tokio::net::TcpListener::bind(addr))
             .with_context(|| format!("cannot bind {addr}; use --addr or --no-server"))?;
-        mcp_url = Some(format!("http://{}/mcp", listener.local_addr()?));
+        let local = listener.local_addr()?;
+        if !local.ip().is_loopback() && token.is_none() {
+            anyhow::bail!("{local} is reachable from the network: set --token or NEWERA_TOKEN");
+        }
+        mcp_url = Some(format!("http://{local}/mcp"));
 
-        let (doc, token) = (document.clone(), shutdown.clone());
+        let (doc, token, access) = (document.clone(), shutdown.clone(), token.map(str::to_owned));
         server_thread = Some(std::thread::spawn(move || {
-            if let Err(err) = runtime.block_on(newera_server::serve_listener(doc, listener, token))
-            {
+            let options = newera_server::ServerOptions { token: access };
+            if let Err(err) = runtime.block_on(newera_server::serve_listener_with(
+                doc, listener, token, options,
+            )) {
                 tracing::error!("HTTP server stopped: {err}");
             }
         }));

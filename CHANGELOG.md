@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Server: token auth for network exposure, SSE revision events, REST commands endpoint.
+
 - Furniture top views on the plan (Ver › Móveis na planta), rendered in the background.
 
 - Photo renderer (path tracing with sun, lamps, glass, denoising): app window and MCP

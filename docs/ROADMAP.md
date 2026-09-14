@@ -126,8 +126,12 @@ The core of what makes the editor useful: placing real objects with real dimensi
       the background and cached), OBJ default materials, transparency, model rotation,
       lamps in photos
 - [ ] Web build (WebGPU) sharing `newera-core`
-- [ ] Auth for exposing the server on a network; multi-user sessions
-- [ ] Plugin API on top of commands
+- [x] Auth for exposing the server on a network: `--token`/`NEWERA_TOKEN` required beyond
+      loopback (Bearer header or `?token=`), MCP host checks relaxed only then
+- [x] Live updates: `GET /api/events` (SSE revision events)
+- [x] REST commands: `POST /api/commands` applies core commands as one undoable step
+- [ ] Multi-user sessions
+- [ ] Plugin API on top of commands (REST commands and MCP are the foundation)
 - [ ] i18n (UI currently in Portuguese)
 
 ## Sweet Home 3D is a reference, not a source

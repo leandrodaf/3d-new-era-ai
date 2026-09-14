@@ -97,6 +97,10 @@ reply=$(call render_3d '{"w":160,"h":120}')
 check "render_3d returns a PNG image" "$reply" '"mimeType":"image/png"'
 check "REST serves the 3D view" "$(curl -s -o /dev/null -w '%{content_type}' "$BASE/api/view.png?w=120&h=90")" "image/png"
 
+check "SSE reports the revision" "$(curl -sN --max-time 1 "$BASE/api/events" | head -2 | tr '\n' ' ')" 'event: revision'
+reply=$(curl -s -X POST "$BASE/api/commands" -H 'content-type: application/json' -d '{"commands":[{"op":"set_compass","compass":{"center":[0,0],"diameter":100,"north_degrees":30,"visible":true}}]}')
+check "REST commands apply atomically" "$reply" '"revision"'
+
 reply=$(call materials '{}')
 check "materials lists drywall" "$reply" 'drywall-95'
 reply=$(call update '{"items":[{"id":"w22","type":"drywall-95","sides":"tiles #ffffff 30"},{"id":"r26","floor_mat":"wood"}]}')
