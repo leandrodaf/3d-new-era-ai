@@ -34,12 +34,23 @@ fn polygon(points: &[Point2]) -> Polygon<f64> {
     Polygon::new(LineString::new(coords), vec![])
 }
 
-fn overlap_area(a: &Polygon<f64>, b: &Polygon<f64>) -> f64 {
-    a.intersection(b).unsigned_area()
+fn heights_overlap(a: &Furniture, b: &Furniture) -> bool {
+    let ((a0, a1), (b0, b1)) = (a.height_range(), b.height_range());
+    a0 < b1 && b0 < a1
 }
 
-fn heights_overlap(a: &Furniture, b: &Furniture) -> bool {
-    a.elevation < b.elevation + b.height && b.elevation < a.elevation + a.height
+fn centroid(polygon: &Polygon<f64>) -> Option<Point2> {
+    geo::Centroid::centroid(polygon).map(|c| Point2::new(c.x(), c.y()))
+}
+
+/// Height of a wall's top above the floor at a plan point.
+fn wall_top_at(wall: &crate::elements::Wall, p: Point2) -> f64 {
+    let len = wall.start.distance(wall.end).max(1e-9);
+    let t = (((p.x - wall.start.x) * (wall.end.x - wall.start.x)
+        + (p.y - wall.start.y) * (wall.end.y - wall.start.y))
+        / (len * len))
+        .clamp(0.0, 1.0);
+    wall.height + (wall.height_at_end.unwrap_or(wall.height) - wall.height) * t
 }
 
 /// Floor area swept by a hinged door leaf, as a polygon (quarter discs).
@@ -77,18 +88,42 @@ pub fn door_swing(door: &Furniture) -> Option<Vec<Point2>> {
 
 pub fn check_layout(home: &Home) -> Vec<Issue> {
     let mut issues = Vec::new();
-    let pieces: Vec<&Furniture> = home.furniture.iter().filter(|f| f.visible).collect();
-    let footprints: Vec<Polygon<f64>> = pieces.iter().map(|f| polygon(&f.footprint())).collect();
+    // Pieces inside groups are checked one by one; pieces of the same group
+    // (roof slopes, a table and its chairs) are meant to touch.
+    let mut pieces: Vec<&Furniture> = Vec::new();
+    let mut groups: Vec<usize> = Vec::new();
+    for (g, top) in home.furniture.iter().enumerate() {
+        for leaf in top.visible_leaves() {
+            pieces.push(leaf);
+            groups.push(g);
+        }
+    }
+    let footprints: Vec<Polygon<f64>> = pieces
+        .iter()
+        .map(|f| polygon(&f.projected_footprint()))
+        .collect();
 
     for (i, a) in pieces.iter().enumerate() {
         if a.is_opening() || a.height <= FLAT {
             continue;
         }
         for (j, b) in pieces.iter().enumerate().skip(i + 1) {
-            if b.is_opening() || b.height <= FLAT || !heights_overlap(a, b) {
+            if b.is_opening()
+                || b.height <= FLAT
+                || groups[i] == groups[j]
+                || !heights_overlap(a, b)
+            {
                 continue;
             }
-            if overlap_area(&footprints[i], &footprints[j]) > MIN_OVERLAP {
+            let shared = footprints[i].intersection(&footprints[j]);
+            if shared.unsigned_area() <= MIN_OVERLAP {
+                continue;
+            }
+            // Tilted pieces only collide if they are at the same height there.
+            let meet = shared.iter().next().and_then(centroid).is_none_or(|at| {
+                a.underside_at(at) < b.top_at(at) && b.underside_at(at) < a.top_at(at)
+            });
+            if meet {
                 issues.push(Issue::Overlap(a.id, b.id));
             }
         }
@@ -100,10 +135,19 @@ pub fn check_layout(home: &Home) -> Vec<Issue> {
             continue;
         }
         for (wall, outline) in home.walls.iter().zip(&outlines) {
-            if outline.len() >= 3
-                && piece.elevation < wall.height
-                && overlap_area(&footprints[i], &polygon(outline)) > MIN_OVERLAP
-            {
+            if outline.len() < 3 {
+                continue;
+            }
+            let shared = footprints[i].intersection(&polygon(outline));
+            if shared.unsigned_area() <= MIN_OVERLAP {
+                continue;
+            }
+            // Over the shared area, is the piece below the wall top? Tilted
+            // pieces (rafters, roof slopes) are measured right there.
+            let Some(at) = shared.iter().next().and_then(centroid) else {
+                continue;
+            };
+            if piece.underside_at(at) < wall_top_at(wall, at) - 1.0 {
                 issues.push(Issue::InWall(piece.id, wall.id));
             }
         }
@@ -115,13 +159,16 @@ pub fn check_layout(home: &Home) -> Vec<Issue> {
         };
         let swing = polygon(&swing);
         for (i, piece) in pieces.iter().enumerate() {
-            if piece.is_opening()
-                || piece.height <= FLAT
-                || piece.elevation >= door.elevation + door.height
-            {
+            if piece.is_opening() || piece.height <= FLAT {
                 continue;
             }
-            if overlap_area(&swing, &footprints[i]) > MIN_OVERLAP {
+            let shared = swing.intersection(&footprints[i]);
+            let high_enough = shared
+                .iter()
+                .next()
+                .and_then(centroid)
+                .is_some_and(|at| piece.underside_at(at) >= door.elevation + door.height);
+            if shared.unsigned_area() > MIN_OVERLAP && !high_enough {
                 issues.push(Issue::BlocksDoor {
                     door: door.id,
                     by: piece.id,
@@ -252,5 +299,69 @@ mod tests {
                 .any(|i| matches!(i, Issue::InWall(FurnitureId(21), _))),
             "doors belong in walls"
         );
+    }
+}
+
+#[cfg(test)]
+mod tilt_tests {
+    use super::*;
+    use crate::elements::Wall;
+    use crate::furniture::{Opening, align_to_wall, wall_cuts};
+    use crate::ids::WallId;
+
+    #[test]
+    fn openings_fit_sloping_walls_and_raised_slopes_do_not_collide() {
+        // Gable wall rising from 1 cm to 675 cm over 300 cm.
+        let mut wall = Wall::new(WallId(1), Point2::new(0.0, 0.0), Point2::new(300.0, 0.0));
+        wall.height = 1.0;
+        wall.height_at_end = Some(675.0);
+        let mut door = Furniture {
+            id: FurnitureId(2),
+            catalog: "door".into(),
+            width: 80.0,
+            depth: 15.0,
+            height: 210.0,
+            opening: Some(Opening::default()),
+            ..Furniture::default()
+        };
+        align_to_wall(&mut door, &wall, 200.0);
+        let cuts = wall_cuts(std::slice::from_ref(&wall), &[door.clone()]);
+        let cut = &cuts[0][0];
+        // At 160 cm along, the wall is ~360 cm high: the whole door fits.
+        assert!((cut.top - 210.0).abs() < 1e-9, "{cut:?}");
+
+        // A roof slope over the room: 45°, centered 300 cm up.
+        let slope = Furniture {
+            id: FurnitureId(3),
+            catalog: "box".into(),
+            position: Point2::new(0.0, 0.0),
+            width: 400.0,
+            depth: 400.0,
+            height: 12.0,
+            elevation: 300.0,
+            pitch: -45.0,
+            ..Furniture::default()
+        };
+        let low = slope.underside_at(Point2::new(0.0, -100.0));
+        let high = slope.underside_at(Point2::new(0.0, 100.0));
+        assert!(high > low + 150.0, "{low} {high}");
+        let fp = slope.projected_footprint();
+        let depth = fp[0].distance(fp[3]);
+        assert!(depth < 400.0 * 0.8, "projected depth {depth}");
+        let (bottom, top) = slope.height_range();
+        assert!(bottom < 200.0 && top > 450.0, "{bottom} {top}");
+        // A table under the high end of the slope does not collide with it.
+        let table = Furniture {
+            id: FurnitureId(4),
+            catalog: "box".into(),
+            position: Point2::new(0.0, 100.0),
+            width: 60.0,
+            depth: 60.0,
+            height: 75.0,
+            ..Furniture::default()
+        };
+        let mut home = Home::default();
+        home.furniture = vec![slope, table];
+        assert!(check_layout(&home).is_empty(), "{:?}", check_layout(&home));
     }
 }

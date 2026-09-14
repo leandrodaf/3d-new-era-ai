@@ -232,6 +232,32 @@ pub fn plan_symbol(piece: &Furniture) -> Vec<SymbolShape> {
     let (hw, hd) = (w / 2.0, d / 2.0);
     let model = find(&piece.catalog).map_or(Model::Box, |i| i.model);
     let mut s = Sym { shapes: Vec::new() };
+    if let Some(newera_core::SolidShape::Outline(points)) = &piece.shape {
+        // Follow the box when the piece was resized.
+        let (lo, hi) = points
+            .iter()
+            .fold(([f64::MAX; 2], [f64::MIN; 2]), |(lo, hi), p| {
+                (
+                    [lo[0].min(p[0]), lo[1].min(p[1])],
+                    [hi[0].max(p[0]), hi[1].max(p[1])],
+                )
+            });
+        let fit = |v: f64, k: usize, size: f64| {
+            let span = hi[k] - lo[k];
+            if span > 1e-9 {
+                (v - lo[k]) / span * size - size / 2.0
+            } else {
+                0.0
+            }
+        };
+        let outline: Vec<(f64, f64)> = points
+            .iter()
+            .map(|p| (fit(p[0], 0, w), fit(p[1], 1, d)))
+            .collect();
+        s.fill(outline.clone(), false);
+        s.line(outline, true, true);
+        return s.shapes;
+    }
 
     if let Some(opening) = piece.opening.as_ref().filter(|o| !o.sashes.is_empty()) {
         // Explicit leaves: each turns around its axis, drawn open at its end

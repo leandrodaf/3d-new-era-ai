@@ -314,7 +314,7 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Create walls (polylines; hs = height per point for gables), rooms (pts, or at=[x,y] to detect from walls), dims (a+b or wall id), labels and roofs (rectangle pts, gable|shed, pitch or ridge_h, eave h, overhang, gables=true closes the ends) in one atomic step."
+        description = "Create walls (polylines; hs = height per point for gables), rooms (pts, or at=[x,y] to detect from walls), dims (a+b or wall id), labels, roofs (rectangle pts, gable|shed, pitch or ridge_h, eave h, overhang, gables=true closes the ends, skylights [{at,w,d}] cut glazed openings) and solids (pts outline raised by h at elev: slabs/mezzanines of any shape; or profile [[u,z]] swept from a to b: gables, ramps) in one atomic step."
     )]
     fn create(&self, Parameters(mut p): Parameters<CreateParams>) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
@@ -2257,5 +2257,62 @@ mod tests {
             (wall.start, wall.end),
             (Point2::new(100.0, 50.0), Point2::new(400.0, 50.0))
         );
+    }
+
+    #[test]
+    fn solids_and_skylights() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"roofs":[{"pts":[[0,0],[0,700],[600,700],[600,0]],"h":0,"ridge_h":675,"overhang":0,"gables":true,
+                          "skylights":[{"at":[150,350],"w":100,"d":80}]}],
+                "solids":[{"pts":[[150,400],[450,400],[300,650]],"h":15,"elev":300,"mat":"wood"},
+                          {"profile":[[-100,0],[100,0],[0,150]],"a":[1000,0],"b":[1000,300]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let doc = s.document.read();
+        let home = doc.home();
+        let roof = home.furniture.iter().find(|f| f.is_group()).unwrap();
+        // The slope with the skylight is split around it, plus the glass.
+        assert_eq!(
+            roof.children.len(),
+            1 + 5,
+            "{:?}",
+            roof.children.iter().map(|c| &c.name).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            roof.children.iter().filter(|c| c.opacity.is_some()).count(),
+            1
+        );
+        let slab = home
+            .furniture
+            .iter()
+            .find(|f| matches!(f.shape, Some(newera_core::SolidShape::Outline(_))))
+            .unwrap();
+        assert!((slab.width - 300.0).abs() < 1e-9 && (slab.elevation - 300.0).abs() < 1e-9);
+        let gable = home
+            .furniture
+            .iter()
+            .find(|f| matches!(f.shape, Some(newera_core::SolidShape::Profile(_))))
+            .unwrap();
+        assert!((gable.depth - 300.0).abs() < 1e-9 && (gable.height - 150.0).abs() < 1e-9);
+        assert!(
+            (gable.position.x - 1000.0).abs() < 1e-6 && (gable.position.y - 150.0).abs() < 1e-6
+        );
+        let mut only = home.clone();
+        only.walls.clear();
+        only.furniture.retain(|f| f.shape.is_some());
+        let mesh =
+            newera_render::Mesh::from_home(&only, &newera_render::Selection::new(), &|_| None);
+        let top = mesh
+            .vertices
+            .iter()
+            .map(|v| v.position[1])
+            .fold(f32::MIN, f32::max);
+        assert!((top - 3.15).abs() < 0.01, "slab top {top}");
+        drop(doc);
+        let bad: CreateParams =
+            serde_json::from_str(r#"{"solids":[{"profile":[[0,0],[1,0],[0,1]]}]}"#).unwrap();
+        assert!(s.create(Parameters(bad)).is_err());
     }
 }

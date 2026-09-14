@@ -1469,3 +1469,131 @@ fn planter(ctx: &mut Ctx) {
         );
     }
 }
+
+/// Places a 2D point of a solid's ring at sweep position 0 or 1.
+type Lift<'a> = Box<dyn Fn([f64; 2], f64) -> [f32; 3] + 'a>;
+
+/// A polygon swept into a closed solid: plan outlines go up by the height,
+/// profiles run along the depth. Points are centered on the piece.
+pub(crate) fn solid(shape: &newera_core::SolidShape, piece: &Furniture, color: Rgb) -> Mesh {
+    use newera_core::{Point2, SolidShape};
+    let mut m = Mesh::default();
+    // `ring` in its own 2D plane, `lift(p, t)` puts point p at sweep t ∈ {0, 1}.
+    let (ring, lift): (Vec<[f64; 2]>, Lift<'_>) = match shape {
+        SolidShape::Outline(points) => (
+            points.clone(),
+            #[allow(clippy::cast_possible_truncation)]
+            Box::new(move |p, t| [p[0] as f32, (t * piece.height) as f32, p[1] as f32]),
+        ),
+        SolidShape::Profile(points) => (
+            points.clone(),
+            #[allow(clippy::cast_possible_truncation)]
+            Box::new(move |p, t| [p[0] as f32, p[1] as f32, ((t - 0.5) * piece.depth) as f32]),
+        ),
+    };
+    if ring.len() < 3 {
+        return m;
+    }
+    let as_points: Vec<Point2> = ring.iter().map(|p| Point2::new(p[0], p[1])).collect();
+    // Counter-clockwise in its plane so caps and sides face out.
+    let ccw = newera_core::signed_area(&as_points) > 0.0;
+    let flip_outline = matches!(shape, SolidShape::Outline(_));
+    let tris = newera_core::triangulate(&as_points);
+    let cap = |m: &mut Mesh, t: f64, up: bool| {
+        for [a, b, c] in &tris {
+            let (a, b, c) = (lift(ring[*a], t), lift(ring[*b], t), lift(ring[*c], t));
+            // Outlines map plan y to z, which mirrors their winding.
+            if up == (ccw != flip_outline) {
+                m.polygon(&[a, b, c], color);
+            } else {
+                m.polygon(&[a, c, b], color);
+            }
+        }
+    };
+    cap(&mut m, 0.0, false);
+    cap(&mut m, 1.0, true);
+    let n = ring.len();
+    for i in 0..n {
+        let (p, q) = (ring[i], ring[(i + 1) % n]);
+        let quad = [lift(p, 0.0), lift(q, 0.0), lift(q, 1.0), lift(p, 1.0)];
+        if ccw == flip_outline {
+            m.polygon(&[quad[3], quad[2], quad[1], quad[0]], shade(color, -0.05));
+        } else {
+            m.polygon(&quad, shade(color, -0.05));
+        }
+    }
+    m.fit_to(piece.width, piece.depth, piece.height);
+    m
+}
+
+#[cfg(test)]
+mod solid_tests {
+    use newera_core::{Furniture, SolidShape};
+
+    use crate::mesh::Rgb;
+
+    fn faces_out(mesh: &crate::Mesh) {
+        #[allow(clippy::cast_precision_loss)]
+        let n = mesh.positions.len() as f32;
+        let center = mesh.positions.iter().fold([0.0f32; 3], |c, p| {
+            [c[0] + p[0] / n, c[1] + p[1] / n, c[2] + p[2] / n]
+        });
+        for tri in mesh.indices.chunks(3) {
+            let [a, b, c] = [0, 1, 2].map(|k| mesh.positions[tri[k] as usize]);
+            let normal = mesh.normals[tri[0] as usize];
+            let mid = [
+                (a[0] + b[0] + c[0]) / 3.0,
+                (a[1] + b[1] + c[1]) / 3.0,
+                (a[2] + b[2] + c[2]) / 3.0,
+            ];
+            let out = [mid[0] - center[0], mid[1] - center[1], mid[2] - center[2]];
+            let dot = out[0] * normal[0] + out[1] * normal[1] + out[2] * normal[2];
+            assert!(dot > -1e-3, "face points inward: {tri:?}");
+        }
+    }
+
+    #[test]
+    fn outlines_and_profiles_are_closed_outward_solids() {
+        let grey: Rgb = [0.5; 3];
+        for points in [
+            vec![
+                [-100.0, -50.0],
+                [100.0, -50.0],
+                [100.0, 50.0],
+                [-100.0, 50.0],
+            ],
+            vec![
+                [-100.0, -50.0],
+                [-100.0, 50.0],
+                [100.0, 50.0],
+                [100.0, -50.0],
+            ],
+        ] {
+            let piece = Furniture {
+                width: 200.0,
+                depth: 100.0,
+                height: 20.0,
+                ..Furniture::default()
+            };
+            let mesh = super::solid(&SolidShape::Outline(points), &piece, grey);
+            assert_eq!(mesh.indices.len() / 3, 2 + 2 + 8);
+            faces_out(&mesh);
+        }
+        // A 600 cm wide, 675 cm high gable swept 20 cm.
+        for points in [
+            vec![[-300.0, 0.0], [300.0, 0.0], [0.0, 675.0]],
+            vec![[-300.0, 0.0], [0.0, 675.0], [300.0, 0.0]],
+        ] {
+            let piece = Furniture {
+                width: 600.0,
+                depth: 20.0,
+                height: 675.0,
+                ..Furniture::default()
+            };
+            let mesh = super::solid(&SolidShape::Profile(points), &piece, grey);
+            faces_out(&mesh);
+            let top = mesh.positions.iter().map(|p| p[1]).fold(f32::MIN, f32::max);
+            assert!((top - 675.0).abs() < 1e-3);
+        }
+    }
+}

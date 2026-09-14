@@ -390,6 +390,30 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
         .collect();
     pieces.sort_by(|(a, _), (b, _)| (a.elevation + a.height).total_cmp(&(b.elevation + b.height)));
     for (piece, selected) in &pieces {
+        // Above the plan cut (roofs, rafters, mezzanines): dashed outline of
+        // what it covers, leaving the floor below readable.
+        if piece.discipline.is_none()
+            && (piece.pitch != 0.0
+                || piece.roll != 0.0
+                || piece.height_range().0 >= PLAN_CUT_HEIGHT)
+        {
+            let color = if *selected {
+                options.palette.selection
+            } else {
+                blend(options.palette.furniture_line, options.palette.paper, 0.35)
+            };
+            let mut outline = piece.projected_footprint().to_vec();
+            outline.push(outline[0]);
+            dashed(
+                &mut scene,
+                Some(piece.id.into()),
+                &outline,
+                color,
+                12.0,
+                8.0,
+            );
+            continue;
+        }
         if let Some(path) = options
             .piece_images
             .as_ref()
@@ -560,6 +584,50 @@ pub fn furniture_items(scene: &mut Scene, piece: &Furniture, selected: bool, pal
                     width: Size::Px(if strong { 1.4 } else { 0.8 }),
                 },
             ),
+        }
+    }
+}
+
+/// Pieces whose underside is at least this high are above the plan's
+/// horizontal cut and drawn as dashed outlines, cm (above door heads).
+pub(crate) const PLAN_CUT_HEIGHT: f64 = 220.0;
+
+/// A dashed polyline with `on`/`off` dash lengths in cm.
+fn dashed(
+    scene: &mut Scene,
+    owner: Option<ElementId>,
+    points: &[Point2],
+    color: Color,
+    on: f64,
+    off: f64,
+) {
+    let mut drawing = true;
+    let mut left = on;
+    for pair in points.windows(2) {
+        let (mut a, b) = (pair[0], pair[1]);
+        let mut remaining = a.distance(b);
+        while remaining > 1e-9 {
+            let step = left.min(remaining);
+            let k = step / remaining;
+            let next = Point2::new(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k);
+            if drawing {
+                scene.push(
+                    owner,
+                    Primitive::Line {
+                        points: vec![a, next],
+                        closed: false,
+                        color,
+                        width: Size::Px(1.0),
+                    },
+                );
+            }
+            remaining -= step;
+            left -= step;
+            a = next;
+            if left <= 1e-9 {
+                drawing = !drawing;
+                left = if drawing { on } else { off };
+            }
         }
     }
 }

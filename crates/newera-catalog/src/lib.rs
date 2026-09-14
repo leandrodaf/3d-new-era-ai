@@ -1353,6 +1353,10 @@ pub(crate) fn count(value: f64) -> u32 {
 /// 3D mesh of a piece in its local frame (see [`mesh`] module docs), at its
 /// exact size. Unknown catalog ids render as a plain box.
 pub fn piece_mesh(piece: &Furniture) -> Mesh {
+    if let Some(shape) = &piece.shape {
+        let color = piece.color.unwrap_or([200, 190, 170]);
+        return models::solid(shape, piece, rgb(color));
+    }
     let item = find(&piece.catalog);
     let model = item.map_or(Model::Box, |i| i.model);
     let color = piece

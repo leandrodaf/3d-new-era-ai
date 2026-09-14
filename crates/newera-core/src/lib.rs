@@ -41,7 +41,7 @@ pub use elements::{
 pub use error::{CoreError, CoreResult};
 pub use furniture::{
     Furniture, Light, LightSource, ModelMaterial, ModelTransform, Opening, OpeningKind, PieceInfo,
-    PieceLocks, Sash, WallCut, WallCutOut, align_to_wall, cut_outline, wall_cuts,
+    PieceLocks, Sash, SolidShape, WallCut, WallCutOut, align_to_wall, cut_outline, wall_cuts,
 };
 pub use geometry::{Point2, polygon_area, polygon_centroid, signed_area, triangulate};
 pub use home::Home;

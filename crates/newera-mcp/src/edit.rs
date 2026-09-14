@@ -141,6 +141,10 @@ pub(crate) struct CreateParams {
     /// Pitched roofs over a rectangle, built as one group of sloping panels.
     #[serde(default)]
     pub roofs: Vec<RoofSpec>,
+    /// Solids from polygons: plan outlines raised by `h` (slabs, mezzanines,
+    /// decks with any shape) or cross-sections swept from `a` to `b` (gables, ramps).
+    #[serde(default)]
+    pub solids: Vec<SolidSpec>,
     /// Every point is given in pixels of the background image (converted with its
     /// scale and offset); lengths (t, h, off) stay in cm.
     #[serde(default)]
@@ -170,10 +174,125 @@ impl CreateParams {
         for p in &mut self.polylines {
             all(&mut p.pts);
         }
+        for solid in &mut self.solids {
+            if let Some(pts) = &mut solid.pts {
+                all(pts);
+            }
+            solid.a = solid.a.map(f);
+            solid.b = solid.b.map(f);
+        }
         for r in &mut self.roofs {
             all(&mut r.pts);
         }
     }
+}
+
+#[derive(Debug, Default, Clone, Copy, Deserialize, JsonSchema)]
+pub(crate) struct SkylightSpec {
+    pub at: Point2,
+    pub w: Option<f64>,
+    pub d: Option<f64>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct SolidSpec {
+    /// Plan outline `[[x,y],…]` cm.
+    pub pts: Option<Vec<Point2>>,
+    /// Instead of `pts`: cross-section `[[u,z],…]` cm swept from `a` to `b`;
+    /// u runs across the path (for a→b going down the plan, +u is +x),
+    /// z is the height above the storey floor.
+    pub profile: Option<Vec<Point2>>,
+    pub a: Option<Point2>,
+    pub b: Option<Point2>,
+    /// Outline thickness cm (default 15).
+    pub h: Option<f64>,
+    /// Outline bottom above the floor cm (default 0).
+    pub elev: Option<f64>,
+    /// Finish (`wood`, `concrete`, `img:…`).
+    pub mat: Option<String>,
+    pub color: Option<[u8; 3]>,
+    pub opacity: Option<f64>,
+    pub name: Option<String>,
+}
+
+/// A piece built from a polygon.
+fn solid(doc: &mut Document, spec: &SolidSpec) -> EditResult<newera_core::Furniture> {
+    use newera_core::SolidShape;
+    let bounds = |pts: &[Point2]| {
+        pts.iter().fold(
+            (
+                Point2::new(f64::MAX, f64::MAX),
+                Point2::new(f64::MIN, f64::MIN),
+            ),
+            |(lo, hi), p| {
+                (
+                    Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                    Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+                )
+            },
+        )
+    };
+    let mut piece = newera_core::Furniture {
+        id: doc.new_furniture_id(),
+        catalog: "solid".into(),
+        name: spec.name.clone().unwrap_or_else(|| "Sólido".into()),
+        color: spec.color,
+        ..newera_core::Furniture::default()
+    };
+    match (&spec.pts, &spec.profile) {
+        (Some(pts), None) => {
+            if pts.len() < 3 || newera_core::polygon_area(pts) < 1.0 {
+                return Err("a solid outline needs at least 3 points enclosing an area".into());
+            }
+            let (lo, hi) = bounds(pts);
+            let center = Point2::new(f64::midpoint(lo.x, hi.x), f64::midpoint(lo.y, hi.y));
+            piece.position = center;
+            piece.width = (hi.x - lo.x).max(0.1);
+            piece.depth = (hi.y - lo.y).max(0.1);
+            piece.height = spec.h.unwrap_or(15.0).max(0.1);
+            piece.elevation = spec.elev.unwrap_or(0.0);
+            piece.shape = Some(SolidShape::Outline(
+                pts.iter()
+                    .map(|p| [p.x - center.x, p.y - center.y])
+                    .collect(),
+            ));
+        }
+        (None, Some(profile)) => {
+            let (Some(a), Some(b)) = (spec.a, spec.b) else {
+                return Err("a profile solid needs `a` and `b` (the path it runs along)".into());
+            };
+            if profile.len() < 3 || newera_core::polygon_area(profile) < 1.0 {
+                return Err("a profile needs at least 3 points enclosing an area".into());
+            }
+            let (dx, dy) = (b.x - a.x, b.y - a.y);
+            let length = dx.hypot(dy);
+            if length < 0.5 {
+                return Err("`a` and `b` must be apart".into());
+            }
+            let (lo, hi) = bounds(profile);
+            let mid_u = f64::midpoint(lo.x, hi.x);
+            // The piece's local x axis (its width) for this heading.
+            let right = (dy / length, -dx / length);
+            piece.angle = (-dx).atan2(dy).to_degrees();
+            piece.position = Point2::new(
+                f64::midpoint(a.x, b.x) + right.0 * mid_u,
+                f64::midpoint(a.y, b.y) + right.1 * mid_u,
+            );
+            piece.width = (hi.x - lo.x).max(0.1);
+            piece.depth = length;
+            piece.height = (hi.y - lo.y).max(0.1);
+            piece.elevation = lo.y;
+            piece.shape = Some(SolidShape::Profile(
+                profile.iter().map(|p| [p.x - mid_u, p.y - lo.y]).collect(),
+            ));
+        }
+        _ => return Err("a solid needs either `pts` or `profile`".into()),
+    }
+    if let Some(raw) = &spec.mat {
+        piece.texture = material(raw)?;
+    }
+    piece.opacity = spec.opacity.filter(|o| *o < 1.0).map(|o| o.clamp(0.0, 1.0));
+    Ok(piece)
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -197,6 +316,10 @@ pub(crate) struct RoofSpec {
     /// Also close the gable ends with sloping walls.
     #[serde(default)]
     pub gables: bool,
+    /// Glazed openings cut through the roof: center `at:[x,y]` on the plan,
+    /// `w` along the ridge and `d` across it (plan size), cm.
+    #[serde(default)]
+    pub skylights: Vec<SkylightSpec>,
     pub name: Option<String>,
 }
 
@@ -357,6 +480,12 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
         };
         ids.push(label.id.to_string());
         commands.push(Command::insert(label));
+    }
+
+    for spec in &params.solids {
+        let piece = solid(doc, spec)?;
+        ids.push(piece.id.to_string());
+        commands.push(Command::insert(piece));
     }
 
     for spec in params.roofs {
@@ -1177,22 +1306,78 @@ fn roof(doc: &mut Document, spec: &RoofSpec) -> EditResult<(newera_core::Furnitu
         vec![(0.0, span / 2.0), (span, span / 2.0)]
     };
     let mut panels = Vec::new();
+    let lift = t / 2.0 * (1.0 + slope * slope).sqrt();
+    let color = spec.color.unwrap_or([150, 75, 55]);
+    // Skylights in plan coordinates along the ridge (s) and across it (k).
+    let holes: Vec<(f64, f64, f64, f64)> = spec
+        .skylights
+        .iter()
+        .map(|h| {
+            let s = (h.at.x - p0.x) * u.0 + (h.at.y - p0.y) * u.1;
+            let k = (h.at.x - p0.x) * n.0 + (h.at.y - p0.y) * n.1;
+            let (w, d) = (h.w.unwrap_or(80.0) / 2.0, h.d.unwrap_or(100.0) / 2.0);
+            (s - w, s + w, k - d, k + d)
+        })
+        .collect();
     for (from, to) in slopes {
         let dir = (to - from).signum();
-        let low = from - dir * overhang;
-        let lift = t / 2.0 * (1.0 + slope * slope).sqrt();
-        let a = at(mid, low);
-        let b = at(mid, to);
-        let mut panel = beam(
-            doc,
-            [a.x, a.y, eave - overhang * slope + lift],
-            [b.x, b.y, eave + rise + lift],
-            length + 2.0 * overhang,
-            t,
-        )?;
-        panel.name = "Água do telhado".into();
-        panel.color = Some(spec.color.unwrap_or([150, 75, 55]));
-        panels.push(panel);
+        // e: horizontal distance up the slope from the eave line.
+        let e_of = |k: f64| (k - from) * dir;
+        let k_of = |e: f64| from + dir * e;
+        let mut make = |doc: &mut Document,
+                        s0: f64,
+                        s1: f64,
+                        e0: f64,
+                        e1: f64,
+                        glass: bool|
+         -> EditResult<()> {
+            if s1 - s0 < 0.5 || e1 - e0 < 0.5 {
+                return Ok(());
+            }
+            let sm = f64::midpoint(s0, s1);
+            let (a, b) = (at(sm, k_of(e0)), at(sm, k_of(e1)));
+            let thickness = if glass { (t * 0.3).max(1.0) } else { t };
+            let mut panel = beam(
+                doc,
+                [a.x, a.y, eave + e0 * slope + lift],
+                [b.x, b.y, eave + e1 * slope + lift],
+                s1 - s0,
+                thickness,
+            )?;
+            if glass {
+                panel.name = "Claraboia".into();
+                panel.color = Some([168, 206, 226]);
+                panel.opacity = Some(0.35);
+            } else {
+                panel.name = "Água do telhado".into();
+                panel.color = Some(color);
+            }
+            panels.push(panel);
+            Ok(())
+        };
+        let run = (to - from).abs();
+        let (start, end) = (-overhang, length + overhang);
+        let mut mine: Vec<(f64, f64, f64, f64)> = holes
+            .iter()
+            .map(|&(s0, s1, k0, k1)| {
+                let (e0, e1) = (e_of(k0).min(e_of(k1)), e_of(k0).max(e_of(k1)));
+                (s0.max(start), s1.min(end), e0.max(0.0), e1.min(run))
+            })
+            .filter(|&(s0, s1, e0, e1)| s1 > s0 && e1 > e0)
+            .collect();
+        mine.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut cursor = start;
+        for &(s0, s1, e0, e1) in &mine {
+            if s0 < cursor {
+                return Err("skylights on the same slope overlap along the ridge".into());
+            }
+            make(doc, cursor, s0, -overhang, run, false)?;
+            make(doc, s0, s1, -overhang, e0, false)?;
+            make(doc, s0, s1, e0, e1, true)?;
+            make(doc, s0, s1, e1, run, false)?;
+            cursor = s1;
+        }
+        make(doc, cursor, end, -overhang, run, false)?;
     }
     let mut gables = Vec::new();
     if spec.gables {

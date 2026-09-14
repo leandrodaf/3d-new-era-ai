@@ -248,6 +248,18 @@ impl Opening {
     }
 }
 
+/// A solid made from a polygon instead of a catalog model. Points are in cm,
+/// relative to the piece's center, and are scaled with its box when resized.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SolidShape {
+    /// Plan outline `[x, y]` raised by the piece height: slabs, mezzanines, decks.
+    Outline(Vec<[f64; 2]>),
+    /// Cross-section `[x across the width, z up]` swept along the depth:
+    /// triangular gables, profiles, ramps.
+    Profile(Vec<[f64; 2]>),
+}
+
 /// A piece of furniture, a door or a window.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Furniture {
@@ -306,6 +318,9 @@ pub struct Furniture {
     /// 0 (invisible) to 1 (opaque); glass panels, water, reference boards.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opacity: Option<f64>,
+    /// Built from a polygon instead of its catalog model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shape: Option<SolidShape>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub materials: Vec<ModelMaterial>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -361,6 +376,7 @@ impl Default for Furniture {
             texture: None,
             shininess: None,
             opacity: None,
+            shape: None,
             materials: Vec::new(),
             light: None,
             children: Vec::new(),
@@ -482,6 +498,78 @@ impl Furniture {
         (if self.mirrored { -x } else { x }, y)
     }
 
+    /// Corners of its box after pitch and roll, in the local frame
+    /// `(x, y up from its bottom, depth)`, cm.
+    fn tilted_corners(&self) -> Vec<[f64; 3]> {
+        let (hw, hd, hh) = (self.width / 2.0, self.depth / 2.0, self.height / 2.0);
+        let (sp, cp) = self.pitch.to_radians().sin_cos();
+        let (sr, cr) = self.roll.to_radians().sin_cos();
+        let mut out = Vec::with_capacity(8);
+        for x in [-hw, hw] {
+            for y in [-hh, hh] {
+                for z in [-hd, hd] {
+                    // Roll around the depth axis, then pitch around the width axis.
+                    let (x1, y1) = (x * cr - y * sr, x * sr + y * cr);
+                    let (y2, z2) = (y1 * cp - z * sp, y1 * sp + z * cp);
+                    out.push([x1, y2 + hh, z2]);
+                }
+            }
+        }
+        out
+    }
+
+    /// Plan footprint of what it really covers once tilted.
+    pub fn projected_footprint(&self) -> [Point2; 4] {
+        if self.pitch == 0.0 && self.roll == 0.0 {
+            return self.footprint();
+        }
+        let corners = self.tilted_corners();
+        let (x0, x1, z0, z1) = corners.iter().fold(
+            (f64::MAX, f64::MIN, f64::MAX, f64::MIN),
+            |(x0, x1, z0, z1), c| (x0.min(c[0]), x1.max(c[0]), z0.min(c[2]), z1.max(c[2])),
+        );
+        [(x0, z0), (x1, z0), (x1, z1), (x0, z1)].map(|p| self.to_plan(p))
+    }
+
+    /// Lowest and highest point above the floor, cm.
+    pub fn height_range(&self) -> (f64, f64) {
+        if self.pitch == 0.0 && self.roll == 0.0 {
+            return (self.elevation, self.elevation + self.height);
+        }
+        let (lo, hi) = self
+            .tilted_corners()
+            .iter()
+            .fold((f64::MAX, f64::MIN), |(lo, hi), c| {
+                (lo.min(c[1]), hi.max(c[1]))
+            });
+        (self.elevation + lo, self.elevation + hi)
+    }
+
+    /// Height of its underside above the floor over a plan point (tilted
+    /// pieces are lower at one end), cm.
+    pub fn underside_at(&self, p: Point2) -> f64 {
+        if self.pitch == 0.0 && self.roll == 0.0 {
+            return self.elevation;
+        }
+        let (x, depth) = self.to_local(p);
+        let (sp, cp) = self.pitch.to_radians().sin_cos();
+        let (sr, cr) = self.roll.to_radians().sin_cos();
+        // Centerline height under that point, minus half the thickness.
+        let z = if cp.abs() > 1e-6 { depth / cp } else { 0.0 };
+        let x = if cr.abs() > 1e-6 { x / cr } else { 0.0 };
+        let mid = self.elevation + self.height / 2.0 + x * sr * cp - z * sp;
+        mid - (self.height / 2.0 * cp * cr).abs()
+    }
+
+    /// Height of its top above the floor over a plan point, cm.
+    pub fn top_at(&self, p: Point2) -> f64 {
+        if self.pitch == 0.0 && self.roll == 0.0 {
+            return self.elevation + self.height;
+        }
+        let tilt = (self.pitch.to_radians().cos() * self.roll.to_radians().cos()).abs();
+        self.underside_at(p) + self.height * tilt
+    }
+
     /// Plan corners of its bounding box, counter-clockwise on screen.
     pub fn footprint(&self) -> [Point2; 4] {
         let (hw, hd) = (self.width / 2.0, self.depth / 2.0);
@@ -569,12 +657,21 @@ pub fn wall_cuts(walls: &[Wall], furniture: &[Furniture]) -> Vec<Vec<WallCut>> {
             .min_by(|a, b| a.2.total_cmp(&b.2));
         if let Some((i, along, _, len)) = best {
             let wall = &walls[i];
+            let (from, to) = (
+                (along - piece.width / 2.0).max(0.0),
+                (along + piece.width / 2.0).min(len),
+            );
+            // Sloping walls (gables): the opening fits under the lower side.
+            let height_at = |s: f64| {
+                wall.height + (wall.height_at_end.unwrap_or(wall.height) - wall.height) * (s / len)
+            };
+            let limit = height_at(from).min(height_at(to));
             let cut = WallCut {
                 furniture: piece.id,
-                from: (along - piece.width / 2.0).max(0.0),
-                to: (along + piece.width / 2.0).min(len),
-                bottom: piece.elevation.clamp(0.0, wall.height),
-                top: (piece.elevation + piece.height).clamp(0.0, wall.height),
+                from,
+                to,
+                bottom: piece.elevation.clamp(0.0, limit),
+                top: (piece.elevation + piece.height).clamp(0.0, limit),
             };
             if cut.to - cut.from > 0.1 && cut.top - cut.bottom > 0.1 {
                 cuts[i].push(cut);

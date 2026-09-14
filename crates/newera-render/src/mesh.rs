@@ -654,7 +654,7 @@ impl Mesh {
                     if base + cut.bottom > bottom {
                         self.add_side(a0, a1, bottom, base + cut.bottom, &surface);
                     }
-                    if base + cut.top < top.min(top + rise) {
+                    if base + cut.top < top_at(a0).min(top_at(a1)) {
                         self.add_side_sloped(
                             a0,
                             a1,
