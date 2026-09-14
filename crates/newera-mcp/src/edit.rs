@@ -44,6 +44,8 @@ pub(crate) struct WallPath {
     pub t: Option<f64>,
     /// Height cm (default 250).
     pub h: Option<f64>,
+    /// Height cm at each point, for sloping walls and gables (overrides `h`).
+    pub hs: Option<Vec<f64>>,
     /// Arc extent in degrees applied to every segment (positive bulges left).
     pub arc: Option<f64>,
     /// Wall type id, e.g. `drywall-95`; sets the thickness unless `t` is given.
@@ -148,12 +150,29 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
         let kind = path.kind.as_deref().map(wall_type).transpose()?.flatten();
         let sides = path.sides.as_deref().map(material).transpose()?.flatten();
         let mut pts = path.pts;
+        let mut heights = path.hs.clone();
+        if let Some(hs) = &heights
+            && hs.len() != pts.len()
+        {
+            return Err(format!("`hs` needs one height per point ({})", pts.len()));
+        }
         if path.closed && pts.len() > 2 {
             pts.push(pts[0]);
+            if let Some(hs) = &mut heights {
+                hs.push(hs[0]);
+            }
         }
-        for pair in pts.windows(2) {
+        for (i, pair) in pts.windows(2).enumerate() {
+            let (height, height_at_end) = match &heights {
+                Some(hs) => (
+                    hs[i],
+                    ((hs[i + 1] - hs[i]).abs() > 1e-6).then_some(hs[i + 1]),
+                ),
+                None => (path.h.unwrap_or(Wall::DEFAULT_HEIGHT), None),
+            };
             let mut wall = Wall {
-                height: path.h.unwrap_or(Wall::DEFAULT_HEIGHT),
+                height,
+                height_at_end,
                 arc_extent: path.arc.filter(|a| *a != 0.0),
                 left_side: sides.clone(),
                 right_side: sides.clone(),
@@ -339,6 +358,12 @@ pub(crate) struct UpdateSpec {
     /// Elevation cm (furniture, level, 3D label/dimension).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub elev: Option<f64>,
+    /// Wall height at its end cm (sloping wall).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub h_end: Option<f64>,
+    /// Furniture tilt around its depth axis, degrees.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub roll: Option<f64>,
     /// Furniture color `[r,g,b]`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<[u8; 3]>,
@@ -388,7 +413,8 @@ pub(crate) struct UpdateSpec {
     /// Label/dimension shown in 3D.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub in3d: Option<bool>,
-    /// 3D tilt degrees: label 0 flat, 90 standing; dimension around its line.
+    /// 3D tilt degrees: label 0 flat, 90 standing; dimension around its line;
+    /// furniture around its width axis.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pitch: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -418,7 +444,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
         let allowed: &[&str] = match element {
             Element::Polyline(_) => &["pts", "t", "color", "level"],
             Element::Wall(_) => &[
-                "a", "b", "t", "h", "arc", "level", "type", "left", "right", "sides",
+                "a", "b", "t", "h", "h_end", "arc", "level", "type", "left", "right", "sides",
             ],
             Element::Room(_) => &[
                 "name",
@@ -442,6 +468,8 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 "d",
                 "h",
                 "elev",
+                "pitch",
+                "roll",
                 "name",
                 "color",
                 "mirror",
@@ -510,6 +538,9 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 }
                 w.thickness = spec.t.unwrap_or(w.thickness);
                 w.height = spec.h.unwrap_or(w.height);
+                if let Some(end) = spec.h_end {
+                    w.height_at_end = ((end - w.height).abs() > 1e-6).then_some(end);
+                }
                 if let Some(arc) = spec.arc {
                     w.arc_extent = (arc != 0.0).then_some(arc);
                 }
@@ -566,6 +597,8 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 f.depth = spec.d.unwrap_or(f.depth);
                 f.height = spec.h.unwrap_or(f.height);
                 f.elevation = spec.elev.unwrap_or(f.elevation);
+                f.pitch = spec.pitch.unwrap_or(f.pitch);
+                f.roll = spec.roll.unwrap_or(f.roll);
                 f.name = spec.name.unwrap_or(f.name);
                 f.color = spec.color.or(f.color);
                 f.mirrored = spec.mirror.unwrap_or(f.mirrored);
@@ -899,6 +932,9 @@ pub(crate) struct PlaceSpec {
     pub d: Option<f64>,
     pub h: Option<f64>,
     pub elev: Option<f64>,
+    /// Tilt around the width axis / the depth axis, degrees (rafters, ramps, panels).
+    pub pitch: Option<f64>,
+    pub roll: Option<f64>,
     pub name: Option<String>,
     pub color: Option<[u8; 3]>,
     pub mirror: Option<bool>,
@@ -948,6 +984,8 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
         piece.depth = spec.d.unwrap_or(piece.depth);
         piece.height = spec.h.unwrap_or(piece.height);
         piece.elevation = spec.elev.unwrap_or(piece.elevation);
+        piece.pitch = spec.pitch.unwrap_or(piece.pitch);
+        piece.roll = spec.roll.unwrap_or(piece.roll);
         piece.name = spec.name.unwrap_or(piece.name);
         piece.color = spec.color;
         piece.mirrored = spec.mirror.unwrap_or(false);

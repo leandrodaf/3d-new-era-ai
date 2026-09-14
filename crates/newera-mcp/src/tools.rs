@@ -133,6 +133,8 @@ pub(crate) struct Render3dParams {
     yaw: Option<f32>,
     /// Aerial height angle, degrees.
     pitch: Option<f32>,
+    /// Aerial distance factor: 1 frames the building, 2 twice as far.
+    zoom: Option<f32>,
     w: Option<u32>,
     h: Option<u32>,
 }
@@ -175,6 +177,8 @@ pub(crate) struct CamerasParams {
     pitch: Option<f64>,
     /// Horizontal field of view, degrees.
     fov: Option<f64>,
+    /// For `store`: point `[x,y,z]` cm to look at (sets yaw and pitch).
+    look_at: Option<[f64; 3]>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -386,7 +390,7 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "PNG of the home in 3D (software render, no GPU needed). view: aerial (default; yaw/pitch degrees), visitor (current visitor camera) or cam=i (stored point of view). Keep w/h small."
+        description = "PNG of the home in 3D (software render, no GPU needed). view: aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). Keep w/h small."
     )]
     fn render_3d(
         &self,
@@ -412,9 +416,12 @@ impl NewEraMcp {
             (None, Some("visitor")) => {
                 newera_render::View::from_camera(&home.cameras.observer, aspect)
             }
-            (None, None | Some("aerial")) => {
-                newera_render::View::aerial(home, p.yaw.unwrap_or(-60.0), p.pitch.unwrap_or(45.0))
-            }
+            (None, None | Some("aerial")) => newera_render::View::aerial_zoom(
+                home,
+                p.yaw.unwrap_or(60.0),
+                p.pitch.unwrap_or(40.0),
+                p.zoom.unwrap_or(1.0),
+            ),
             (None, Some(other)) => return Err(invalid(format!("unknown view `{other}`"))),
         };
         let home = home.clone();
@@ -472,7 +479,7 @@ impl NewEraMcp {
                 home.cameras.observer.time,
             ),
             (None, None | Some("aerial")) => (
-                newera_render::View::aerial(&home, p.yaw.unwrap_or(-60.0), p.pitch.unwrap_or(45.0)),
+                newera_render::View::aerial(&home, p.yaw.unwrap_or(60.0), p.pitch.unwrap_or(40.0)),
                 home.cameras.top.time,
             ),
             (None, Some(other)) => return Err(invalid(format!("unknown view `{other}`"))),
@@ -806,7 +813,7 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Points of view. list (default): {active, rows [i,name,x,y,z,yaw,pitch,fov]}. view {i} shows stored view i in the 3D window; aerial returns to the orbit view; store {name?,x?,y?,z?,yaw?,pitch?,fov?} saves one (missing values from the visitor); delete {i}. cm and degrees."
+        description = "Points of view. list (default): {active, rows [i,name,x,y,z,yaw,pitch,fov]}. view {i} shows stored view i in the 3D window; aerial returns to the orbit view; store {name?,x?,y?,z?,yaw?,pitch?,fov?,look_at?:[x,y,z]} saves one (missing values from the visitor; yaw 0 looks toward +y/plan bottom, 90 toward -x; pitch positive looks down); delete {i}. cm and degrees."
     )]
     fn cameras(&self, Parameters(p): Parameters<CamerasParams>) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
@@ -857,6 +864,13 @@ impl NewEraMcp {
                     fov: p.fov.unwrap_or(base.fov),
                     ..base
                 };
+                let mut camera = camera;
+                if let Some([tx, ty, tz]) = p.look_at {
+                    let (dx, dy, dz) = (tx - camera.x, ty - camera.y, tz - camera.z);
+                    // `Camera::direction` is (-sin yaw, cos yaw) on the plan.
+                    camera.yaw = (-dx).atan2(dy).to_degrees();
+                    camera.pitch = (-dz).atan2(dx.hypot(dy)).to_degrees();
+                }
                 cameras.stored.push(camera);
             }
             "delete" => {
@@ -1032,7 +1046,7 @@ impl NewEraMcp {
             "list" => Ok(compact::variants(&doc).to_string()),
             "duplicate" | "new" => {
                 let index = doc.add_variant(p.name, p.action.as_deref() == Some("duplicate"));
-                Ok(format!("ok rev={} i={index}", doc.revision()))
+                Ok(format!("ok rev={} v={index} i={index}", doc.revision()))
             }
             "switch" => {
                 doc.switch_variant(need(p.i)?).map_err(core)?;
@@ -1136,12 +1150,18 @@ fn with_extension(path: PathBuf) -> PathBuf {
     }
 }
 
+/// `ok rev=N [v=I] [ids=…]`; the active variant is named once there are
+/// several, so an agent notices when it writes to another tab than it meant.
 fn ok(doc: &Document, ids: &[String]) -> String {
-    if ids.is_empty() {
-        format!("ok rev={}", doc.revision())
-    } else {
-        format!("ok rev={} ids={}", doc.revision(), ids.join(","))
+    use std::fmt::Write as _;
+    let mut reply = format!("ok rev={}", doc.revision());
+    if doc.variant_count() > 1 {
+        let _ = write!(reply, " v={}", doc.active_variant());
     }
+    if !ids.is_empty() {
+        let _ = write!(reply, " ids={}", ids.join(","));
+    }
+    reply
 }
 
 fn invalid(message: impl Into<String>) -> ErrorData {
@@ -1722,5 +1742,96 @@ mod tests {
             .join("Ana", newera_core::collab::now_ms());
         let rows: serde_json::Value = serde_json::from_str(&s.sessions()).unwrap();
         assert_eq!(rows["rows"][0][1], "Ana");
+    }
+
+    #[test]
+    fn sloping_walls_and_tilted_pieces() {
+        let s = server();
+        // A gable: 600 cm base rising to 675 cm in the middle.
+        let params: CreateParams =
+            serde_json::from_str(r#"{"walls":[{"pts":[[0,0],[300,0],[600,0]],"hs":[10,675,10]}]}"#)
+                .unwrap();
+        s.create(Parameters(params)).unwrap();
+        {
+            let doc = s.document.read();
+            let walls = &doc.home().walls;
+            assert_eq!(
+                (walls[0].height, walls[0].height_at_end),
+                (10.0, Some(675.0))
+            );
+            assert_eq!(
+                (walls[1].height, walls[1].height_at_end),
+                (675.0, Some(10.0))
+            );
+        }
+        let bad: CreateParams =
+            serde_json::from_str(r#"{"walls":[{"pts":[[0,0],[100,0]],"hs":[10]}]}"#).unwrap();
+        assert!(s.create(Parameters(bad)).is_err());
+        let wall = s.document.read().home().walls[0].id.to_string();
+        let spec: UpdateSpec =
+            serde_json::from_str(&format!(r#"{{"id":"{wall}","h_end":300}}"#)).unwrap();
+        s.update(Parameters(UpdateParams { items: vec![spec] }))
+            .unwrap();
+        assert_eq!(s.document.read().home().walls[0].height_at_end, Some(300.0));
+
+        // A 400 cm rafter tilted 45°: its far end rises.
+        let params: PlaceParams = serde_json::from_str(
+            r#"{"items":[{"cat":"box","at":[300,300],"w":10,"d":400,"h":10,"elev":100,"pitch":45}]}"#,
+        )
+        .unwrap();
+        s.place(Parameters(params)).unwrap();
+        let doc = s.document.read();
+        let piece = doc.home().furniture.last().unwrap().clone();
+        assert!((piece.pitch - 45.0).abs() < 1e-9);
+        let mut only = doc.home().clone();
+        only.walls.clear();
+        let mesh =
+            newera_render::Mesh::from_home(&only, &newera_render::Selection::new(), &|_| None);
+        let top = mesh
+            .vertices
+            .iter()
+            .map(|v| v.position[1])
+            .fold(f32::MIN, f32::max);
+        // Centered at 105 cm, half its length at 45° adds ~141 cm.
+        assert!(top > 2.3 && top < 2.6, "{top}");
+    }
+
+    #[test]
+    fn cameras_can_look_at_a_point() {
+        let s = server();
+        s.cameras(Parameters(CamerasParams {
+            action: Some("store".into()),
+            x: Some(0.0),
+            y: Some(0.0),
+            z: Some(170.0),
+            look_at: Some([100.0, 100.0, 70.0]),
+            ..CamerasParams::default()
+        }))
+        .unwrap();
+        let doc = s.document.read();
+        let camera = &doc.home().cameras.stored[0];
+        let (dx, dy) = camera.direction();
+        let k = std::f64::consts::FRAC_1_SQRT_2;
+        assert!((dx - k).abs() < 1e-9 && (dy - k).abs() < 1e-9, "{dx} {dy}");
+        // 100 cm down over 141 cm: about 35° below the horizon.
+        assert!((camera.pitch - 35.26).abs() < 0.1, "{}", camera.pitch);
+    }
+
+    #[test]
+    fn writes_name_the_active_variant_once_there_are_several() {
+        let s = server();
+        let wall = || -> CreateParams {
+            serde_json::from_str(r#"{"walls":[{"pts":[[0,0],[100,0]]}]}"#).unwrap()
+        };
+        assert!(!s.create(Parameters(wall())).unwrap().contains(" v="));
+        let reply = s
+            .variants(Parameters(VariantsParams {
+                action: Some("new".into()),
+                ..VariantsParams::default()
+            }))
+            .unwrap();
+        assert!(reply.contains(" v=1 i=1"), "{reply}");
+        let reply = s.create(Parameters(wall())).unwrap();
+        assert!(reply.contains(" v=1 ids="), "{reply}");
     }
 }

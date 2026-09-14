@@ -130,8 +130,8 @@ mcp-tools: ## Lista as ferramentas MCP expostas (precisa do editor/servidor roda
 	H+=(-H "Mcp-Session-Id: $$S" -H "MCP-Protocol-Version: 2025-06-18"); \
 	curl -s "$${H[@]}" http://$(ADDR)/mcp -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null; \
 	curl -s "$${H[@]}" http://$(ADDR)/mcp -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
-	  | sed -n 's/^data: //p' | grep -o '"name":"[a-z_]*","[^}]*description":"[^"]*"' \
-	  | sed -E 's/"name":"([a-z_]*)".*"description":"([^"]*)"/  \1 — \2/'
+	  | sed -n 's/^data: //p' \
+	  | python3 -c 'import json,sys; [print("  " + t["name"] + " — " + t.get("description", "")) for t in json.load(sys.stdin)["result"]["tools"]]'
 
 .PHONY: mcp
 mcp: ## Chama uma ferramenta MCP: make mcp TOOL=get_home ARGS='{}'

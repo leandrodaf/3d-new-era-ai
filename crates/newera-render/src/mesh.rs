@@ -874,7 +874,19 @@ impl Mesh {
         floor: f64,
         highlight: bool,
     ) {
+        // Tilts turn the model around its center: pitch around the width
+        // axis, roll around the depth axis.
+        #[allow(clippy::cast_possible_truncation)]
+        let tilt = (piece.pitch != 0.0 || piece.roll != 0.0).then(|| {
+            glam::Mat3::from_rotation_x(piece.pitch.to_radians() as f32)
+                * glam::Mat3::from_rotation_z(piece.roll.to_radians() as f32)
+        });
+        #[allow(clippy::cast_possible_truncation)]
+        let middle = piece.height as f32 / 2.0;
         let world = |p: [f32; 3]| {
+            let p = tilt.map_or(p, |m| {
+                (m * (Vec3::from(p) - Vec3::Y * middle) + Vec3::Y * middle).to_array()
+            });
             let plan = piece.to_plan((f64::from(p[0]), f64::from(p[2])));
             to_world(plan, floor + piece.elevation + f64::from(p[1]))
         };
