@@ -189,6 +189,203 @@ pub fn wall_dimension(doc: &mut Document, id: WallId, gap: f64) -> CoreResult<Di
     })
 }
 
+/// Which line of a wall a dimension measures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WallSide {
+    /// Along the centerline, end to end.
+    #[default]
+    Axis,
+    /// Along the face away from the middle of the drawing.
+    Outer,
+    /// Along the face toward the middle of the drawing.
+    Inner,
+}
+
+/// The two ends of a wall face (as joined with its neighbors) and the sign of
+/// the offset that points away from the wall on that side.
+fn wall_face(
+    home: &crate::home::Home,
+    id: WallId,
+    side: WallSide,
+) -> CoreResult<(Point2, Point2, f64)> {
+    let wall = home.wall(id).ok_or(CoreError::NotFound(id.into()))?.clone();
+    let view = home.level_view(wall.level);
+    let index = view
+        .walls
+        .iter()
+        .position(|w| w.id == id)
+        .ok_or(CoreError::NotFound(id.into()))?;
+    let outline = view.wall_outlines().swap_remove(index);
+    let len = wall.start.distance(wall.end).max(1e-9);
+    let dir = (
+        (wall.end.x - wall.start.x) / len,
+        (wall.end.y - wall.start.y) / len,
+    );
+    // Left normal (plan axes), matching Dimension::offset.
+    let normal = (dir.1, -dir.0);
+    let center = home.bounds().map_or(wall.start, |(min, max)| {
+        Point2::new(min.x.midpoint(max.x), min.y.midpoint(max.y))
+    });
+    let mid = wall.point_at(0.5);
+    let outward = if (mid.x - center.x) * normal.0 + (mid.y - center.y) * normal.1 >= 0.0 {
+        1.0
+    } else {
+        -1.0
+    };
+    let sign = match side {
+        WallSide::Axis | WallSide::Outer => outward,
+        WallSide::Inner => -outward,
+    };
+    if side == WallSide::Axis {
+        return Ok((wall.start, wall.end, sign));
+    }
+    let along = |p: Point2| (p.x - wall.start.x) * dir.0 + (p.y - wall.start.y) * dir.1;
+    let across = |p: Point2| (p.x - wall.start.x) * normal.0 + (p.y - wall.start.y) * normal.1;
+    let target = sign * wall.thickness / 2.0;
+    let on_face: Vec<f64> = outline
+        .iter()
+        .filter(|p| (across(**p) - target).abs() < 0.5)
+        .map(|p| along(*p))
+        .collect();
+    let (lo, hi) = on_face
+        .iter()
+        .fold((f64::MAX, f64::MIN), |(lo, hi), v| (lo.min(*v), hi.max(*v)));
+    if on_face.len() < 2 || hi - lo < 0.1 {
+        return Err(CoreError::InvalidGeometry(format!(
+            "{id} has no {side:?} face to measure"
+        )));
+    }
+    let at = |s: f64| {
+        Point2::new(
+            wall.start.x + dir.0 * s + normal.0 * target,
+            wall.start.y + dir.1 * s + normal.1 * target,
+        )
+    };
+    Ok((at(lo), at(hi), sign))
+}
+
+/// A dimension along one line of a wall, `gap` cm off the measured line on
+/// its own side (outside for the outer face and axis, inside for the inner).
+pub fn wall_side_dimension(
+    doc: &mut Document,
+    id: WallId,
+    side: WallSide,
+    gap: f64,
+) -> CoreResult<Dimension> {
+    let level = doc.home().wall(id).and_then(|w| w.level);
+    let (start, end, sign) = wall_face(doc.home(), id, side)?;
+    let extra = if side == WallSide::Axis {
+        doc.home().wall(id).map_or(0.0, |w| w.thickness / 2.0)
+    } else {
+        0.0
+    };
+    Ok(Dimension {
+        id: doc.new_dimension_id(),
+        start,
+        end,
+        offset: sign * (gap + extra),
+        level,
+        ..Dimension::default()
+    })
+}
+
+/// A chain of dimensions along a wall face, split at every door and window
+/// edge: wall piece, opening, wall piece…
+pub fn wall_chain_dimensions(
+    doc: &mut Document,
+    id: WallId,
+    side: WallSide,
+    gap: f64,
+) -> CoreResult<Vec<Dimension>> {
+    let home = doc.home();
+    let wall = home.wall(id).ok_or(CoreError::NotFound(id.into()))?.clone();
+    let side = if side == WallSide::Axis {
+        WallSide::Outer
+    } else {
+        side
+    };
+    let (start, end, sign) = wall_face(home, id, side)?;
+    let view = home.level_view(wall.level);
+    let cuts = view
+        .walls
+        .iter()
+        .position(|w| w.id == id)
+        .map(|i| view.wall_cuts().swap_remove(i))
+        .unwrap_or_default();
+    let len = wall.start.distance(wall.end).max(1e-9);
+    let dir = (
+        (wall.end.x - wall.start.x) / len,
+        (wall.end.y - wall.start.y) / len,
+    );
+    let along = |p: Point2| (p.x - wall.start.x) * dir.0 + (p.y - wall.start.y) * dir.1;
+    let (a, b) = (along(start), along(end));
+    let mut stops = vec![a, b];
+    for cut in &cuts {
+        stops.extend([cut.from, cut.to].into_iter().filter(|s| *s > a && *s < b));
+    }
+    stops.sort_by(f64::total_cmp);
+    stops.dedup_by(|x, y| (*x - *y).abs() < 0.5);
+    let at = |s: f64| {
+        let t = (s - a) / (b - a).max(1e-9);
+        Point2::new(
+            start.x + (end.x - start.x) * t,
+            start.y + (end.y - start.y) * t,
+        )
+    };
+    let level = wall.level;
+    let pairs: Vec<(f64, f64)> = stops.windows(2).map(|w| (w[0], w[1])).collect();
+    Ok(pairs
+        .into_iter()
+        .map(|(s0, s1)| Dimension {
+            id: doc.new_dimension_id(),
+            start: at(s0),
+            end: at(s1),
+            offset: sign * gap,
+            level,
+            ..Dimension::default()
+        })
+        .collect())
+}
+
+/// Clear width and depth of a room (its bounding box), crossing inside it.
+pub fn room_dimensions(doc: &mut Document, id: crate::ids::RoomId) -> CoreResult<Vec<Dimension>> {
+    let room = doc
+        .home()
+        .room(id)
+        .ok_or(CoreError::NotFound(id.into()))?
+        .clone();
+    let (lo, hi) = room.points.iter().fold(
+        (
+            Point2::new(f64::MAX, f64::MAX),
+            Point2::new(f64::MIN, f64::MIN),
+        ),
+        |(lo, hi), p| {
+            (
+                Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+            )
+        },
+    );
+    let y = lo.y.midpoint(hi.y) + (hi.y - lo.y) * 0.25;
+    let x = lo.x.midpoint(hi.x) + (hi.x - lo.x) * 0.25;
+    Ok(vec![
+        Dimension {
+            id: doc.new_dimension_id(),
+            start: Point2::new(lo.x, y),
+            end: Point2::new(hi.x, y),
+            level: room.level,
+            ..Dimension::default()
+        },
+        Dimension {
+            id: doc.new_dimension_id(),
+            start: Point2::new(x, lo.y),
+            end: Point2::new(x, hi.y),
+            level: room.level,
+            ..Dimension::default()
+        },
+    ])
+}
+
 /// Nearest straight wall to `p` within `max_distance` cm of its centerline,
 /// with the distance along it from its start.
 pub fn nearest_wall(
@@ -449,5 +646,68 @@ mod tests {
         // b goes down (+y); left normal points +x, away from the center.
         assert!(dim_b.offset > 0.0);
         assert!((dim.offset - 37.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn wall_faces_chains_and_rooms_by_intent() {
+        let mut doc = Document::default();
+        let pts = [(0.0, 0.0), (400.0, 0.0), (400.0, 300.0), (0.0, 300.0)];
+        let mut commands = Vec::new();
+        for i in 0..4 {
+            let (a, b) = (pts[i], pts[(i + 1) % 4]);
+            commands.push(Command::insert(Wall::new(
+                doc.new_wall_id(),
+                Point2::new(a.0, a.1),
+                Point2::new(b.0, b.1),
+            )));
+        }
+        doc.execute(Command::Batch { commands }).unwrap();
+        let top = WallId(1);
+        let outer = wall_side_dimension(&mut doc, top, WallSide::Outer, 40.0).unwrap();
+        let inner = wall_side_dimension(&mut doc, top, WallSide::Inner, 40.0).unwrap();
+        let axis = wall_side_dimension(&mut doc, top, WallSide::Axis, 40.0).unwrap();
+        assert!(
+            (outer.length() - 415.0).abs() < 1e-9 && outer.offset > 0.0,
+            "{outer:?}"
+        );
+        assert!(
+            (inner.length() - 385.0).abs() < 1e-9 && inner.offset < 0.0,
+            "{inner:?}"
+        );
+        assert!((axis.length() - 400.0).abs() < 1e-9);
+
+        let mut window = crate::Furniture {
+            id: doc.new_furniture_id(),
+            catalog: "window".into(),
+            width: 100.0,
+            depth: 15.0,
+            height: 120.0,
+            opening: Some(crate::Opening::default()),
+            ..crate::Furniture::default()
+        };
+        let wall = doc.home().wall(top).unwrap().clone();
+        crate::furniture::align_to_wall(&mut window, &wall, 200.0);
+        doc.execute(Command::insert(window)).unwrap();
+        let chain = wall_chain_dimensions(&mut doc, top, WallSide::Outer, 60.0).unwrap();
+        let lengths: Vec<f64> = chain
+            .iter()
+            .map(|d| (d.length() * 10.0).round() / 10.0)
+            .collect();
+        assert_eq!(lengths, vec![157.5, 100.0, 157.5]);
+
+        let room = crate::Room::new(
+            doc.new_room_id(),
+            "Sala",
+            vec![
+                Point2::new(7.5, 7.5),
+                Point2::new(392.5, 7.5),
+                Point2::new(392.5, 292.5),
+                Point2::new(7.5, 292.5),
+            ],
+        );
+        let rid = room.id;
+        doc.execute(Command::insert(room)).unwrap();
+        let dims = room_dimensions(&mut doc, rid).unwrap();
+        assert!((dims[0].length() - 385.0).abs() < 1e-9 && (dims[1].length() - 285.0).abs() < 1e-9);
     }
 }

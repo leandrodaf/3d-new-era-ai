@@ -70,9 +70,16 @@ pub(crate) struct RoomSpec {
 pub(crate) struct DimSpec {
     pub a: Option<Point2>,
     pub b: Option<Point2>,
-    /// Measure an existing wall instead of a/b; placed outside the house.
+    /// Measure a wall: `side` picks the line, `chain` splits at openings.
     pub wall: Option<String>,
-    /// Offset cm from the measured points (left of a→b is positive).
+    /// `out` (outer face, default for chains), `in` (inner face) or `axis` (default).
+    pub side: Option<String>,
+    /// With `wall`: one dimension per wall piece and opening along the face.
+    #[serde(default)]
+    pub chain: bool,
+    /// Clear width and depth of a room, e.g. `r5` (two dimensions).
+    pub room: Option<String>,
+    /// Offset cm from the measured line (default 40 for walls; a/b: left of a→b is positive).
     pub off: Option<f64>,
 }
 
@@ -185,27 +192,40 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
     }
 
     for spec in params.dims {
-        let dim = match (spec.wall, spec.a, spec.b) {
-            (Some(wall), _, _) => {
+        let side = match spec.side.as_deref() {
+            None | Some("axis") => ops::WallSide::Axis,
+            Some("out") => ops::WallSide::Outer,
+            Some("in") => ops::WallSide::Inner,
+            Some(other) => return Err(format!("unknown side `{other}` (out, in, axis)")),
+        };
+        let dims: Vec<Dimension> = match (spec.wall, spec.room, spec.a, spec.b) {
+            (Some(wall), _, _, _) => {
                 let id = wall.parse().map_err(|e| format!("{e}"))?;
-                let mut dim = ops::wall_dimension(doc, id, 40.0).map_err(core)?;
-                if let Some(off) = spec.off {
-                    dim.offset = off;
+                let gap = spec.off.map_or(40.0, f64::abs);
+                if spec.chain {
+                    ops::wall_chain_dimensions(doc, id, side, gap).map_err(core)?
+                } else {
+                    vec![ops::wall_side_dimension(doc, id, side, gap).map_err(core)?]
                 }
-                dim
             }
-            (None, Some(a), Some(b)) => Dimension {
+            (None, Some(room), _, _) => {
+                let id = room.parse().map_err(|e| format!("{e}"))?;
+                ops::room_dimensions(doc, id).map_err(core)?
+            }
+            (None, None, Some(a), Some(b)) => vec![Dimension {
                 id: doc.new_dimension_id(),
                 start: a,
                 end: b,
                 offset: spec.off.unwrap_or(0.0),
                 level: None,
                 ..Default::default()
-            },
-            _ => return Err("dimension needs `a` and `b`, or `wall`".into()),
+            }],
+            _ => return Err("dimension needs `a` and `b`, `wall` or `room`".into()),
         };
-        ids.push(dim.id.to_string());
-        commands.push(Command::insert(dim));
+        for dim in dims {
+            ids.push(dim.id.to_string());
+            commands.push(Command::insert(dim));
+        }
     }
 
     for spec in params.labels {

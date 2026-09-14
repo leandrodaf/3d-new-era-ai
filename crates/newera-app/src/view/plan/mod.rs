@@ -411,16 +411,18 @@ impl PlanView {
             }
             Tool::Dimensions => {
                 if let Some(p) = raw {
-                    let snapped = match self.dim_points.first() {
-                        Some(a) if self.dim_points.len() == 1 && magnetism => {
-                            magnet::snap_segment(&home, *a, p, zoom, &[])
-                        }
-                        _ if magnetism => magnet::snap_point(&home, p, zoom, &[]),
-                        _ => p,
+                    let outlines = home.wall_outlines();
+                    let anchor = (self.dim_points.len() == 1).then(|| self.dim_points[0]);
+                    let (snapped, kind) = if magnetism && self.dim_points.len() < 2 {
+                        magnet::snap_measure(&home, &outlines, p, zoom, anchor)
+                    } else {
+                        (p, magnet::SnapKind::Free)
                     };
+                    if kind != magnet::SnapKind::Free {
+                        overlays.push(Overlay::Snap(snapped, kind));
+                    }
                     if multi_click(&response) && self.dim_points.len() <= 1 {
                         self.dim_points.clear();
-                        let outlines = home.wall_outlines();
                         if let Some(ElementId::Wall(id)) = hit::pick(&home, &outlines, p, tolerance)
                         {
                             commit(&mut events, &mut |doc| {
@@ -902,6 +904,37 @@ impl PlanView {
                     angle,
                 );
             }
+            Overlay::Snap(p, kind) => {
+                let c = to(*p);
+                let color = Color32::from_rgb(230, 80, 30);
+                let stroke = Stroke::new(1.6, color);
+                match kind {
+                    magnet::SnapKind::Corner => {
+                        painter.rect_stroke(
+                            Rect::from_center_size(c, Vec2::splat(11.0)),
+                            0.0,
+                            stroke,
+                            egui::StrokeKind::Middle,
+                        );
+                    }
+                    magnet::SnapKind::Face => {
+                        let d = 6.5;
+                        painter.add(egui::Shape::closed_line(
+                            vec![
+                                c + Vec2::new(0.0, -d),
+                                c + Vec2::new(d, 0.0),
+                                c + Vec2::new(0.0, d),
+                                c + Vec2::new(-d, 0.0),
+                            ],
+                            stroke,
+                        ));
+                    }
+                    magnet::SnapKind::Axis => {
+                        painter.circle_stroke(c, 6.0, stroke);
+                    }
+                    magnet::SnapKind::Free => {}
+                }
+            }
             Overlay::Path(points) => {
                 let screen: Vec<Pos2> = points.iter().map(|p| to(*p)).collect();
                 painter.add(egui::Shape::line(screen, Stroke::new(1.5, accent)));
@@ -955,6 +988,8 @@ enum Overlay {
     Polygon(Vec<Point2>),
     /// Open polyline being drawn.
     Path(Vec<Point2>),
+    /// Where a measuring click will land and what it locked onto.
+    Snap(Point2, magnet::SnapKind),
     Dimension(Point2, Point2, f64),
     Measure(Point2, Point2),
 }
@@ -1329,6 +1364,32 @@ mod tests {
         assert_eq!(dims.len(), 1);
         assert!((dims[0].length() - 400.0).abs() < 0.6);
         assert!((dims[0].offset - 60.0).abs() < 2.0, "{}", dims[0].offset);
+    }
+
+    #[test]
+    fn dimension_clicks_lock_onto_outer_and_inner_corners() {
+        let mut h = harness(square(400.0), Tool::Dimensions);
+        // Imprecise clicks near the outer corners (walls are 15 cm thick).
+        click(&mut h, (-4.0, -10.0));
+        click(&mut h, (404.0, -5.0));
+        click(&mut h, (200.0, -80.0));
+        // And near the inner corners of the same wall.
+        click(&mut h, (11.0, 4.0));
+        click(&mut h, (389.0, 11.0));
+        click(&mut h, (200.0, 60.0));
+        let dims = home(&h).dimensions;
+        assert_eq!(dims.len(), 2, "{dims:?}");
+        assert!(
+            (dims[0].length() - 415.0).abs() < 1e-9,
+            "outer {}",
+            dims[0].length()
+        );
+        assert!(
+            (dims[1].length() - 385.0).abs() < 1e-9,
+            "inner {}",
+            dims[1].length()
+        );
+        assert!((dims[0].start.y + 7.5).abs() < 1e-9 && (dims[1].start.y - 7.5).abs() < 1e-9);
     }
 
     #[test]

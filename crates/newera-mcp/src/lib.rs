@@ -7,6 +7,7 @@
 
 mod compact;
 mod edit;
+mod schema;
 mod tools;
 
 use std::sync::Arc;

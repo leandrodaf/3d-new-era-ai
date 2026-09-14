@@ -113,6 +113,8 @@ pub(crate) struct AnnotationParams {
     refs: Option<bool>,
     /// Include brand, model and link in references.
     details: Option<bool>,
+    /// Convert the automatic dimension chains into editable dimensions.
+    bake: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -176,9 +178,17 @@ pub(crate) struct PathParams {
 #[tool_router]
 impl NewEraMcp {
     pub fn new(document: SharedDocument) -> Self {
+        let mut tool_router = Self::tool_router();
+        for route in tool_router.map.values_mut() {
+            let mut schema = serde_json::Value::Object((*route.attr.input_schema).clone());
+            crate::schema::compact(&mut schema);
+            if let serde_json::Value::Object(map) = schema {
+                route.attr.input_schema = std::sync::Arc::new(map);
+            }
+        }
         Self {
             document,
-            tool_router: Self::tool_router(),
+            tool_router,
         }
     }
 
@@ -473,13 +483,28 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Plan annotations. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs). Always returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
+        description = "Plan annotations. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs); bake=true turns the automatic chains into editable dimensions (ids returned). Otherwise returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
     )]
     fn annotations(
         &self,
         Parameters(p): Parameters<AnnotationParams>,
     ) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
+        if p.bake.unwrap_or(false) {
+            let view = doc.home().level_view(doc.home().current_level());
+            let mut commands = Vec::new();
+            let mut ids = Vec::new();
+            for mut dim in newera_core::auto_dimensions(&view) {
+                dim.id = doc.new_dimension_id();
+                ids.push(dim.id.to_string());
+                commands.push(Command::insert(dim));
+            }
+            let mut annotations = doc.home().annotations;
+            annotations.auto_dimensions = false;
+            commands.push(Command::SetAnnotations { annotations });
+            doc.execute(Command::Batch { commands }).map_err(core)?;
+            return Ok(ok(&doc, &ids));
+        }
         let mut next = doc.home().annotations;
         next.auto_dimensions = p.dims.unwrap_or(next.auto_dimensions);
         next.references = p.refs.unwrap_or(next.references);
@@ -1031,6 +1056,7 @@ mod tests {
                 dims: Some(true),
                 refs: Some(true),
                 details: Some(true),
+                bake: None,
             }))
             .unwrap();
         assert!(reply.contains(r#""rooms":[["Sala",[[1,"#), "{reply}");
@@ -1044,5 +1070,68 @@ mod tests {
             ..RenderParams::default()
         }));
         assert!(png.is_ok());
+    }
+
+    #[test]
+    fn dimensions_by_intent_in_one_call() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}],"rooms":[{"name":"Sala","at":[200,150]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let place: PlaceParams =
+            serde_json::from_str(r#"{"items":[{"cat":"window","wall":"w1","along":200}]}"#)
+                .unwrap();
+        s.place(Parameters(place)).unwrap();
+        let dims: CreateParams = serde_json::from_str(
+            r#"{"dims":[{"wall":"w1","side":"out"},{"wall":"w1","side":"in"},{"wall":"w1","chain":true,"off":70},{"room":"r5"}]}"#,
+        )
+        .unwrap();
+        let reply = s.create(Parameters(dims)).unwrap();
+        assert_eq!(reply.matches(",d").count() + 1, 7, "{reply}");
+        let doc = s.document.read();
+        let lengths: Vec<f64> = doc
+            .home()
+            .dimensions
+            .iter()
+            .map(|d| (d.length() * 10.0).round() / 10.0)
+            .collect();
+        assert_eq!(&lengths[..2], &[415.0, 385.0]);
+        assert!(lengths.contains(&285.0));
+        drop(doc);
+        let baked = s
+            .annotations(Parameters(AnnotationParams {
+                bake: Some(true),
+                ..AnnotationParams::default()
+            }))
+            .unwrap();
+        assert!(
+            baked.starts_with("ok rev=") && baked.contains("ids=d"),
+            "{baked}"
+        );
+    }
+
+    #[test]
+    #[ignore = "prints the size of the tool list"]
+    fn tool_list_size() {
+        let tools = server().tool_router.list_all();
+        let json = serde_json::to_string(&tools).unwrap();
+        println!(
+            "{} tools, {} bytes (~{} tokens)",
+            tools.len(),
+            json.len(),
+            json.len() / 4
+        );
+        let mut sizes: Vec<(usize, String)> = tools
+            .iter()
+            .map(|t| (serde_json::to_string(t).unwrap().len(), t.name.to_string()))
+            .collect();
+        sizes.sort();
+        for (n, name) in sizes.iter().rev() {
+            println!("{n:6} {name}");
+        }
+        let update = tools.iter().find(|t| t.name == "update").unwrap();
+        println!("{}", serde_json::to_string(&update.input_schema).unwrap());
     }
 }

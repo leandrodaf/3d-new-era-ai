@@ -63,6 +63,120 @@ pub(crate) fn snap_segment(
     )
 }
 
+/// What a measuring point locked onto.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SnapKind {
+    /// A corner of a wall face (inside or outside), an opening edge or a
+    /// room/furniture corner.
+    Corner,
+    /// A point on a wall face.
+    Face,
+    /// A wall axis end.
+    Axis,
+    /// Grid, angle or length rounding.
+    Free,
+}
+
+/// Snaps a point for measuring: the nearest corner of any wall face (inner
+/// and outer), opening edge, wall axis end, room or furniture corner wins;
+/// otherwise the nearest wall face; otherwise angle/length rounding from
+/// `anchor` (or the grid). Radii are in screen pixels, so precision holds at
+/// every zoom.
+pub(crate) fn snap_measure(
+    home: &Home,
+    outlines: &[Vec<Point2>],
+    p: Point2,
+    zoom: f32,
+    anchor: Option<Point2>,
+) -> (Point2, SnapKind) {
+    let corner_radius = f64::from(12.0 / zoom);
+    let face_radius = f64::from(8.0 / zoom);
+    let nearest = |candidates: &mut dyn Iterator<Item = (Point2, SnapKind)>| {
+        candidates
+            .filter(|(q, _)| q.distance(p) <= corner_radius)
+            .min_by(|a, b| a.0.distance(p).total_cmp(&b.0.distance(p)))
+    };
+
+    // Corners of the joined wall outlines are the true inner/outer corners.
+    let mut corners: Vec<(Point2, SnapKind)> = outlines
+        .iter()
+        .flatten()
+        .map(|q| (*q, SnapKind::Corner))
+        .collect();
+    for (wall, cuts) in home.walls.iter().zip(home.wall_cuts()) {
+        corners.push((wall.start, SnapKind::Axis));
+        corners.push((wall.end, SnapKind::Axis));
+        let len = wall.start.distance(wall.end).max(1e-9);
+        let (dx, dy) = (
+            (wall.end.x - wall.start.x) / len,
+            (wall.end.y - wall.start.y) / len,
+        );
+        let half = wall.thickness / 2.0;
+        for cut in cuts {
+            for s in [cut.from, cut.to] {
+                for side in [-half, half] {
+                    corners.push((
+                        Point2::new(
+                            wall.start.x + dx * s - dy * side,
+                            wall.start.y + dy * s + dx * side,
+                        ),
+                        SnapKind::Corner,
+                    ));
+                }
+            }
+        }
+    }
+    corners.extend(
+        home.rooms
+            .iter()
+            .flat_map(|r| r.points.iter().map(|q| (*q, SnapKind::Corner))),
+    );
+    corners.extend(
+        home.furniture
+            .iter()
+            .filter(|f| f.visible && !f.is_opening())
+            .flat_map(|f| f.footprint().map(|q| (q, SnapKind::Corner))),
+    );
+    // Prefer real corners over axis ends when both are equally close.
+    if let Some(hit) = nearest(&mut corners.iter().copied()) {
+        return hit;
+    }
+
+    let face = outlines
+        .iter()
+        .flat_map(|outline| {
+            let n = outline.len();
+            (0..n).map(move |i| (outline[i], outline[(i + 1) % n]))
+        })
+        .filter_map(|(a, b)| {
+            let (ux, uy) = (b.x - a.x, b.y - a.y);
+            let len2 = ux * ux + uy * uy;
+            if len2 < 1e-9 {
+                return None;
+            }
+            let t = (((p.x - a.x) * ux + (p.y - a.y) * uy) / len2).clamp(0.0, 1.0);
+            let q = Point2::new(a.x + ux * t, a.y + uy * t);
+            (q.distance(p) <= face_radius).then_some(q)
+        })
+        .min_by(|a, b| a.distance(p).total_cmp(&b.distance(p)));
+    if let Some(q) = face {
+        // Along a face, keep measurements square to the anchor when close.
+        if let Some(a) = anchor {
+            for aligned in [Point2::new(q.x, a.y), Point2::new(a.x, q.y)] {
+                if aligned.distance(q) <= face_radius && aligned.distance(p) <= face_radius * 1.5 {
+                    return (aligned, SnapKind::Face);
+                }
+            }
+        }
+        return (q, SnapKind::Face);
+    }
+
+    match anchor {
+        Some(a) => (snap_segment(home, a, p, zoom, &[]), SnapKind::Free),
+        None => (snap_point(home, p, zoom, &[]), SnapKind::Free),
+    }
+}
+
 /// Point at `length` cm from `anchor` in the direction of `toward`.
 pub(crate) fn along(anchor: Point2, toward: Point2, length: f64) -> Point2 {
     let d = anchor.distance(toward);
@@ -101,6 +215,32 @@ mod tests {
             &[],
         );
         assert!((diag.x - diag.y).abs() < 1e-9, "45°: {diag:?}");
+    }
+
+    #[test]
+    fn measuring_snaps_to_inner_and_outer_corners_then_faces() {
+        let mut home = Home::default();
+        let pts = [(0.0, 0.0), (400.0, 0.0), (400.0, 300.0), (0.0, 300.0)];
+        for i in 0..4 {
+            let (a, b) = (pts[i], pts[(i + 1) % 4]);
+            home.walls.push(Wall::new(
+                WallId(i as u64 + 1),
+                Point2::new(a.0, a.1),
+                Point2::new(b.0, b.1),
+            ));
+        }
+        let outlines = home.wall_outlines();
+        // Walls are 15 cm thick: outer corner (-7.5, -7.5), inner (7.5, 7.5).
+        let (outer, kind) = snap_measure(&home, &outlines, Point2::new(-5.0, -9.0), 1.0, None);
+        assert_eq!((outer, kind), (Point2::new(-7.5, -7.5), SnapKind::Corner));
+        let (inner, _) = snap_measure(&home, &outlines, Point2::new(9.0, 6.0), 1.0, None);
+        assert_eq!(inner, Point2::new(7.5, 7.5));
+        // Mid-wall on the inner face.
+        let (face, kind) = snap_measure(&home, &outlines, Point2::new(200.0, 12.0), 1.0, None);
+        assert_eq!((face, kind), (Point2::new(200.0, 7.5), SnapKind::Face));
+        // Far from everything: free rounding.
+        let (_, kind) = snap_measure(&home, &outlines, Point2::new(200.0, 150.0), 1.0, None);
+        assert_eq!(kind, SnapKind::Free);
     }
 
     #[test]

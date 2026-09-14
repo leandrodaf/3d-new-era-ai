@@ -93,9 +93,12 @@ The core of what makes the editor useful: placing real objects with real dimensi
 - [x] **Room references**: numbered tags and a schedule beside the plan listing each
       room and its pieces with sizes, plus brand/model/link details; Ver menu, furniture
       dialog and MCP `annotations` / `update`
-- [ ] Precise dimension magnet: snap to wall corners and inner/outer faces
-- [ ] MCP dimensions by intent (wall inner/outer/axis, room, chain) and baking
-      automatic dimensions into editable ones
+- [x] Precise dimension magnet: locks onto inner/outer wall corners, opening edges,
+      axis ends, room and furniture corners, then wall faces (pixel radii, any zoom),
+      with a marker showing what it caught
+- [x] MCP dimensions by intent in `create` (`wall`+`side` out/in/axis, `chain` through
+      openings, `room` clear sizes) and `annotations bake` to keep automatic chains
+- [x] Leaner MCP: tool schemas compacted at startup (−18% tokens for the tool list)
 - [ ] Lighting: sun from compass + date/time, light sources from furniture
 - [x] Virtual visitor camera; stored points of view
 - [ ] Photo renderer (GPU path tracing) and video along a camera path
