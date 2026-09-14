@@ -60,10 +60,17 @@ function Install-NewEra {
     }
 
     Step 'Última versão'
-    $release = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -Headers @{ 'User-Agent' = 'newera-installer' }
-    $tag = $release.tag_name
-    $asset = $release.assets | Where-Object name -eq 'newera-windows-x64.zip'
-    if (-not $asset) { throw "A release $tag não tem o pacote para Windows." }
+    # github.com/<repo>/releases/latest redirects to the newest tag. Unlike the
+    # REST API it has no per-IP limit, so offices behind one IP aren't blocked.
+    $request = [Net.HttpWebRequest]::Create("https://github.com/$repo/releases/latest")
+    $request.AllowAutoRedirect = $false
+    $request.UserAgent = 'newera-installer'
+    $response = $request.GetResponse()
+    $location = $response.Headers['Location']
+    $response.Close()
+    if (-not $location -or $location -notmatch '/releases/tag/([^/?#]+)') { throw 'Nenhuma versão publicada ainda.' }
+    $tag = [Uri]::UnescapeDataString($Matches[1])
+    $assetName = 'newera-windows-x64.zip'
     Info $tag
     $versionFile = Join-Path $dir 'version.txt'
     if (-not $Force -and (Test-Path (Join-Path $dir 'newera-gui.exe')) -and
@@ -74,9 +81,12 @@ function Install-NewEra {
         $work = Join-Path ([IO.Path]::GetTempPath()) ("newera-install-" + [Guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $work | Out-Null
         try {
-            Step "Baixando $($asset.name) ($([Math]::Round($asset.size / 1MB, 1)) MB)"
+            Step "Baixando $assetName"
             $zip = Join-Path $work 'newera.zip'
-            Invoke-WebRequest $asset.browser_download_url -OutFile $zip -UseBasicParsing
+            try {
+                Invoke-WebRequest "https://github.com/$repo/releases/download/$tag/$assetName" -OutFile $zip -UseBasicParsing
+            }
+            catch { throw "A versão $tag não tem o pacote para Windows ($assetName)." }
             Expand-Archive $zip -DestinationPath $work
             $unpacked = Join-Path $work $name
             & (Join-Path $unpacked 'newera.exe') --version | Out-Null

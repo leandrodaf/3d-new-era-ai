@@ -25,6 +25,8 @@ OWNER_REPO="leandrodaf/3d-new-era-ai"
 NEWERA_APPS="${NEWERA_APPS:-$HOME/Applications}"
 APP="$NEWERA_APPS/3D New Era AI.app"
 BIN_DIR="$HOME/.local/bin"
+# Which release or commit is installed, kept outside the signed app.
+STATE="$HOME/Library/Application Support/3D New Era AI/installed"
 MIN_RUST="1.95"
 
 step() { printf '\n\033[1;34m==>\033[0m \033[1m%s\033[0m\n' "$*"; }
@@ -37,6 +39,7 @@ fail() { printf '\n\033[1;31merro:\033[0m %s\n' "$*" >&2; exit 1; }
 if [ "${1:-}" = "--uninstall" ]; then
     step "Desinstalando"
     rm -rf "$APP"
+    rm -f "$STATE"
     [ -L "$BIN_DIR/newera" ] && rm -f "$BIN_DIR/newera"
     if command -v claude >/dev/null 2>&1 && claude mcp get newera >/dev/null 2>&1; then
         claude mcp remove --scope user newera >/dev/null 2>&1 || true
@@ -69,7 +72,8 @@ github_sha() { # github_sha <ref> -> commit sha
         "https://api.github.com/repos/$OWNER_REPO/commits/$1"
 }
 
-installed_commit() { cat "$APP/Contents/Resources/commit" 2>/dev/null || true; }
+installed_commit() { cat "$STATE" 2>/dev/null || true; }
+remember() { mkdir -p "$(dirname "$STATE")" && echo "$1" > "$STATE"; }
 
 up_to_date() { # up_to_date <commit>
     [ "${NEWERA_FORCE:-0}" != "1" ] && [ "$1" != "local" ] \
@@ -99,12 +103,16 @@ install_release() {
         *) return 1 ;;
     esac
     step "Última versão"
-    TAG=$(curl -fsSL "https://api.github.com/repos/$OWNER_REPO/releases/latest" 2>/dev/null \
-        | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
-    [ -n "$TAG" ] || { info "nenhuma release publicada ainda"; return 1; }
-    COMMIT=$(github_sha "$TAG") || return 1
-    info "$TAG (${COMMIT:0:12})"
-    if up_to_date "$COMMIT"; then
+    # github.com/<repo>/releases/latest redirects to the newest tag. Unlike the
+    # REST API it has no per-IP limit, so offices behind one IP aren't blocked.
+    local location
+    location=$(curl -fsSI -o /dev/null -w '%{redirect_url}' "https://github.com/$OWNER_REPO/releases/latest" 2>/dev/null || true)
+    case "$location" in
+        */releases/tag/*) TAG="${location##*/releases/tag/}" ;;
+        *) info "nenhuma release publicada ainda"; return 1 ;;
+    esac
+    info "$TAG"
+    if up_to_date "release:$TAG"; then
         info "já instalado nesta versão: nada a baixar (NEWERA_FORCE=1 reinstala)"
         return 0
     fi
@@ -119,6 +127,7 @@ install_release() {
     "$built/Contents/MacOS/newera" --version >/dev/null 2>&1 \
         || { info "o app baixado não abriu neste Mac"; return 1; }
     place_app "$built"
+    remember "release:$TAG"
     info "ok: $("$APP/Contents/MacOS/newera" --version)"
 }
 
@@ -140,8 +149,13 @@ build_from_source() {
         COMMIT=$(git -C "$src" rev-parse HEAD 2>/dev/null || echo "local")
         info "usando o clone em $src ($COMMIT) — nada a baixar"
     else
-        COMMIT=$(github_sha "$ref") || fail "não consegui consultar $OWNER_REPO@$ref no GitHub."
-        info "$ref está em ${COMMIT:0:12}"
+        if COMMIT=$(github_sha "$ref" 2>/dev/null) && [ -n "$COMMIT" ]; then
+            info "$ref está em ${COMMIT:0:12}"
+        else
+            # API unavailable (rate limit): build the ref as named, without the up-to-date check.
+            COMMIT="$ref"
+            info "$ref (não consegui ver o commit; compilando mesmo assim)"
+        fi
     fi
     if up_to_date "$COMMIT"; then
         info "já instalado nesta versão: nada a baixar nem compilar (NEWERA_FORCE=1 recompila)"
@@ -197,6 +211,7 @@ build_from_source() {
     mkdir -p "$WORK/app"
     bash "$src/scripts/macos-app.sh" "$CARGO_TARGET_DIR/release/newera" "$WORK/app" "$COMMIT" >/dev/null
     place_app "$WORK/app/3D New Era AI.app"
+    [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] && remember "$COMMIT"
     info "ok (${COMMIT:0:12})"
 }
 
