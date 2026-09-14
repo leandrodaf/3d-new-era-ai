@@ -48,6 +48,9 @@ once:
 The one-line installers above skip these prompts.
 </details>
 
+Next: **[connect your AI](#connect-your-ai)** — Claude, Codex, Gemini, Cursor, VS Code,
+DeepSeek and others.
+
 ## Showcase
 
 A real 105 m² apartment, traced from an openly licensed floor plan and furnished, lit
@@ -114,7 +117,7 @@ Every image below came out of the editor itself.
 
 The installers from [Download](#download) work for your user only: they put the app in
 `~/Applications` or `%LOCALAPPDATA%\Programs`, add `newera` to your `PATH`, register the
-MCP server in Claude Code if you have it, and delete their temporary files. Uninstall
+MCP server in Claude Code and Codex if you have them, and delete their temporary files. Uninstall
 with `install-macos.sh --uninstall` or from *Settings → Apps* on Windows. On a Mac with no
 build for it, or with `NEWERA_REF=<branch>`, the installer compiles from source instead.
 
@@ -131,23 +134,77 @@ make release      # optimized binary in target/release/newera
 Run `make` to see every development command. `make web-serve` builds the browser editor
 and viewer and serves them at `http://127.0.0.1:8790`.
 
-## Connect an AI agent
+## Connect your AI
 
-With the editor open, the MCP endpoint is `http://127.0.0.1:7878/mcp`.
+Open the editor (or run `newera serve` for no window). It serves MCP at
+**`http://127.0.0.1:7878/mcp`** — point your AI there and it edits the plan you see, live.
 
-Claude Code picks it up from this repository's `.mcp.json` when you open the project
-(approve the `newera` server once). Elsewhere:
+**Claude Code**
 
 ```sh
-# Claude Code
 claude mcp add --transport http newera http://127.0.0.1:7878/mcp
 ```
 
-Clients that spawn a process can use stdio instead:
+Inside a clone of this repository it's already set up by `.mcp.json` (approve `newera` once).
+
+**Codex CLI**
+
+```sh
+codex mcp add newera --url http://127.0.0.1:7878/mcp
+```
+
+**Gemini CLI**
+
+```sh
+gemini mcp add --transport http newera http://127.0.0.1:7878/mcp
+```
+
+**VS Code (Copilot agent mode)**
+
+```sh
+code --add-mcp '{"name":"newera","type":"http","url":"http://127.0.0.1:7878/mcp"}'
+```
+
+**Cursor** — `~/.cursor/mcp.json`
+
+```json
+{ "mcpServers": { "newera": { "url": "http://127.0.0.1:7878/mcp" } } }
+```
+
+**Windsurf** — `~/.codeium/windsurf/mcp_config.json`
+
+```json
+{ "mcpServers": { "newera": { "serverUrl": "http://127.0.0.1:7878/mcp" } } }
+```
+
+**Claude Desktop** — *Settings → Developer → Edit Config* (needs [Node.js](https://nodejs.org)
+for the `mcp-remote` bridge)
+
+```json
+{ "mcpServers": { "newera": { "command": "npx", "args": ["-y", "mcp-remote", "http://127.0.0.1:7878/mcp"] } } }
+```
+
+**DeepSeek, Qwen, Llama and other models** — the model doesn't matter, the app you chat in
+does. Use one that speaks MCP and add the URL above: [Cline](https://cline.bot) or
+[Roo Code](https://roocode.com) in VS Code, [Cherry Studio](https://cherry-ai.com),
+[LM Studio](https://lmstudio.ai) or [opencode](https://opencode.ai) (`opencode.json`):
+
+```json
+{ "mcp": { "newera": { "type": "remote", "url": "http://127.0.0.1:7878/mcp" } } }
+```
+
+**Any other client** — streamable HTTP at `http://127.0.0.1:7878/mcp`, or, for clients that only start a
+process, stdio with `newera mcp`:
 
 ```json
 { "mcpServers": { "newera": { "command": "newera", "args": ["mcp"] } } }
 ```
+
+With stdio the agent works on its own project in the background, not on the open
+window; use the URL to design together live. Then just ask, for example: *"Draw a 4 × 5 m
+bedroom with a door and a window, furnish it and render a photo."*
+
+### Tools
 
 | Tool | What it does |
 |------|--------------|

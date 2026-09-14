@@ -52,7 +52,10 @@ function Install-NewEra {
         if (Get-Command claude -ErrorAction SilentlyContinue) {
             claude mcp remove --scope user newera 2>$null | Out-Null
         }
-        Info "removido: $dir, atalhos, PATH e o MCP 'newera' do Claude Code"
+        if (Get-Command codex -ErrorAction SilentlyContinue) {
+            codex mcp remove newera 2>$null | Out-Null
+        }
+        Info "removido: $dir, atalhos, PATH e o MCP 'newera' do Claude Code e do Codex"
         return
     }
 
@@ -128,21 +131,32 @@ function Install-NewEra {
     }.GetEnumerator() | ForEach-Object { New-ItemProperty -Path $uninstallKey -Name $_.Key -Value $_.Value -Force | Out-Null }
     New-ItemProperty -Path $uninstallKey -Name NoModify -Value 1 -PropertyType DWord -Force | Out-Null
 
+    $mcpUrl = 'http://127.0.0.1:7878/mcp'
     if (Get-Command claude -ErrorAction SilentlyContinue) {
         Step 'MCP no Claude Code'
         claude mcp get newera 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) { Info 'já registrado' }
         else {
-            claude mcp add --scope user --transport http newera http://127.0.0.1:7878/mcp 2>$null | Out-Null
+            claude mcp add --scope user --transport http newera $mcpUrl 2>$null | Out-Null
             if ($LASTEXITCODE -eq 0) { Info "servidor 'newera' registrado" }
-            else { Info 'não consegui registrar; rode: claude mcp add --transport http newera http://127.0.0.1:7878/mcp' }
+            else { Info "não consegui registrar; rode: claude mcp add --transport http newera $mcpUrl" }
+        }
+    }
+    if (Get-Command codex -ErrorAction SilentlyContinue) {
+        Step 'MCP no Codex'
+        codex mcp get newera 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { Info 'já registrado' }
+        else {
+            codex mcp add newera --url $mcpUrl 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { Info "servidor 'newera' registrado" }
+            else { Info "não consegui registrar; rode: codex mcp add newera --url $mcpUrl" }
         }
     }
 
     Write-Host "`nPronto!" -ForegroundColor Green
     Write-Host "  Abrir:        Menu Iniciar ou Área de Trabalho > $name"
     Write-Host '  Terminal:     newera --demo'
-    Write-Host '  MCP:          http://127.0.0.1:7878/mcp (com o editor aberto)'
+    Write-Host '  MCP:          http://127.0.0.1:7878/mcp (com o editor aberto; outras IAs: veja o README)'
     Write-Host '  Atualizar:    rode o mesmo comando de novo'
     Write-Host '  Desinstalar:  Configurações > Aplicativos > 3D New Era AI'
 }

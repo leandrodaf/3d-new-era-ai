@@ -41,7 +41,10 @@ if [ "${1:-}" = "--uninstall" ]; then
     if command -v claude >/dev/null 2>&1 && claude mcp get newera >/dev/null 2>&1; then
         claude mcp remove --scope user newera >/dev/null 2>&1 || true
     fi
-    info "removidos: $APP, $BIN_DIR/newera e o MCP 'newera' do Claude Code"
+    if command -v codex >/dev/null 2>&1 && codex mcp get newera >/dev/null 2>&1; then
+        codex mcp remove newera >/dev/null 2>&1 || true
+    fi
+    info "removidos: $APP, $BIN_DIR/newera e o MCP 'newera' do Claude Code e do Codex"
     exit 0
 fi
 
@@ -217,14 +220,25 @@ case ":$PATH:" in
         ;;
 esac
 
+MCP_URL="http://127.0.0.1:7878/mcp"
 if command -v claude >/dev/null 2>&1; then
     step "MCP no Claude Code"
     if claude mcp get newera >/dev/null 2>&1; then
         info "já registrado"
-    elif claude mcp add --scope user --transport http newera http://127.0.0.1:7878/mcp >/dev/null 2>&1; then
+    elif claude mcp add --scope user --transport http newera "$MCP_URL" >/dev/null 2>&1; then
         info "servidor 'newera' registrado"
     else
-        info "não consegui registrar; rode: claude mcp add --transport http newera http://127.0.0.1:7878/mcp"
+        info "não consegui registrar; rode: claude mcp add --transport http newera $MCP_URL"
+    fi
+fi
+if command -v codex >/dev/null 2>&1; then
+    step "MCP no Codex"
+    if codex mcp get newera >/dev/null 2>&1; then
+        info "já registrado"
+    elif codex mcp add newera --url "$MCP_URL" >/dev/null 2>&1; then
+        info "servidor 'newera' registrado"
+    else
+        info "não consegui registrar; rode: codex mcp add newera --url $MCP_URL"
     fi
 fi
 
@@ -233,7 +247,7 @@ cat <<DONE
   Abrir:        open "$APP"   (ou Spotlight: "3D New Era AI")
   Terminal:     newera --demo
   Sem janela:   newera serve
-  MCP:          http://127.0.0.1:7878/mcp (com o editor aberto)
+  MCP:          http://127.0.0.1:7878/mcp (com o editor aberto; outras IAs: veja o README)
   Atualizar:    rode o mesmo comando de novo
   Desinstalar:  rode com --uninstall
 DONE

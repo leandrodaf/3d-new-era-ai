@@ -18,7 +18,8 @@ MCP server, with everything below.
   desktop shortcuts, user `PATH`, listed in Settings > Apps) and `install-macos.sh`
   (`3D New Era AI.app`, ad-hoc signed; builds from source when there is no binary).
   Both skip what is already installed, clean up after themselves and register the MCP
-  server in Claude Code. `newera-gui.exe` opens the editor without a console window.
+  server in Claude Code and Codex. The README shows how to connect Gemini CLI, VS Code,
+  Cursor, Windsurf, Claude Desktop and MCP apps for other models. `newera-gui.exe` opens the editor without a console window.
 
 - Smaller `.newera` files: every project is a deflated bundle with compact JSON, and large
   JPEG textures are recompressed once on save (quality 85, at most 2048 px). The showcase
