@@ -55,6 +55,9 @@ pub struct Home {
     pub furniture_descending: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub base_plan_locked: bool,
+    /// Derived annotations shown on the plan.
+    #[serde(default, skip_serializing_if = "crate::style::is_default")]
+    pub annotations: crate::annotations::PlanAnnotations,
     /// Technical project being edited; new symbols and lines go there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_discipline: Option<crate::style::Discipline>,
@@ -93,6 +96,7 @@ impl Default for Home {
             base_plan_locked: false,
             active_discipline: None,
             hidden_disciplines: Vec::new(),
+            annotations: crate::annotations::PlanAnnotations::default(),
             properties: Properties::new(),
             next_id: 1,
         }
@@ -274,6 +278,7 @@ impl Home {
             furniture_descending: self.furniture_descending,
             base_plan_locked: self.base_plan_locked,
             active_discipline: self.active_discipline,
+            annotations: self.annotations,
             hidden_disciplines: self.hidden_disciplines.clone(),
             properties: self.properties.clone(),
             next_id: self.next_id,

@@ -337,6 +337,15 @@ pub(crate) struct UpdateSpec {
     /// Room ceiling finish.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ceil_mat: Option<String>,
+    /// Furniture brand (references).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub brand: Option<String>,
+    /// Furniture commercial model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_name: Option<String>,
+    /// Furniture product link.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
     /// Label bold text.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bold: Option<bool>,
@@ -396,6 +405,9 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 "visible",
                 "hinge_right",
                 "level",
+                "brand",
+                "model_name",
+                "url",
             ],
         };
         if let Some(bad) = spec
@@ -501,6 +513,14 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 f.color = spec.color.or(f.color);
                 f.mirrored = spec.mirror.unwrap_or(f.mirrored);
                 f.visible = spec.visible.unwrap_or(f.visible);
+                let text = |v: Option<String>, old: Option<String>| match v {
+                    Some(v) if v.is_empty() => None,
+                    Some(v) => Some(v),
+                    None => old,
+                };
+                f.info.brand = text(spec.brand, f.info.brand.take());
+                f.info.model_name = text(spec.model_name, f.info.model_name.take());
+                f.info.url = text(spec.url, f.info.url.take());
                 if let (Some(right), Some(opening)) = (spec.hinge_right, f.opening.as_mut()) {
                     opening.hinge_right = right;
                 }

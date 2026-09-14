@@ -205,6 +205,30 @@ impl NewEraApp {
         }
     }
 
+    /// Derived plan annotations: engineering dimensions and room references.
+    fn annotations_menu(&mut self, ui: &mut egui::Ui) {
+        let current = self.document.read().home().annotations;
+        let mut next = current;
+        ui.checkbox(
+            &mut next.auto_dimensions,
+            format!("{} Cotas automáticas (engenharia)", icon::RULER),
+        );
+        ui.checkbox(
+            &mut next.references,
+            format!("{} Referências dos cômodos", icon::LIST_BULLETS),
+        );
+        ui.add_enabled(
+            next.references,
+            egui::Checkbox::new(
+                &mut next.reference_details,
+                "Detalhes: marca, modelo e link",
+            ),
+        );
+        if next != current {
+            self.run(|doc| doc.execute(Command::SetAnnotations { annotations: next }));
+        }
+    }
+
     /// Aerial/visitor switch and stored points of view.
     fn viewpoints_menu(&mut self, ui: &mut egui::Ui) {
         let cameras = self.document.read().home().cameras.clone();
@@ -889,6 +913,8 @@ impl NewEraApp {
                 if menu_item(ui, icon::CUBE, "Enquadrar 3D", "", true) {
                     self.scene.request_frame();
                 }
+                ui.separator();
+                self.annotations_menu(ui);
                 ui.separator();
                 self.viewpoints_menu(ui);
                 ui.separator();

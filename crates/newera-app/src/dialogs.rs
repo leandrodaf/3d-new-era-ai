@@ -546,6 +546,9 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                             .show(ui, |ui| {
                                 grid(ui, "piece_info_grid", |ui| {
                                     for (label, value) in [
+                                        ("Marca", &mut piece.info.brand),
+                                        ("Modelo", &mut piece.info.model_name),
+                                        ("Link", &mut piece.info.url),
                                         ("Descrição", &mut piece.info.description),
                                         ("Informações", &mut piece.info.information),
                                         ("Autor", &mut piece.info.creator),
@@ -557,6 +560,13 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                                         if ui.text_edit_singleline(&mut text).changed() {
                                             *value = (!text.is_empty()).then_some(text);
                                         }
+                                        ui.end_row();
+                                    }
+                                    if let Some(url) =
+                                        piece.info.url.clone().filter(|u| u.starts_with("http"))
+                                    {
+                                        ui.label("");
+                                        ui.hyperlink_to("Abrir link", url);
                                         ui.end_row();
                                     }
                                     if let Some(id) = &piece.info.source_catalog_id {

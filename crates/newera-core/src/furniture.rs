@@ -168,6 +168,14 @@ pub struct PieceInfo {
     pub currency: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vat_percentage: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brand: Option<String>,
+    /// Commercial model name or code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_name: Option<String>,
+    /// Product page or reference link.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
     /// Catalog icon image file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,

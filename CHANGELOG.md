@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Engineering dimension chains and room reference schedules (tags, sizes, brand/model/
+  link) drawn on the plan; MCP `annotations`.
+
 - Electrical and plumbing projects over the plan (disciplines, symbols, line tool,
   quantities, MCP `disciplines`); points of view with visitor camera and MCP `cameras`;
   polyline and label style editing; groups carry their pieces.

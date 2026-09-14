@@ -42,6 +42,10 @@ pub enum Command {
     SetCameras {
         cameras: crate::style::Cameras,
     },
+    /// Derived annotations shown on the plan (dimension chains, references).
+    SetAnnotations {
+        annotations: crate::annotations::PlanAnnotations,
+    },
     /// Look of the 3D world (sky, ground, light, photo settings).
     SetEnvironment {
         environment: crate::style::Environment,
@@ -129,6 +133,12 @@ impl Command {
                 let previous = std::mem::replace(&mut home.background, background);
                 Ok(Self::SetBackground {
                     background: previous,
+                })
+            }
+            Self::SetAnnotations { annotations } => {
+                let previous = std::mem::replace(&mut home.annotations, annotations);
+                Ok(Self::SetAnnotations {
+                    annotations: previous,
                 })
             }
             Self::SetCameras { cameras } => {

@@ -87,6 +87,15 @@ The core of what makes the editor useful: placing real objects with real dimensi
       bill of quantities (points and line lengths); MCP `disciplines`
 - [x] Points of view: aerial/visitor views, stored cameras (menu + MCP `cameras`)
 - [ ] Discipline legend on exported sheets
+- [x] **Engineering dimensioning**: automatic dimension chains like standard drawings —
+      per façade openings, wall axes and totals, plus clear room sizes; Ver menu and MCP
+      `annotations`
+- [x] **Room references**: numbered tags and a schedule beside the plan listing each
+      room and its pieces with sizes, plus brand/model/link details; Ver menu, furniture
+      dialog and MCP `annotations` / `update`
+- [ ] Precise dimension magnet: snap to wall corners and inner/outer faces
+- [ ] MCP dimensions by intent (wall inner/outer/axis, room, chain) and baking
+      automatic dimensions into editable ones
 - [ ] Lighting: sun from compass + date/time, light sources from furniture
 - [x] Virtual visitor camera; stored points of view
 - [ ] Photo renderer (GPU path tracing) and video along a camera path

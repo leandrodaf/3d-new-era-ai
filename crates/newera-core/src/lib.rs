@@ -8,6 +8,7 @@
 //! All lengths are in **centimeters**, matching architectural drawings.
 
 mod analysis;
+mod annotations;
 mod command;
 mod detect;
 mod document;
@@ -26,6 +27,9 @@ mod style;
 mod units;
 
 pub use analysis::{Issue, check_layout, door_swing};
+pub use annotations::{
+    PlanAnnotations, ReferenceItem, RoomReference, auto_dimensions, room_references,
+};
 pub use command::Command;
 pub use detect::detect_room;
 pub use document::{Document, FIRST_VARIANT_NAME, SharedDocument, Variant, VariantInfo};

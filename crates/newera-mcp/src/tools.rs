@@ -106,6 +106,16 @@ pub(crate) struct CatalogParams {
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct AnnotationParams {
+    /// Show engineering dimension chains.
+    dims: Option<bool>,
+    /// Show the room reference schedule and tags.
+    refs: Option<bool>,
+    /// Include brand, model and link in references.
+    details: Option<bool>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct DisciplineParams {
     /// `active` (default), `select`, `show`, `hide`, `quantities`.
     action: Option<String>,
@@ -460,6 +470,60 @@ impl NewEraMcp {
         }
         let home = doc.home();
         Ok(serde_json::json!({"active": home.active_discipline, "hidden": home.hidden_disciplines}).to_string())
+    }
+
+    #[tool(
+        description = "Plan annotations. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs). Always returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
+    )]
+    fn annotations(
+        &self,
+        Parameters(p): Parameters<AnnotationParams>,
+    ) -> Result<String, ErrorData> {
+        let mut doc = self.document.write();
+        let mut next = doc.home().annotations;
+        next.auto_dimensions = p.dims.unwrap_or(next.auto_dimensions);
+        next.references = p.refs.unwrap_or(next.references);
+        next.reference_details = p.details.unwrap_or(next.reference_details);
+        if next != doc.home().annotations {
+            doc.execute(Command::SetAnnotations { annotations: next })
+                .map_err(core)?;
+        }
+        let view = doc.home().level_view(doc.home().current_level());
+        let rooms: Vec<serde_json::Value> = newera_core::room_references(&view)
+            .into_iter()
+            .map(|g| {
+                let items: Vec<serde_json::Value> = g
+                    .items
+                    .iter()
+                    .map(|i| {
+                        let mut row = vec![
+                            serde_json::json!(i.tag),
+                            serde_json::json!(i.name),
+                            compact::num(i.size[0]),
+                            compact::num(i.size[1]),
+                            compact::num(i.size[2]),
+                        ];
+                        if i.brand.is_some() || i.model.is_some() || i.url.is_some() {
+                            row.extend([
+                                serde_json::json!(i.brand),
+                                serde_json::json!(i.model),
+                                serde_json::json!(i.url),
+                            ]);
+                        }
+                        serde_json::Value::Array(row)
+                    })
+                    .collect();
+                serde_json::json!([g.name, items])
+            })
+            .collect();
+        Ok(serde_json::json!({
+            "rev": doc.revision(),
+            "dims": next.auto_dimensions,
+            "refs": next.references,
+            "details": next.reference_details,
+            "rooms": rooms,
+        })
+        .to_string())
     }
 
     #[tool(
@@ -942,5 +1006,43 @@ mod tests {
             }))
             .unwrap();
         assert!(!png.content.is_empty());
+    }
+
+    #[test]
+    fn annotations_list_rooms_with_details() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[500,0],[500,400],[0,400]],"closed":true}],"rooms":[{"name":"Sala","at":[250,200]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let place: PlaceParams =
+            serde_json::from_str(r#"{"items":[{"cat":"sofa-3","at":[250,300]}]}"#).unwrap();
+        let ids = s.place(Parameters(place)).unwrap();
+        let id = ids.rsplit('=').next().unwrap().to_owned();
+        let spec: UpdateSpec = serde_json::from_str(&format!(
+            r#"{{"id":"{id}","brand":"Tok&Stok","url":"https://example.com/sofa"}}"#
+        ))
+        .unwrap();
+        s.update(Parameters(UpdateParams { items: vec![spec] }))
+            .unwrap();
+        let reply = s
+            .annotations(Parameters(AnnotationParams {
+                dims: Some(true),
+                refs: Some(true),
+                details: Some(true),
+            }))
+            .unwrap();
+        assert!(reply.contains(r#""rooms":[["Sala",[[1,"#), "{reply}");
+        assert!(
+            reply.contains("Tok&Stok") && reply.contains(r#""dims":true"#),
+            "{reply}"
+        );
+        let png = s.render_plan(Parameters(RenderParams {
+            w: Some(320),
+            h: Some(240),
+            ..RenderParams::default()
+        }));
+        assert!(png.is_ok());
     }
 }

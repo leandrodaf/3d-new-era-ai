@@ -43,4 +43,39 @@ fn render_sh3d_levels() {
         let png = render_png(&scene, &options, &load).unwrap();
         std::fs::write(out.join(format!("plan-level{i}.png")), png).unwrap();
     }
+
+    // The edited layout with engineering dimensions and room references.
+    let mut view = home.level_view(home.selected_level);
+    view.annotations = newera_core::PlanAnnotations {
+        auto_dimensions: true,
+        references: true,
+        reference_details: true,
+    };
+    if let Some(piece) = view
+        .furniture
+        .iter_mut()
+        .find(|f| f.name.contains("Geladeira"))
+    {
+        piece.info.brand = Some("Electrolux".into());
+        piece.info.url = Some("https://www.electrolux.com.br".into());
+    }
+    let scene = plan_scene(
+        &view,
+        &SceneOptions {
+            show_background: false,
+            ..SceneOptions::default()
+        },
+    );
+    let (min, max) = scene.bounds().unwrap();
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let options = RenderOptions {
+        width: (max.x - min.x + 80.0) as u32,
+        height: (max.y - min.y + 80.0) as u32,
+        margin_px: 40.0,
+        grid: false,
+        region: Some((min, max)),
+        ..RenderOptions::default()
+    };
+    let png = render_png(&scene, &options, &|_| None).unwrap();
+    std::fs::write(out.join("plan-annotations.png"), png).unwrap();
 }

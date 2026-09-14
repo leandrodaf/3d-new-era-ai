@@ -894,6 +894,7 @@ impl<'g> Importer<'g> {
             vat_percentage: text("valueAddedTaxPercentage"),
             icon,
             plan_icon,
+            ..PieceInfo::default()
         };
         let opening = p.is("HomeDoorOrWindow").then(|| opening(p));
         let light = p.is("HomeLight").then(|| Light {

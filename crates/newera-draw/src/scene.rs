@@ -435,8 +435,17 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
         label_items(&mut scene, label, color);
     }
 
+    if home.annotations.auto_dimensions {
+        let color = fade(options.palette.dimension, None);
+        for dimension in newera_core::auto_dimensions(home) {
+            dimension_items(&mut scene, &dimension, options.unit, color);
+        }
+    }
     if home.compass.visible {
         compass_items(&mut scene, &home.compass, palette.compass);
+    }
+    if home.annotations.references {
+        reference_items(&mut scene, home, options);
     }
     scene
 }
@@ -707,6 +716,158 @@ fn room_texts(scene: &mut Scene, room: &Room, options: &SceneOptions) {
                 look: TextLook::default(),
             },
         );
+    }
+}
+
+/// Numbered tags on furniture and, beside the plan, a schedule of every
+/// room with the pieces inside and their sizes (plus brand, model and link
+/// when details are on).
+fn reference_items(scene: &mut Scene, home: &Home, options: &SceneOptions) {
+    let groups = newera_core::room_references(home);
+    if groups.is_empty() {
+        return;
+    }
+    let ink = Color::rgb(40, 44, 52);
+    let accent = Color::rgb(30, 90, 170);
+    let paper = options.palette.paper;
+    let text = |scene: &mut Scene,
+                content: String,
+                at: Point2,
+                size: f64,
+                color: Color,
+                bold: bool,
+                align: Align| {
+        scene.push(
+            None,
+            Primitive::Text {
+                text: content,
+                position: at,
+                size: Size::Cm(size * EM_TO_HEIGHT),
+                color,
+                align,
+                angle: 0.0,
+                look: TextLook {
+                    bold,
+                    italic: false,
+                    outline: None,
+                },
+            },
+        );
+    };
+    // Tags.
+    for item in groups.iter().flat_map(|g| &g.items) {
+        let r = 11.0;
+        let circle: Vec<Point2> = (0..20)
+            .map(|i| {
+                let a = f64::from(i) / 20.0 * std::f64::consts::TAU;
+                Point2::new(item.position.x + r * a.cos(), item.position.y + r * a.sin())
+            })
+            .collect();
+        scene.fill(Some(item.piece.into()), &circle, paper);
+        scene.push(
+            Some(item.piece.into()),
+            Primitive::Line {
+                points: circle,
+                closed: true,
+                color: accent,
+                width: Size::Px(1.2),
+            },
+        );
+        text(
+            scene,
+            item.tag.to_string(),
+            item.position,
+            11.0,
+            accent,
+            true,
+            Align::Center,
+        );
+    }
+    // Schedule to the right of everything already drawn (plan and any
+    // legends the user wrote).
+    let Some((min, max)) = scene.bounds().or_else(|| home.bounds()) else {
+        return;
+    };
+    let x = max.x + 160.0;
+    let mut y = min.y + 20.0;
+    text(
+        scene,
+        "REFERÊNCIAS".to_owned(),
+        Point2::new(x, y),
+        22.0,
+        ink,
+        true,
+        Align::BaselineLeft,
+    );
+    y += 20.0;
+    text(
+        scene,
+        "Medidas: largura × profundidade × altura".to_owned(),
+        Point2::new(x, y),
+        11.0,
+        options.palette.room_text,
+        false,
+        Align::BaselineLeft,
+    );
+    y += 34.0;
+    for group in &groups {
+        text(
+            scene,
+            group.name.to_uppercase(),
+            Point2::new(x, y),
+            16.0,
+            ink,
+            true,
+            Align::BaselineLeft,
+        );
+        y += 24.0;
+        for item in &group.items {
+            let size = options.unit.format_size(item.size);
+            text(
+                scene,
+                format!("{:>2}  {} — {size}", item.tag, item.name),
+                Point2::new(x + 10.0, y),
+                13.0,
+                ink,
+                false,
+                Align::BaselineLeft,
+            );
+            y += 20.0;
+            if home.annotations.reference_details {
+                let mut detail = Vec::new();
+                if let Some(brand) = &item.brand {
+                    detail.push(format!("Marca: {brand}"));
+                }
+                if let Some(model) = &item.model {
+                    detail.push(format!("Modelo: {model}"));
+                }
+                if !detail.is_empty() {
+                    text(
+                        scene,
+                        detail.join(" · "),
+                        Point2::new(x + 40.0, y),
+                        11.0,
+                        options.palette.room_text,
+                        false,
+                        Align::BaselineLeft,
+                    );
+                    y += 17.0;
+                }
+                if let Some(url) = &item.url {
+                    text(
+                        scene,
+                        url.clone(),
+                        Point2::new(x + 40.0, y),
+                        11.0,
+                        accent,
+                        false,
+                        Align::BaselineLeft,
+                    );
+                    y += 17.0;
+                }
+            }
+        }
+        y += 16.0;
     }
 }
 
