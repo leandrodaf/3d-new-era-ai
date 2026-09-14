@@ -5,6 +5,7 @@
 //! undoable command on release.
 
 mod camera;
+mod guides;
 mod hit;
 mod magnet;
 mod paint;
@@ -106,6 +107,8 @@ pub(crate) struct PlanView {
     typed_length: String,
     /// Screen area of the last frame, for tests and zoom commands.
     rect: Option<Rect>,
+    /// Alignment guides of the move in progress.
+    guides: guides::Aligned,
 }
 
 impl PlanView {
@@ -261,6 +264,14 @@ impl PlanView {
                 }
                 if let (Some(drag), Some(current)) = (self.drag.clone(), raw) {
                     let snapped = self.drag_target(&home, &drag, current, magnetism);
+                    if let Drag::Move { .. } = drag {
+                        for g in &self.guides.guides {
+                            overlays.push(Overlay::Guide(g.a, g.b, g.center));
+                        }
+                        for (a, b, _) in &self.guides.gaps {
+                            overlays.push(Overlay::Dimension(*a, *b, 0.0));
+                        }
+                    }
                     if let Drag::Box { start } = drag {
                         overlays.push(Overlay::Box(start, current));
                     } else if drag != Drag::Pan {
@@ -290,6 +301,7 @@ impl PlanView {
                             }
                         }
                         self.drag = None;
+                        self.guides = guides::Aligned::default();
                     }
                 } else if response.drag_stopped() {
                     self.drag = None;
@@ -771,17 +783,30 @@ impl PlanView {
     }
 
     /// Applies magnetism to the drag target point.
-    fn drag_target(&self, home: &Home, drag: &Drag, current: Point2, magnetism: bool) -> Point2 {
+    fn drag_target(
+        &mut self,
+        home: &Home,
+        drag: &Drag,
+        current: Point2,
+        magnetism: bool,
+    ) -> Point2 {
+        self.guides = guides::Aligned::default();
         if !magnetism {
             return current;
         }
         let zoom = self.camera.zoom;
         match drag {
-            Drag::Move { origin, .. } => {
+            Drag::Move { origin, ids } => {
                 let step = magnet::round_step(zoom);
-                let dx = ((current.x - origin.x) / step).round() * step;
-                let dy = ((current.y - origin.y) / step).round() * step;
-                Point2::new(origin.x + dx, origin.y + dy)
+                // Line up with pieces, rooms and walls within 8 px, else the grid.
+                self.guides = guides::align(
+                    home,
+                    ids,
+                    (current.x - origin.x, current.y - origin.y),
+                    f64::from(8.0 / zoom),
+                    step,
+                );
+                Point2::new(origin.x + self.guides.dx, origin.y + self.guides.dy)
             }
             Drag::WallPoint { id, at_start } => home.wall(*id).map_or(current, |w| {
                 let (moving, fixed) = if *at_start {
@@ -1038,6 +1063,23 @@ impl PlanView {
                     paint_scene(painter, rect, &self.camera, &scene, &mut textures, None);
                 }
             }
+            Overlay::Guide(a, b, center) => {
+                let tint = if *center {
+                    Color32::from_rgb(236, 72, 153)
+                } else {
+                    Color32::from_rgb(14, 165, 233)
+                };
+                let (sa, sb) = (to(*a), to(*b));
+                let length = (sb - sa).length();
+                let dir = (sb - sa) / length.max(1.0);
+                // Dashed: 6 px on, 4 px off.
+                let mut t = 0.0;
+                while t < length {
+                    let end = (t + 6.0).min(length);
+                    painter.line_segment([sa + dir * t, sa + dir * end], Stroke::new(1.5, tint));
+                    t += 10.0;
+                }
+            }
             Overlay::Measure(a, b) => {
                 painter.line_segment(
                     [to(*a), to(*b)],
@@ -1063,6 +1105,8 @@ enum Overlay {
     Snap(Point2, magnet::SnapKind),
     Dimension(Point2, Point2, f64),
     Measure(Point2, Point2),
+    /// Alignment line while moving: center-to-center when true.
+    Guide(Point2, Point2, bool),
 }
 
 struct Handle {
@@ -1480,6 +1524,66 @@ mod tests {
         );
         assert!(close(home.walls[3].end, (0.0, -100.0)), "neighbor followed");
         assert_eq!(h.state().document.read().revision(), 1, "one undoable step");
+    }
+
+    #[test]
+    fn a_dragged_round_table_centers_in_the_room_with_guides() {
+        let mut home = square(400.0);
+        let room = home.new_room_id();
+        home.rooms.push(newera_core::Room::new(
+            room,
+            "Sala",
+            vec![
+                Point2::new(7.5, 7.5),
+                Point2::new(392.5, 7.5),
+                Point2::new(392.5, 392.5),
+                Point2::new(7.5, 392.5),
+            ],
+        ));
+        let table = home.new_furniture_id();
+        home.furniture.push(Furniture {
+            id: table,
+            catalog: "round-table".into(),
+            name: "Mesa".into(),
+            position: Point2::new(100.0, 150.0),
+            width: 110.0,
+            depth: 110.0,
+            height: 75.0,
+            ..Furniture::default()
+        });
+        let mut h = harness(home, Tool::Select);
+        // Press on the table and drag near the room's middle; hold before letting go.
+        let (a, b) = (screen(&h, (100.0, 150.0)), screen(&h, (196.0, 204.0)));
+        h.hover_at(a);
+        h.step();
+        button(&mut h, a, true);
+        for i in 1..=10_u8 {
+            h.hover_at(a + (b - a) * (f32::from(i) / 10.0));
+            h.step();
+        }
+        let guides = h.state().plan.guides.clone();
+        assert!(
+            guides.guides.iter().filter(|g| g.center).count() >= 2,
+            "{guides:?}"
+        );
+        assert!(guides.gaps.len() >= 2, "distances to the walls: {guides:?}");
+        if let Ok(image) = h.render()
+            && let Ok(dir) = std::env::var("NEWERA_SNAPSHOT_DIR")
+        {
+            image.save(format!("{dir}/guides.png")).ok();
+        }
+        button(&mut h, b, false);
+        h.run_steps(5);
+        let placed = h
+            .state()
+            .document
+            .read()
+            .home()
+            .piece(table)
+            .unwrap()
+            .position;
+        assert!(close(placed, (200.0, 200.0)), "{placed:?}");
+        assert!(h.state().plan.guides.guides.is_empty(), "guides go away");
     }
 
     #[test]

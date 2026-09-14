@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Smart guides while moving pieces on the plan: edges and centers line up with other pieces,
+  rooms and wall faces (dashed lines show what they lined up with), equal gaps between two
+  neighbors, and live distances to what is around. Shift turns the magnet off.
+
 - Walls, glass and panels fitted to the roof above them (MCP `fit_roof`, Planta > Ajustar ao
   telhado): under an A-frame a partition is split at the ridge with sloping tops and a glass
   gable becomes a triangle; they keep following the roof in the same undo step.
