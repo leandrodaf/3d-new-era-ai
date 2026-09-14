@@ -25,6 +25,7 @@ newera-sh3d = { path = "crates/newera-sh3d", version = "0.1.0" }
 newera-render = { path = "crates/newera-render", version = "0.1.0" }
 newera-plugins = { path = "crates/newera-plugins", version = "0.1.0" }
 newera-joinery = { path = "crates/newera-joinery", version = "0.1.0" }
+newera-ergonomics = { path = "crates/newera-ergonomics", version = "0.1.0" }
 
 # External crates
 ab_glyph = "0.2.32"

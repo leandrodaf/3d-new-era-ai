@@ -992,6 +992,25 @@ impl NewEraMcp {
     }
 
     #[tool(
+        description = "Ergonomics and habitability review for the people living there (occupants, children, elderly, wheelchair, stature cm): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen triangle and heights, doors, ceiling heights, windows, minimum furniture, wheelchair turning. Brazilian references (NBR 9050, NBR 15575-1, IBGE; building codes vary by city). Reply {score, capacity, findings:[[erro|alerta|dica, place, message with the fix]]}."
+    )]
+    fn ergonomics(&self, Parameters(p): Parameters<newera_ergonomics::Profile>) -> String {
+        let doc = self.document.read();
+        let report = newera_ergonomics::review(doc.home(), &p);
+        let findings: Vec<serde_json::Value> = report
+            .findings
+            .iter()
+            .map(|f| serde_json::json!([f.severity, f.place, f.message]))
+            .collect();
+        serde_json::json!({
+            "score": report.score,
+            "capacity": report.capacity,
+            "findings": findings,
+        })
+        .to_string()
+    }
+
+    #[tool(
         description = "Fill a wall with cabinets sized for it: measures the free stretches between corners, doors, windows, fridge and stove, splits each into even modules (30-90 cm, no useless leftovers; 15-30 cm pull-outs, fillers under 15), drawer unit beside the stove, countertop on base rows, cabinet over the fridge and hood gap on wall rows. Replaces the cabinets already there (keep ids stay). Reply {modules:[[id,role,from,w]],removed,notes}; dry plans only. Change one module afterwards with joinery id."
     )]
     fn cabinet_run(
@@ -3227,5 +3246,31 @@ mod tests {
                 .message
                 .contains("max entre")
         );
+    }
+
+    #[test]
+    fn ergonomics_reviews_the_plan_for_its_people() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}],"rooms":[{"name":"Quarto","at":[200,150]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let place: PlaceParams = serde_json::from_str(
+            r#"{"items":[{"cat":"bed-double","wall":"w1","along":90},{"cat":"door","wall":"w3","along":200,"w":70}]}"#,
+        )
+        .unwrap();
+        s.place(Parameters(place)).unwrap();
+        let profile: newera_ergonomics::Profile =
+            serde_json::from_str(r#"{"occupants":3,"wheelchair":true}"#).unwrap();
+        let report: serde_json::Value =
+            serde_json::from_str(&s.ergonomics(Parameters(profile))).unwrap();
+        let text = report["findings"].to_string();
+        assert_eq!(report["capacity"]["beds"], 2, "{report}");
+        assert!(text.contains("falta 1"), "{text}");
+        assert!(text.contains("NBR 9050 pede 80 cm"), "{text}");
+        // The bed is 90 cm from the left wall's axis: 7,5 cm wall, 79 cm half bed → 3,5 cm.
+        assert!(text.contains("transferência da cadeira"), "{text}");
+        assert!(report["score"].as_u64().unwrap() < 80, "{report}");
     }
 }

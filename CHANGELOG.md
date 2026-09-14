@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- MCP `ergonomics`: a review of the plan for the people who live there (occupants, children,
+  elderly, wheelchair, the cook's height). Room to walk beside beds and in front of the stove,
+  beds, seats, bathrooms and wardrobes per person, the kitchen triangle and heights, doors that
+  hit furniture, ceiling heights, windows, minimum furniture and wheelchair turning space, each
+  finding with its numbers, the fix and the Brazilian reference (NBR 9050, NBR 15575-1, IBGE).
+
 - MCP `cabinet_run` fills a wall with cabinets sized for it: the free stretches between
   corners, doors (and their swing), windows, fridge and stove become even modules with no
   useless leftovers — pull-outs for 15–30 cm, fillers below — a drawer unit by the stove,

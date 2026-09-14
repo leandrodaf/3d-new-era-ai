@@ -1,0 +1,478 @@
+//! The plan as the review sees it: pieces sorted into what they are for,
+//! rooms sorted into how they are used, and a way to measure the free
+//! floor beside a piece.
+
+use geo::{BooleanOps, Contains, Coord, LineString, Polygon};
+use newera_core::{Furniture, Home, Point2, Room};
+
+/// What a piece is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Use {
+    /// Sleeps this many (adults; cribs count as one child).
+    Bed(u32),
+    Crib,
+    Nightstand,
+    Wardrobe,
+    Dresser,
+    /// Seats this many.
+    Sofa(u32),
+    Armchair,
+    CoffeeTable,
+    /// A table and the seats around it.
+    DiningTable(u32),
+    /// Table with chairs drawn in.
+    DiningSet(u32),
+    Chair,
+    Stool,
+    Fridge,
+    Stove,
+    Sink,
+    /// Low cabinets and worktops.
+    Counter,
+    WallCabinet,
+    Island,
+    Toilet,
+    Basin,
+    Shower,
+    Bathtub,
+    Washer,
+    LaundrySink,
+    Desk,
+    OfficeChair,
+    Storage,
+    Switch,
+    Outlet,
+    Other,
+}
+
+impl Use {
+    /// Moved around in use: never an obstacle to circulation.
+    pub fn movable(self) -> bool {
+        matches!(self, Self::Chair | Self::Stool | Self::OfficeChair)
+    }
+}
+
+/// A piece the review looks at: a catalog piece, or a whole joinery build.
+#[derive(Debug, Clone)]
+pub struct Unit<'a> {
+    pub piece: &'a Furniture,
+    pub what: Use,
+    /// Joinery parameters, when it is a build.
+    pub params: Option<serde_json::Value>,
+}
+
+impl Unit<'_> {
+    pub fn label(&self) -> String {
+        format!("{} {}", self.piece.name, self.piece.id)
+    }
+}
+
+fn joinery(piece: &Furniture) -> Option<serde_json::Value> {
+    serde_json::from_str(piece.properties.get("joinery:params")?).ok()
+}
+
+fn classify(piece: &Furniture, params: Option<&serde_json::Value>) -> Use {
+    if let Some(p) = params {
+        let (lo, hi) = piece.height_range();
+        return match p["kind"].as_str() {
+            Some("sofa") => {
+                let modules = p["modules"]
+                    .as_u64()
+                    .unwrap_or_else(|| (piece.width / 70.0).floor() as u64);
+                Use::Sofa(u32::try_from(modules.max(1)).unwrap_or(1))
+            }
+            Some("countertop") => {
+                let sink = p["cutouts"]
+                    .as_array()
+                    .is_some_and(|c| c.iter().any(|c| c["kind"] == "sink"));
+                if sink { Use::Sink } else { Use::Counter }
+            }
+            Some("cabinet") if lo >= 100.0 => Use::WallCabinet,
+            Some("cabinet") if p["cooktop"] == true => Use::Stove,
+            Some("cabinet") if hi > 150.0 => Use::Wardrobe,
+            Some("cabinet" | "filler") => Use::Counter,
+            _ => Use::Other,
+        };
+    }
+    match piece.catalog.as_str() {
+        "bed-double" | "bed-queen" | "bed-king" => Use::Bed(2),
+        "bed-single" => Use::Bed(1),
+        "crib" => Use::Crib,
+        "nightstand" => Use::Nightstand,
+        "wardrobe" => Use::Wardrobe,
+        "dresser" => Use::Dresser,
+        "sofa-2" => Use::Sofa(2),
+        "sofa-3" => Use::Sofa(3),
+        "sofa-l" => Use::Sofa(4),
+        "armchair" => Use::Armchair,
+        "coffee-table" | "side-table" => Use::CoffeeTable,
+        "dining-table-4" | "round-table" => Use::DiningTable(4),
+        "dining-table-6" => Use::DiningTable(6),
+        "dining-set-4" => Use::DiningSet(4),
+        "dining-set-6" => Use::DiningSet(6),
+        "chair" => Use::Chair,
+        "stool" => Use::Stool,
+        "fridge" => Use::Fridge,
+        "stove" => Use::Stove,
+        "sink-counter" => Use::Sink,
+        "base-cabinet" | "dishwasher" => Use::Counter,
+        "wall-cabinet" | "microwave" => Use::WallCabinet,
+        "kitchen-island" => Use::Island,
+        "toilet" => Use::Toilet,
+        "basin-cabinet" => Use::Basin,
+        "shower" | "shower-glass" => Use::Shower,
+        "bathtub" => Use::Bathtub,
+        "washer" | "dryer" => Use::Washer,
+        "laundry-sink" => Use::LaundrySink,
+        "desk" => Use::Desk,
+        "office-chair" => Use::OfficeChair,
+        "bookcase" | "sideboard" | "tv-stand" => Use::Storage,
+        c if c.starts_with("switch") => Use::Switch,
+        c if c.starts_with("outlet") || c == "data-outlet" => Use::Outlet,
+        _ => Use::Other,
+    }
+}
+
+/// How a room is used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RoomUse {
+    Bedroom,
+    Living,
+    Dining,
+    Kitchen,
+    Bathroom,
+    Laundry,
+    Office,
+    Corridor,
+    Other,
+}
+
+impl RoomUse {
+    /// Rooms people stay in for long (sleep, live, work).
+    pub fn long_stay(self) -> bool {
+        matches!(
+            self,
+            Self::Bedroom | Self::Living | Self::Dining | Self::Office
+        )
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Bedroom => "dormitório",
+            Self::Living => "sala",
+            Self::Dining => "sala de jantar",
+            Self::Kitchen => "cozinha",
+            Self::Bathroom => "banheiro",
+            Self::Laundry => "área de serviço",
+            Self::Office => "escritório",
+            Self::Corridor => "circulação",
+            Self::Other => "ambiente",
+        }
+    }
+}
+
+fn plain(text: &str) -> String {
+    text.to_lowercase()
+        .chars()
+        .map(|c| match c {
+            'á' | 'à' | 'â' | 'ã' => 'a',
+            'é' | 'ê' => 'e',
+            'í' => 'i',
+            'ó' | 'ô' | 'õ' => 'o',
+            'ú' | 'ü' => 'u',
+            'ç' => 'c',
+            c => c,
+        })
+        .collect()
+}
+
+fn room_use_by_name(name: &str) -> Option<RoomUse> {
+    let n = plain(name);
+    let has = |words: &[&str]| words.iter().any(|w| n.contains(w));
+    let living = has(&["sala", "estar", "living"]);
+    Some(if has(&["quarto", "dormitorio", "suite", "bedroom"]) {
+        RoomUse::Bedroom
+    } else if has(&["cozinha", "kitchen", "copa"]) && !living {
+        RoomUse::Kitchen
+    } else if has(&["banheiro", "lavabo", "wc", "bath", "sanitario"]) {
+        RoomUse::Bathroom
+    } else if has(&["servico", "lavanderia", "laundry"]) {
+        RoomUse::Laundry
+    } else if has(&["jantar", "dining"]) {
+        RoomUse::Dining
+    } else if has(&["sala", "estar", "living", "tv"]) {
+        RoomUse::Living
+    } else if has(&["escritorio", "office", "estudo", "home office"]) {
+        RoomUse::Office
+    } else if has(&["corredor", "circulacao", "hall", "passagem"]) {
+        RoomUse::Corridor
+    } else {
+        return None;
+    })
+}
+
+pub(crate) fn polygon(points: &[Point2]) -> Polygon<f64> {
+    let mut coords: Vec<Coord<f64>> = points.iter().map(|p| Coord { x: p.x, y: p.y }).collect();
+    if let Some(first) = coords.first().copied() {
+        coords.push(first);
+    }
+    Polygon::new(LineString::new(coords), vec![])
+}
+
+/// One side of a piece, seen from its front.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Side {
+    Front,
+    Left,
+    Right,
+}
+
+/// A room with what is in it.
+#[derive(Debug, Clone)]
+pub struct Space<'a> {
+    pub room: &'a Room,
+    pub what: RoomUse,
+    pub units: Vec<usize>,
+}
+
+impl Space<'_> {
+    pub fn label(&self) -> String {
+        if self.room.name.is_empty() {
+            format!("{} {}", self.what.name(), self.room.id)
+        } else {
+            format!("{} {}", self.room.name, self.room.id)
+        }
+    }
+}
+
+/// The current storey, ready to review.
+#[allow(missing_debug_implementations)]
+pub struct Scene<'a> {
+    pub home: &'a Home,
+    pub units: Vec<Unit<'a>>,
+    pub spaces: Vec<Space<'a>>,
+    /// Plan outlines that stop movement: walls, then each unit's footprint.
+    walls: Vec<Polygon<f64>>,
+    footprints: Vec<Polygon<f64>>,
+}
+
+impl<'a> Scene<'a> {
+    /// `home` must already be a single storey's view.
+    pub fn new(home: &'a Home) -> Self {
+        let mut units = Vec::new();
+        for top in home.furniture.iter().filter(|f| f.visible) {
+            if top.is_opening() {
+                continue;
+            }
+            let params = joinery(top);
+            if params.is_some() || top.children.is_empty() {
+                let what = classify(top, params.as_ref());
+                units.push(Unit {
+                    piece: top,
+                    what,
+                    params,
+                });
+            } else {
+                for leaf in top.visible_leaves() {
+                    if !leaf.is_opening() {
+                        units.push(Unit {
+                            piece: leaf,
+                            what: classify(leaf, None),
+                            params: None,
+                        });
+                    }
+                }
+            }
+        }
+        let footprints: Vec<Polygon<f64>> = units
+            .iter()
+            .map(|u| polygon(&u.piece.projected_footprint()))
+            .collect();
+        let walls = home
+            .wall_outlines()
+            .iter()
+            .filter(|o| o.len() >= 3)
+            .map(|o| polygon(o))
+            .collect();
+        let mut spaces: Vec<Space<'a>> = home
+            .rooms
+            .iter()
+            .filter(|r| r.points.len() >= 3)
+            .map(|room| {
+                let shape = polygon(&room.points);
+                let inside: Vec<usize> = units
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, u)| {
+                        let p = u.piece.position;
+                        shape.contains(&geo::Point::new(p.x, p.y))
+                    })
+                    .map(|(i, _)| i)
+                    .collect();
+                Space {
+                    room,
+                    what: RoomUse::Other,
+                    units: inside,
+                }
+            })
+            .collect();
+        for space in &mut spaces {
+            let has = |f: &dyn Fn(Use) -> bool| space.units.iter().any(|&i| f(units[i].what));
+            space.what = room_use_by_name(&space.room.name).unwrap_or_else(|| {
+                if has(&|u| matches!(u, Use::Toilet | Use::Shower | Use::Bathtub)) {
+                    RoomUse::Bathroom
+                } else if has(&|u| matches!(u, Use::Bed(_) | Use::Crib)) {
+                    RoomUse::Bedroom
+                } else if has(&|u| matches!(u, Use::Stove | Use::Fridge | Use::Sink)) {
+                    RoomUse::Kitchen
+                } else if has(&|u| matches!(u, Use::Washer | Use::LaundrySink)) {
+                    RoomUse::Laundry
+                } else if has(&|u| matches!(u, Use::Sofa(_) | Use::Armchair)) {
+                    RoomUse::Living
+                } else if has(&|u| matches!(u, Use::DiningTable(_) | Use::DiningSet(_))) {
+                    RoomUse::Dining
+                } else if has(&|u| matches!(u, Use::Desk)) {
+                    RoomUse::Office
+                } else {
+                    RoomUse::Other
+                }
+            });
+        }
+        Self {
+            home,
+            units,
+            spaces,
+            walls,
+            footprints,
+        }
+    }
+
+    /// Free floor beside unit `i`, cm, up to `max`: the nearest wall or
+    /// standing piece within the band `from..to` along that side (fractions
+    /// of the side's length, from the back or the left).
+    pub fn free(&self, i: usize, side: Side, max: f64, span: (f64, f64)) -> f64 {
+        let piece = self.units[i].piece;
+        let (hw, hd) = (piece.width / 2.0, piece.depth / 2.0);
+        // The band in the piece's frame, 2 cm in from the corners so
+        // neighbours that merely touch a corner don't count.
+        let (x0, x1, y0, y1) = match side {
+            Side::Front => (
+                -hw + 2.0 + (piece.width - 4.0) * span.0,
+                -hw + 2.0 + (piece.width - 4.0) * span.1,
+                hd + 0.5,
+                hd + max,
+            ),
+            Side::Left | Side::Right => {
+                let (a, b) = (
+                    -hd + 2.0 + (piece.depth - 4.0) * span.0,
+                    -hd + 2.0 + (piece.depth - 4.0) * span.1,
+                );
+                if side == Side::Left {
+                    (-hw - max, -hw - 0.5, a, b)
+                } else {
+                    (hw + 0.5, hw + max, a, b)
+                }
+            }
+        };
+        let band: Vec<Point2> = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+            .into_iter()
+            .map(|p| piece.to_plan(p))
+            .collect();
+        let band = polygon(&band);
+        let mut free = max;
+        let mut measure = |shape: &Polygon<f64>| {
+            for poly in shape.intersection(&band) {
+                for c in poly.exterior().coords() {
+                    let (x, y) = piece.to_local(Point2::new(c.x, c.y));
+                    let d = match side {
+                        Side::Front => y - hd,
+                        Side::Left => -hw - x,
+                        Side::Right => x - hw,
+                    };
+                    free = free.min(d.max(0.0));
+                }
+            }
+        };
+        for wall in &self.walls {
+            measure(wall);
+        }
+        for (j, other) in self.units.iter().enumerate() {
+            let (lo, hi) = other.piece.height_range();
+            if j == i
+                || other.what.movable()
+                || matches!(other.what, Use::Switch | Use::Outlet)
+                || other.piece.discipline.is_some()
+                || hi - lo < 20.0
+                || lo >= 190.0
+                || hi <= 5.0
+                // Cabinets on the wall above a counter don't stop a person.
+                || (lo >= 100.0 && self.units[i].piece.height_range().1 <= 100.0)
+            {
+                continue;
+            }
+            measure(&self.footprints[j]);
+        }
+        free
+    }
+
+    /// Largest circle (diameter, cm) that fits on the free floor of a room,
+    /// sampled every 5 cm — enough to tell whether a wheelchair turns.
+    pub fn turning_diameter(&self, space: &Space<'_>) -> f64 {
+        let pts = &space.room.points;
+        let (lo, hi) = pts.iter().fold(
+            (
+                Point2::new(f64::MAX, f64::MAX),
+                Point2::new(f64::MIN, f64::MIN),
+            ),
+            |(lo, hi), p| {
+                (
+                    Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                    Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+                )
+            },
+        );
+        let shape = polygon(pts);
+        let obstacles: Vec<Vec<Point2>> = space
+            .units
+            .iter()
+            .filter(|&&i| {
+                let u = &self.units[i];
+                let (lo, hi) = u.piece.height_range();
+                !u.what.movable() && u.piece.discipline.is_none() && hi - lo >= 20.0 && lo < 70.0
+            })
+            .map(|&i| self.units[i].piece.projected_footprint().to_vec())
+            .collect();
+        let edges = |poly: &[Point2]| {
+            (0..poly.len())
+                .map(|k| (poly[k], poly[(k + 1) % poly.len()]))
+                .collect::<Vec<_>>()
+        };
+        let mut segments = edges(pts);
+        for o in &obstacles {
+            segments.extend(edges(o));
+        }
+        let mut best: f64 = 0.0;
+        let step = 5.0;
+        let mut y = lo.y + step / 2.0;
+        while y < hi.y {
+            let mut x = lo.x + step / 2.0;
+            while x < hi.x {
+                let p = Point2::new(x, y);
+                let inside = shape.contains(&geo::Point::new(x, y))
+                    && !obstacles
+                        .iter()
+                        .any(|o| polygon(o).contains(&geo::Point::new(x, y)));
+                if inside {
+                    let r = segments
+                        .iter()
+                        .map(|(a, b)| p.distance_to_segment(*a, *b))
+                        .fold(f64::MAX, f64::min);
+                    best = best.max(2.0 * r);
+                }
+                x += step;
+            }
+            y += step;
+        }
+        best
+    }
+}

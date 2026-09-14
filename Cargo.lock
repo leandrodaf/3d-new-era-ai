@@ -2739,6 +2739,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "newera-ergonomics"
+version = "0.1.0"
+dependencies = [
+ "geo",
+ "newera-core",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "newera-joinery"
 version = "0.1.0"
 dependencies = [
@@ -2757,6 +2768,7 @@ dependencies = [
  "newera-catalog",
  "newera-core",
  "newera-draw",
+ "newera-ergonomics",
  "newera-joinery",
  "newera-plugins",
  "newera-render",

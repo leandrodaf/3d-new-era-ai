@@ -68,6 +68,7 @@ Clients that spawn a process can use stdio instead:
 | `trace_background` | Find walls in the scanned plan and list or create them |
 | `joinery` | Parametric cabinets, slatted panels, countertops with cutouts, plaster coves, shadow gaps and modular sofas; workshop rules answer with the fix to make |
 | `cabinet_run` | Fill a wall with cabinets sized for it: even modules around corners, doors, windows, fridge and stove, drawer unit by the stove, blind corners in L kitchens |
+| `ergonomics` | Review for the people living there: circulation, beds/seats/bathrooms per person, kitchen, doors, ceiling heights, windows, wheelchair use (NBR 9050, NBR 15575-1) |
 | `cut_list` | Cut list of the joinery builds (boards merged, edge banding, hardware) as CSV, or DXF/SVG sheets |
 | `render_plan` | PNG of the plan, exactly as the user sees it (`bg` overlays the scan) |
 | `render_3d` | Software 3D: aerial, visitor, stored cameras, elevations and sections |
@@ -100,7 +101,8 @@ The server binds to loopback by default and validates the `Host` header.
 ```
 crates/
   newera-core     domain model, commands, undo/redo, geometry — no UI, no I/O
-  newera-joinery  parametric joinery and interiors: parts, workshop rules, cut lists
+  newera-joinery  parametric joinery and interiors: parts, workshop rules, cut lists, cabinet runs
+  newera-ergonomics  habitability review: clearances, occupancy, kitchens, accessibility
   newera-catalog  parametric furniture: 3D models and plan symbols at exact sizes; OBJ/glTF import
   newera-draw     plan scene shared by the editor, PNG renders and SVG export
   newera-mcp      MCP tools (rmcp), stdio and Streamable HTTP

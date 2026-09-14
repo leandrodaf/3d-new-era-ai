@@ -16,6 +16,7 @@ newera-core.workspace = true
 newera-sh3d.workspace = true
 newera-draw.workspace = true
 newera-joinery.workspace = true
+newera-ergonomics.workspace = true
 newera-plugins.workspace = true
 newera-render.workspace = true
 rmcp = { workspace = true, features = [
