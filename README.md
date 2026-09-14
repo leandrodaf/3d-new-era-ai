@@ -42,6 +42,9 @@ Run `make` to see every development command.
 
 With the editor open, the MCP endpoint is `http://127.0.0.1:7878/mcp`.
 
+Claude Code picks it up from this repository's `.mcp.json` when you open the project
+(approve the `newera` server once). Elsewhere:
+
 ```sh
 # Claude Code
 claude mcp add --transport http newera http://127.0.0.1:7878/mcp
@@ -56,18 +59,25 @@ Clients that spawn a process can use stdio instead:
 | Tool | What it does |
 |------|--------------|
 | `get_home` | Compact state (`detail=summary` for counts, bounds and room areas) |
-| `create` | Walls (polylines, arcs), rooms (polygon or detected from walls), dimensions and labels — one atomic call |
+| `create` | Walls (polylines, arcs, sloping `hs`), rooms (polygon or detected from walls, dividers), dimensions, labels, roofs with skylights and solids from outlines or profiles — one atomic call |
 | `update` / `move` / `delete` | Edit any element by id |
+| `arrange` | Copies in a row, rotate, mirror, group/ungroup, drawing order |
 | `split_wall` | Split a wall into two joined walls |
 | `set_home` | Project name and compass (north) |
-| `set_background` | Scanned plan at real scale (calibrate with two points and a distance) |
-| `render_plan` | PNG of the plan, exactly as the user sees it |
-| `export_plan` | SVG (true scale) or PNG file |
-| `save_home` / `open_home` / `new_home` | Project files (`.newera`) |
+| `set_background` | Scanned plan at real scale: calibrations, X/Y scale, rotation |
+| `trace_background` | Find walls in the scanned plan and list or create them |
+| `render_plan` | PNG of the plan, exactly as the user sees it (`bg` overlays the scan) |
+| `render_3d` | Software 3D: aerial, visitor, stored cameras, elevations and sections |
+| `render_photo` | Path-traced photo with sun and lamps |
+| `export_plan` | PDF, SVG, PNG plan; GLB/OBJ model |
+| `save_home` / `open_home` / `new_home` | Projects (`.newera`) and Sweet Home 3D import (`.sh3d`) |
 | `catalog` | Search the parametric furniture catalog (rows `[id,name,w,d,h]`) |
-| `place` | Place furniture, doors and windows (`wall` + `along` seats openings in walls) |
-| `check_layout` | Overlaps, pieces in walls, blocked doors, pieces outside rooms |
+| `place` | Furniture, doors and windows (snap into walls, swing side), beams, finishes, glass, batch defaults |
+| `check_layout` | Overlaps, pieces in walls, blocked doors, pieces outside rooms, areas vs. reference |
 | `variants` | Plan versions as tabs: list with stats, duplicate, switch, rename, delete |
+| `levels` / `cameras` / `video` | Storeys, points of view, camera path videos |
+| `materials` / `disciplines` / `annotations` | Finishes, electrical and plumbing projects, dimension chains and reference schedules |
+| `plugins` / `sessions` | External plugins and the people working on the project |
 | `undo` / `redo` | Shared history with the user |
 
 ## Modes
