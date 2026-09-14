@@ -55,6 +55,9 @@ impl std::fmt::Debug for PhotoOptions<'_> {
     }
 }
 
+/// Log-average luminance auto exposure aims for.
+const AUTO_EXPOSURE_KEY: f32 = 0.12;
+
 /// Sun position for a moment and place: `(azimuth, elevation)` in degrees,
 /// azimuth clockwise from north. Simplified solar ephemeris (good to a
 /// fraction of a degree, plenty for daylight).
@@ -559,8 +562,10 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
                         let dir = (forward + right * sx + up * sy).normalize();
                         let mut first = None;
                         let value = radiance(scene, lighting, eye, dir, &mut rng, &mut first);
-                        // Clamp fireflies from rare paths.
-                        sum += value.min(Vec3::splat(20.0));
+                        // Clamp fireflies from rare paths; a broken sample adds nothing.
+                        if value.is_finite() {
+                            sum += value.min(Vec3::splat(20.0));
+                        }
                         let f = first.unwrap_or_default();
                         surface.albedo += f.albedo;
                         surface.normal += f.normal;
@@ -591,13 +596,14 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
     }
 
     let denoised = denoise(&pixels, w, h);
-    // Auto exposure: bring the scene's average brightness to a mid gray.
+    // Auto exposure: bring the scene's average brightness to a middle tone
+    // (calibrated against Sweet Home 3D photos of the same cameras).
     let log_mean = denoised
         .iter()
         .map(|c| (luminance(*c) + 1e-4).ln())
         .sum::<f32>()
         / denoised.len().max(1) as f32;
-    let auto = (0.2 / log_mean.exp()).clamp(0.3, 30.0);
+    let auto = (AUTO_EXPOSURE_KEY / log_mean.exp()).clamp(0.3, 30.0);
     let mut image = RgbaImage::new(w as u32, h as u32);
     for (i, value) in denoised.iter().enumerate() {
         let mapped = aces(*value * exposure * auto).powf(1.0 / 2.2) * 255.0;
@@ -654,7 +660,10 @@ fn denoise(pixels: &[(Vec3, Surface)], w: usize, h: usize) -> Vec<Vec3> {
                         let depth = (-(s.depth - qs.depth).abs()
                             / (0.05 * s.depth.max(0.5) * step as f32))
                             .exp();
-                        let lum = (-(cl - luminance(q)).abs() / (0.6 * (cl + 0.05))).exp();
+                        // Symmetric in the pair, so a pixel whose few samples all
+                        // missed the light still borrows from brighter neighbors.
+                        let ql = luminance(q);
+                        let lum = (-(cl - ql).abs() / (0.6 * (cl.max(ql) + 0.05))).exp();
                         let wgt = kx * ky * normal * depth * lum;
                         sum += q * wgt;
                         weight += wgt;
