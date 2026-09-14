@@ -14,3 +14,6 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # Its tags are Rust versions: `@1.95` is the MSRV job, not an outdated action.
+      - dependency-name: dtolnay/rust-toolchain

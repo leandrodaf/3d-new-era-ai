@@ -1,9 +1,11 @@
-//! Native project file (`.newera`): pretty, versioned JSON.
+//! Native project file (`.newera`): a ZIP bundle holding versioned JSON
+//! (`project.json`) plus the files the project uses (models, textures,
+//! images), so it travels as one small file. Asset paths inside are relative
+//! to the bundle root.
 //!
-//! JSON keeps projects diff-friendly and readable by agents and scripts.
-//! Projects that use files (models, textures, images) are saved as a ZIP
-//! bundle holding `project.json` plus those files, so they travel as one
-//! file; asset paths inside are relative to the bundle root.
+//! The JSON is compact and deflated, and large JPEG textures are recompressed
+//! on the way in: a furnished apartment with a dozen scanned finishes went
+//! from 12 MB to under 3 MB. Plain JSON files (older saves) still open.
 
 use std::path::{Path, PathBuf};
 
@@ -97,7 +99,7 @@ pub fn to_project_json(doc: &Document) -> String {
             })
             .collect(),
     };
-    serde_json::to_string_pretty(&file).expect("home is always serializable")
+    serde_json::to_string(&file).expect("home is always serializable")
 }
 
 pub fn from_project_json(json: &str) -> Result<Project, ProjectError> {
@@ -265,17 +267,82 @@ fn bundle_name(stored: &str) -> String {
     format!("external/{:016x}/{file}", hasher.finish())
 }
 
-/// Saves a project: a plain JSON file when it uses no files, otherwise a
-/// bundle with every referenced file.
+/// JPEG files at least this big are worth trying to recompress.
+const RECOMPRESS_FROM: usize = 256 * 1024;
+/// Longest side kept for a bundled JPEG: plenty for a texture tile or a scan.
+const MAX_IMAGE_SIDE: u32 = 2048;
+/// Quality of recompressed JPEGs: no visible change on finishes and scans.
+const JPEG_QUALITY: u8 = 85;
+
+/// Bytes stored for an asset: big JPEGs recompressed (and capped in size)
+/// when that saves at least a quarter, everything else as it is. A file
+/// already recompressed doesn't shrink enough to be touched again, so saving
+/// repeatedly doesn't wear the image down.
+fn packed_asset(name: &str, bytes: Vec<u8>) -> Vec<u8> {
+    if bytes.len() < RECOMPRESS_FROM || !has_extension(name, &["jpg", "jpeg"]) {
+        return bytes;
+    }
+    let Ok(image) = image::load_from_memory_with_format(&bytes, image::ImageFormat::Jpeg) else {
+        return bytes;
+    };
+    let image = if image.width().max(image.height()) > MAX_IMAGE_SIDE {
+        image.resize(
+            MAX_IMAGE_SIDE,
+            MAX_IMAGE_SIDE,
+            image::imageops::FilterType::Lanczos3,
+        )
+    } else {
+        image
+    };
+    let mut out = Vec::new();
+    let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, JPEG_QUALITY);
+    if image.to_rgb8().write_with_encoder(encoder).is_err() || out.len() * 4 > bytes.len() * 3 {
+        return bytes;
+    }
+    out
+}
+
+fn has_extension(name: &str, extensions: &[&str]) -> bool {
+    Path::new(name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| extensions.iter().any(|x| e.eq_ignore_ascii_case(x)))
+}
+
+/// Formats that are already compressed: deflating them again only costs time.
+fn already_compressed(name: &str) -> bool {
+    has_extension(
+        name,
+        &["jpg", "jpeg", "png", "webp", "glb", "zip", "mp4", "avi"],
+    )
+}
+
+/// A project as the bytes of a `.newera` file with no bundled files: for
+/// saving where there is no file system (the browser).
+///
+/// # Panics
+///
+/// Never in practice: writing a ZIP into memory cannot fail.
+pub fn to_project_bytes(doc: &Document) -> Vec<u8> {
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    zip.start_file(BUNDLE_JSON, deflated())
+        .expect("zip in memory");
+    std::io::Write::write_all(&mut zip, to_project_json(doc).as_bytes()).expect("zip in memory");
+    zip.finish().expect("zip in memory").into_inner()
+}
+
+fn deflated() -> zip::write::SimpleFileOptions {
+    zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .compression_level(Some(9))
+}
+
+/// Saves a project as a bundle with every referenced file.
 ///
 /// The document's asset paths are left untouched; the bundle stores them
 /// renamed where needed.
 pub fn save_project(doc: &Document, path: &Path) -> Result<(), ProjectError> {
     let files = bundle_files(doc);
-    if files.is_empty() {
-        std::fs::write(path, to_project_json(doc))?;
-        return Ok(());
-    }
     // Rewrite escaping paths to their bundle names in a copy.
     let mut copy = Document::default();
     let variants: Vec<(String, Home)> = doc
@@ -292,14 +359,19 @@ pub fn save_project(doc: &Document, path: &Path) -> Result<(), ProjectError> {
     {
         let file = std::fs::File::create(&tmp)?;
         let mut zip = zip::ZipWriter::new(std::io::BufWriter::new(file));
-        let stored = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated);
-        zip.start_file(BUNDLE_JSON, stored)?;
+        zip.start_file(BUNDLE_JSON, deflated())?;
         std::io::Write::write_all(&mut zip, to_project_json(&copy).as_bytes())?;
         for (source, name) in files {
             match crate::vfs::read(&source) {
                 Ok(bytes) => {
-                    zip.start_file(name, stored)?;
+                    let options = if already_compressed(&name) {
+                        zip::write::SimpleFileOptions::default()
+                            .compression_method(zip::CompressionMethod::Stored)
+                    } else {
+                        deflated()
+                    };
+                    let bytes = packed_asset(&name, bytes);
+                    zip.start_file(name, options)?;
                     std::io::Write::write_all(&mut zip, &bytes)?;
                 }
                 // A missing file is kept as a dangling reference rather than
@@ -410,8 +482,8 @@ mod tests {
         doc.execute(Command::insert(wall)).unwrap();
         doc.add_variant(Some("Sem parede".into()), false);
         let json = to_project_json(&doc);
-        assert!(json.contains("\"format\": \"3d-new-era-ai\""));
-        assert!(json.contains("\"version\": 2"));
+        assert!(json.contains("\"format\":\"3d-new-era-ai\""));
+        assert!(json.contains("\"version\":2"));
 
         let project = from_project_json(&json).unwrap();
         assert_eq!(project.active, 1);
@@ -550,11 +622,80 @@ mod tests {
         assert!(floor.starts_with("external/"), "{floor}");
         assert!(dir.join(&floor).exists());
 
-        // No files: plain JSON.
+        // No files: still a small bundle, and older plain JSON files open.
+        let empty = root.join("empty.newera");
+        save_project(&Document::default(), &empty).unwrap();
+        assert!(std::fs::read(&empty).unwrap().starts_with(b"PK\x03\x04"));
+        assert!(open_project(&empty, &root.join("cache")).is_ok());
         let plain = root.join("plain.newera");
-        save_project(&Document::default(), &plain).unwrap();
-        assert!(std::fs::read_to_string(&plain).unwrap().starts_with('{'));
+        std::fs::write(&plain, to_project_json(&Document::default())).unwrap();
         assert!(open_project(&plain, &root).unwrap().1.is_none());
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    fn noisy_jpeg(w: u32, h: u32, quality: u8) -> Vec<u8> {
+        // Pseudo-random texture: the kind of detail scans have.
+        let mut seed = 12_345_u32;
+        let image = image::RgbImage::from_fn(w, h, |x, y| {
+            seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+            let n = seed.to_be_bytes()[0];
+            let (x, y) = (x.to_le_bytes()[0], y.to_le_bytes()[0]);
+            image::Rgb([n, x / 2 + n / 2, y / 2 + n / 2])
+        });
+        let mut out = Vec::new();
+        image
+            .write_with_encoder(image::codecs::jpeg::JpegEncoder::new_with_quality(
+                &mut out, quality,
+            ))
+            .unwrap();
+        out
+    }
+
+    #[test]
+    fn big_jpegs_are_recompressed_once_and_the_rest_kept_as_is() {
+        let heavy = noisy_jpeg(1024, 1024, 100);
+        assert!(heavy.len() >= RECOMPRESS_FROM, "{}", heavy.len());
+        let packed = packed_asset("tex/Wood.JPG", heavy.clone());
+        assert!(
+            packed.len() * 4 <= heavy.len() * 3,
+            "{} -> {}",
+            heavy.len(),
+            packed.len()
+        );
+        let decoded = image::load_from_memory(&packed).unwrap();
+        assert_eq!((decoded.width(), decoded.height()), (1024, 1024));
+        // Saving again leaves it alone: no generation loss.
+        assert_eq!(packed_asset("tex/Wood.JPG", packed.clone()), packed);
+
+        let huge = noisy_jpeg(4096, 2048, 95);
+        let decoded = image::load_from_memory(&packed_asset("scan.jpeg", huge)).unwrap();
+        assert_eq!(
+            (decoded.width(), decoded.height()),
+            (MAX_IMAGE_SIDE, MAX_IMAGE_SIDE / 2)
+        );
+
+        assert_eq!(
+            packed_asset("model.png", heavy.clone()),
+            heavy,
+            "PNGs stay lossless"
+        );
+        let broken = vec![0xFF_u8; RECOMPRESS_FROM + 1];
+        assert_eq!(packed_asset("broken.jpg", broken.clone()), broken);
+    }
+
+    #[test]
+    fn project_bytes_open_back() {
+        let mut doc = Document::default();
+        let wall = Wall::new(
+            doc.new_wall_id(),
+            Point2::new(0.0, 0.0),
+            Point2::new(300.0, 0.0),
+        );
+        doc.execute(Command::insert(wall)).unwrap();
+        let bytes = to_project_bytes(&doc);
+        assert!(bytes.len() < to_project_json(&doc).len());
+        let (project, files) = project_from_bytes(&bytes).unwrap();
+        assert!(files.is_empty());
+        assert_eq!(project.variants[0].1.walls.len(), 1);
     }
 }

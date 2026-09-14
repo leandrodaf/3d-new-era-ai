@@ -12,6 +12,10 @@ All notable changes to this project are documented here. The format follows
   the Command Line Tools and Rust when missing, creates `3D New Era AI.app` with an ad-hoc
   signature, puts `newera` on the `PATH` and registers the MCP server in Claude Code.
 
+- Smaller `.newera` files: every project is a deflated bundle with compact JSON, and large
+  JPEG textures are recompressed once on save (quality 85, at most 2048 px). The showcase
+  apartment went from 12.3 MB to 2.7 MB. Plain JSON projects from earlier saves still open.
+
 - MCP `lighting`: lux per room by photometry against NBR ISO/CIE 8995-1; `fill` places the
   fixtures a room needs. Photos get a half-strength white balance and render on half the
   cores by default (`NEWERA_RENDER_THREADS`).

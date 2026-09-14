@@ -2706,6 +2706,7 @@ name = "newera-core"
 version = "0.1.0"
 dependencies = [
  "geo",
+ "image",
  "schemars",
  "serde",
  "serde_json",

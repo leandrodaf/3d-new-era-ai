@@ -482,13 +482,13 @@ impl NewEraApp {
     fn save_web(&mut self) -> bool {
         let doc = self.document.read();
         let name = format!("{}.{}", doc.home().name, newera_core::PROJECT_EXTENSION);
-        let json = newera_core::to_project_json(&doc);
+        let bytes = newera_core::to_project_bytes(&doc);
         drop(doc);
         match crate::files::save_bytes(
             "3D New Era AI",
             newera_core::PROJECT_EXTENSION,
             &name,
-            || Ok(json.into_bytes()),
+            || Ok(bytes),
         ) {
             Ok(_) => {
                 self.document.write().mark_saved(&name);
