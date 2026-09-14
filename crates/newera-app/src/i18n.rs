@@ -144,6 +144,8 @@ fn english(pt: &str) -> Option<&'static str> {
         "Separa ambientes sem parede (ex.: sala e jantar integrados)" => {
             "Separates rooms without a wall (e.g. open living and dining)"
         }
+        "Escala vertical" => "Vertical scale",
+        "Diferente" => "Different",
         "Criar paredes" => "Create walls",
         "Curva suave" => "Smooth curve",
         "Cômodos" => "Rooms",

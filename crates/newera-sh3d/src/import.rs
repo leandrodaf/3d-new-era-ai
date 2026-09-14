@@ -679,6 +679,7 @@ impl<'g> Importer<'g> {
             offset: Point2::new(-b.f("xOrigin"), -b.f("yOrigin")),
             opacity: 1.0,
             visible: !b.b("invisible"),
+            ..BackgroundImage::default()
         })
     }
 

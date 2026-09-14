@@ -992,8 +992,25 @@ impl Mesh {
                 );
                 kind = pattern.index();
             } else if let (Some(layer), Some(texture)) = (texture_layer, piece_texture) {
-                // Planar mapping on the face's dominant axis, at the texture's real size.
-                uv = planar_uv(position, normal, texture.tile_size());
+                // Planar mapping on the face's dominant axis, at the texture's
+                // real size, or one image stretched over each face.
+                uv = if texture.fit {
+                    #[allow(clippy::cast_possible_truncation)]
+                    let (w, d, h) = (piece.width as f32, piece.depth as f32, piece.height as f32);
+                    let n = normal.map(f32::abs);
+                    if n[1] >= n[0] && n[1] >= n[2] {
+                        [
+                            position[0] / w.max(0.01) + 0.5,
+                            position[2] / d.max(0.01) + 0.5,
+                        ]
+                    } else if n[0] >= n[2] {
+                        [position[2] / d.max(0.01) + 0.5, position[1] / h.max(0.01)]
+                    } else {
+                        [position[0] / w.max(0.01) + 0.5, position[1] / h.max(0.01)]
+                    }
+                } else {
+                    planar_uv(position, normal, texture.tile_size())
+                };
                 color = [1.0; 3];
                 kind = layer;
             } else if let Some((over, layer, _, planar)) = look {

@@ -715,6 +715,7 @@ impl NewEraApp {
                     offset: Point2::new(0.0, 0.0),
                     opacity: 0.5,
                     visible: true,
+                    ..Default::default()
                 }),
             })
         });

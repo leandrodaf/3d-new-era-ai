@@ -733,6 +733,7 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                             // Scale around the first point so it stays where it was marked.
                             let factor = distance / measured;
                             bg.cm_per_px *= factor;
+                            bg.cm_per_px_y = bg.cm_per_px_y.map(|y| y * factor);
                             bg.offset = Point2::new(
                                 a.x - (a.x - bg.offset.x) * factor,
                                 a.y - (a.y - bg.offset.y) * factor,
@@ -762,6 +763,33 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                             .range(0.001..=1000.0)
                             .speed(0.01)
                             .suffix(" cm/px"),
+                    );
+                    ui.end_row();
+                    ui.label(crate::i18n::tr("Escala vertical"));
+                    ui.horizontal(|ui| {
+                        let mut separate = bg.cm_per_px_y.is_some();
+                        if ui
+                            .checkbox(&mut separate, crate::i18n::tr("Diferente"))
+                            .changed()
+                        {
+                            bg.cm_per_px_y = separate.then_some(bg.cm_per_px);
+                        }
+                        if let Some(y) = &mut bg.cm_per_px_y {
+                            ui.add(
+                                DragValue::new(y)
+                                    .range(0.001..=1000.0)
+                                    .speed(0.01)
+                                    .suffix(" cm/px"),
+                            );
+                        }
+                    });
+                    ui.end_row();
+                    ui.label(crate::i18n::tr("Rotação"));
+                    ui.add(
+                        DragValue::new(&mut bg.angle)
+                            .range(-180.0..=180.0)
+                            .speed(0.1)
+                            .suffix("°"),
                     );
                     ui.end_row();
                     ui.label(crate::i18n::tr("Posição (x, y)"));

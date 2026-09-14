@@ -264,7 +264,9 @@ impl FromStr for Material {
         let mut tokens: Vec<&str> = s.split_whitespace().collect();
         let mut material = Self::default();
         while let Some(last) = tokens.last().copied() {
-            if let Some(color) = parse_hex(last) {
+            if last == "fit" {
+                material.fit = true;
+            } else if let Some(color) = parse_hex(last) {
                 material.color = Some(color);
             } else if let Some(angle) = last.strip_prefix('r').and_then(|a| a.parse().ok()) {
                 material.angle = angle;
@@ -325,6 +327,9 @@ impl fmt::Display for Material {
         }
         if self.angle != 0.0 {
             parts.push(format!("r{}", trim_number(self.angle)));
+        }
+        if self.fit {
+            parts.push("fit".to_owned());
         }
         if self.shininess != 0.0 {
             parts.push(format!("s{}", trim_number(self.shininess)));

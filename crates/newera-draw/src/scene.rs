@@ -359,7 +359,7 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
                 min,
                 max,
                 opacity: bg.opacity,
-                angle: 0.0,
+                angle: bg.angle,
             },
         );
     }

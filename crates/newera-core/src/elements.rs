@@ -546,6 +546,27 @@ pub struct BackgroundImage {
     pub opacity: f64,
     #[serde(default = "yes")]
     pub visible: bool,
+    /// Vertical scale when it differs from `cm_per_px` (images resized unevenly).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cm_per_px_y: Option<f64>,
+    /// Clockwise turn around the image center, degrees (scans taken askew).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub angle: f64,
+}
+
+impl Default for BackgroundImage {
+    fn default() -> Self {
+        Self {
+            path: String::new(),
+            size_px: [1, 1],
+            cm_per_px: 1.0,
+            offset: Point2::new(0.0, 0.0),
+            opacity: 0.5,
+            visible: true,
+            cm_per_px_y: None,
+            angle: 0.0,
+        }
+    }
 }
 
 impl BackgroundImage {
@@ -560,10 +581,73 @@ impl BackgroundImage {
         (px > 0.0 && distance_cm > 0.0).then(|| distance_cm / px)
     }
 
-    /// Plan-space rectangle `(min, max)` covered by the image.
+    /// Horizontal and vertical scale, cm per pixel.
+    pub fn scale(&self) -> (f64, f64) {
+        (self.cm_per_px, self.cm_per_px_y.unwrap_or(self.cm_per_px))
+    }
+
+    /// Plan point (cm) under image pixel `px`, with scale and rotation.
+    pub fn plan_point(&self, px: Point2) -> Point2 {
+        let (sx, sy) = self.scale();
+        let (w, h) = (
+            f64::from(self.size_px[0]) * sx,
+            f64::from(self.size_px[1]) * sy,
+        );
+        let (x, y) = (px.x * sx - w / 2.0, px.y * sy - h / 2.0);
+        let (sin, cos) = self.angle.to_radians().sin_cos();
+        Point2::new(
+            self.offset.x + w / 2.0 + x * cos - y * sin,
+            self.offset.y + h / 2.0 + x * sin + y * cos,
+        )
+    }
+
+    /// Scales `(x, y)` that best fit several known distances between pixel
+    /// pairs `(a, b, cm)`: uniform with one pair or when the pairs don't tell
+    /// the axes apart, per axis otherwise (least squares on squared lengths).
+    pub fn fit_scale(pairs: &[(Point2, Point2, f64)]) -> Option<(f64, f64)> {
+        let usable: Vec<(f64, f64, f64)> = pairs
+            .iter()
+            .map(|(a, b, cm)| ((b.x - a.x).abs(), (b.y - a.y).abs(), *cm))
+            .filter(|(dx, dy, cm)| dx.hypot(*dy) > 0.0 && *cm > 0.0)
+            .collect();
+        if usable.is_empty() {
+            return None;
+        }
+        let uniform = || {
+            let (num, den) = usable.iter().fold((0.0, 0.0), |(n, d), (dx, dy, cm)| {
+                let px = dx.hypot(*dy);
+                (n + cm * px, d + px * px)
+            });
+            let s = num / den;
+            (s, s)
+        };
+        // L² = dx²·sx² + dy²·sy², linear in (sx², sy²).
+        let (mut a11, mut a12, mut a22, mut b1, mut b2) = (0.0, 0.0, 0.0, 0.0, 0.0);
+        for (dx, dy, cm) in &usable {
+            let (u, v, l) = (dx * dx, dy * dy, cm * cm);
+            a11 += u * u;
+            a12 += u * v;
+            a22 += v * v;
+            b1 += u * l;
+            b2 += v * l;
+        }
+        let det = a11 * a22 - a12 * a12;
+        if usable.len() < 2 || det.abs() < 1e-9 * (a11 * a22).max(1e-12) {
+            return Some(uniform());
+        }
+        let (x2, y2) = ((b1 * a22 - b2 * a12) / det, (a11 * b2 - a12 * b1) / det);
+        if x2 > 0.0 && y2 > 0.0 {
+            Some((x2.sqrt(), y2.sqrt()))
+        } else {
+            Some(uniform())
+        }
+    }
+
+    /// Plan-space rectangle `(min, max)` covered by the image before its turn.
     pub fn bounds(&self) -> (Point2, Point2) {
-        let w = f64::from(self.size_px[0]) * self.cm_per_px;
-        let h = f64::from(self.size_px[1]) * self.cm_per_px;
+        let (sx, sy) = self.scale();
+        let w = f64::from(self.size_px[0]) * sx;
+        let h = f64::from(self.size_px[1]) * sy;
         (
             self.offset,
             Point2::new(self.offset.x + w, self.offset.y + h),
@@ -805,5 +889,67 @@ mod tests {
         assert!(!json.contains("visible"), "{json}");
         let back: Room = serde_json::from_str(&json).unwrap();
         assert!(back.floor_visible && back.ceiling_visible && back.area_visible);
+    }
+}
+
+#[cfg(test)]
+mod background_tests {
+    use super::*;
+
+    #[test]
+    fn scales_rotation_and_calibration_fits() {
+        let bg = BackgroundImage {
+            path: "scan.png".into(),
+            size_px: [200, 100],
+            cm_per_px: 2.0,
+            cm_per_px_y: Some(3.0),
+            offset: Point2::new(100.0, 50.0),
+            ..BackgroundImage::default()
+        };
+        assert_eq!(
+            bg.bounds(),
+            (Point2::new(100.0, 50.0), Point2::new(500.0, 350.0))
+        );
+        let p = bg.plan_point(Point2::new(200.0, 100.0));
+        assert!((p.x - 500.0).abs() < 1e-9 && (p.y - 350.0).abs() < 1e-9);
+        // Half a turn around the center swaps opposite corners.
+        let turned = BackgroundImage {
+            angle: 180.0,
+            ..bg.clone()
+        };
+        let q = turned.plan_point(Point2::new(0.0, 0.0));
+        assert!(
+            (q.x - 500.0).abs() < 1e-6 && (q.y - 350.0).abs() < 1e-6,
+            "{q:?}"
+        );
+
+        // One pair: uniform scale.
+        let one =
+            BackgroundImage::fit_scale(&[(Point2::new(0.0, 0.0), Point2::new(100.0, 0.0), 250.0)])
+                .unwrap();
+        assert!((one.0 - 2.5).abs() < 1e-9 && (one.1 - 2.5).abs() < 1e-9);
+        // Across and down with different scales, plus a diagonal consistent with both.
+        let pairs = [
+            (Point2::new(0.0, 0.0), Point2::new(100.0, 0.0), 250.0),
+            (Point2::new(0.0, 0.0), Point2::new(0.0, 100.0), 200.0),
+            (
+                Point2::new(0.0, 0.0),
+                Point2::new(100.0, 100.0),
+                250.0_f64.hypot(200.0),
+            ),
+        ];
+        let (sx, sy) = BackgroundImage::fit_scale(&pairs).unwrap();
+        assert!(
+            (sx - 2.5).abs() < 1e-6 && (sy - 2.0).abs() < 1e-6,
+            "{sx} {sy}"
+        );
+        assert!(
+            BackgroundImage::fit_scale(&[(Point2::new(1.0, 1.0), Point2::new(1.0, 1.0), 10.0)])
+                .is_none()
+        );
+        // Stretched images round-trip through their text form.
+        let fit: crate::Material = "img:facade.png fit".parse().unwrap();
+        assert!(fit.fit && fit.image.as_deref() == Some("facade.png"));
+        assert_eq!(fit.to_string().parse::<crate::Material>().unwrap(), fit);
     }
 }

@@ -914,6 +914,14 @@ pub(crate) struct BackgroundParams {
     pub cm_per_px: Option<f64>,
     /// Or scale by marking two pixels with a known real distance.
     pub calibrate: Option<Calibration>,
+    /// Several known distances (e.g. one across, one down): fits separate
+    /// horizontal and vertical scales when they differ, uniform otherwise.
+    #[serde(default)]
+    pub calibrations: Vec<Calibration>,
+    /// Vertical scale cm/px when it differs from the horizontal one.
+    pub cm_per_px_y: Option<f64>,
+    /// Clockwise turn of the image, degrees.
+    pub angle: Option<f64>,
     /// Plan position cm of the image's top-left corner.
     pub offset: Option<Point2>,
     pub opacity: Option<f64>,
@@ -944,13 +952,37 @@ pub(crate) fn set_background(
         (None, Some(bg)) => bg.size_px,
         _ => image_size(&path)?,
     };
-    let cm_per_px = match (&params.calibrate, params.cm_per_px) {
-        (Some(c), _) => BackgroundImage::cm_per_px_from(c.a, c.b, c.cm)
-            .ok_or("calibration points must differ and distance be positive")?,
-        (None, Some(v)) => v,
-        (None, None) => current.as_ref().map_or(1.0, |bg| bg.cm_per_px),
+    let mut pairs: Vec<(Point2, Point2, f64)> = params
+        .calibrations
+        .iter()
+        .map(|c| (c.a, c.b, c.cm))
+        .collect();
+    if let Some(c) = &params.calibrate {
+        pairs.push((c.a, c.b, c.cm));
+    }
+    let (cm_per_px, cm_per_px_y) = if pairs.is_empty() {
+        let x = params
+            .cm_per_px
+            .unwrap_or_else(|| current.as_ref().map_or(1.0, |bg| bg.cm_per_px));
+        let y = params.cm_per_px_y.or_else(|| {
+            if params.cm_per_px.is_some() {
+                None
+            } else {
+                current.as_ref().and_then(|bg| bg.cm_per_px_y)
+            }
+        });
+        (x, y)
+    } else {
+        let (x, y) = BackgroundImage::fit_scale(&pairs)
+            .ok_or("calibration points must differ and distances be positive")?;
+        (x, ((y - x).abs() > x * 1e-3).then_some(y))
     };
     let background = BackgroundImage {
+        cm_per_px_y,
+        angle: params
+            .angle
+            .or(current.as_ref().map(|bg| bg.angle))
+            .unwrap_or(0.0),
         path,
         size_px,
         cm_per_px,
