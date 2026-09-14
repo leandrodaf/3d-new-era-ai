@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- "Ergonomia…" window in the editor (Planta menu): the habitability score and findings for
+  the occupants you set, kept current while you edit; a finding selects what it is about and
+  its checked fix applies in one click.
+
 - MCP `ergonomics`: a review of the plan for the people who live there (occupants, children,
   elderly, wheelchair, the cook's height). Room to walk beside beds and in front of the stove,
   beds, seats, bathrooms and wardrobes per person, the kitchen triangle and heights, doors that

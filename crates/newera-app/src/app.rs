@@ -83,6 +83,8 @@ pub(crate) struct NewEraApp {
     /// The "Criar foto" window, while open.
     pub(crate) photo: Option<crate::photo::PhotoWindow>,
     pub(crate) video: Option<crate::video::VideoWindow>,
+    /// The "Ergonomia" window, while open.
+    pub(crate) ergonomics: Option<crate::ergonomics::ErgonomicsWindow>,
     /// Top-view provider for the plan: `(look, asset dir, provider)`.
     top_views: Option<(
         FurnitureLook,
@@ -146,6 +148,7 @@ impl NewEraApp {
             applied_observer: None,
             photo: None,
             video: None,
+            ergonomics: None,
             top_views: None,
             top_view_generation: 0,
             #[cfg(not(target_arch = "wasm32"))]
@@ -1242,6 +1245,16 @@ impl NewEraApp {
                 ) {
                     self.open_home_settings();
                 }
+                if menu_item(
+                    ui,
+                    icon::PERSON_ARMS_SPREAD,
+                    crate::i18n::tr("Ergonomia…"),
+                    "",
+                    true,
+                ) {
+                    self.ergonomics.get_or_insert_with(Default::default);
+                    ui.close();
+                }
             });
             ui.menu_button(crate::i18n::tr("Ver"), |ui| {
                 if menu_item(
@@ -1820,6 +1833,7 @@ impl eframe::App for NewEraApp {
         }
         crate::photo::show(self, &ctx);
         crate::video::show(self, &ctx);
+        crate::ergonomics::show(self, &ctx);
 
         self.shortcuts(&ctx);
         self.update_title(&ctx);

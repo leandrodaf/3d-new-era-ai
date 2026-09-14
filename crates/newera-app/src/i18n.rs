@@ -26,6 +26,26 @@ pub(crate) fn tr(pt: &'static str) -> &'static str {
 fn english(pt: &str) -> Option<&'static str> {
     Some(match pt {
         " · arco" => " · arc",
+        "Ergonomia" => "Ergonomics",
+        "Ergonomia…" => "Ergonomics…",
+        "Moradores" => "Occupants",
+        "Crianças" => "Children",
+        "Idosos" => "Elderly",
+        "Altura de quem cozinha" => "Cook's height",
+        "Alguém usa cadeira de rodas (NBR 9050)" => "Someone uses a wheelchair (NBR 9050)",
+        "nota de habitabilidade" => "habitability score",
+        "lugares para dormir" => "beds",
+        "banheiros" => "bathrooms",
+        "à mesa" => "at the table",
+        "na sala" => "in the living room",
+        "de guarda-roupa" => "of wardrobe",
+        "Nada a apontar para esses moradores." => "Nothing to point out for these occupants.",
+        "Selecionar na planta" => "Select on the plan",
+        "Aplicar correção" => "Apply fix",
+        "Correção aplicada (Ctrl+Z desfaz)." => "Fix applied (Ctrl+Z undoes it).",
+        "Referências: NBR 9050, NBR 15575-1 e IBGE; áreas e janelas variam com o código de obras do município." => {
+            "References: NBR 9050, NBR 15575-1 and IBGE; areas and windows vary with the city's building code."
+        }
         " · luz" => " · light",
         "(cópia)" => "(copy)",
         "Abrir" => "Open",
