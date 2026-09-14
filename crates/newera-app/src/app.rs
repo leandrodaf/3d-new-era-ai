@@ -1191,6 +1191,28 @@ impl NewEraApp {
                 ui.separator();
                 self.viewpoints_menu(ui);
                 ui.separator();
+                let mut sun = self.scene.sun_hour.is_some();
+                if ui
+                    .checkbox(
+                        &mut sun,
+                        format!(
+                            "{} {}",
+                            icon::SUN,
+                            crate::i18n::tr("Sol pela bússola e hora")
+                        ),
+                    )
+                    .changed()
+                {
+                    self.scene.sun_hour = sun.then_some(10.0);
+                }
+                if let Some(hour) = &mut self.scene.sun_hour {
+                    ui.add(
+                        egui::Slider::new(hour, 0.0..=24.0)
+                            .step_by(0.25)
+                            .suffix(" h"),
+                    );
+                }
+                ui.separator();
                 ui.label(crate::i18n::tr("Unidade"));
                 for unit in LengthUnit::ALL {
                     ui.radio_value(&mut self.settings.unit, unit, unit.label());

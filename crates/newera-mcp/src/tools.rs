@@ -1262,6 +1262,45 @@ mod tests {
     }
 
     #[test]
+    fn labels_and_dimensions_in_3d() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"labels":[{"text":"Sala","at":[10,10],"pitch":90,"elev":150},{"text":"Plano","at":[0,0]}],
+                "dims":[{"a":[0,0],"b":[300,0],"off":30,"in3d":true,"elev":250,"pitch":90}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        {
+            let doc = s.document.read();
+            let home = doc.home();
+            assert_eq!(home.labels[0].pitch, Some(90.0));
+            assert!((home.labels[0].elevation - 150.0).abs() < 1e-9);
+            assert_eq!(home.labels[1].pitch, None);
+            let d = &home.dimensions[0];
+            assert!(d.visible_in_3d && (d.elevation[1] - 250.0).abs() < 1e-9);
+        }
+        let ids: Vec<String> = {
+            let doc = s.document.read();
+            vec![
+                doc.home().labels[0].id.to_string(),
+                doc.home().labels[1].id.to_string(),
+                doc.home().dimensions[0].id.to_string(),
+            ]
+        };
+        let specs: Vec<UpdateSpec> = serde_json::from_str(&format!(
+            r#"[{{"id":"{}","in3d":false}},{{"id":"{}","pitch":0}},{{"id":"{}","in3d":false}}]"#,
+            ids[0], ids[1], ids[2]
+        ))
+        .unwrap();
+        s.update(Parameters(UpdateParams { items: specs })).unwrap();
+        let doc = s.document.read();
+        let home = doc.home();
+        assert_eq!(home.labels[0].pitch, None);
+        assert_eq!(home.labels[1].pitch, Some(0.0));
+        assert!(!home.dimensions[0].visible_in_3d);
+    }
+
+    #[test]
     fn polylines_label_styles_and_cameras() {
         let s = server();
         let params: CreateParams = serde_json::from_str(

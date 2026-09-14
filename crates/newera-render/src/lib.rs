@@ -8,6 +8,7 @@ pub mod mesh;
 mod patterns;
 pub mod photo;
 mod raster;
+pub mod text3d;
 pub mod video;
 
 use std::collections::HashMap;
@@ -261,6 +262,29 @@ pub fn at_local_hour(time_ms: i64, hour: f64, longitude: f64) -> i64 {
     time_ms.div_euclid(DAY) * DAY + offset
 }
 
+/// Unit vector towards the sun (y up, plan x/z) and its elevation in degrees
+/// at `time_ms` for the compass location; `None` once it is well below the
+/// horizon. Azimuth is clockwise from north and the compass says where north is.
+#[allow(clippy::cast_possible_truncation)]
+pub fn sun_direction(compass: &newera_core::Compass, time_ms: i64) -> Option<(glam::Vec3, f64)> {
+    let (azimuth, elevation) = photo::sun_position(
+        time_ms,
+        compass.latitude.unwrap_or(-23.55),
+        compass.longitude.unwrap_or(-46.63),
+    );
+    (elevation > -2.0).then(|| {
+        let heading = (compass.north_degrees + azimuth).to_radians();
+        let el = elevation.max(0.5).to_radians();
+        let dir = glam::Vec3::new(
+            (heading.sin() * el.cos()) as f32,
+            el.sin() as f32,
+            (-heading.cos() * el.cos()) as f32,
+        )
+        .normalize();
+        (dir, elevation)
+    })
+}
+
 /// How long a photo may take: samples per pixel and bounces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PhotoQuality {
@@ -296,22 +320,7 @@ pub fn photo_home(
     let models = |piece: &newera_core::Furniture| cache.piece_model(piece, assets);
     let mesh = Mesh::from_home(home, &Selection::new(), &models);
 
-    // Sun: azimuth is clockwise from north; the compass says where north is.
-    let compass = &home.compass;
-    let (azimuth, elevation) = photo::sun_position(
-        time_ms,
-        compass.latitude.unwrap_or(-23.55),
-        compass.longitude.unwrap_or(-46.63),
-    );
-    let sun = (elevation > -2.0).then(|| {
-        let heading = (compass.north_degrees + azimuth).to_radians();
-        let el = elevation.max(0.5).to_radians();
-        let dir = Vec3::new(
-            (heading.sin() * el.cos()) as f32,
-            el.sin() as f32,
-            (-heading.cos() * el.cos()) as f32,
-        )
-        .normalize();
+    let sun = sun_direction(&home.compass, time_ms).map(|(dir, elevation)| {
         let strength = (elevation / 20.0).clamp(0.15, 1.0) as f32;
         (dir, Vec3::new(1.0, 0.95, 0.88) * 3.2 * strength)
     });

@@ -231,8 +231,149 @@ impl Mesh {
                     mesh.add_piece(piece, &local, base, highlight);
                 }
             }
+            let shown = |d: Option<newera_core::Discipline>| {
+                d.is_none_or(|d| !home.hidden_disciplines.contains(&d))
+            };
+            for label in view
+                .labels
+                .iter()
+                .filter(|l| l.pitch.is_some() && shown(l.discipline))
+            {
+                mesh.add_label(label, base);
+            }
+            for dimension in view
+                .dimensions
+                .iter()
+                .filter(|d| d.visible_in_3d && shown(d.discipline))
+            {
+                mesh.add_dimension(dimension, base);
+            }
         }
         mesh
+    }
+
+    /// Text lying on the plane through `origin` (cm) spanned by `right` and
+    /// `up` (unit world vectors), seen from both sides.
+    #[allow(clippy::cast_possible_truncation)]
+    fn add_text(
+        &mut self,
+        text: &str,
+        size: f64,
+        align: f32,
+        origin: Vec3,
+        (right, up): (Vec3, Vec3),
+        color: [f32; 3],
+    ) {
+        let surface = Surface::plain(color);
+        let normal = right.cross(up).normalize_or_zero();
+        // Both faces float a hair off the plane so they never fight.
+        let lift = normal * 0.05;
+        for [a, b, c] in crate::text3d::text_triangles(text, size as f32, align) {
+            let at = |p: [f32; 2], side: f32| {
+                (origin + right * p[0] + up * p[1] + lift * side) * CM_TO_M
+            };
+            // Earcut winding varies: orient each triangle to its face.
+            let front = (at(b, 0.0) - at(a, 0.0))
+                .cross(at(c, 0.0) - at(a, 0.0))
+                .dot(normal)
+                > 0.0;
+            let (b, c) = if front { (b, c) } else { (c, b) };
+            self.add_triangle([at(a, 1.0), at(b, 1.0), at(c, 1.0)], normal, &surface);
+            self.add_triangle([at(a, -1.0), at(c, -1.0), at(b, -1.0)], -normal, &surface);
+        }
+    }
+
+    /// A label shown in 3D: at its elevation, turned by its angle and
+    /// tilted by its pitch (0 lying on the floor, 90 standing).
+    #[allow(clippy::cast_possible_truncation)]
+    fn add_label(&mut self, label: &newera_core::Label, base: f64) {
+        let pitch = label.pitch.unwrap_or(0.0).to_radians() as f32;
+        let angle = label.angle.to_radians() as f32;
+        // Plan x → world x, plan y (down on screen) → world z.
+        let right = Vec3::new(angle.cos(), 0.0, angle.sin());
+        let plan_up = Vec3::new(angle.sin(), 0.0, -angle.cos());
+        let up = plan_up * pitch.cos() + Vec3::Y * pitch.sin();
+        let origin = Vec3::new(
+            label.position.x as f32,
+            (base + label.elevation) as f32,
+            label.position.y as f32,
+        );
+        let align = match label.align {
+            newera_core::TextAlign::Left => 0.0,
+            newera_core::TextAlign::Center => 0.5,
+            newera_core::TextAlign::Right => 1.0,
+        };
+        let color = srgb_to_linear(label.color.unwrap_or([0, 0, 0]));
+        self.add_text(&label.text, label.size, align, origin, (right, up), color);
+    }
+
+    /// A dimension line in 3D: measured points at their elevations, the line
+    /// offset in the plane tilted by the dimension pitch, ticks and length.
+    #[allow(clippy::cast_possible_truncation)]
+    fn add_dimension(&mut self, dimension: &newera_core::Dimension, base: f64) {
+        let at = |p: Point2, h: f64| Vec3::new(p.x as f32, (base + h) as f32, p.y as f32);
+        let a = at(dimension.start, dimension.elevation[0]);
+        let b = at(dimension.end, dimension.elevation[1]);
+        let Some(along) = (b - a).try_normalize() else {
+            return;
+        };
+        let pitch = dimension.pitch.to_radians() as f32;
+        // Left of start → end on the plan, then tilted up around the line.
+        let left = Vec3::new(along.z, 0.0, -along.x)
+            .try_normalize()
+            .unwrap_or(Vec3::X);
+        let side = (left * pitch.cos() + Vec3::Y * pitch.sin()).normalize();
+        let offset = side * dimension.offset as f32;
+        let (a2, b2) = (a + offset, b + offset);
+        let color = srgb_to_linear(dimension.color.unwrap_or([0, 0, 0]));
+        let surface = Surface::plain(color);
+        let normal = along.cross(side).normalize_or_zero();
+        let mut stroke = |p: Vec3, q: Vec3, width: f32| {
+            let Some(dir) = (q - p).try_normalize() else {
+                return;
+            };
+            let across = dir.cross(normal).normalize_or_zero() * width / 2.0;
+            let lift = normal * 0.05;
+            let quad = |s: f32| {
+                [p - across, q - across, q + across, p + across].map(|c| (c + lift * s) * CM_TO_M)
+            };
+            let [p0, p1, p2, p3] = quad(1.0);
+            let facing = (p1 - p0).cross(p3 - p0).dot(normal) > 0.0;
+            let front = if facing {
+                [p0, p1, p2, p3]
+            } else {
+                [p3, p2, p1, p0]
+            };
+            self.add_quad(front, normal, &surface);
+            let [q0, q1, q2, q3] = quad(-1.0);
+            let back = if facing {
+                [q3, q2, q1, q0]
+            } else {
+                [q0, q1, q2, q3]
+            };
+            self.add_quad(back, -normal, &surface);
+        };
+        let width = 0.8;
+        let overshoot = side * 8.0 * (dimension.offset as f32).signum();
+        if dimension.offset.abs() > 1e-6 {
+            let start = side * 4.0 * (dimension.offset as f32).signum();
+            stroke(a + start, a2 + overshoot, width);
+            stroke(b + start, b2 + overshoot, width);
+        }
+        stroke(a2, b2, width);
+        let tick = (along + side).normalize() * dimension.end_mark as f32 / 2.0;
+        stroke(a2 - tick, a2 + tick, width * 1.6);
+        stroke(b2 - tick, b2 + tick, width * 1.6);
+        // Length above the line, never read backwards from the plan.
+        let size = dimension.style.as_ref().map_or(18.0, |s| s.size);
+        let (right, up) = if along.x < -1e-4 || (along.x.abs() <= 1e-4 && along.z > 0.0) {
+            (-along, -side)
+        } else {
+            (along, side)
+        };
+        let text = newera_core::LengthUnit::Centimeter.format_length(a.distance(b).into());
+        let origin = (a2 + b2) / 2.0 + up * 3.0;
+        self.add_text(&text, size, 0.5, origin, (right, up), color);
     }
 
     /// One piece alone at the origin, unturned, standing on the ground.
@@ -1137,5 +1278,80 @@ mod level_tests {
             .fold(f32::MIN, f32::max);
         // Only the ground storey remains; the stairs (280 cm) are its tallest piece.
         assert!(max_y <= 2.801, "{max_y}");
+    }
+}
+
+#[cfg(test)]
+mod annotation_tests {
+    use newera_core::{Dimension, DimensionId, Label, LabelId};
+
+    use super::*;
+
+    fn build(home: &Home) -> Mesh {
+        Mesh::from_home(home, &Selection::new(), &|_| None)
+    }
+
+    fn extent(mesh: &Mesh, from: usize) -> (Vec3, Vec3) {
+        mesh.vertices[from..].iter().fold(
+            (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
+            |(lo, hi), v| (lo.min(v.position.into()), hi.max(v.position.into())),
+        )
+    }
+
+    #[test]
+    fn labels_with_pitch_and_3d_dimensions_become_geometry() {
+        let mut home = Home::default();
+        home.labels.push(Label {
+            id: LabelId(1),
+            text: "Plan only".into(),
+            ..Label::default()
+        });
+        home.dimensions.push(Dimension {
+            id: DimensionId(2),
+            end: Point2::new(300.0, 0.0),
+            ..Dimension::default()
+        });
+        let ground = build(&home).vertices.len();
+        assert_eq!(ground, 4, "plan-only annotations stay out of 3D");
+
+        // Standing label 150 cm up, facing -z.
+        home.labels[0].pitch = Some(90.0);
+        home.labels[0].elevation = 150.0;
+        home.labels[0].size = 40.0;
+        let mesh = build(&home);
+        assert!(mesh.vertices.len() > ground + 100);
+        let (lo, hi) = extent(&mesh, ground);
+        assert!((lo.y - 1.5).abs() < 0.15 && hi.y > 1.7, "{lo} {hi}");
+        assert!(
+            (hi.z - lo.z).abs() < 0.01,
+            "standing text is vertical: {lo} {hi}"
+        );
+        assert!(mesh.indices.chunks(3).all(|t| {
+            let [a, b, c] = [0, 1, 2].map(|k| Vec3::from(mesh.vertices[t[k] as usize].position));
+            (b - a)
+                .cross(c - a)
+                .dot(mesh.vertices[t[0] as usize].normal.into())
+                >= -1e-9
+        }));
+
+        // Lying label and a 3D dimension lifted 100 cm with 50 cm offset.
+        home.labels[0].pitch = Some(0.0);
+        let label_only = build(&home).vertices.len();
+        home.dimensions[0].visible_in_3d = true;
+        home.dimensions[0].elevation = [100.0, 100.0];
+        home.dimensions[0].offset = 50.0;
+        let mesh = build(&home);
+        let (lo, hi) = extent(&mesh, label_only);
+        assert!(mesh.vertices.len() > label_only + 50);
+        assert!(
+            lo.x < 0.05 && hi.x > 2.95,
+            "spans the measured length: {lo} {hi}"
+        );
+        assert!(
+            (lo.y - 1.0).abs() < 0.01 && (hi.y - 1.0).abs() < 0.01,
+            "{lo} {hi}"
+        );
+        // Offset to the left of start → end on the plan is -y, world -z.
+        assert!(lo.z < -0.5, "{lo}");
     }
 }

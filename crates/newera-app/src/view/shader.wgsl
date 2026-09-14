@@ -1,7 +1,7 @@
 struct Uniforms {
     view_proj: mat4x4<f32>,
     light_dir: vec3<f32>,
-    _pad: f32,
+    sun: f32,
 };
 
 @group(0) @binding(0)
@@ -224,6 +224,13 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let diffuse = max(dot(n, -u.light_dir), 0.0);
     // Soft indoor light: bright hemisphere ambient plus a gentle key light,
     // so interiors read like a lit room rather than a dark box.
-    let ambient = mix(0.86, 1.0, n.y * 0.5 + 0.5);
-    return vec4<f32>(min(albedo * (ambient + diffuse * 0.22), vec3<f32>(1.0)), in.color.a);
+    if (u.sun < 0.0) {
+        let ambient = mix(0.86, 1.0, n.y * 0.5 + 0.5);
+        return vec4<f32>(min(albedo * (ambient + diffuse * 0.22), vec3<f32>(1.0)), in.color.a);
+    }
+    // Live sun from the compass: sky ambient fading towards night plus a warm
+    // directional key light.
+    let sky = mix(0.28, 0.62, u.sun) * mix(0.8, 1.0, n.y * 0.5 + 0.5);
+    let key = vec3<f32>(1.0, 0.95, 0.86) * diffuse * 0.62 * u.sun;
+    return vec4<f32>(min(albedo * (vec3<f32>(sky) + key), vec3<f32>(1.0)), in.color.a);
 }

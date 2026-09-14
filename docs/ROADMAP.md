@@ -100,7 +100,11 @@ The core of what makes the editor useful: placing real objects with real dimensi
 - [x] MCP dimensions by intent in `create` (`wall`+`side` out/in/axis, `chain` through
       openings, `room` clear sizes) and `annotations bake` to keep automatic chains
 - [x] Leaner MCP: tool schemas compacted at startup (−18% tokens for the tool list)
-- [ ] Lighting: sun from compass + date/time, light sources from furniture
+- [x] Lighting: sun from compass + date/time (live in the 3D view, Ver › Sol pela
+      bússola e hora; photos also use lamps from furniture)
+- [x] Labels and dimensions in 3D: text as triangulated glyph outlines (GPU view,
+      software renders, photos, GLB), label pitch/elevation, dimension elevation/pitch;
+      dialogs and MCP `create`/`update` (`in3d`, `elev`, `pitch`)
 - [x] Virtual visitor camera; stored points of view
 - [x] Photo renderer: CPU path tracer (BVH, sun from compass location and time, lamp
       sources, glass, importance-sampled lights, edge-aware denoiser, auto exposure);

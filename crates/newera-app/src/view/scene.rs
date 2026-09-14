@@ -146,7 +146,9 @@ impl Visitor {
 struct Uniforms {
     view_proj: [[f32; 4]; 4],
     light_dir: [f32; 3],
-    _pad: f32,
+    /// Sunlight strength 0–1 when the sun follows the compass; negative for
+    /// the default soft studio light.
+    sun: f32,
 }
 
 struct GpuMesh {
@@ -183,10 +185,27 @@ struct Gpu {
     texture_id: Option<egui::TextureId>,
 }
 
+/// Direction towards the sun and its strength (0 at night) at `hour` local
+/// solar time, on the day of the home's camera, from the compass location.
+pub(crate) fn sun_light(home: &Home, hour: f64) -> (Vec3, f32) {
+    let base = match home.cameras.top.time {
+        0 => 1_789_214_400_000,
+        time => time,
+    };
+    let time = newera_render::at_local_hour(base, hour, home.compass.longitude.unwrap_or(-46.63));
+    match newera_render::sun_direction(&home.compass, time) {
+        #[allow(clippy::cast_possible_truncation)]
+        Some((dir, elevation)) => (dir, (elevation / 25.0).clamp(0.0, 1.0) as f32),
+        None => (Vec3::Y, 0.0),
+    }
+}
+
 pub(crate) struct SceneView {
     camera: OrbitCamera,
     /// When set, the view looks through this visitor instead of orbiting.
     pub(crate) visitor: Option<Visitor>,
+    /// Local solar hour of the live sun; `None` keeps the soft studio light.
+    pub(crate) sun_hour: Option<f64>,
     gpu: Option<Gpu>,
     /// `(document revision, selection)` the GPU mesh was built from.
     built_for: Option<(u64, Vec<ElementId>)>,
@@ -212,6 +231,7 @@ impl SceneView {
             camera: OrbitCamera::default(),
             visitor: None,
             gpu: None,
+            sun_hour: None,
             built_for: None,
             framed_once: false,
             models: std::cell::RefCell::default(),
@@ -229,6 +249,15 @@ impl SceneView {
                 fov_y: 45f32.to_radians(),
             },
         }
+    }
+
+    /// `(direction the light travels, sun strength)` for the shader.
+    fn light(&self, home: &Home) -> (Vec3, f32) {
+        let Some(hour) = self.sun_hour else {
+            return (Vec3::new(-0.4, -1.0, -0.3).normalize(), -1.0);
+        };
+        let (dir, strength) = sun_light(home, hour);
+        (-dir, strength)
     }
 
     pub(crate) fn request_frame(&mut self) {
@@ -267,6 +296,7 @@ impl SceneView {
             self.framed_once = true;
         }
 
+        let light = self.light(home);
         let gpu = self.gpu.get_or_insert_with(|| Gpu::new(&rs.device));
         let key = (revision, selection.iter().copied().collect::<Vec<_>>());
         if self.built_for.as_ref() != Some(&key) {
@@ -298,7 +328,7 @@ impl SceneView {
             Some(visitor) => visitor.view_proj(aspect),
             None => self.camera.view_proj(aspect),
         };
-        gpu.render(rs, size, view_proj);
+        gpu.render(rs, size, view_proj, light);
 
         if let Some(texture_id) = gpu.texture_id {
             ui.painter().image(
@@ -728,7 +758,7 @@ impl Gpu {
         self.targets = Some(targets);
     }
 
-    fn render(&mut self, rs: &RenderState, size: [u32; 2], view_proj: Mat4) {
+    fn render(&mut self, rs: &RenderState, size: [u32; 2], view_proj: Mat4, light: (Vec3, f32)) {
         self.ensure_targets(rs, size);
         let (Some(targets), Some(mesh)) = (&self.targets, &self.mesh) else {
             return;
@@ -736,8 +766,8 @@ impl Gpu {
 
         let uniforms = Uniforms {
             view_proj: view_proj.to_cols_array_2d(),
-            light_dir: Vec3::new(-0.4, -1.0, -0.3).normalize().to_array(),
-            _pad: 0.0,
+            light_dir: light.0.to_array(),
+            sun: light.1,
         };
         rs.queue
             .write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&uniforms));
@@ -786,5 +816,28 @@ impl Gpu {
             }
         }
         rs.queue.submit([encoder.finish()]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn live_sun_follows_the_compass_and_the_hour() {
+        let mut home = Home::default();
+        home.compass.latitude = Some(-23.5);
+        home.compass.longitude = Some(-46.6);
+        let (noon, strength) = sun_light(&home, 12.0);
+        assert!(noon.y > 0.7 && strength > 0.9, "{noon} {strength}");
+        let (_, night) = sun_light(&home, 0.0);
+        assert!(night.abs() < f32::EPSILON);
+        // Morning sun rises in the east; north up on the plan puts east at +x.
+        let (morning, _) = sun_light(&home, 8.0);
+        assert!(morning.x > 0.5, "{morning}");
+        // Turning the compass half a turn moves it to the other side.
+        home.compass.north_degrees = 180.0;
+        let (turned, _) = sun_light(&home, 8.0);
+        assert!(turned.x < -0.5, "{turned}");
     }
 }

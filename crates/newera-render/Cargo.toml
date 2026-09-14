@@ -9,6 +9,9 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+ab_glyph.workspace = true
+epaint_default_fonts.workspace = true
+geo = "0.33.1"
 bytemuck.workspace = true
 glam.workspace = true
 image.workspace = true

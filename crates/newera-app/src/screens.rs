@@ -137,6 +137,12 @@ fn sh3d_import() {
         .iter()
         .map(|l| l.id)
         .collect();
+    for hour in [8.0, 16.0] {
+        render(&format!("sh3d-sun-{hour}h"), shared.clone(), |app| {
+            app.scene.sun_hour = Some(hour);
+            app.scene.visitor = None;
+        });
+    }
     for (i, level) in levels.into_iter().enumerate() {
         shared.write().select_level(Some(level));
         render(&format!("sh3d-import-level{i}"), shared.clone(), |_| {});

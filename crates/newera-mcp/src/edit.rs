@@ -81,6 +81,11 @@ pub(crate) struct DimSpec {
     pub room: Option<String>,
     /// Offset cm from the measured line (default 40 for walls; a/b: left of a→b is positive).
     pub off: Option<f64>,
+    /// Also draw it in 3D, at `elev` cm, tilted `pitch`° around its line (90 = offset upwards).
+    #[serde(default)]
+    pub in3d: bool,
+    pub elev: Option<f64>,
+    pub pitch: Option<f64>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -91,6 +96,10 @@ pub(crate) struct LabelSpec {
     pub size: Option<f64>,
     /// Clockwise degrees.
     pub angle: Option<f64>,
+    /// Show in 3D tilted this much: 0 lying on the floor, 90 standing.
+    pub pitch: Option<f64>,
+    /// Height cm in 3D.
+    pub elev: Option<f64>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -222,7 +231,12 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
             }],
             _ => return Err("dimension needs `a` and `b`, `wall` or `room`".into()),
         };
-        for dim in dims {
+        for mut dim in dims {
+            if spec.in3d || spec.elev.is_some() || spec.pitch.is_some() {
+                dim.visible_in_3d = true;
+                dim.elevation = [spec.elev.unwrap_or(0.0); 2];
+                dim.pitch = spec.pitch.unwrap_or(0.0);
+            }
             ids.push(dim.id.to_string());
             commands.push(Command::insert(dim));
         }
@@ -236,6 +250,8 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
             size: spec.size.unwrap_or(Label::DEFAULT_SIZE),
             angle: spec.angle.unwrap_or(0.0),
             level: None,
+            pitch: spec.pitch.or(spec.elev.map(|_| 90.0)),
+            elevation: spec.elev.unwrap_or(0.0),
             ..Default::default()
         };
         ids.push(label.id.to_string());
@@ -320,7 +336,7 @@ pub(crate) struct UpdateSpec {
     /// Furniture depth cm.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub d: Option<f64>,
-    /// Furniture elevation cm.
+    /// Elevation cm (furniture, level, 3D label/dimension).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub elev: Option<f64>,
     /// Furniture color `[r,g,b]`.
@@ -369,6 +385,12 @@ pub(crate) struct UpdateSpec {
     /// Label bold text.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bold: Option<bool>,
+    /// Label/dimension shown in 3D.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub in3d: Option<bool>,
+    /// 3D tilt degrees: label 0 flat, 90 standing; dimension around its line.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pitch: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub italic: Option<bool>,
     /// Label alignment: `left`, `center`, `right`.
@@ -407,9 +429,10 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 "floor_mat",
                 "ceil_mat",
             ],
-            Element::Dimension(_) => &["a", "b", "off", "level"],
+            Element::Dimension(_) => &["a", "b", "off", "level", "in3d", "elev", "pitch"],
             Element::Label(_) => &[
-                "text", "at", "size", "angle", "level", "bold", "italic", "align", "color",
+                "text", "at", "size", "angle", "level", "bold", "italic", "align", "color", "in3d",
+                "elev", "pitch",
             ],
             Element::Level(_) => &["name", "elev", "h", "slab"],
             Element::Furniture(_) => &[
@@ -509,6 +532,13 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 d.start = spec.a.unwrap_or(d.start);
                 d.end = spec.b.unwrap_or(d.end);
                 d.offset = spec.off.unwrap_or(d.offset);
+                d.visible_in_3d = spec
+                    .in3d
+                    .unwrap_or(d.visible_in_3d || spec.elev.is_some() || spec.pitch.is_some());
+                if let Some(elev) = spec.elev {
+                    d.elevation = [elev; 2];
+                }
+                d.pitch = spec.pitch.unwrap_or(d.pitch);
                 Element::Dimension(d)
             }
             Element::Label(mut l) => {
@@ -520,6 +550,13 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 l.italic = spec.italic.unwrap_or(l.italic);
                 l.align = spec.align.unwrap_or(l.align);
                 l.color = spec.color.or(l.color);
+                l.elevation = spec.elev.unwrap_or(l.elevation);
+                l.pitch = match (spec.in3d, spec.pitch) {
+                    (Some(false), _) => None,
+                    (_, Some(pitch)) => Some(pitch),
+                    (Some(true), None) => l.pitch.or(Some(90.0)),
+                    (None, None) => l.pitch.or(spec.elev.map(|_| 90.0)),
+                };
                 Element::Label(l)
             }
             Element::Furniture(mut f) => {

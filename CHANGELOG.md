@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Live sun in the 3D view from the compass and hour; labels and dimensions shown in
+  3D (dialogs and MCP `in3d`/`elev`/`pitch`).
+
 - Video along the camera path (Catmull-Rom, Motion-JPEG AVI): "Criar vídeo" window
   and MCP `video`.
 

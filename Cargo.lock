@@ -2732,7 +2732,10 @@ dependencies = [
 name = "newera-render"
 version = "0.1.0"
 dependencies = [
+ "ab_glyph",
  "bytemuck",
+ "epaint_default_fonts",
+ "geo",
  "glam",
  "image",
  "newera-catalog",

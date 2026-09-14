@@ -439,6 +439,25 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                     ui.label(crate::i18n::tr("Afastamento"));
                     ui.add(cm(&mut dim.offset, -10_000.0..=10_000.0));
                     ui.end_row();
+                    ui.label(crate::i18n::tr("Vista 3D"));
+                    ui.checkbox(&mut dim.visible_in_3d, crate::i18n::tr("Mostrar em 3D"));
+                    ui.end_row();
+                    if dim.visible_in_3d {
+                        ui.label(crate::i18n::tr("Elevação"));
+                        ui.horizontal(|ui| {
+                            ui.add(cm(&mut dim.elevation[0], -1000.0..=10_000.0));
+                            ui.add(cm(&mut dim.elevation[1], -1000.0..=10_000.0));
+                        });
+                        ui.end_row();
+                        ui.label(crate::i18n::tr("Inclinação"));
+                        ui.add(
+                            DragValue::new(&mut dim.pitch)
+                                .range(-180.0..=180.0)
+                                .suffix("°")
+                                .speed(1.0),
+                        );
+                        ui.end_row();
+                    }
                 });
             });
             finish(app, answer, Dialog::ModifyDimension(dim.clone()), || {
@@ -474,6 +493,27 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                     ui.label(crate::i18n::tr("Contorno"));
                     optional_color(ui, &mut label.outline, [255, 255, 255]);
                     ui.end_row();
+                    ui.label(crate::i18n::tr("Vista 3D"));
+                    let mut shown = label.pitch.is_some();
+                    if ui
+                        .checkbox(&mut shown, crate::i18n::tr("Mostrar em 3D"))
+                        .changed()
+                    {
+                        label.pitch = shown.then_some(90.0);
+                    }
+                    ui.end_row();
+                    if let Some(pitch) = &mut label.pitch {
+                        ui.label(crate::i18n::tr("Elevação"));
+                        ui.add(cm(&mut label.elevation, -1000.0..=10_000.0));
+                        ui.end_row();
+                        ui.label(crate::i18n::tr("Inclinação"));
+                        ui.horizontal(|ui| {
+                            ui.selectable_value(pitch, 0.0, crate::i18n::tr("Deitado"));
+                            ui.selectable_value(pitch, 90.0, crate::i18n::tr("Em pé"));
+                            ui.add(DragValue::new(pitch).range(0.0..=90.0).suffix("°"));
+                        });
+                        ui.end_row();
+                    }
                 });
             });
             finish(app, answer, Dialog::ModifyLabel(label.clone()), || {
