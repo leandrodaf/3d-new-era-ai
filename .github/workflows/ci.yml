@@ -74,7 +74,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/linux-deps
-      - uses: dtolnay/rust-toolchain@1.95
+      - uses: dtolnay/rust-toolchain@1.120
       - uses: Swatinem/rust-cache@v2
       # `+1.95` overrides rust-toolchain.toml, which pins `stable`.
       - run: cargo +1.95 check --workspace --locked
