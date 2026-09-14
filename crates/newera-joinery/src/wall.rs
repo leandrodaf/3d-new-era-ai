@@ -249,7 +249,23 @@ fn resolve(home: &Home, p: &CabinetRunParams) -> Result<Request, String> {
         ));
     }
     let given = p.p.clone().unwrap_or_default();
-    let params: RunParams = serde_json::from_value(Value::Object(given.clone()))
+    // Planning the same row again starts from the choices made last time
+    // (sink, cooktop, fronts…); what is given now changes only those keys.
+    let row = given.get("row").and_then(Value::as_str).unwrap_or("base");
+    let tag = format!("{wall_id}:{row}");
+    let mut merged_params = home
+        .furniture
+        .iter()
+        .find(|f| f.properties.get(RUN_KEY) == Some(&tag))
+        .and_then(|f| f.properties.get(REQUEST_KEY))
+        .and_then(|s| serde_json::from_str::<Request>(s).ok())
+        .and_then(|r| serde_json::to_value(r.params).ok())
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
+    for (key, value) in &given {
+        merged_params.insert(key.clone(), value.clone());
+    }
+    let params: RunParams = serde_json::from_value(Value::Object(merged_params))
         .map_err(|e| format!("invalid parameters: {e}"))?;
     let length = wall.start.distance(wall.end);
     let u = (
@@ -476,14 +492,13 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
             {
                 let center = along(child.position);
                 match crate::fixture_of(child) {
-                    crate::Fixture::Cooktop
-                        if params.row == RunRow::Base && params.cooktop.is_none() =>
-                    {
+                    // A real item already set in wins over the position asked before.
+                    crate::Fixture::Cooktop if params.row == RunRow::Base => {
                         params.cooktop = Some(center);
                         params.cooktop_w = ((child.width + 6.0) / 5.0).ceil().max(12.0) * 5.0;
                         params.cooktop_real = Some([child.width, child.depth]);
                     }
-                    crate::Fixture::Sink if params.row == RunRow::Base && params.sink.is_none() => {
+                    crate::Fixture::Sink if params.row == RunRow::Base => {
                         params.sink = Some(center);
                         params.sink_w = ((child.width + 10.0) / 5.0).ceil().max(12.0) * 5.0;
                         params.sink_real = Some([child.width, child.depth]);
@@ -771,10 +786,17 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
         .map(|m| {
             let mut build = m.build;
             // Turned around, the cabinet's left is the run's end.
-            if side < 0.0
-                && let Build::Cabinet(c) = &mut build
-            {
-                std::mem::swap(&mut c.blind_left, &mut c.blind_right);
+            if side < 0.0 {
+                match &mut build {
+                    Build::Cabinet(c) => std::mem::swap(&mut c.blind_left, &mut c.blind_right),
+                    // …and a countertop's cutouts count from the other end.
+                    Build::Countertop(top) => {
+                        for cut in &mut top.cutouts {
+                            cut.x = top.length - cut.x;
+                        }
+                    }
+                    _ => {}
+                }
             }
             let along = m.from + m.width / 2.0;
             let out = wall.thickness / 2.0 + m.depth / 2.0;

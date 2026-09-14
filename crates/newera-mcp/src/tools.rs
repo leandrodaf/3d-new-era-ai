@@ -3578,7 +3578,10 @@ mod tests {
             let p: newera_joinery::CabinetRunParams = serde_json::from_str(json).unwrap();
             serde_json::from_str(&s.cabinet_run(Parameters(p)).unwrap()).unwrap()
         };
-        let base = run(r#"{"wall":"w1","p":{"cooktop":260}}"#);
+        run(r#"{"wall":"w1","p":{"cooktop":260}}"#);
+        // Planned again without parameters, the cooktop stays where it was.
+        let base = run(r#"{"wall":"w1"}"#);
+        assert!(base["modules"].to_string().contains("cooktop"), "{base}");
         let top = base["modules"]
             .as_array()
             .unwrap()
@@ -3728,5 +3731,61 @@ mod tests {
         // Nothing overhead is explained.
         let p: FitRoofParams = serde_json::from_str(r#"{"ids":["w999"]}"#).unwrap();
         assert!(s.fit_roof(Parameters(p)).is_err());
+    }
+
+    #[test]
+    fn cutouts_land_over_their_cabinets_on_walls_run_either_way() {
+        let s = server();
+        // Counter-clockwise walls: the kitchen side of w2 is to its right.
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[0,300],[420,300],[420,0]],"closed":true}],"rooms":[{"name":"Cozinha","at":[210,150]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        for wall in ["w1", "w2", "w3", "w4"] {
+            let p: newera_joinery::CabinetRunParams = serde_json::from_str(&format!(
+                r#"{{"wall":"{wall}","p":{{"cooktop":210,"sink":80}}}}"#
+            ))
+            .unwrap();
+            let Ok(reply) = s.cabinet_run(Parameters(p)) else {
+                continue;
+            };
+            let reply: serde_json::Value = serde_json::from_str(&reply).unwrap();
+            let doc = s.document.read();
+            let find = |role: &str| {
+                let id = reply["modules"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|m| m[1] == role)?[0]
+                    .as_str()?
+                    .to_owned();
+                doc.home()
+                    .furniture
+                    .iter()
+                    .find(|f| f.id.to_string() == id)
+                    .cloned()
+            };
+            let (Some(top), Some(cooktop)) = (find("countertop"), find("cooktop")) else {
+                continue;
+            };
+            let params: newera_joinery::Build =
+                serde_json::from_str(&top.properties[newera_joinery::PARAMS_KEY]).unwrap();
+            let newera_joinery::Build::Countertop(t) = params else {
+                panic!()
+            };
+            let cut = t
+                .cutouts
+                .iter()
+                .find(|c| c.kind == newera_joinery::CutoutKind::Cooktop)
+                .unwrap();
+            let hole = top.to_plan((cut.x - t.length / 2.0, 0.0));
+            // The hole is over the cooktop's drawer unit, whichever way the wall runs.
+            assert!(
+                hole.distance(cooktop.position) < 35.0,
+                "{wall}: hole {hole:?} vs cabinet {:?}",
+                cooktop.position
+            );
+        }
     }
 }
