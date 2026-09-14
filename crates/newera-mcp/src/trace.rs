@@ -6,7 +6,7 @@
 // Image coordinates are far below 2^52.
 #![allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
 
-use image::GrayImage;
+use image::{GrayImage, Luma, RgbImage};
 
 /// A wall found in the image, in pixels.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -25,6 +25,25 @@ pub(crate) struct TraceOptions {
     pub min_length: f64,
     pub min_thickness: f64,
     pub max_thickness: f64,
+    /// Collinear pieces this close (door and window gaps) become one wall.
+    pub max_gap: f64,
+}
+
+/// Ink of a colored plan: dark and gray, not saturated. Humanized plans paint
+/// lawns, plants, furniture and cars in color; walls are black or gray.
+pub(crate) fn ink_mask(image: &RgbImage, threshold: u8) -> GrayImage {
+    GrayImage::from_fn(image.width(), image.height(), |x, y| {
+        let [r, g, b] = image.get_pixel(x, y).0;
+        let (max, min) = (r.max(g).max(b), r.min(g).min(b));
+        let luma = (u32::from(r) * 299 + u32::from(g) * 587 + u32::from(b) * 114) / 1000;
+        // Saturation as in HSV: spread over the brightest channel.
+        let saturated = max > 0 && f32::from(max - min) / f32::from(max) > 0.28 && max - min > 30;
+        Luma([if luma < u32::from(threshold) && !saturated {
+            0
+        } else {
+            255
+        }])
+    })
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -111,6 +130,16 @@ fn bands(
     done
 }
 
+/// Union-find root of `i`.
+fn root(group: &mut [usize], i: usize) -> usize {
+    let mut i = i;
+    while group[i] != i {
+        group[i] = group[group[i]];
+        i = group[i];
+    }
+    i
+}
+
 /// Horizontal and vertical walls, ends snapped onto the axis of the walls
 /// they run into.
 #[allow(clippy::cast_precision_loss)]
@@ -160,8 +189,113 @@ pub(crate) fn trace(image: &GrayImage, options: &TraceOptions) -> Vec<Traced> {
             thickness: thick(v),
         });
     }
-    walls.retain(|t| (t.b[0] - t.a[0]).hypot(t.b[1] - t.a[1]) >= options.min_length);
-    walls
+    // Pieces of one wall interrupted by doors and windows join up.
+    let mut merged: Vec<Traced> = Vec::new();
+    walls.sort_by(|p, q| {
+        let key = |t: &Traced| {
+            let horizontal = (t.a[1] - t.b[1]).abs() < (t.a[0] - t.b[0]).abs();
+            (
+                horizontal,
+                if horizontal { t.a[1] } else { t.a[0] },
+                t.a[0].min(t.b[0]) + t.a[1].min(t.b[1]),
+            )
+        };
+        let (a, b) = (key(p), key(q));
+        a.0.cmp(&b.0)
+            .then(a.1.total_cmp(&b.1))
+            .then(a.2.total_cmp(&b.2))
+    });
+    for wall in walls {
+        let horizontal = (wall.a[1] - wall.b[1]).abs() < (wall.a[0] - wall.b[0]).abs();
+        let span = |t: &Traced| {
+            if horizontal {
+                (
+                    t.a[0].min(t.b[0]),
+                    t.a[0].max(t.b[0]),
+                    f64::midpoint(t.a[1], t.b[1]),
+                )
+            } else {
+                (
+                    t.a[1].min(t.b[1]),
+                    t.a[1].max(t.b[1]),
+                    f64::midpoint(t.a[0], t.b[0]),
+                )
+            }
+        };
+        let (s0, s1, axis) = span(&wall);
+        let joined = merged.iter_mut().rev().find(|m| {
+            let m_horizontal = (m.a[1] - m.b[1]).abs() < (m.a[0] - m.b[0]).abs();
+            let (m0, m1, m_axis) = span(m);
+            m_horizontal == horizontal
+                && (m_axis - axis).abs() <= m.thickness.max(wall.thickness) / 2.0
+                && (m.thickness - wall.thickness).abs() <= 0.35 * m.thickness.max(wall.thickness)
+                && s0 <= m1 + options.max_gap
+                && s1 >= m0 - options.max_gap
+        });
+        match joined {
+            Some(m) => {
+                let (m0, m1, m_axis) = span(m);
+                let (lo, hi) = (m0.min(s0), m1.max(s1));
+                let axis = f64::midpoint(m_axis, axis);
+                if horizontal {
+                    m.a = [lo, axis];
+                    m.b = [hi, axis];
+                } else {
+                    m.a = [axis, lo];
+                    m.b = [axis, hi];
+                }
+                m.thickness = m.thickness.max(wall.thickness);
+            }
+            None => merged.push(wall),
+        }
+    }
+    merged.retain(|t| (t.b[0] - t.a[0]).hypot(t.b[1] - t.a[1]) >= options.min_length);
+    // Walls meet other walls. Short dark pieces touching nothing (a car's
+    // windows, a table, a shadow) are drawings, not walls.
+    let length = |t: &Traced| (t.b[0] - t.a[0]).hypot(t.b[1] - t.a[1]);
+    let touches = |t: &Traced, others: &[Traced]| {
+        let near = |p: [f64; 2], o: &Traced| {
+            // Distance from p to the other wall's axis segment.
+            let (dx, dy) = (o.b[0] - o.a[0], o.b[1] - o.a[1]);
+            let len2 = (dx * dx + dy * dy).max(1e-9);
+            let k = (((p[0] - o.a[0]) * dx + (p[1] - o.a[1]) * dy) / len2).clamp(0.0, 1.0);
+            (p[0] - (o.a[0] + dx * k)).hypot(p[1] - (o.a[1] + dy * k))
+                <= o.thickness.max(t.thickness) / 2.0 + 4.0
+        };
+        others
+            .iter()
+            .filter(|o| *o != t)
+            .any(|o| near(t.a, o) || near(t.b, o) || near(o.a, t) || near(o.b, t))
+    };
+    for _ in 0..2 {
+        let snapshot = merged.clone();
+        merged.retain(|t| length(t) >= 3.0 * options.min_length || touches(t, &snapshot));
+    }
+    // A house is one connected set of walls: small clusters apart from it
+    // (shadows of plants, a set of chairs in the garden) go too.
+    let n = merged.len();
+    let mut group: Vec<usize> = (0..n).collect();
+    for i in 0..n {
+        for j in i + 1..n {
+            if touches(&merged[i], std::slice::from_ref(&merged[j])) {
+                let (a, b) = (root(&mut group, i), root(&mut group, j));
+                group[a] = b;
+            }
+        }
+    }
+    let mut totals = std::collections::HashMap::new();
+    for (i, wall) in merged.iter().enumerate() {
+        *totals.entry(root(&mut group, i)).or_insert(0.0) += length(wall);
+    }
+    let biggest = totals.values().copied().fold(0.0, f64::max);
+    let keep: Vec<bool> = (0..n)
+        .map(|i| totals[&root(&mut group, i)] >= 0.2 * biggest)
+        .collect();
+    merged
+        .into_iter()
+        .zip(keep)
+        .filter_map(|(t, k)| k.then_some(t))
+        .collect()
 }
 
 #[cfg(test)]
@@ -176,6 +310,41 @@ mod tests {
                 image.put_pixel(x, y, Luma([20]));
             }
         }
+    }
+
+    #[test]
+    fn colored_blobs_are_not_walls_and_openings_do_not_split_them() {
+        use image::Rgb;
+        let mut image = RgbImage::from_pixel(420, 200, Rgb([245, 245, 245]));
+        let mut paint = |x0: u32, y0: u32, x1: u32, y1: u32, c: [u8; 3]| {
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    image.put_pixel(x, y, Rgb(c));
+                }
+            }
+        };
+        // A wall with a 60 px window gap, a dark green hedge as thick as a wall,
+        // and a short dark block standing alone (a car's windshield).
+        paint(10, 20, 150, 32, [30, 30, 30]);
+        paint(210, 20, 410, 32, [30, 30, 30]);
+        paint(10, 120, 300, 132, [40, 110, 50]);
+        paint(150, 160, 210, 172, [25, 25, 25]);
+        let mask = ink_mask(&image, 128);
+        let walls = trace(
+            &mask,
+            &TraceOptions {
+                threshold: 128,
+                min_length: 40.0,
+                min_thickness: 5.0,
+                max_thickness: 30.0,
+                max_gap: 80.0,
+            },
+        );
+        assert_eq!(walls.len(), 1, "{walls:?}");
+        assert!(
+            (walls[0].a[0] - 10.0).abs() < 0.5 && (walls[0].b[0] - 410.0).abs() < 0.5,
+            "{walls:?}"
+        );
     }
 
     #[test]
@@ -196,6 +365,7 @@ mod tests {
                 min_length: 40.0,
                 min_thickness: 5.0,
                 max_thickness: 30.0,
+                max_gap: 0.0,
             },
         );
         assert_eq!(walls.len(), 5, "{walls:?}");

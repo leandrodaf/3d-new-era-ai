@@ -158,13 +158,17 @@ pub(crate) struct CutListParams {
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct TraceParams {
-    /// Luminance 0..255 below which a pixel is ink (default 128; raise it for gray walls).
+    /// Luminance 0..255 below which a gray pixel is ink (default 128; raise it for light gray walls).
     threshold: Option<u8>,
     /// Shortest wall kept, cm (default 60).
     min_len: Option<f64>,
     /// Wall thickness range, cm (default 5..45).
     t_min: Option<f64>,
     t_max: Option<f64>,
+    /// Doors and windows up to this wide don't split a wall, cm (default 130).
+    max_gap: Option<f64>,
+    /// Only this part of the plan `[x0, y0, x1, y1]` cm.
+    region: Option<[f64; 4]>,
     /// Create the walls (one undo step) instead of only listing them.
     #[serde(default)]
     create: bool,
@@ -1267,7 +1271,7 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Trace walls from the background image (set_background first): thick dark bands across or down the image become walls. Returns rows [[x1,y1],[x2,y2],t] in plan cm; create=true adds them as walls. Check with render_plan bg=0.5."
+        description = "Trace walls from the background image (set_background first): thick dark or gray bands across or down the image become walls (colored areas — lawn, plants, furniture — are ignored; collinear pieces split by doors/windows up to max_gap join; region limits the search). Returns rows [[x1,y1],[x2,y2],t] in plan cm; create=true adds them as walls. Check with render_plan bg=0.5."
     )]
     fn trace_background(
         &self,
@@ -1278,7 +1282,9 @@ impl NewEraMcp {
         let path = newera_core::resolve_asset(doc.asset_dir().as_deref(), &bg.path);
         let image = image::open(&path)
             .map_err(|e| invalid(format!("cannot read {}: {e}", path.display())))?
-            .to_luma8();
+            .to_rgb8();
+        // Colored areas (lawn, plants, furniture, cars) are never ink.
+        let image = crate::trace::ink_mask(&image, p.threshold.unwrap_or(128));
         let (sx, sy) = bg.scale();
         let px = |cm: f64| cm / sx.min(sy);
         let options = crate::trace::TraceOptions {
@@ -1286,6 +1292,7 @@ impl NewEraMcp {
             min_length: px(p.min_len.unwrap_or(60.0)),
             min_thickness: p.t_min.unwrap_or(5.0) / sx.max(sy),
             max_thickness: p.t_max.unwrap_or(45.0) / sx.min(sy),
+            max_gap: px(p.max_gap.unwrap_or(130.0)),
         };
         let walls: Vec<(Point2, Point2, f64)> = crate::trace::trace(&image, &options)
             .into_iter()
@@ -1297,6 +1304,17 @@ impl NewEraMcp {
                     bg.plan_point(Point2::new(t.b[0], t.b[1])),
                     (thickness * 10.0).round() / 10.0,
                 )
+            })
+            .filter(|(a, b, _)| {
+                p.region.is_none_or(|[x0, y0, x1, y1]| {
+                    let inside = |q: &Point2| {
+                        q.x >= x0.min(x1)
+                            && q.x <= x0.max(x1)
+                            && q.y >= y0.min(y1)
+                            && q.y <= y0.max(y1)
+                    };
+                    inside(a) && inside(b)
+                })
             })
             .collect();
         if p.create {
