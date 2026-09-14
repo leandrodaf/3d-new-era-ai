@@ -220,6 +220,38 @@ impl Document {
                 };
             }
         }
+        // Walls and panels that follow the roof, in the same undo step.
+        let follows = |home: &Home| {
+            home.walls
+                .iter()
+                .any(|w| w.properties.contains_key(crate::roof_fit::ROOF_FIT_KEY))
+                || home
+                    .furniture
+                    .iter()
+                    .any(|f| f.properties.contains_key(crate::roof_fit::ROOF_FIT_KEY))
+        };
+        if follows(&variant.home) {
+            let snapshot = variant.home.clone();
+            let mut ids = variant.home.clone();
+            let refit = crate::roof_fit::refit_marked(&snapshot, &mut || ids.new_wall_id());
+            if !refit.is_empty() {
+                // Keep the id counter in step with the walls just added.
+                for _ in refit.iter().filter(|c| matches!(c, Command::Insert { .. })) {
+                    variant.home.new_wall_id();
+                }
+                let mut undo_fit = Vec::new();
+                for command in refit {
+                    if let Ok(previous) = command.apply(&mut variant.home) {
+                        undo_fit.push(previous);
+                    }
+                }
+                if !undo_fit.is_empty() {
+                    undo_fit.reverse();
+                    undo_fit.push(inverse);
+                    inverse = Command::Batch { commands: undo_fit };
+                }
+            }
+        }
         variant.undo_stack.push(inverse);
         variant.redo_stack.clear();
         self.revision += 1;

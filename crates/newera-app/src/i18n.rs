@@ -26,6 +26,7 @@ pub(crate) fn tr(pt: &'static str) -> &'static str {
 fn english(pt: &str) -> Option<&'static str> {
     Some(match pt {
         " · arco" => " · arc",
+        "Ajustar ao telhado" => "Fit to the roof",
         "Embutir peça no móvel selecionado" => "Embed the piece in the selected joinery",
         "Embutido:" => "Embedded:",
         "Armários na parede" => "Cabinets on the wall",

@@ -1227,6 +1227,25 @@ impl NewEraApp {
                     }
                     ui.close();
                 }
+                let fit_ids: Vec<ElementId> = self
+                    .selection
+                    .iter()
+                    .filter(|id| matches!(id, ElementId::Wall(_) | ElementId::Furniture(_)))
+                    .copied()
+                    .collect();
+                if menu_item(
+                    ui,
+                    icon::TRIANGLE,
+                    crate::i18n::tr("Ajustar ao telhado"),
+                    "",
+                    !fit_ids.is_empty(),
+                ) {
+                    self.run(|doc| {
+                        newera_core::fit_to_roof(doc, &fit_ids, newera_core::ROOF_FIT_ABOVE)
+                            .map(|_| ())
+                    });
+                    ui.close();
+                }
                 if menu_item(
                     ui,
                     icon::SQUARES_FOUR,

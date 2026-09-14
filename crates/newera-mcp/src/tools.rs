@@ -33,6 +33,17 @@ pub struct NewEraMcp {
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct FitRoofParams {
+    /// Walls and pieces (glass, panels) to fit.
+    ids: Vec<String>,
+    /// Lowest sloping surface that counts, cm above the floor (default 5).
+    above: Option<f64>,
+    /// Stop following the roof (heights stay as they are).
+    #[serde(default)]
+    off: bool,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct EmbedParams {
     /// Piece already in the plan to embed (id)…
     item: Option<String>,
@@ -1014,6 +1025,53 @@ impl NewEraMcp {
         };
         doc.execute(command).map_err(core)?;
         Ok(summary(&group_id.to_string()).to_string())
+    }
+
+    #[tool(
+        description = "Fit walls, glass and panels to the roof above them: under an A-frame or shed roof a wall gets a sloping top and is split at the ridge, a panel becomes a triangle or trapezoid (a glass gable with no math). They keep following the roof when it changes, in the same undo step; off stops that. Reply ok with the count."
+    )]
+    fn fit_roof(&self, Parameters(p): Parameters<FitRoofParams>) -> Result<String, ErrorData> {
+        let ids = edit::parse_ids(&p.ids).map_err(invalid)?;
+        let mut doc = self.document.write();
+        if p.off {
+            let mut commands = Vec::new();
+            for id in &ids {
+                match id {
+                    newera_core::ElementId::Wall(w) => {
+                        if let Some(mut wall) = doc.home().wall(*w).cloned() {
+                            wall.properties.remove(newera_core::ROOF_FIT_KEY);
+                            commands.push(Command::update(wall));
+                        }
+                    }
+                    newera_core::ElementId::Furniture(f) => {
+                        if let Some(mut piece) =
+                            doc.home().furniture.iter().find(|x| x.id == *f).cloned()
+                        {
+                            piece.properties.remove(newera_core::ROOF_FIT_KEY);
+                            commands.push(Command::update(piece));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            doc.execute(Command::Batch { commands }).map_err(core)?;
+            return Ok(ok(&doc, &[]));
+        }
+        let before: Vec<String> = doc.home().walls.iter().map(|w| w.id.to_string()).collect();
+        let count = newera_core::fit_to_roof(
+            &mut doc,
+            &ids,
+            p.above.unwrap_or(newera_core::ROOF_FIT_ABOVE),
+        )
+        .map_err(core)?;
+        let added: Vec<String> = doc
+            .home()
+            .walls
+            .iter()
+            .map(|w| w.id.to_string())
+            .filter(|id| !before.contains(id))
+            .collect();
+        Ok(format!("{} fitted={count}", ok(&doc, &added)))
     }
 
     #[tool(
@@ -3583,5 +3641,74 @@ mod tests {
             Some(tower_id.clone()),
             "the oven stays in the tower"
         );
+    }
+
+    #[test]
+    fn walls_and_glass_follow_an_a_frame_roof() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"roofs":[{"pts":[[0,0],[0,700],[600,700],[600,0]],"h":0,"ridge_h":600,"overhang":30,"t":15}],"walls":[{"pts":[[0,420],[600,420]],"h":250,"t":12}]}"#,
+        )
+        .unwrap();
+        let ids = s.create(Parameters(params)).unwrap();
+        let wall = ids
+            .rsplit('=')
+            .next()
+            .unwrap()
+            .split(',')
+            .find(|i| i.starts_with('w'))
+            .unwrap()
+            .to_owned();
+        let place: PlaceParams = serde_json::from_str(
+            r#"{"items":[{"cat":"panel","at":[300,5],"w":600,"d":2,"h":100,"opacity":0.35}]}"#,
+        )
+        .unwrap();
+        let glass = s
+            .place(Parameters(place))
+            .unwrap()
+            .rsplit('=')
+            .next()
+            .unwrap()
+            .to_owned();
+        let p: FitRoofParams =
+            serde_json::from_str(&format!(r#"{{"ids":["{wall}","{glass}"]}}"#)).unwrap();
+        let reply = s.fit_roof(Parameters(p)).unwrap();
+        assert!(reply.contains("fitted=3"), "{reply}");
+        {
+            let doc = s.document.read();
+            let walls = &doc.home().walls;
+            assert_eq!(walls.len(), 2, "split at the ridge");
+            let peak = walls
+                .iter()
+                .map(|w| w.height.max(w.height_at_end.unwrap_or(0.0)))
+                .fold(0.0, f64::max);
+            assert!(peak > 590.0, "{walls:?}");
+            let panel = doc
+                .home()
+                .furniture
+                .iter()
+                .find(|f| f.id.to_string() == glass)
+                .unwrap();
+            assert!(
+                matches!(panel.shape, Some(newera_core::SolidShape::Profile(_))),
+                "{panel:?}"
+            );
+        }
+        // Off: the marks go, heights stay.
+        let p: FitRoofParams =
+            serde_json::from_str(&format!(r#"{{"ids":["{wall}"],"off":true}}"#)).unwrap();
+        s.fit_roof(Parameters(p)).unwrap();
+        assert!(
+            !s.document
+                .read()
+                .home()
+                .wall(wall.parse().unwrap())
+                .unwrap()
+                .properties
+                .contains_key(newera_core::ROOF_FIT_KEY)
+        );
+        // Nothing overhead is explained.
+        let p: FitRoofParams = serde_json::from_str(r#"{"ids":["w999"]}"#).unwrap();
+        assert!(s.fit_roof(Parameters(p)).is_err());
     }
 }

@@ -25,6 +25,7 @@ mod levels;
 mod materials;
 pub mod ops;
 mod project;
+mod roof_fit;
 mod style;
 mod units;
 pub mod vfs;
@@ -58,6 +59,7 @@ pub use project::{
     open_project, project_from_bytes, resolve_asset, resolve_project_path, save_project,
     to_project_json,
 };
+pub use roof_fit::{ROOF_FIT_ABOVE, ROOF_FIT_KEY, fit_commands, fit_to_roof, roof_height_at};
 pub use style::{
     ArrowStyle, Camera, Cameras, DashStyle, Discipline, DrawingMode, Environment, LineCap,
     LineJoin, PaperOrientation, PhotoSettings, Polyline, PrintSettings, Properties, TextAlign,
