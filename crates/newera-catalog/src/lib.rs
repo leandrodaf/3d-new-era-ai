@@ -703,7 +703,7 @@ pub static CATALOG: &[CatalogItem] = &[
         [90.0, 90.0, 200.0],
         [170, 205, 225],
         Model::Shower,
-        "shower box chuveiro",
+        "shower box chuveiro alvenaria",
     ),
     item(
         "shower-glass",
@@ -712,7 +712,7 @@ pub static CATALOG: &[CatalogItem] = &[
         [120.0, 2.0, 190.0],
         [168, 206, 226],
         Model::GlassPanel,
-        "shower glass box vidro",
+        "shower glass box vidro chuveiro vidro temperado",
     ),
     item(
         "bathtub",
@@ -1326,9 +1326,11 @@ pub fn find(id: &str) -> Option<&'static CatalogItem> {
 /// returns everything in catalog order.
 pub fn search(query: &str) -> Vec<&'static CatalogItem> {
     let words: Vec<String> = fold(query).split_whitespace().map(str::to_owned).collect();
-    CATALOG
+    // Items matching any word, the ones matching more words first.
+    let mut scored: Vec<(usize, usize, &'static CatalogItem)> = CATALOG
         .iter()
-        .filter(|item| {
+        .enumerate()
+        .filter_map(|(order, item)| {
             let haystack = fold(&format!(
                 "{} {} {} {}",
                 item.id,
@@ -1336,9 +1338,15 @@ pub fn search(query: &str) -> Vec<&'static CatalogItem> {
                 item.keywords,
                 item.category.name()
             ));
-            words.iter().all(|w| haystack.contains(w.as_str()))
+            let hits = words
+                .iter()
+                .filter(|w| haystack.contains(w.as_str()))
+                .count();
+            (hits > 0 || words.is_empty()).then_some((hits, order, item))
         })
-        .collect()
+        .collect();
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    scored.into_iter().map(|(_, _, item)| item).collect()
 }
 
 fn fold(text: &str) -> String {
@@ -1473,7 +1481,9 @@ mod tests {
         let ids = |q: &str| search(q).iter().map(|i| i.id).collect::<Vec<_>>();
         assert!(ids("sofa").contains(&"sofa-3"));
         assert!(ids("Sofá 2").contains(&"sofa-2"));
-        assert_eq!(ids("geladeira"), ["fridge"]);
+        assert_eq!(ids("geladeira").first(), Some(&"fridge"));
+        // Several words: any of them, best match first.
+        assert_eq!(ids("box vidro chuveiro").first(), Some(&"shower-glass"));
         assert!(ids("cama casal").contains(&"bed-double"));
         assert!(ids("window").contains(&"window"));
         assert_eq!(search("").len(), CATALOG.len());

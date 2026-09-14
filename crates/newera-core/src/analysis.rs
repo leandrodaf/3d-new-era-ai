@@ -23,6 +23,8 @@ pub enum Issue {
 
 /// Area below which a contact is ignored (touching pieces are fine), cm².
 const MIN_OVERLAP: f64 = 25.0;
+/// How far a piece may press into a wall face and still count as against it, cm.
+const WALL_TOLERANCE: f64 = 2.0;
 /// Pieces this thin (rugs, mats) never collide.
 const FLAT: f64 = 2.0;
 
@@ -142,6 +144,21 @@ pub fn check_layout(home: &Home) -> Vec<Issue> {
             if shared.unsigned_area() <= MIN_OVERLAP {
                 continue;
             }
+            // Resting against a wall is not being in it: only count pieces that
+            // go more than a couple of centimeters into it.
+            let depth = shared
+                .iter()
+                .filter_map(geo::MinimumRotatedRect::minimum_rotated_rect)
+                .map(|r| {
+                    let c: Vec<_> = r.exterior().coords().copied().collect();
+                    let a = (c[1].x - c[0].x).hypot(c[1].y - c[0].y);
+                    let b = (c[2].x - c[1].x).hypot(c[2].y - c[1].y);
+                    a.min(b)
+                })
+                .fold(0.0, f64::max);
+            if depth <= WALL_TOLERANCE {
+                continue;
+            }
             // Over the shared area, is the piece below the wall top? Tilted
             // pieces (rafters, roof slopes) are measured right there.
             let Some(at) = shared.iter().next().and_then(centroid) else {
@@ -159,7 +176,11 @@ pub fn check_layout(home: &Home) -> Vec<Issue> {
         };
         let swing = polygon(&swing);
         for (i, piece) in pieces.iter().enumerate() {
-            if piece.is_opening() || piece.height <= FLAT {
+            // Below the door's sill (footings under a raised floor) is out of its way.
+            if piece.is_opening()
+                || piece.height <= FLAT
+                || piece.height_range().1 <= door.elevation + 1.0
+            {
                 continue;
             }
             let shared = swing.intersection(&footprints[i]);
@@ -253,6 +274,50 @@ mod tests {
         assert_eq!(
             issues,
             vec![Issue::Overlap(FurnitureId(10), FurnitureId(11))],
+            "{issues:?}"
+        );
+    }
+
+    #[test]
+    fn pieces_against_a_wall_or_below_a_raised_door_are_fine() {
+        let mut home = room_home();
+        // A wardrobe pressing 1 cm into the top wall's face: against it, not in it.
+        let face = home.walls[0].thickness / 2.0;
+        home.furniture
+            .push(piece(30, (250.0, face - 1.0 + 30.0), (180.0, 60.0, 220.0)));
+        // 5 cm in: that one is in the wall.
+        home.furniture
+            .push(piece(31, (100.0, face - 5.0 + 20.0), (60.0, 40.0, 80.0)));
+        let mut door = piece(32, (0.0, 0.0), (80.0, 15.0, 210.0));
+        door.opening = Some(Opening::default());
+        door.elevation = 55.0;
+        let left_wall = home.walls[3].clone();
+        align_to_wall(&mut door, &left_wall, 200.0);
+        home.furniture.push(door);
+        // A footing under the raised floor, right in the swing.
+        home.furniture
+            .push(piece(33, (40.0, 180.0), (40.0, 40.0, 50.0)));
+        let issues = check_layout(&home);
+        assert!(
+            !issues
+                .iter()
+                .any(|i| matches!(i, Issue::InWall(FurnitureId(30), _))),
+            "{issues:?}"
+        );
+        assert!(
+            issues
+                .iter()
+                .any(|i| matches!(i, Issue::InWall(FurnitureId(31), _))),
+            "{issues:?}"
+        );
+        assert!(
+            !issues.iter().any(|i| matches!(
+                i,
+                Issue::BlocksDoor {
+                    by: FurnitureId(33),
+                    ..
+                }
+            )),
             "{issues:?}"
         );
     }

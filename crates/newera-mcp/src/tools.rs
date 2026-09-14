@@ -225,9 +225,9 @@ pub(crate) struct Render3dParams {
     pitch: Option<f32>,
     /// Aerial distance factor: 1 frames the building, 2 twice as far.
     zoom: Option<f32>,
-    /// Elevations (front/back/left/right/top): section plane in plan cm along
-    /// the view direction (y for front/back, x for left/right, height for top);
-    /// everything nearer than it is cut away.
+    /// Elevations: section plane in plan cm (y for front/back, x for left/right,
+    /// height for top); what lies between the viewer and it is cut away — walls
+    /// and pieces alike. front views from large y, back from y=0.
     cut: Option<f64>,
     w: Option<u32>,
     h: Option<u32>,
@@ -529,7 +529,7 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations (cut=cm makes a section), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). Keep w/h small."
+        description = "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations — front looks from the plan's bottom edge (large y) toward y=0, back from y=0 toward large y, left from x=0, right from large x; cut=cm makes a section keeping only what is beyond that plane from the viewer (front cut=200 keeps y<200, so the wall at y=0 stays as the backdrop; to remove it look from back), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). Keep w/h small."
     )]
     fn render_3d(
         &self,

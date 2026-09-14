@@ -629,11 +629,12 @@ pub struct WallCut {
 }
 
 /// Openings cut into each straight wall, in `walls` order. A door or window
-/// belongs to the nearest wall it is aligned with and centered in.
+/// cuts every wall it is aligned with and lies in: one that sits where a
+/// gable is split in two walls opens both halves.
 pub fn wall_cuts(walls: &[Wall], furniture: &[Furniture]) -> Vec<Vec<WallCut>> {
     let mut cuts = vec![Vec::new(); walls.len()];
     for piece in furniture.iter().filter(|f| f.is_opening() && f.visible) {
-        let best = walls
+        let hits: Vec<(usize, f64, f64)> = walls
             .iter()
             .enumerate()
             .filter(|(_, w)| !w.is_arc())
@@ -652,10 +653,12 @@ pub fn wall_cuts(walls: &[Wall], furniture: &[Furniture]) -> Vec<Vec<WallCut>> {
                 let along = dx * dir.0 + dy * dir.1;
                 let across = (-dx * dir.1 + dy * dir.0).abs();
                 let reach = w.thickness.max(piece.depth) / 2.0 + 1.0;
-                (across <= reach && along >= 0.0 && along <= len).then_some((i, along, across, len))
+                let half = piece.width / 2.0;
+                (across <= reach && along + half > 0.1 && along - half < len - 0.1)
+                    .then_some((i, along, len))
             })
-            .min_by(|a, b| a.2.total_cmp(&b.2));
-        if let Some((i, along, _, len)) = best {
+            .collect();
+        for (i, along, len) in hits {
             let wall = &walls[i];
             let (from, to) = (
                 (along - piece.width / 2.0).max(0.0),
@@ -837,6 +840,23 @@ mod tests {
             .map(|p| crate::geometry::polygon_area(p))
             .sum();
         assert!((area - (500.0 - 120.0) * 15.0).abs() < 1e-6, "{area}");
+    }
+
+    #[test]
+    fn a_door_where_a_gable_is_split_opens_both_halves() {
+        let mut left = Wall::new(WallId(1), Point2::new(0.0, 0.0), Point2::new(300.0, 0.0));
+        left.height = 55.0;
+        left.height_at_end = Some(675.0);
+        let mut right = Wall::new(WallId(2), Point2::new(300.0, 0.0), Point2::new(600.0, 0.0));
+        right.height = 675.0;
+        right.height_at_end = Some(55.0);
+        let mut door = piece(3, (300.0, 0.0), (90.0, 10.0, 210.0));
+        door.elevation = 55.0;
+        door.opening = Some(Opening::default());
+        let cuts = wall_cuts(&[left, right], &[door]);
+        assert_eq!((cuts[0][0].from, cuts[0][0].to), (255.0, 300.0));
+        assert_eq!((cuts[1][0].from, cuts[1][0].to), (0.0, 45.0));
+        assert!(cuts.iter().all(|c| (c[0].top - 265.0).abs() < 1e-9));
     }
 
     #[cfg(test)]

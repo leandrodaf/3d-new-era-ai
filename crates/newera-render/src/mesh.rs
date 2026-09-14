@@ -650,22 +650,26 @@ impl Mesh {
                 let (s0, s1) = (pair[0], pair[1]);
                 let mid = s0.midpoint(s1);
                 let (a0, a1) = (at(s0), at(s1));
-                if let Some(cut) = cuts.iter().find(|c| c.from <= mid && c.to >= mid) {
-                    if base + cut.bottom > bottom {
-                        self.add_side(a0, a1, bottom, base + cut.bottom, &surface);
-                    }
-                    if base + cut.top < top_at(a0).min(top_at(a1)) {
-                        self.add_side_sloped(
-                            a0,
-                            a1,
-                            base + cut.top,
-                            top_at(a0),
-                            top_at(a1),
-                            &surface,
-                        );
-                    }
-                } else {
+                // Openings stacked over this stretch (a door under a gable window):
+                // wall only below, between and above them.
+                let mut here: Vec<&WallCut> = cuts
+                    .iter()
+                    .filter(|c| c.from <= mid && c.to >= mid)
+                    .collect();
+                if here.is_empty() {
                     self.add_side_sloped(a0, a1, bottom, top_at(a0), top_at(a1), &surface);
+                } else {
+                    here.sort_by(|x, y| x.bottom.total_cmp(&y.bottom));
+                    let mut floor = bottom;
+                    for cut in &here {
+                        if base + cut.bottom > floor + 1e-6 {
+                            self.add_side(a0, a1, floor, base + cut.bottom, &surface);
+                        }
+                        floor = floor.max(base + cut.top);
+                    }
+                    if floor < top_at(a0).min(top_at(a1)) {
+                        self.add_side_sloped(a0, a1, floor, top_at(a0), top_at(a1), &surface);
+                    }
                 }
             }
         }
