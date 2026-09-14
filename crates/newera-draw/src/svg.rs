@@ -160,16 +160,20 @@ pub fn to_svg(scene: &Scene, options: &SvgOptions) -> String {
                 min,
                 max,
                 opacity,
+                angle,
             } => {
                 let _ = writeln!(
                     out,
-                    r#"<image href="{}" x="{}" y="{}" width="{}" height="{}" opacity="{}" preserveAspectRatio="none"/>"#,
+                    r#"<image href="{}" x="{}" y="{}" width="{}" height="{}" opacity="{}" preserveAspectRatio="none" transform="rotate({} {} {})"/>"#,
                     escape(path),
                     f(min.x),
                     f(min.y),
                     f(max.x - min.x),
                     f(max.y - min.y),
-                    f(*opacity)
+                    f(*opacity),
+                    f(*angle),
+                    f(min.x.midpoint(max.x)),
+                    f(min.y.midpoint(max.y))
                 );
             }
         }

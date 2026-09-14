@@ -44,6 +44,44 @@ fn render_sh3d_levels() {
         std::fs::write(out.join(format!("plan-level{i}.png")), png).unwrap();
     }
 
+    // Imported models drawn as top views.
+    let views = newera_render::TopViews::new(
+        std::env::temp_dir().join("newera-topviews-test"),
+        assets.clone(),
+        false,
+    );
+    let started = std::time::Instant::now();
+    let mut view = home.level_view(home.selected_level);
+    view.selected_level = home.selected_level;
+    let options = SceneOptions {
+        show_background: false,
+        piece_images: Some(newera_draw::PieceImages(std::sync::Arc::new(move |p| {
+            views.image_for(p)
+        }))),
+        ..SceneOptions::default()
+    };
+    let scene = plan_scene(&view, &options);
+    println!("top views: {:?}", started.elapsed());
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let options = RenderOptions {
+        width: (max.x - min.x + 80.0) as u32,
+        height: (max.y - min.y + 80.0) as u32,
+        margin_px: 40.0,
+        grid: false,
+        region: Some((Point2::new(min.x, min.y), Point2::new(max.x, max.y))),
+        ..RenderOptions::default()
+    };
+    let load = |p: &str| {
+        image::open(newera_core::resolve_asset(assets.as_deref(), p))
+            .ok()
+            .map(|i| i.to_rgba8())
+    };
+    std::fs::write(
+        out.join("plan-topviews.png"),
+        render_png(&scene, &options, &load).unwrap(),
+    )
+    .unwrap();
+
     // The edited layout with engineering dimensions and room references.
     let mut view = home.level_view(home.selected_level);
     view.annotations = newera_core::PlanAnnotations {

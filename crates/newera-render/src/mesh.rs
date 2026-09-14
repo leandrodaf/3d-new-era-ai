@@ -228,6 +228,17 @@ impl Mesh {
         mesh
     }
 
+    /// One piece alone at the origin, unturned, standing on the ground.
+    pub fn piece_alone(piece: &Furniture, local: &newera_catalog::Mesh) -> Self {
+        let mut mesh = Self::default();
+        let mut alone = piece.clone();
+        alone.position = Point2::new(0.0, 0.0);
+        alone.angle = 0.0;
+        alone.elevation = 0.0;
+        mesh.add_piece(&alone, local, 0.0, false);
+        mesh
+    }
+
     /// Removes the ground plane (the first quad), for exports.
     pub fn drop_ground(&mut self) {
         if self.vertices.len() < 4 || self.indices.len() < 6 {

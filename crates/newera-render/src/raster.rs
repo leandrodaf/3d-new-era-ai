@@ -17,6 +17,8 @@ pub struct RenderOptions<'a> {
     pub supersample: u32,
     /// Resolves image paths referenced by the mesh.
     pub load_image: &'a dyn Fn(&str) -> Option<RgbaImage>,
+    /// Leave uncovered pixels transparent instead of painting the sky.
+    pub transparent: bool,
 }
 
 impl std::fmt::Debug for RenderOptions<'_> {
@@ -313,19 +315,38 @@ pub fn render(mesh: &Mesh, options: &RenderOptions<'_>) -> RgbaImage {
     for y in 0..out_h {
         for x in 0..out_w {
             let mut sum = Vec3::ZERO;
+            let mut covered = 0.0_f32;
             for sy in 0..ss {
                 for sx in 0..ss {
-                    sum += target.color[(y * ss + sy) * target.width + x * ss + sx];
+                    let index = (y * ss + sy) * target.width + x * ss + sx;
+                    if options.transparent {
+                        if target.depth[index].is_finite() {
+                            sum += target.color[index];
+                            covered += 1.0;
+                        }
+                    } else {
+                        sum += target.color[index];
+                    }
                 }
             }
-            let c = (sum / samples * 255.0)
+            let (divisor, alpha) = if options.transparent {
+                (covered.max(1.0), covered / samples)
+            } else {
+                (samples, 1.0)
+            };
+            let c = (sum / divisor * 255.0)
                 .round()
                 .clamp(Vec3::ZERO, Vec3::splat(255.0));
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             image.put_pixel(
                 x as u32,
                 y as u32,
-                Rgba([c.x as u8, c.y as u8, c.z as u8, 255]),
+                Rgba([
+                    c.x as u8,
+                    c.y as u8,
+                    c.z as u8,
+                    (alpha * 255.0).round() as u8,
+                ]),
             );
         }
     }

@@ -474,7 +474,7 @@ impl NewEraMcp {
             Some("pdf") => {
                 let doc = self.document.read();
                 let view = doc.home().level_view(doc.home().current_level());
-                let scene = plan_scene(&view, &scene_options());
+                let scene = plan_scene(&view, &scene_options_for(&doc));
                 newera_draw::to_pdf(
                     &scene,
                     &newera_draw::PdfOptions {
@@ -487,7 +487,7 @@ impl NewEraMcp {
             Some("svg") => {
                 let doc = self.document.read();
                 let view = doc.home().level_view(doc.home().current_level());
-                let scene = plan_scene(&view, &scene_options());
+                let scene = plan_scene(&view, &scene_options_for(&doc));
                 to_svg(&scene, &SvgOptions::default()).into_bytes()
             }
             Some("png") => self.render(p.w.unwrap_or(1600), p.h.unwrap_or(1200), None, false)?,
@@ -866,7 +866,7 @@ impl NewEraMcp {
         let (w, h) = (w.clamp(64, 2048), h.clamp(64, 2048));
         let doc = self.document.read();
         let view = doc.home().level_view(doc.home().current_level());
-        let scene = plan_scene(&view, &scene_options());
+        let scene = plan_scene(&view, &scene_options_for(&doc));
         let project = doc.asset_dir();
         drop(doc);
         let options = RenderOptions {
@@ -900,9 +900,19 @@ impl ServerHandler for NewEraMcp {
     }
 }
 
-fn scene_options() -> SceneOptions {
+/// Plan options as the user sees them: backgrounds, and top views for
+/// imported models.
+fn scene_options_for(doc: &Document) -> SceneOptions {
+    let views = newera_render::TopViews::new(
+        newera_core::cache_dir().join("topviews"),
+        doc.asset_dir(),
+        false,
+    );
     SceneOptions {
         show_background: true,
+        piece_images: Some(newera_draw::PieceImages(std::sync::Arc::new(
+            move |piece| views.image_for(piece),
+        ))),
         ..SceneOptions::default()
     }
 }

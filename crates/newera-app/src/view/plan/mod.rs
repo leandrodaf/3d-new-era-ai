@@ -63,6 +63,8 @@ pub(crate) struct PlanInput<'a> {
     pub(crate) tool: Tool,
     pub(crate) unit: LengthUnit,
     pub(crate) palette: &'a Palette,
+    /// Top views drawn instead of furniture symbols.
+    pub(crate) piece_images: Option<newera_draw::PieceImages>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -112,6 +114,11 @@ impl PlanView {
             pending_fit: true,
             ..Self::default()
         }
+    }
+
+    /// Forces the plan scene to be rebuilt on the next frame.
+    pub(crate) fn invalidate_scene(&mut self) {
+        self.scene_cache = None;
     }
 
     pub(crate) fn request_fit(&mut self) {
@@ -548,6 +555,7 @@ impl PlanView {
                 unit: input.unit,
                 palette: input.palette.clone(),
                 show_background: true,
+                piece_images: input.piece_images.clone(),
             }
         };
         painter.rect_filled(rect, 0.0, color(input.palette.paper));
@@ -1221,6 +1229,7 @@ mod tests {
                             tool: state.tool,
                             unit: LengthUnit::Centimeter,
                             palette: &palette,
+                            piece_images: None,
                         },
                     );
                     state.events.extend(events);

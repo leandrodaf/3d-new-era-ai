@@ -34,6 +34,21 @@ pub(crate) enum Pending {
 struct Settings {
     unit: LengthUnit,
     recent: Vec<PathBuf>,
+    /// How furniture looks on the plan.
+    #[serde(default)]
+    furniture_look: FurnitureLook,
+}
+
+/// Plan drawing of furniture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub(crate) enum FurnitureLook {
+    /// Symbols for catalog pieces, top views for imported models.
+    #[default]
+    Auto,
+    /// Architectural symbols only.
+    Symbols,
+    /// Top views of every piece.
+    TopViews,
 }
 
 const SETTINGS_KEY: &str = "newera-settings";
@@ -62,6 +77,15 @@ pub(crate) struct NewEraApp {
     applied_observer: Option<(bool, newera_core::Camera)>,
     /// The "Criar foto" window, while open.
     pub(crate) photo: Option<crate::photo::PhotoWindow>,
+    /// Top-view provider for the plan: `(look, asset dir, provider)`.
+    top_views: Option<(
+        FurnitureLook,
+        Option<PathBuf>,
+        newera_render::TopViews,
+        newera_draw::PieceImages,
+    )>,
+    /// Background top views finished when the plan was last rebuilt.
+    top_view_generation: u64,
 }
 
 impl std::fmt::Debug for NewEraApp {
@@ -105,6 +129,8 @@ impl NewEraApp {
             plan_rect: egui::Rect::NOTHING,
             applied_observer: None,
             photo: None,
+            top_views: None,
+            top_view_generation: 0,
             catalog_query: String::new(),
             renaming_variant: None,
         }
@@ -208,10 +234,55 @@ impl NewEraApp {
         }
     }
 
+    /// The plan's top-view provider for the current look and project.
+    fn piece_images(&mut self) -> Option<newera_draw::PieceImages> {
+        let look = self.settings.furniture_look;
+        if look == FurnitureLook::Symbols {
+            return None;
+        }
+        let assets = self.document.read().asset_dir();
+        if self
+            .top_views
+            .as_ref()
+            .is_none_or(|(l, a, _, _)| *l != look || *a != assets)
+        {
+            let views = newera_render::TopViews::in_background(
+                newera_core::cache_dir().join("topviews"),
+                assets.clone(),
+                look == FurnitureLook::TopViews,
+            );
+            let worker = views.clone();
+            let provider =
+                newera_draw::PieceImages(std::sync::Arc::new(move |piece| worker.image_for(piece)));
+            self.top_views = Some((look, assets, views, provider));
+            self.plan.invalidate_scene();
+        }
+        let (_, _, views, provider) = self.top_views.as_ref()?;
+        // Redraw as background images arrive.
+        let generation = views.generation();
+        if generation != self.top_view_generation {
+            self.top_view_generation = generation;
+            self.plan.invalidate_scene();
+        }
+        Some(provider.clone())
+    }
+
     /// Derived plan annotations: engineering dimensions and room references.
     fn annotations_menu(&mut self, ui: &mut egui::Ui) {
         let current = self.document.read().home().annotations;
         let mut next = current;
+        ui.menu_button(format!("{} Móveis na planta", icon::ARMCHAIR), |ui| {
+            for (look, name) in [
+                (
+                    FurnitureLook::Auto,
+                    "Automático (símbolos e vista de cima dos modelos)",
+                ),
+                (FurnitureLook::Symbols, "Símbolos arquitetônicos"),
+                (FurnitureLook::TopViews, "Vista de cima de todos"),
+            ] {
+                ui.radio_value(&mut self.settings.furniture_look, look, name);
+            }
+        });
         ui.checkbox(
             &mut next.auto_dimensions,
             format!("{} Cotas automáticas (engenharia)", icon::RULER),
@@ -1252,6 +1323,13 @@ impl eframe::App for NewEraApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
         self.follow_document_camera();
+        if self
+            .top_views
+            .as_ref()
+            .is_some_and(|(_, _, views, _)| views.busy())
+        {
+            ctx.request_repaint_after(Duration::from_millis(250));
+        }
         crate::photo::show(self, &ctx);
 
         self.shortcuts(&ctx);
@@ -1279,6 +1357,7 @@ impl eframe::App for NewEraApp {
                     .frame(egui::Frame::NONE)
                     .show(ui, |ui| {
                         self.plan_rect = ui.available_rect_before_wrap();
+                        let piece_images = self.piece_images();
                         let events = self.plan.ui(
                             ui,
                             PlanInput {
@@ -1287,6 +1366,7 @@ impl eframe::App for NewEraApp {
                                 tool: self.tool,
                                 unit: self.settings.unit,
                                 palette: &self.palette,
+                                piece_images,
                             },
                         );
                         for event in events {

@@ -120,12 +120,14 @@ pub enum Primitive {
         angle: f64,
         look: TextLook,
     },
-    /// Background image covering `min`..`max` (plan cm).
+    /// Image covering `min`..`max` (plan cm), turned `angle` degrees
+    /// clockwise around the box center.
     Image {
         path: String,
         min: Point2,
         max: Point2,
         opacity: f64,
+        angle: f64,
     },
 }
 
@@ -185,7 +187,27 @@ impl Scene {
                 ]
             }
             Primitive::Text { position, .. } => vec![*position],
-            Primitive::Image { min, max, .. } => vec![*min, *max],
+            Primitive::Image {
+                min, max, angle, ..
+            } => {
+                let center = Point2::new(min.x.midpoint(max.x), min.y.midpoint(max.y));
+                let (sin, cos) = angle.to_radians().sin_cos();
+                [
+                    (min.x, min.y),
+                    (max.x, min.y),
+                    (max.x, max.y),
+                    (min.x, max.y),
+                ]
+                .iter()
+                .map(|&(x, y)| {
+                    let (dx, dy) = (x - center.x, y - center.y);
+                    Point2::new(
+                        center.x + dx * cos - dy * sin,
+                        center.y + dx * sin + dy * cos,
+                    )
+                })
+                .collect()
+            }
         });
         points.fold(None, |acc, p| {
             let (min, max) = acc.unwrap_or((p, p));
@@ -249,12 +271,27 @@ impl Default for Palette {
     }
 }
 
+/// Supplies a top-view image file for a piece, when one should replace its
+/// plan symbol.
+pub type PieceImageFn = dyn Fn(&Furniture) -> Option<String> + Send + Sync;
+
+#[derive(Clone)]
+pub struct PieceImages(pub std::sync::Arc<PieceImageFn>);
+
+impl std::fmt::Debug for PieceImages {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("PieceImages")
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct SceneOptions {
     pub selected: HashSet<ElementId>,
     pub unit: LengthUnit,
     pub palette: Palette,
     pub show_background: bool,
+    /// Top views drawn instead of symbols, for the pieces it returns.
+    pub piece_images: Option<PieceImages>,
 }
 
 /// Builds the plan scene. Draw order: background, rooms, furniture, walls
@@ -320,6 +357,7 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
                 min,
                 max,
                 opacity: bg.opacity,
+                angle: 0.0,
             },
         );
     }
@@ -350,6 +388,36 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
         .collect();
     pieces.sort_by(|(a, _), (b, _)| (a.elevation + a.height).total_cmp(&(b.elevation + b.height)));
     for (piece, selected) in &pieces {
+        if let Some(path) = options
+            .piece_images
+            .as_ref()
+            .and_then(|images| (images.0)(piece))
+        {
+            let (hw, hd) = (piece.width / 2.0, piece.depth / 2.0);
+            let owner = Some(piece.id.into());
+            scene.push(
+                owner,
+                Primitive::Image {
+                    path,
+                    min: Point2::new(piece.position.x - hw, piece.position.y - hd),
+                    max: Point2::new(piece.position.x + hw, piece.position.y + hd),
+                    opacity: if dimmed(piece.discipline) { 0.35 } else { 1.0 },
+                    angle: piece.angle,
+                },
+            );
+            if *selected {
+                scene.push(
+                    owner,
+                    Primitive::Line {
+                        points: piece.footprint().to_vec(),
+                        closed: true,
+                        color: options.palette.selection,
+                        width: Size::Px(1.5),
+                    },
+                );
+            }
+            continue;
+        }
         furniture_items(&mut scene, piece, *selected, &options_for(piece.discipline));
     }
 

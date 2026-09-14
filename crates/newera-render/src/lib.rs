@@ -16,6 +16,183 @@ pub use camera::View;
 pub use mesh::{IMAGE_BASE, Mesh, ModelSource, Selection, Vertex};
 pub use raster::{RenderOptions, render};
 
+/// Top-view images of pieces for the plan, rendered once and cached as PNG
+/// files. Safe to share across threads.
+#[derive(Debug, Clone)]
+pub struct TopViews {
+    inner: std::sync::Arc<std::sync::Mutex<TopViewCache>>,
+    dir: PathBuf,
+    assets: Option<PathBuf>,
+    /// Also replace catalog symbols (otherwise only imported models).
+    pub all: bool,
+    /// Render missing images on a worker thread instead of blocking.
+    background: Option<std::sync::mpsc::Sender<newera_core::Furniture>>,
+    /// Bumped whenever a background image becomes ready.
+    generation: std::sync::Arc<std::sync::atomic::AtomicU64>,
+}
+
+#[derive(Debug, Default)]
+struct TopViewCache {
+    models: ModelCache,
+    done: HashMap<u64, Option<String>>,
+    queued: std::collections::HashSet<u64>,
+}
+
+impl TopViews {
+    /// A provider that renders missing images right away (servers, exports).
+    pub fn new(dir: PathBuf, assets: Option<PathBuf>, all: bool) -> Self {
+        Self {
+            inner: std::sync::Arc::default(),
+            dir,
+            assets,
+            all,
+            background: None,
+            generation: std::sync::Arc::default(),
+        }
+    }
+
+    /// A provider that renders missing images on a worker thread; they show
+    /// up once [`TopViews::generation`] changes.
+    pub fn in_background(dir: PathBuf, assets: Option<PathBuf>, all: bool) -> Self {
+        let mut views = Self::new(dir, assets, all);
+        let (sender, receiver) = std::sync::mpsc::channel::<newera_core::Furniture>();
+        let worker = views.clone();
+        std::thread::spawn(move || {
+            for piece in receiver {
+                if let Some(key) = worker.key(&piece) {
+                    let image = worker.produce(&piece, key);
+                    if let Ok(mut cache) = worker.inner.lock() {
+                        cache.done.insert(key, image);
+                    }
+                    worker
+                        .generation
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+            }
+        });
+        views.background = Some(sender);
+        views
+    }
+
+    /// Changes whenever background images become ready.
+    pub fn generation(&self) -> u64 {
+        self.generation.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Whether images are still being rendered.
+    pub fn busy(&self) -> bool {
+        self.inner
+            .lock()
+            .is_ok_and(|c| c.queued.iter().any(|k| !c.done.contains_key(k)))
+    }
+
+    fn key(&self, piece: &newera_core::Furniture) -> Option<u64> {
+        use std::hash::{Hash, Hasher};
+        if piece.is_opening() || piece.discipline.is_some() || (piece.model.is_none() && !self.all)
+        {
+            return None;
+        }
+        let mut copy = piece.clone();
+        copy.position = newera_core::Point2::new(0.0, 0.0);
+        copy.angle = 0.0;
+        copy.elevation = 0.0;
+        copy.level = None;
+        copy.id = newera_core::FurnitureId(0);
+        copy.name.clear();
+        copy.info = newera_core::PieceInfo::default();
+        copy.properties.clear();
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        // Serialized, the look-defining fields hash stably.
+        serde_json::to_string(&copy).ok()?.hash(&mut hasher);
+        self.assets.hash(&mut hasher);
+        Some(hasher.finish())
+    }
+
+    /// The cached top view of a piece: rendered now, or queued when working
+    /// in the background (then `None` until ready).
+    pub fn image_for(&self, piece: &newera_core::Furniture) -> Option<String> {
+        let key = self.key(piece)?;
+        {
+            let mut cache = self.inner.lock().ok()?;
+            if let Some(done) = cache.done.get(&key) {
+                return done.clone();
+            }
+            let path = self.dir.join(format!("{key:016x}.png"));
+            if path.exists() {
+                let found = Some(path.display().to_string());
+                cache.done.insert(key, found.clone());
+                return found;
+            }
+            if let Some(sender) = &self.background {
+                if cache.queued.insert(key) {
+                    let _ = sender.send(piece.clone());
+                }
+                return None;
+            }
+        }
+        let image = self.produce(piece, key);
+        if let Ok(mut cache) = self.inner.lock() {
+            cache.done.insert(key, image.clone());
+        }
+        image
+    }
+
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    fn produce(&self, piece: &newera_core::Furniture, key: u64) -> Option<String> {
+        let path = self.dir.join(format!("{key:016x}.png"));
+        let local = {
+            let cache = self.inner.lock().ok()?;
+            cache.models.piece_model(piece, self.assets.as_deref())
+        }
+        .unwrap_or_else(|| newera_catalog::piece_mesh(piece));
+        let mesh = Mesh::piece_alone(piece, &local);
+        let longest = piece.width.max(piece.depth).max(1.0);
+        let px_per_cm = (256.0 / longest).min(2.0);
+        let (w, h) = (
+            ((piece.width * px_per_cm).round() as u32).max(8),
+            ((piece.depth * px_per_cm).round() as u32).max(8),
+        );
+        let (hw, hd, top) = (
+            (piece.width / 200.0) as f32,
+            (piece.depth / 200.0) as f32,
+            (piece.height / 100.0) as f32,
+        );
+        let view = glam::camera::rh::view::look_at_mat4(
+            glam::Vec3::new(0.0, top + 1.0, 0.0),
+            glam::Vec3::ZERO,
+            glam::Vec3::NEG_Z,
+        );
+        let proj = glam::camera::rh::proj::directx::orthographic(-hw, hw, -hd, hd, 0.01, top + 2.0);
+        let assets = self.assets.clone();
+        let load = |file: &str| {
+            image::open(newera_core::resolve_asset(assets.as_deref(), file))
+                .ok()
+                .map(|i| {
+                    image::imageops::resize(
+                        &i.to_rgba8(),
+                        128,
+                        128,
+                        image::imageops::FilterType::Triangle,
+                    )
+                })
+        };
+        let image = render(
+            &mesh,
+            &RenderOptions {
+                width: w,
+                height: h,
+                view_proj: proj * view,
+                sky: [255, 255, 255],
+                supersample: 2,
+                load_image: &load,
+                transparent: true,
+            },
+        );
+        std::fs::create_dir_all(&self.dir).ok();
+        image.save(&path).ok().map(|()| path.display().to_string())
+    }
+}
+
 /// Loads imported models once per file and fits them to each piece.
 #[derive(Debug, Default)]
 pub struct ModelCache {
@@ -228,6 +405,7 @@ pub fn render_home(
             sky: home.environment.sky_color,
             supersample: 2,
             load_image: &load,
+            transparent: false,
         },
     )
 }

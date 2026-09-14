@@ -141,16 +141,46 @@ pub(crate) fn paint_scene(
                 min,
                 max,
                 opacity,
+                angle,
             } => {
                 if let Some(texture) = textures.get(painter.ctx(), project, path) {
                     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                     let tint = Color32::from_white_alpha((opacity * 255.0) as u8);
-                    painter.image(
-                        texture.id(),
-                        Rect::from_two_pos(to(*min), to(*max)),
-                        Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
-                        tint,
-                    );
+                    if angle.abs() < 1e-6 {
+                        painter.image(
+                            texture.id(),
+                            Rect::from_two_pos(to(*min), to(*max)),
+                            Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                            tint,
+                        );
+                    } else {
+                        let center = Point2::new(min.x.midpoint(max.x), min.y.midpoint(max.y));
+                        let (sin, cos) = angle.to_radians().sin_cos();
+                        let corner = |x: f64, y: f64| {
+                            let (dx, dy) = (x - center.x, y - center.y);
+                            to(Point2::new(
+                                center.x + dx * cos - dy * sin,
+                                center.y + dx * sin + dy * cos,
+                            ))
+                        };
+                        let mut mesh = egui::Mesh::with_texture(texture.id());
+                        let uv = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+                        let pos = [
+                            corner(min.x, min.y),
+                            corner(max.x, min.y),
+                            corner(max.x, max.y),
+                            corner(min.x, max.y),
+                        ];
+                        for (p, (u, v)) in pos.iter().zip(uv) {
+                            mesh.vertices.push(egui::epaint::Vertex {
+                                pos: *p,
+                                uv: Pos2::new(u, v),
+                                color: tint,
+                            });
+                        }
+                        mesh.indices.extend([0, 1, 2, 0, 2, 3]);
+                        painter.add(egui::Shape::mesh(mesh));
+                    }
                 }
             }
         }

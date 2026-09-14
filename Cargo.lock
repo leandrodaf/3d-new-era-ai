@@ -2703,6 +2703,7 @@ dependencies = [
  "image",
  "newera-catalog",
  "newera-core",
+ "newera-render",
  "newera-sh3d",
  "thiserror 2.0.20",
  "tiny-skia 0.12.0",
@@ -2737,6 +2738,7 @@ dependencies = [
  "newera-catalog",
  "newera-core",
  "newera-sh3d",
+ "serde_json",
  "thiserror 2.0.20",
 ]
 

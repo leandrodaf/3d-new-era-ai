@@ -122,8 +122,9 @@ The core of what makes the editor useful: placing real objects with real dimensi
       settings), embedded assets extracted; opens from the app, CLI and MCP `open_home`
 - [x] Project bundles: `.newera` becomes a ZIP with `project.json` and every asset
       when the home uses files, so imported projects travel as one file
-- [ ] Import fidelity pass: wall hatches, plan icons/top views, OBJ default
-      materials, transparency, model rotation, light sources in 3D
+- [x] Import fidelity pass: wall hatches, furniture top views on the plan (rendered in
+      the background and cached), OBJ default materials, transparency, model rotation,
+      lamps in photos
 - [ ] Web build (WebGPU) sharing `newera-core`
 - [ ] Auth for exposing the server on a network; multi-user sessions
 - [ ] Plugin API on top of commands

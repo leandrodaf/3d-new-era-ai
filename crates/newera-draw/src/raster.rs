@@ -177,6 +177,7 @@ pub fn render_pixmap(
                 min,
                 max,
                 opacity,
+                angle,
             } => {
                 let image = images
                     .entry(path.clone())
@@ -200,7 +201,11 @@ pub fn render_pixmap(
                         0,
                         image.as_ref(),
                         &paint,
-                        Transform::from_row(sx, 0.0, 0.0, sy, x0, y0),
+                        #[allow(clippy::cast_possible_truncation)]
+                        Transform::from_translate(x0.midpoint(x1), y0.midpoint(y1))
+                            .pre_rotate(*angle as f32)
+                            .pre_translate(-(x1 - x0) / 2.0, -(y1 - y0) / 2.0)
+                            .pre_scale(sx, sy),
                         None,
                     );
                 }
