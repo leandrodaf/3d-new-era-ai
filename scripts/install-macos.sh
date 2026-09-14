@@ -1,81 +1,159 @@
 #!/usr/bin/env bash
 # Builds and installs 3D New Era AI on a Mac from source — no Apple Developer
-# account needed. A binary built on the machine itself is never quarantined,
+# account needed: a binary built on the machine itself is never quarantined,
 # so Gatekeeper opens it without complaints.
 #
 #   curl -fsSL https://raw.githubusercontent.com/leandrodaf/3d-new-era-ai/main/scripts/install-macos.sh | bash
+#   ... | bash -s -- --uninstall
 #
-# What it does:
-#   1. Xcode Command Line Tools (compiler and linker), if missing
-#   2. Rust through rustup, if missing
-#   3. Clones or updates the source in ~/.newera/src
-#   4. cargo build --release
-#   5. "3D New Era AI.app" in ~/Applications (Spotlight and Launchpad find it)
-#   6. `newera` command in ~/.local/bin
-#   7. Registers the MCP server in Claude Code, if installed
+# Runs as your user only: nothing needs sudo, nothing is written outside your
+# home folder and the temporary build folder.
 #
-# Environment: NEWERA_HOME (default ~/.newera), NEWERA_REF (branch or tag,
-# default main), NEWERA_APPS (default ~/Applications).
+#   - Already up to date? Nothing is downloaded (the commit is compared first).
+#   - Rust already installed (rustup or Homebrew, 1.95+)? It is used as it is.
+#     Otherwise a private Rust goes into the temporary folder and leaves with it.
+#   - Run from inside a clone of the repository? That source is used, untouched.
+#   - At the end — success or failure — the temporary folder (source, build,
+#     private Rust) is deleted. What stays: the app and the `newera` link.
+#
+# Environment: NEWERA_REF (branch, tag or commit; default main),
+# NEWERA_APPS (default ~/Applications), NEWERA_FORCE=1 to rebuild anyway.
 set -euo pipefail
 
-REPO="https://github.com/leandrodaf/3d-new-era-ai.git"
-NEWERA_HOME="${NEWERA_HOME:-$HOME/.newera}"
+OWNER_REPO="leandrodaf/3d-new-era-ai"
 NEWERA_REF="${NEWERA_REF:-main}"
 NEWERA_APPS="${NEWERA_APPS:-$HOME/Applications}"
-SRC="$NEWERA_HOME/src"
-BIN_DIR="$HOME/.local/bin"
 APP="$NEWERA_APPS/3D New Era AI.app"
+BIN_DIR="$HOME/.local/bin"
+MIN_RUST="1.95"
 
 step() { printf '\n\033[1;34m==>\033[0m \033[1m%s\033[0m\n' "$*"; }
-fail() { printf '\033[1;31merro:\033[0m %s\n' "$*" >&2; exit 1; }
+info() { printf '    %s\n' "$*"; }
+fail() { printf '\n\033[1;31merro:\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ "$(uname -s)" = "Darwin" ] || fail "este script é para macOS (no Linux/Windows veja o README)."
+[ "$(id -u)" -ne 0 ] || fail "não rode como root/sudo: tudo é instalado só para o seu usuário."
 
-step "Xcode Command Line Tools"
-if ! xcode-select -p >/dev/null 2>&1; then
-    xcode-select --install || true
-    echo "Uma janela pediu para instalar as Command Line Tools. Conclua a instalação;"
-    echo "o script continua sozinho quando terminar."
-    until xcode-select -p >/dev/null 2>&1; do sleep 10; done
+if [ "${1:-}" = "--uninstall" ]; then
+    step "Desinstalando"
+    rm -rf "$APP"
+    [ -L "$BIN_DIR/newera" ] && rm -f "$BIN_DIR/newera"
+    if command -v claude >/dev/null 2>&1 && claude mcp get newera >/dev/null 2>&1; then
+        claude mcp remove --scope user newera >/dev/null 2>&1 || true
+    fi
+    info "removidos: $APP, $BIN_DIR/newera e o MCP 'newera' do Claude Code"
+    exit 0
 fi
-echo "ok: $(xcode-select -p)"
 
-step "Rust"
-if ! command -v cargo >/dev/null 2>&1 && [ ! -x "$HOME/.cargo/bin/cargo" ]; then
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+# Everything temporary lives here and is deleted on any exit.
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/newera-install.XXXXXX")
+cleanup() {
+    # Build files can be read-only (cargo registry): make them removable first.
+    chmod -R u+w "$WORK" 2>/dev/null || true
+    rm -rf "$WORK"
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
+version_ge() { # version_ge 1.96.0 1.95 -> true
+    [ "$(printf '%s\n%s\n' "$2" "$1" | sort -t. -k1,1n -k2,2n -k3,3n | head -1)" = "$2" ]
+}
+
+step "Ferramentas do sistema"
+# The compiler and linker come from Apple's Command Line Tools. Installing them
+# asks for an administrator password, so the script never does it on its own.
+if ! xcode-select -p >/dev/null 2>&1 || ! xcrun --find cc >/dev/null 2>&1; then
+    fail "faltam as Xcode Command Line Tools (compilador e linker da Apple).
+       Instale uma vez com:  xcode-select --install
+       e rode este script de novo."
 fi
-# shellcheck disable=SC1091
-[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
-command -v cargo >/dev/null 2>&1 || fail "cargo não encontrado depois de instalar o rustup."
-rustup update stable >/dev/null 2>&1 || true
-echo "ok: $(cargo --version)"
+command -v curl >/dev/null 2>&1 || fail "curl não encontrado."
+info "Command Line Tools: $(xcode-select -p)"
 
-step "Código-fonte ($NEWERA_REF)"
-command -v git >/dev/null 2>&1 || fail "git não encontrado (vem com as Command Line Tools)."
-if [ -d "$SRC/.git" ]; then
-    git -C "$SRC" fetch --depth 1 origin "$NEWERA_REF"
-    git -C "$SRC" checkout -q --force FETCH_HEAD
+step "Código-fonte"
+LOCAL_SRC=""
+for dir in "$PWD" "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd || true)"; do
+    if [ -n "$dir" ] && [ -f "$dir/crates/newera/Cargo.toml" ]; then
+        LOCAL_SRC="$dir"
+        break
+    fi
+done
+
+if [ -n "$LOCAL_SRC" ]; then
+    SRC="$LOCAL_SRC"
+    COMMIT=$(git -C "$SRC" rev-parse HEAD 2>/dev/null || echo "local")
+    info "usando o clone em $SRC ($COMMIT) — nada a baixar"
 else
-    mkdir -p "$NEWERA_HOME"
-    git clone --depth 1 --branch "$NEWERA_REF" "$REPO" "$SRC"
+    COMMIT=$(curl -fsSL -H "Accept: application/vnd.github.sha" \
+        "https://api.github.com/repos/$OWNER_REPO/commits/$NEWERA_REF") \
+        || fail "não consegui consultar $OWNER_REPO@$NEWERA_REF no GitHub."
+    info "$NEWERA_REF está em ${COMMIT:0:12}"
 fi
-echo "ok: $(git -C "$SRC" log -1 --format='%h %s')"
 
-step "Compilando (a primeira vez leva alguns minutos)"
-# rust-toolchain.toml in the repo picks the toolchain and components.
-# Half the cores keeps the Mac usable (and cool) while it builds.
-JOBS=$(( $(sysctl -n hw.ncpu) / 2 ))
-[ "$JOBS" -ge 1 ] || JOBS=1
-(cd "$SRC" && cargo build -p newera --release --locked -j "$JOBS")
-BUILT="$SRC/target/release/newera"
-[ -x "$BUILT" ] || fail "o build terminou sem gerar $BUILT."
+INSTALLED=$(cat "$APP/Contents/Resources/commit" 2>/dev/null || true)
+if [ "${NEWERA_FORCE:-0}" != "1" ] && [ "$COMMIT" != "local" ] && [ "$INSTALLED" = "$COMMIT" ] \
+    && [ -x "$APP/Contents/MacOS/newera" ]; then
+    info "já instalado nesta versão: nada a baixar nem compilar (NEWERA_FORCE=1 recompila)"
+    NEED_BUILD=0
+else
+    NEED_BUILD=1
+fi
 
-step "Aplicativo em $APP"
-VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' "$SRC/Cargo.toml" | head -1)
-rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BUILT" "$APP/Contents/MacOS/newera"
-cat > "$APP/Contents/Info.plist" <<PLIST
+if [ "$NEED_BUILD" = 1 ] && [ -z "$LOCAL_SRC" ]; then
+    SRC="$WORK/src"
+    mkdir -p "$SRC"
+    curl -fsSL "https://codeload.github.com/$OWNER_REPO/tar.gz/$COMMIT" \
+        | tar -xz -C "$SRC" --strip-components 1
+    info "baixado para a pasta temporária"
+fi
+
+if [ "$NEED_BUILD" = 1 ]; then
+    step "Rust"
+    # Use the Rust already on the machine when it is new enough; pinning the
+    # toolchain keeps rustup from fetching extra components the repo lists.
+    [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+    RUST_OK=0
+    if command -v rustc >/dev/null 2>&1 && command -v cargo >/dev/null 2>&1; then
+        if command -v rustup >/dev/null 2>&1; then
+            TOOLCHAIN=$( (cd "$HOME" && rustup show active-toolchain 2>/dev/null) | awk '{print $1}')
+            [ -n "$TOOLCHAIN" ] && export RUSTUP_TOOLCHAIN="$TOOLCHAIN"
+        fi
+        HAVE=$(rustc --version 2>/dev/null | awk '{print $2}')
+        if [ -n "$HAVE" ] && version_ge "$HAVE" "$MIN_RUST"; then
+            RUST_OK=1
+            info "usando o Rust já instalado: $HAVE${RUSTUP_TOOLCHAIN:+ ($RUSTUP_TOOLCHAIN)}"
+        else
+            info "Rust ${HAVE:-?} é anterior ao $MIN_RUST exigido; não vou mexer nele"
+            unset RUSTUP_TOOLCHAIN
+        fi
+    fi
+    if [ "$RUST_OK" = 0 ]; then
+        # Private, temporary Rust: never touches ~/.cargo, ~/.rustup or the shell profile.
+        export RUSTUP_HOME="$WORK/rustup" CARGO_HOME="$WORK/cargo"
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal --default-toolchain stable --no-modify-path >/dev/null
+        export PATH="$CARGO_HOME/bin:$PATH" RUSTUP_TOOLCHAIN=stable
+        info "Rust temporário: $(rustc --version) (apagado no final)"
+    fi
+
+    step "Compilando (a primeira vez leva alguns minutos)"
+    # Half the cores keeps the Mac usable and cool while it builds.
+    JOBS=$(($(sysctl -n hw.ncpu) / 2))
+    [ "$JOBS" -ge 1 ] || JOBS=1
+    # Build output goes to the temporary folder, even for a local clone.
+    export CARGO_TARGET_DIR="$WORK/target"
+    (cd "$SRC" && cargo build -p newera --release --locked -j "$JOBS")
+    BUILT="$CARGO_TARGET_DIR/release/newera"
+    [ -x "$BUILT" ] || fail "o build terminou sem gerar o binário."
+
+    step "Aplicativo em $APP"
+    VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' "$SRC/Cargo.toml" | head -1)
+    mkdir -p "$NEWERA_APPS"
+    STAGE="$WORK/3D New Era AI.app"
+    mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Resources"
+    cp "$BUILT" "$STAGE/Contents/MacOS/newera"
+    echo "$COMMIT" > "$STAGE/Contents/Resources/commit"
+    cat > "$STAGE/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -100,31 +178,42 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
-# Ad-hoc signature: Apple Silicon only runs signed code, and no account is needed.
-codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
-xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
-echo "ok"
+    # Ad-hoc signature: Apple Silicon only runs signed code, and no account is needed.
+    codesign --force --deep --sign - "$STAGE" >/dev/null 2>&1 || true
+    # Swap in the new app only once it is complete.
+    rm -rf "$APP"
+    mv "$STAGE" "$APP"
+    info "ok (${COMMIT:0:12})"
+fi
 
 step "Comando newera em $BIN_DIR"
 mkdir -p "$BIN_DIR"
-ln -sf "$APP/Contents/MacOS/newera" "$BIN_DIR/newera"
+ln -sfn "$APP/Contents/MacOS/newera" "$BIN_DIR/newera"
 case ":$PATH:" in
-    *":$BIN_DIR:"*) ;;
+    *":$BIN_DIR:"*) info "ok" ;;
     *)
         PROFILE="$HOME/.zprofile"
         [ "${SHELL##*/}" = "bash" ] && PROFILE="$HOME/.bash_profile"
-        grep -qs '.local/bin' "$PROFILE" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$PROFILE"
-        echo "adicionado ao PATH em $PROFILE (abra um terminal novo)"
+        if ! grep -qs 'newera: ~/.local/bin' "$PROFILE"; then
+            printf '\n# newera: ~/.local/bin\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$PROFILE"
+        fi
+        info "adicionado ao PATH em $PROFILE (abra um terminal novo)"
         ;;
 esac
-echo "ok"
 
 if command -v claude >/dev/null 2>&1; then
     step "MCP no Claude Code"
-    claude mcp add --scope user --transport http newera http://127.0.0.1:7878/mcp >/dev/null 2>&1 \
-        && echo "ok: servidor 'newera' registrado" \
-        || echo "já registrado (ou falhou): claude mcp list"
+    if claude mcp get newera >/dev/null 2>&1; then
+        info "já registrado"
+    elif claude mcp add --scope user --transport http newera http://127.0.0.1:7878/mcp >/dev/null 2>&1; then
+        info "servidor 'newera' registrado"
+    else
+        info "não consegui registrar; rode: claude mcp add --transport http newera http://127.0.0.1:7878/mcp"
+    fi
 fi
+
+step "Limpando arquivos temporários"
+info "a pasta de build é apagada ao sair"
 
 printf '\n\033[1;32mPronto!\033[0m\n'
 cat <<DONE
@@ -132,6 +221,6 @@ cat <<DONE
   Terminal:     newera --demo
   Sem janela:   newera serve
   MCP:          http://127.0.0.1:7878/mcp (com o editor aberto)
-  Atualizar:    rode este script de novo
-  Desinstalar:  rm -rf "$APP" "$NEWERA_HOME" "$BIN_DIR/newera"
+  Atualizar:    rode o mesmo comando de novo
+  Desinstalar:  rode com --uninstall
 DONE

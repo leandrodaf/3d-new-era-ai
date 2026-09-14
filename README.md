@@ -8,7 +8,7 @@ An open-source home design editor in Rust, inspired by Sweet Home 3D, that is
 [Model Context Protocol](https://modelcontextprotocol.io) server, so an AI agent
 can design alongside you and every change shows up live on screen.
 
-![Editor: catalog on the left, floor plan on top, native 3D view below](docs/images/editor.png)
+![Editor with a furnished 105 m² apartment: catalog, rendered floor plan and live 3D view](docs/images/editor.png)
 
 ## Showcase
 
@@ -16,13 +16,23 @@ A real 105 m² apartment, traced from an openly licensed floor plan and furnishe
 and photographed by an AI agent through MCP alone — walls from the scan, doors that
 swing the right way, slatted TV wall, L kitchen and wardrobe from `cabinet_run`,
 downlights sized by photometry against NBR ISO/CIE 8995-1, path-traced photos.
+Every image below came out of the editor itself.
 **[See how it was built →](docs/SHOWCASE.md)**
 
-| | |
+| Floor plan with real finishes | Aerial cutaway |
 |---|---|
-| ![Living room with slatted TV wall](docs/images/showcase/01-estar-janela.jpg) | ![Dining at dusk](docs/images/showcase/09-jantar-noite.jpg) |
-| ![L-shaped kitchen](docs/images/showcase/04-cozinha.jpg) | ![Slatted TV wall](docs/images/showcase/03-painel-tv.jpg) |
-| ![Rendered floor plan with real finishes](docs/images/showcase/13-planta-humanizada.jpg) | ![Aerial cutaway](docs/images/showcase/12-aerea.jpg) |
+| ![Rendered floor plan with real finishes](docs/images/showcase/13-planta-humanizada.jpg) | ![Aerial cutaway of the apartment](docs/images/showcase/12-aerea.jpg) |
+
+| Daylight | At dusk, lamps on |
+|---|---|
+| ![Living room with slatted TV wall](docs/images/showcase/01-estar-janela.jpg) | ![Dining table under the pendant at dusk](docs/images/showcase/09-jantar-noite.jpg) |
+| ![Dining and living toward the window](docs/images/showcase/02-jantar-estar.jpg) | ![L-shaped kitchen at night](docs/images/showcase/10-cozinha-noite.jpg) |
+| ![L-shaped kitchen with terrazzo floor](docs/images/showcase/04-cozinha.jpg) | ![Master bedroom at night](docs/images/showcase/11-suite-noite.jpg) |
+
+| Joinery and rooms | |
+|---|---|
+| ![Slatted TV wall with the TV embedded](docs/images/showcase/03-painel-tv.jpg) | ![Home office with desk and bookcase](docs/images/showcase/05-escritorio.jpg) |
+| ![Master bedroom with tall wardrobe run](docs/images/showcase/07-suite.jpg) | ![Bathroom with Nero marble wall](docs/images/showcase/08-banheiro.jpg) |
 
 ## Why
 
