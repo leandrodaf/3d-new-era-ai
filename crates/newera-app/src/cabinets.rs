@@ -245,6 +245,60 @@ mod tests {
     use super::*;
 
     #[test]
+    fn embeds_the_selected_piece_in_the_selected_countertop() {
+        let mut doc = Document::default();
+        let build = newera_joinery::Build::Countertop(newera_joinery::CountertopParams::default());
+        let output = newera_joinery::generate(&build).unwrap();
+        let top = doc.new_furniture_id();
+        let group = {
+            let mut next = || doc.new_furniture_id();
+            newera_joinery::assemble(
+                &build,
+                &output,
+                top,
+                Point2::new(200.0, 100.0),
+                0.0,
+                0.0,
+                &mut next,
+            )
+        };
+        doc.execute(Command::insert(group)).unwrap();
+        let cooktop = doc.new_furniture_id();
+        doc.execute(Command::insert(newera_core::Furniture {
+            id: cooktop,
+            catalog: "cooktop".into(),
+            name: "Cooktop".into(),
+            position: Point2::new(230.0, 100.0),
+            width: 60.0,
+            depth: 50.0,
+            height: 6.0,
+            ..newera_core::Furniture::default()
+        }))
+        .unwrap();
+        let document = SharedDocument::new(doc);
+        let shared = document.clone();
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(1280.0, 900.0))
+            .build_eframe(move |cc| NewEraApp::new(cc, document, None));
+        h.run_steps(3);
+        h.state_mut().selection = [
+            newera_core::ElementId::from(top),
+            newera_core::ElementId::from(cooktop),
+        ]
+        .into_iter()
+        .collect();
+        h.run_steps(2);
+        h.get_by_label("Planta").click();
+        h.run_steps(2);
+        h.get_by_label_contains("Embutir peça").click();
+        h.run_steps(3);
+        let home = shared.read();
+        let host = home.home().furniture.iter().find(|f| f.id == top).unwrap();
+        assert!(host.children.iter().any(|c| c.id == cooktop), "embedded");
+        assert!(!home.home().furniture.iter().any(|f| f.id == cooktop));
+    }
+
+    #[test]
     fn previews_then_builds_the_cabinets_of_a_wall() {
         let mut doc = Document::default();
         let corners = [(0.0, 0.0), (300.0, 0.0), (300.0, 240.0), (0.0, 240.0)];

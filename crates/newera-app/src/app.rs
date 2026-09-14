@@ -1169,6 +1169,64 @@ impl NewEraApp {
                     [ElementId::Wall(id)] => Some(*id),
                     _ => None,
                 };
+                // Two pieces selected, one of them joinery: embed the other in it.
+                let pair = {
+                    let doc = self.document.read();
+                    let pieces: Vec<newera_core::Furniture> = self
+                        .selection
+                        .iter()
+                        .filter_map(|id| match id {
+                            ElementId::Furniture(f) => {
+                                doc.home().furniture.iter().find(|p| p.id == *f).cloned()
+                            }
+                            _ => None,
+                        })
+                        .collect();
+                    match pieces.as_slice() {
+                        [a, b] => {
+                            let host = |p: &newera_core::Furniture| {
+                                p.properties.contains_key(newera_joinery::PARAMS_KEY)
+                            };
+                            match (host(a), host(b)) {
+                                (true, false) => Some((b.clone(), a.id)),
+                                (false, true) => Some((a.clone(), b.id)),
+                                _ => None,
+                            }
+                        }
+                        _ => None,
+                    }
+                };
+                if menu_item(
+                    ui,
+                    icon::ARROW_SQUARE_IN,
+                    crate::i18n::tr("Embutir peça no móvel selecionado"),
+                    "",
+                    pair.is_some(),
+                ) && let Some((item, host)) = pair
+                {
+                    let request = newera_joinery::EmbedRequest {
+                        item,
+                        existing: true,
+                        host,
+                        at: None,
+                        z: None,
+                        dry: false,
+                    };
+                    let result = newera_joinery::embed(&mut self.document.write(), &request);
+                    match result {
+                        Ok(reply) => self.set_status(format!(
+                            "{} {}",
+                            crate::i18n::tr("Embutido:"),
+                            reply["notes"]
+                                .as_array()
+                                .and_then(|n| n.first())
+                                .and_then(|n| n.as_str())
+                                .unwrap_or(reply["kind"].as_str().unwrap_or_default())
+                        )),
+                        Err(err) => self.set_status(format!("⚠ {err}")),
+                    }
+                    ui.close();
+                }
                 if menu_item(
                     ui,
                     icon::SQUARES_FOUR,
