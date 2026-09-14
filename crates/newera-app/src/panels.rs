@@ -114,7 +114,9 @@ fn catalog_row(app: &mut NewEraApp, ui: &mut egui::Ui, item: &'static CatalogIte
         );
     }
     if response
-        .on_hover_text("Clique e depois clique na planta para posicionar")
+        .on_hover_text(crate::i18n::tr(
+            "Clique e depois clique na planta para posicionar",
+        ))
         .clicked()
     {
         app.set_tool(Tool::Place(item.id));
@@ -127,12 +129,19 @@ pub(crate) fn left(app: &mut NewEraApp, ui: &mut egui::Ui) {
         .default_size(ui.available_height() * 0.55)
         .show(ui, |ui| {
             ui.add_space(4.0);
-            ui.label(RichText::new(format!("{} Catálogo", icon::ARMCHAIR)).heading());
+            ui.label(
+                RichText::new(format!(
+                    "{} {}",
+                    icon::ARMCHAIR,
+                    crate::i18n::tr("Catálogo")
+                ))
+                .heading(),
+            );
             ui.horizontal(|ui| {
                 ui.label(icon::MAGNIFYING_GLASS);
                 ui.add(
                     egui::TextEdit::singleline(&mut app.catalog_query)
-                        .hint_text("Buscar: cama, janela, sofá…")
+                        .hint_text(crate::i18n::tr("Buscar: cama, janela, sofá…"))
                         .desired_width(f32::INFINITY),
                 );
             });
@@ -149,7 +158,7 @@ pub(crate) fn left(app: &mut NewEraApp, ui: &mut egui::Ui) {
                             egui::CollapsingHeader::new(format!(
                                 "{}  {} ({})",
                                 category_icon(category),
-                                category.name(),
+                                crate::i18n::tr(category.name()),
                                 items.len()
                             ))
                             .id_salt(category.id())
@@ -162,7 +171,7 @@ pub(crate) fn left(app: &mut NewEraApp, ui: &mut egui::Ui) {
                     } else {
                         let found = newera_catalog::search(&query);
                         if found.is_empty() {
-                            ui.weak("Nada encontrado.");
+                            ui.weak(crate::i18n::tr("Nada encontrado."));
                         }
                         for item in found {
                             catalog_row(app, ui, item);
@@ -180,10 +189,13 @@ pub(crate) fn left(app: &mut NewEraApp, ui: &mut egui::Ui) {
         ui.label(RichText::new(format!("{} {}", icon::HOUSE_LINE, home.name)).heading());
         let total: f64 = home.rooms.iter().map(newera_core::Room::area).sum();
         ui.weak(format!(
-            "{} paredes · {} cômodos · {} móveis · {}",
+            "{} {} · {} {} · {} {} · {}",
             home.walls.len(),
+            crate::i18n::tr("paredes"),
             home.rooms.len(),
+            crate::i18n::tr("cômodos"),
             home.furniture.len(),
+            crate::i18n::tr("móveis"),
             app.unit().format_area(total)
         ));
         ui.separator();
@@ -211,15 +223,15 @@ pub(crate) fn left(app: &mut NewEraApp, ui: &mut egui::Ui) {
             };
             section(
                 ui,
-                format!("{} Móveis ({})", icon::ARMCHAIR, home.furniture.len()),
+                format!("{} {} ({})", icon::ARMCHAIR, crate::i18n::tr("Móveis"), home.furniture.len()),
                 home.furniture
                     .iter()
                     .map(|f| {
                         let size = unit.format_size([f.width, f.depth, f.height]);
                         let kind = if f.is_group() {
-                            format!(" · grupo de {}", f.flatten().len() - 1)
+                            format!(" · {} {}", crate::i18n::tr("grupo de"), f.flatten().len() - 1)
                         } else if f.light.is_some() {
-                            " · luz".to_owned()
+                            crate::i18n::tr(" · luz").to_owned()
                         } else {
                             String::new()
                         };
@@ -229,34 +241,34 @@ pub(crate) fn left(app: &mut NewEraApp, ui: &mut egui::Ui) {
             );
             section(
                 ui,
-                format!("{} Cômodos ({})", icon::POLYGON, home.rooms.len()),
+                format!("{} {} ({})", icon::POLYGON, crate::i18n::tr("Cômodos"), home.rooms.len()),
                 home.rooms
                     .iter()
                     .map(|r| {
-                        let name = if r.name.is_empty() { "Sem nome" } else { &r.name };
+                        let name = if r.name.is_empty() { crate::i18n::tr("Sem nome") } else { &r.name };
                         (r.id.into(), format!("{name} · {}", unit.format_area(r.area())))
                     })
                     .collect(),
             );
             section(
                 ui,
-                format!("{} Paredes ({})", icon::WALL, home.walls.len()),
+                format!("{} {} ({})", icon::WALL, crate::i18n::tr("Paredes"), home.walls.len()),
                 home.walls
                     .iter()
                     .map(|w| {
-                        let arc = if w.is_arc() { " · arco" } else { "" };
+                        let arc = if w.is_arc() { crate::i18n::tr(" · arco") } else { "" };
                         (w.id.into(), format!("{} · {}{arc}", w.id, unit.format_length(w.length())))
                     })
                     .collect(),
             );
             section(
                 ui,
-                format!("{} Cotas ({})", icon::RULER, home.dimensions.len()),
+                format!("{} {} ({})", icon::RULER, crate::i18n::tr("Cotas"), home.dimensions.len()),
                 home.dimensions.iter().map(|d| (d.id.into(), unit.format_length(d.length()))).collect(),
             );
             section(
                 ui,
-                format!("{} Textos ({})", icon::TEXT_T, home.labels.len()),
+                format!("{} {} ({})", icon::TEXT_T, crate::i18n::tr("Textos"), home.labels.len()),
                 home.labels
                     .iter()
                     .map(|l| (l.id.into(), l.text.lines().next().unwrap_or_default().to_owned()))
@@ -264,7 +276,7 @@ pub(crate) fn left(app: &mut NewEraApp, ui: &mut egui::Ui) {
             );
             section(
                 ui,
-                format!("{} Linhas ({})", icon::LINE_SEGMENTS, home.polylines.len()),
+                format!("{} {} ({})", icon::LINE_SEGMENTS, crate::i18n::tr("Linhas"), home.polylines.len()),
                 home.polylines
                     .iter()
                     .map(|l| {
@@ -275,7 +287,7 @@ pub(crate) fn left(app: &mut NewEraApp, ui: &mut egui::Ui) {
             );
             if home.walls.is_empty() && home.rooms.is_empty() && home.furniture.is_empty() {
                 ui.add_space(12.0);
-                ui.weak("Comece desenhando paredes (W), importe uma planta como imagem de fundo, ou peça para a IA via MCP.");
+                ui.weak(crate::i18n::tr("Comece desenhando paredes (W), importe uma planta como imagem de fundo, ou peça para a IA via MCP."));
             }
         });
 

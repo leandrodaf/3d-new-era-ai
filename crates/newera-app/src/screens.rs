@@ -206,3 +206,16 @@ fn disciplines() {
     doc.execute(Command::insert(run)).unwrap();
     render("disciplines-electrical", SharedDocument::new(doc), |_| {});
 }
+
+#[test]
+#[ignore = "visual review; needs a GPU"]
+fn english_interface() {
+    crate::i18n::set_english(true);
+    let mut doc = Document::default();
+    house(&mut doc, 600.0);
+    render("english", SharedDocument::new(doc), |app| {
+        crate::i18n::set_english(true);
+        app.open_modify(&[newera_core::WallId(1).into()]);
+    });
+    crate::i18n::set_english(false);
+}

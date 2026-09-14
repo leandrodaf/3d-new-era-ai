@@ -135,7 +135,8 @@ The core of what makes the editor useful: placing real objects with real dimensi
 - [x] REST commands: `POST /api/commands` applies core commands as one undoable step
 - [ ] Multi-user sessions
 - [ ] Plugin API on top of commands (REST commands and MCP are the foundation)
-- [ ] i18n (UI currently in Portuguese)
+- [x] i18n: interface in Portuguese or English (Ajuda › Idioma / Language), saved in
+      preferences; project data and catalog item names stay as written
 
 ## Sweet Home 3D is a reference, not a source
 

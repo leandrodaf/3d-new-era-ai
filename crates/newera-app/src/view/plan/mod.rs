@@ -353,7 +353,8 @@ impl PlanView {
                                     doc.execute(Command::insert(room))
                                 }),
                                 None => events.push(PlanEvent::Status(
-                                    "Nenhum espaço fechado por paredes aqui".into(),
+                                    crate::i18n::tr("Nenhum espaço fechado por paredes aqui")
+                                        .into(),
                                 )),
                             }
                         }

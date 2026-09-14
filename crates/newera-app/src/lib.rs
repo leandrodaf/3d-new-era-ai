@@ -5,6 +5,7 @@
 
 mod app;
 mod dialogs;
+mod i18n;
 mod panels;
 mod photo;
 #[cfg(test)]

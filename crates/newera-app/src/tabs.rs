@@ -74,13 +74,20 @@ pub(crate) fn bar(app: &mut NewEraApp, ui: &mut egui::Ui) {
                         }
                         tab.context_menu(|ui| {
                             if ui
-                                .button(format!("{} Renomear", icon::PENCIL_SIMPLE))
+                                .button(format!(
+                                    "{} {}",
+                                    icon::PENCIL_SIMPLE,
+                                    crate::i18n::tr("Renomear")
+                                ))
                                 .clicked()
                             {
                                 app.renaming_variant = Some((info.index, info.name.clone()));
                                 ui.close();
                             }
-                            if ui.button(format!("{} Duplicar", icon::COPY)).clicked() {
+                            if ui
+                                .button(format!("{} {}", icon::COPY, crate::i18n::tr("Duplicar")))
+                                .clicked()
+                            {
                                 switch_to = Some(info.index);
                                 duplicate = true;
                                 ui.close();
@@ -88,7 +95,11 @@ pub(crate) fn bar(app: &mut NewEraApp, ui: &mut egui::Ui) {
                             if ui
                                 .add_enabled(
                                     count > 1,
-                                    egui::Button::new(format!("{} Fechar versão", icon::X)),
+                                    egui::Button::new(format!(
+                                        "{} {}",
+                                        icon::X,
+                                        crate::i18n::tr("Fechar versão")
+                                    )),
                                 )
                                 .clicked()
                             {
@@ -102,8 +113,12 @@ pub(crate) fn bar(app: &mut NewEraApp, ui: &mut egui::Ui) {
         ui.menu_button(RichText::new(icon::PLUS).size(16.0), |ui| {
             if ui
                 .add(
-                    egui::Button::new(format!("{} Duplicar versão atual", icon::COPY))
-                        .shortcut_text("Ctrl+T"),
+                    egui::Button::new(format!(
+                        "{} {}",
+                        icon::COPY,
+                        crate::i18n::tr("Duplicar versão atual")
+                    ))
+                    .shortcut_text("Ctrl+T"),
                 )
                 .clicked()
             {
@@ -111,7 +126,11 @@ pub(crate) fn bar(app: &mut NewEraApp, ui: &mut egui::Ui) {
                 ui.close();
             }
             if ui
-                .button(format!("{} Nova versão em branco", icon::FILE_PLUS))
+                .button(format!(
+                    "{} {}",
+                    icon::FILE_PLUS,
+                    crate::i18n::tr("Nova versão em branco")
+                ))
                 .clicked()
             {
                 blank = true;
@@ -119,11 +138,15 @@ pub(crate) fn bar(app: &mut NewEraApp, ui: &mut egui::Ui) {
             }
         })
         .response
-        .on_hover_text("Nova versão da planta");
+        .on_hover_text(crate::i18n::tr("Nova versão da planta"));
         let compare = count > 1
             && ui
-                .button(format!("{} Comparar", icon::CHART_BAR))
-                .on_hover_text("Comparar as versões")
+                .button(format!(
+                    "{} {}",
+                    icon::CHART_BAR,
+                    crate::i18n::tr("Comparar")
+                ))
+                .on_hover_text(crate::i18n::tr("Comparar as versões"))
                 .clicked();
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             levels(app, ui);
@@ -161,9 +184,11 @@ fn disciplines(app: &mut NewEraApp, ui: &mut egui::Ui) {
         (home.active_discipline, home.hidden_disciplines.clone())
     };
     let label = |d: Option<Discipline>| match d {
-        None => format!("{} Arquitetura", icon::HOUSE_LINE),
-        Some(Discipline::Electrical) => format!("{} Elétrica", icon::LIGHTNING),
-        Some(Discipline::Plumbing) => format!("{} Hidráulica", icon::DROP),
+        None => format!("{} {}", icon::HOUSE_LINE, crate::i18n::tr("Arquitetura")),
+        Some(Discipline::Electrical) => {
+            format!("{} {}", icon::LIGHTNING, crate::i18n::tr("Elétrica"))
+        }
+        Some(Discipline::Plumbing) => format!("{} {}", icon::DROP, crate::i18n::tr("Hidráulica")),
     };
     let mut choice = None;
     let mut toggle = None;
@@ -192,14 +217,20 @@ fn disciplines(app: &mut NewEraApp, ui: &mut egui::Ui) {
             }
             ui.separator();
             if ui
-                .button(format!("{} Quantitativos", icon::LIST_NUMBERS))
+                .button(format!(
+                    "{} {}",
+                    icon::LIST_NUMBERS,
+                    crate::i18n::tr("Quantitativos")
+                ))
                 .clicked()
             {
                 quantities = true;
             }
         })
         .response
-        .on_hover_text("Projeto em edição: novos símbolos e linhas vão para ele");
+        .on_hover_text(crate::i18n::tr(
+            "Projeto em edição: novos símbolos e linhas vão para ele",
+        ));
     if let Some(d) = choice {
         app.document.write().set_active_discipline(d);
         if let Some(d) = d {
@@ -254,15 +285,15 @@ fn levels(app: &mut NewEraApp, ui: &mut egui::Ui) {
         (levels, home.current_level())
     };
     if ui
-        .button(format!("{} Andar", icon::PLUS))
-        .on_hover_text("Adicionar um andar acima do mais alto")
+        .button(format!("{} {}", icon::PLUS, crate::i18n::tr("Andar")))
+        .on_hover_text(crate::i18n::tr("Adicionar um andar acima do mais alto"))
         .clicked()
     {
         app.run(|doc| newera_core::ops::add_level(doc, None, None).map(|_| ()));
         app.after_variant_change();
     }
     if levels.is_empty() {
-        ui.weak(format!("{} Térreo", icon::STACK));
+        ui.weak(format!("{} {}", icon::STACK, crate::i18n::tr("Térreo")));
         return;
     }
     let current_name = levels
@@ -288,7 +319,11 @@ fn levels(app: &mut NewEraApp, ui: &mut egui::Ui) {
             }
             ui.separator();
             if ui
-                .button(format!("{} Editar andar…", icon::PENCIL_SIMPLE))
+                .button(format!(
+                    "{} {}",
+                    icon::PENCIL_SIMPLE,
+                    crate::i18n::tr("Editar andar…")
+                ))
                 .clicked()
                 && let Some(id) = current
             {
@@ -297,7 +332,11 @@ fn levels(app: &mut NewEraApp, ui: &mut egui::Ui) {
             if ui
                 .add_enabled(
                     levels.len() > 1,
-                    egui::Button::new(format!("{} Excluir andar", icon::TRASH)),
+                    egui::Button::new(format!(
+                        "{} {}",
+                        icon::TRASH,
+                        crate::i18n::tr("Excluir andar")
+                    )),
                 )
                 .clicked()
                 && let Some(level) = levels.iter().find(|l| Some(l.id) == current)

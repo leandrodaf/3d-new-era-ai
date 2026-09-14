@@ -84,79 +84,94 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
     let mut open = true;
     let mut start = false;
     let mut save = false;
-    egui::Window::new(format!("{} Criar foto", icon::CAMERA))
-        .open(&mut open)
-        .default_width(560.0)
-        .show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label("Qualidade");
-                for (quality, name) in [
-                    (newera_render::PhotoQuality::Draft, "Rascunho"),
-                    (newera_render::PhotoQuality::Good, "Boa"),
-                    (newera_render::PhotoQuality::Best, "Máxima"),
-                ] {
-                    ui.selectable_value(&mut window.quality, quality, name);
-                }
-            });
-            ui.horizontal(|ui| {
-                ui.label("Hora do dia");
-                ui.add(
-                    egui::Slider::new(&mut window.hour, 0.0..=24.0)
-                        .step_by(0.25)
-                        .suffix(" h"),
-                );
-            });
-            ui.horizontal(|ui| {
-                ui.label("Tamanho");
-                for size in [[640, 480], [800, 600], [1280, 960], [1920, 1080]] {
-                    ui.selectable_value(&mut window.size, size, format!("{}×{}", size[0], size[1]));
-                }
-            });
-            ui.weak("Usa o ponto de vista atual da vista 3D (aérea ou visitante).");
-            ui.separator();
-            let running = window.job.is_some();
-            ui.horizontal(|ui| {
-                if ui
-                    .add_enabled(
-                        !running,
-                        egui::Button::new(format!("{} Renderizar", icon::APERTURE)),
-                    )
-                    .clicked()
-                {
-                    start = true;
-                }
-                if ui
-                    .add_enabled(
-                        window.result.is_some(),
-                        egui::Button::new(format!("{} Salvar PNG…", icon::FLOPPY_DISK)),
-                    )
-                    .clicked()
-                {
-                    save = true;
-                }
-                if let Some((started, _)) = &window.job {
-                    ui.spinner();
-                    ui.label(format!(
-                        "Renderizando… {:.0} s",
-                        started.elapsed().as_secs_f32()
-                    ));
-                    ctx.request_repaint_after(Duration::from_millis(200));
-                }
-                if let Some((_, _, took)) = &window.result {
-                    ui.label(
-                        RichText::new(format!("Pronta em {:.1} s", took.as_secs_f32())).weak(),
-                    );
-                }
-            });
-            if let Some((_, texture, _)) = &window.result {
-                let width = ui.available_width();
-                let size = texture.size_vec2();
-                ui.image((
-                    texture.id(),
-                    egui::vec2(width, width * size.y / size.x.max(1.0)),
-                ));
+    egui::Window::new(format!(
+        "{} {}",
+        icon::CAMERA,
+        crate::i18n::tr("Criar foto")
+    ))
+    .open(&mut open)
+    .default_width(560.0)
+    .show(ctx, |ui| {
+        ui.horizontal(|ui| {
+            ui.label(crate::i18n::tr("Qualidade"));
+            for (quality, name) in [
+                (
+                    newera_render::PhotoQuality::Draft,
+                    crate::i18n::tr("Rascunho"),
+                ),
+                (newera_render::PhotoQuality::Good, crate::i18n::tr("Boa")),
+                (newera_render::PhotoQuality::Best, crate::i18n::tr("Máxima")),
+            ] {
+                ui.selectable_value(&mut window.quality, quality, name);
             }
         });
+        ui.horizontal(|ui| {
+            ui.label(crate::i18n::tr("Hora do dia"));
+            ui.add(
+                egui::Slider::new(&mut window.hour, 0.0..=24.0)
+                    .step_by(0.25)
+                    .suffix(" h"),
+            );
+        });
+        ui.horizontal(|ui| {
+            ui.label(crate::i18n::tr("Tamanho"));
+            for size in [[640, 480], [800, 600], [1280, 960], [1920, 1080]] {
+                ui.selectable_value(&mut window.size, size, format!("{}×{}", size[0], size[1]));
+            }
+        });
+        ui.weak(crate::i18n::tr(
+            "Usa o ponto de vista atual da vista 3D (aérea ou visitante).",
+        ));
+        ui.separator();
+        let running = window.job.is_some();
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(
+                    !running,
+                    egui::Button::new(format!(
+                        "{} {}",
+                        icon::APERTURE,
+                        crate::i18n::tr("Renderizar")
+                    )),
+                )
+                .clicked()
+            {
+                start = true;
+            }
+            if ui
+                .add_enabled(
+                    window.result.is_some(),
+                    egui::Button::new(format!(
+                        "{} {}",
+                        icon::FLOPPY_DISK,
+                        crate::i18n::tr("Salvar PNG…")
+                    )),
+                )
+                .clicked()
+            {
+                save = true;
+            }
+            if let Some((started, _)) = &window.job {
+                ui.spinner();
+                ui.label(format!(
+                    "Renderizando… {:.0} s",
+                    started.elapsed().as_secs_f32()
+                ));
+                ctx.request_repaint_after(Duration::from_millis(200));
+            }
+            if let Some((_, _, took)) = &window.result {
+                ui.label(RichText::new(format!("Pronta em {:.1} s", took.as_secs_f32())).weak());
+            }
+        });
+        if let Some((_, texture, _)) = &window.result {
+            let width = ui.available_width();
+            let size = texture.size_vec2();
+            ui.image((
+                texture.id(),
+                egui::vec2(width, width * size.y / size.x.max(1.0)),
+            ));
+        }
+    });
 
     // Collect a finished render.
     let finished = window.job.as_ref().and_then(|(started, slot)| {

@@ -37,6 +37,9 @@ struct Settings {
     /// How furniture looks on the plan.
     #[serde(default)]
     furniture_look: FurnitureLook,
+    /// Interface in English instead of Portuguese.
+    #[serde(default)]
+    english: bool,
 }
 
 /// Plan drawing of furniture.
@@ -111,6 +114,7 @@ impl NewEraApp {
             .storage
             .and_then(|s| eframe::get_value::<Settings>(s, SETTINGS_KEY))
             .unwrap_or_default();
+        crate::i18n::set_english(settings.english);
         Self {
             document,
             mcp_url,
@@ -187,11 +191,11 @@ impl NewEraApp {
                 let path = path.or_else(|| {
                     rfd::FileDialog::new()
                         .add_filter(
-                            "Projetos (3D New Era AI, Sweet Home 3D)",
+                            crate::i18n::tr("Projetos (3D New Era AI, Sweet Home 3D)"),
                             &[newera_core::PROJECT_EXTENSION, "sh3d"],
                         )
                         .add_filter("3D New Era AI", &[newera_core::PROJECT_EXTENSION])
-                        .add_filter("Sweet Home 3D", &["sh3d"])
+                        .add_filter(crate::i18n::tr("Sweet Home 3D"), &["sh3d"])
                         .pick_file()
                 });
                 if let Some(path) = path {
@@ -271,38 +275,58 @@ impl NewEraApp {
     fn annotations_menu(&mut self, ui: &mut egui::Ui) {
         let current = self.document.read().home().annotations;
         let mut next = current;
-        ui.menu_button(format!("{} Móveis na planta", icon::ARMCHAIR), |ui| {
-            for (look, name) in [
-                (
-                    FurnitureLook::Auto,
-                    "Automático (símbolos e vista de cima dos modelos)",
-                ),
-                (FurnitureLook::Symbols, "Símbolos arquitetônicos"),
-                (FurnitureLook::TopViews, "Vista de cima de todos"),
-            ] {
-                ui.radio_value(&mut self.settings.furniture_look, look, name);
-            }
-        });
+        ui.menu_button(
+            format!("{} {}", icon::ARMCHAIR, crate::i18n::tr("Móveis na planta")),
+            |ui| {
+                for (look, name) in [
+                    (
+                        FurnitureLook::Auto,
+                        crate::i18n::tr("Automático (símbolos e vista de cima dos modelos)"),
+                    ),
+                    (
+                        FurnitureLook::Symbols,
+                        crate::i18n::tr("Símbolos arquitetônicos"),
+                    ),
+                    (
+                        FurnitureLook::TopViews,
+                        crate::i18n::tr("Vista de cima de todos"),
+                    ),
+                ] {
+                    ui.radio_value(&mut self.settings.furniture_look, look, name);
+                }
+            },
+        );
         ui.checkbox(
             &mut next.auto_dimensions,
-            format!("{} Cotas automáticas (engenharia)", icon::RULER),
+            format!(
+                "{} {}",
+                icon::RULER,
+                crate::i18n::tr("Cotas automáticas (engenharia)")
+            ),
         );
         ui.checkbox(
             &mut next.references,
-            format!("{} Referências dos cômodos", icon::LIST_BULLETS),
+            format!(
+                "{} {}",
+                icon::LIST_BULLETS,
+                crate::i18n::tr("Referências dos cômodos")
+            ),
         );
         ui.add_enabled(
             next.references,
             egui::Checkbox::new(
                 &mut next.reference_details,
-                "Detalhes: marca, modelo e link",
+                crate::i18n::tr("Detalhes: marca, modelo e link"),
             ),
         );
         ui.checkbox(
             &mut next.legend,
             format!(
-                "{} Legenda de símbolos (elétrica e hidráulica)",
-                icon::LIST_DASHES
+                "{} {}",
+                icon::LIST_DASHES,
+                crate::i18n::tr(crate::i18n::tr(
+                    "Legenda de símbolos (elétrica e hidráulica)"
+                ))
             ),
         );
         if next != current {
@@ -315,14 +339,24 @@ impl NewEraApp {
         let cameras = self.document.read().home().cameras.clone();
         let aerial = self.scene.visitor.is_none();
         if ui
-            .radio(aerial, format!("{} Visão aérea", icon::GLOBE))
+            .radio(
+                aerial,
+                format!("{} {}", icon::GLOBE, crate::i18n::tr("Visão aérea")),
+            )
             .clicked()
         {
             self.scene.visitor = None;
             ui.close();
         }
         if ui
-            .radio(!aerial, format!("{} Visitante", icon::PERSON_SIMPLE_WALK))
+            .radio(
+                !aerial,
+                format!(
+                    "{} {}",
+                    icon::PERSON_SIMPLE_WALK,
+                    crate::i18n::tr("Visitante")
+                ),
+            )
             .clicked()
         {
             self.scene.visitor = Some(crate::view::scene::Visitor {
@@ -338,7 +372,7 @@ impl NewEraApp {
             ),
             |ui| {
                 if cameras.stored.is_empty() {
-                    ui.weak("Nenhum ponto de vista salvo");
+                    ui.weak(crate::i18n::tr("Nenhum ponto de vista salvo"));
                 }
                 for (i, camera) in cameras.stored.iter().enumerate() {
                     let name = camera
@@ -357,7 +391,11 @@ impl NewEraApp {
         if ui
             .add_enabled(
                 self.scene.visitor.is_some(),
-                egui::Button::new(format!("{} Salvar ponto de vista", icon::FLOPPY_DISK)),
+                egui::Button::new(format!(
+                    "{} {}",
+                    icon::FLOPPY_DISK,
+                    crate::i18n::tr("Salvar ponto de vista")
+                )),
             )
             .clicked()
             && let Some(visitor) = &self.scene.visitor
@@ -521,7 +559,7 @@ impl NewEraApp {
     /// the middle of the plan view.
     pub(crate) fn import_model(&mut self) {
         let Some(path) = rfd::FileDialog::new()
-            .add_filter("Modelos 3D", &["obj", "gltf", "glb"])
+            .add_filter(crate::i18n::tr("Modelos 3D"), &["obj", "gltf", "glb"])
             .pick_file()
         else {
             return;
@@ -529,9 +567,10 @@ impl NewEraApp {
         match newera_catalog::load_model(&path) {
             Ok(model) => {
                 let at = self.plan.view_center();
-                let name = path
-                    .file_stem()
-                    .map_or_else(|| "Modelo".to_owned(), |s| s.to_string_lossy().into_owned());
+                let name = path.file_stem().map_or_else(
+                    || crate::i18n::tr("Modelo").to_owned(),
+                    |s| s.to_string_lossy().into_owned(),
+                );
                 let mut placed = None;
                 self.run(|doc| {
                     let piece = newera_core::Furniture {
@@ -558,7 +597,9 @@ impl NewEraApp {
                 if let Some(id) = placed {
                     self.selection = std::iter::once(ElementId::from(id)).collect();
                     self.set_tool(Tool::Select);
-                    self.set_status("Modelo importado. Ajuste medidas com Enter ou pelas alças.");
+                    self.set_status(crate::i18n::tr(
+                        "Modelo importado. Ajuste medidas com Enter ou pelas alças.",
+                    ));
                 }
             }
             Err(err) => self.set_status(format!("⚠ {err}")),
@@ -567,7 +608,10 @@ impl NewEraApp {
 
     pub(crate) fn import_background(&mut self) {
         let Some(path) = rfd::FileDialog::new()
-            .add_filter("Imagens", &["png", "jpg", "jpeg", "webp", "bmp"])
+            .add_filter(
+                crate::i18n::tr("Imagens"),
+                &["png", "jpg", "jpeg", "webp", "bmp"],
+            )
             .pick_file()
         else {
             return;
@@ -593,7 +637,7 @@ impl NewEraApp {
         self.plan.request_fit();
         self.set_tool(Tool::Calibrate);
         self.set_status(
-            "Imagem importada. Clique em dois pontos de medida conhecida para calibrar; arraste para posicionar.",
+            crate::i18n::tr("Imagem importada. Clique em dois pontos de medida conhecida para calibrar; arraste para posicionar."),
         );
     }
 
@@ -827,17 +871,27 @@ impl NewEraApp {
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
         egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button("Arquivo", |ui| {
-                if menu_item(ui, icon::FILE_PLUS, "Novo", "Ctrl+N", true) {
+            ui.menu_button(crate::i18n::tr("Arquivo"), |ui| {
+                if menu_item(ui, icon::FILE_PLUS, crate::i18n::tr("Novo"), "Ctrl+N", true) {
                     self.request(Pending::New);
                 }
-                if menu_item(ui, icon::FOLDER_OPEN, "Abrir…", "Ctrl+O", true) {
+                if menu_item(
+                    ui,
+                    icon::FOLDER_OPEN,
+                    crate::i18n::tr("Abrir…"),
+                    "Ctrl+O",
+                    true,
+                ) {
                     self.request(Pending::Open(None));
                 }
                 let recent = self.settings.recent.clone();
                 ui.add_enabled_ui(!recent.is_empty(), |ui| {
                     ui.menu_button(
-                        format!("{} Recentes", icon::CLOCK_COUNTER_CLOCKWISE),
+                        format!(
+                            "{} {}",
+                            icon::CLOCK_COUNTER_CLOCKWISE,
+                            crate::i18n::tr("Recentes")
+                        ),
                         |ui| {
                             for path in recent {
                                 let label = path.file_name().map_or_else(
@@ -856,50 +910,65 @@ impl NewEraApp {
                     );
                 });
                 ui.separator();
-                if menu_item(ui, icon::FLOPPY_DISK, "Salvar", "Ctrl+S", true) {
+                if menu_item(
+                    ui,
+                    icon::FLOPPY_DISK,
+                    crate::i18n::tr("Salvar"),
+                    "Ctrl+S",
+                    true,
+                ) {
                     self.save(false);
                 }
                 if menu_item(
                     ui,
                     icon::FLOPPY_DISK_BACK,
-                    "Salvar como…",
+                    crate::i18n::tr("Salvar como…"),
                     "Ctrl+Shift+S",
                     true,
                 ) {
                     self.save(true);
                 }
                 ui.separator();
-                ui.menu_button(format!("{} Exportar planta", icon::EXPORT), |ui| {
-                    if ui.button("PDF (A3, ajustado à folha)…").clicked() {
-                        self.export("pdf");
-                    }
-                    if ui.button("PDF 1:50…").clicked() {
-                        self.export("pdf50");
-                    }
-                    if ui.button("PDF 1:100…").clicked() {
-                        self.export("pdf100");
-                    }
-                    if ui.button("SVG em escala real…").clicked() {
-                        self.export("svg");
-                    }
-                    if ui.button("PNG…").clicked() {
-                        self.export("png");
-                    }
-                });
-                ui.menu_button(format!("{} Exportar 3D", icon::CUBE), |ui| {
-                    if ui.button("glTF binário (.glb)…").clicked() {
-                        self.export_3d("glb");
-                    }
-                    if ui.button("OBJ + MTL…").clicked() {
-                        self.export_3d("obj");
-                    }
-                });
+                ui.menu_button(
+                    format!("{} {}", icon::EXPORT, crate::i18n::tr("Exportar planta")),
+                    |ui| {
+                        if ui
+                            .button(crate::i18n::tr("PDF (A3, ajustado à folha)…"))
+                            .clicked()
+                        {
+                            self.export("pdf");
+                        }
+                        if ui.button(crate::i18n::tr("PDF 1:50…")).clicked() {
+                            self.export("pdf50");
+                        }
+                        if ui.button(crate::i18n::tr("PDF 1:100…")).clicked() {
+                            self.export("pdf100");
+                        }
+                        if ui.button(crate::i18n::tr("SVG em escala real…")).clicked() {
+                            self.export("svg");
+                        }
+                        if ui.button(crate::i18n::tr("PNG…")).clicked() {
+                            self.export("png");
+                        }
+                    },
+                );
+                ui.menu_button(
+                    format!("{} {}", icon::CUBE, crate::i18n::tr("Exportar 3D")),
+                    |ui| {
+                        if ui.button(crate::i18n::tr("glTF binário (.glb)…")).clicked() {
+                            self.export_3d("glb");
+                        }
+                        if ui.button(crate::i18n::tr("OBJ + MTL…")).clicked() {
+                            self.export_3d("obj");
+                        }
+                    },
+                );
                 ui.separator();
-                if menu_item(ui, icon::SIGN_OUT, "Sair", "", true) {
+                if menu_item(ui, icon::SIGN_OUT, crate::i18n::tr("Sair"), "", true) {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             });
-            ui.menu_button("Editar", |ui| {
+            ui.menu_button(crate::i18n::tr("Editar"), |ui| {
                 let (can_undo, can_redo) = {
                     let doc = self.document.read();
                     (doc.can_undo(), doc.can_redo())
@@ -908,7 +977,7 @@ impl NewEraApp {
                 if menu_item(
                     ui,
                     icon::ARROW_COUNTER_CLOCKWISE,
-                    "Desfazer",
+                    crate::i18n::tr("Desfazer"),
                     "Ctrl+Z",
                     can_undo,
                 ) {
@@ -917,51 +986,81 @@ impl NewEraApp {
                 if menu_item(
                     ui,
                     icon::ARROW_CLOCKWISE,
-                    "Refazer",
+                    crate::i18n::tr("Refazer"),
                     "Ctrl+Shift+Z",
                     can_redo,
                 ) {
                     self.run(Document::redo);
                 }
                 ui.separator();
-                if menu_item(ui, icon::SCISSORS, "Recortar", "Ctrl+X", has_selection) {
+                if menu_item(
+                    ui,
+                    icon::SCISSORS,
+                    crate::i18n::tr("Recortar"),
+                    "Ctrl+X",
+                    has_selection,
+                ) {
                     self.copy();
                     self.delete_selection();
                 }
-                if menu_item(ui, icon::COPY, "Copiar", "Ctrl+C", has_selection) {
+                if menu_item(
+                    ui,
+                    icon::COPY,
+                    crate::i18n::tr("Copiar"),
+                    "Ctrl+C",
+                    has_selection,
+                ) {
                     self.copy();
                 }
                 if menu_item(
                     ui,
                     icon::CLIPBOARD,
-                    "Colar",
+                    crate::i18n::tr("Colar"),
                     "Ctrl+V",
                     !self.clipboard.is_empty(),
                 ) {
                     self.paste(self.clipboard.clone());
                 }
-                if menu_item(ui, icon::COPY_SIMPLE, "Duplicar", "Ctrl+D", has_selection) {
+                if menu_item(
+                    ui,
+                    icon::COPY_SIMPLE,
+                    crate::i18n::tr("Duplicar"),
+                    "Ctrl+D",
+                    has_selection,
+                ) {
                     let selected = self.selected_elements();
                     self.paste(selected);
                 }
-                if menu_item(ui, icon::TRASH, "Excluir", "Del", has_selection) {
+                if menu_item(
+                    ui,
+                    icon::TRASH,
+                    crate::i18n::tr("Excluir"),
+                    "Del",
+                    has_selection,
+                ) {
                     self.delete_selection();
                 }
                 ui.separator();
-                if menu_item(ui, icon::SELECTION_ALL, "Selecionar tudo", "Ctrl+A", true) {
+                if menu_item(
+                    ui,
+                    icon::SELECTION_ALL,
+                    crate::i18n::tr("Selecionar tudo"),
+                    "Ctrl+A",
+                    true,
+                ) {
                     self.select_all();
                 }
                 if menu_item(
                     ui,
                     icon::PENCIL_SIMPLE,
-                    "Modificar…",
+                    crate::i18n::tr("Modificar…"),
                     "Enter",
                     has_selection,
                 ) {
                     self.open_modify(&self.selection.iter().copied().collect::<Vec<_>>());
                 }
             });
-            ui.menu_button("Planta", |ui| {
+            ui.menu_button(crate::i18n::tr("Planta"), |ui| {
                 for (tool, glyph, label, key) in TOOLS {
                     if ui
                         .add(
@@ -981,7 +1080,7 @@ impl NewEraApp {
                 if menu_item(
                     ui,
                     icon::SCISSORS,
-                    "Dividir parede ao meio",
+                    crate::i18n::tr("Dividir parede ao meio"),
                     "",
                     single_wall.is_some(),
                 ) && let Some(id) = single_wall
@@ -999,7 +1098,7 @@ impl NewEraApp {
                 if menu_item(
                     ui,
                     icon::RULER,
-                    "Cotar paredes selecionadas",
+                    crate::i18n::tr("Cotar paredes selecionadas"),
                     "",
                     !walls.is_empty(),
                 ) {
@@ -1012,42 +1111,66 @@ impl NewEraApp {
                     });
                 }
                 ui.separator();
-                ui.menu_button(format!("{} Imagem de fundo", icon::IMAGE), |ui| {
-                    if ui.button("Importar…").clicked() {
-                        self.import_background();
-                    }
-                    let background = self.document.read().home().background.clone();
-                    if ui
-                        .add_enabled(
-                            background.is_some(),
-                            egui::Button::new("Calibrar e posicionar"),
-                        )
-                        .clicked()
-                    {
-                        self.set_tool(Tool::Calibrate);
-                    }
-                    if ui
-                        .add_enabled(background.is_some(), egui::Button::new("Ajustes…"))
-                        .clicked()
-                    {
-                        self.dialog = background.map(Dialog::Background);
-                    }
-                });
-                if menu_item(ui, icon::CUBE, "Importar modelo 3D…", "", true) {
+                ui.menu_button(
+                    format!("{} {}", icon::IMAGE, crate::i18n::tr("Imagem de fundo")),
+                    |ui| {
+                        if ui.button(crate::i18n::tr("Importar…")).clicked() {
+                            self.import_background();
+                        }
+                        let background = self.document.read().home().background.clone();
+                        if ui
+                            .add_enabled(
+                                background.is_some(),
+                                egui::Button::new(crate::i18n::tr("Calibrar e posicionar")),
+                            )
+                            .clicked()
+                        {
+                            self.set_tool(Tool::Calibrate);
+                        }
+                        if ui
+                            .add_enabled(
+                                background.is_some(),
+                                egui::Button::new(crate::i18n::tr("Ajustes…")),
+                            )
+                            .clicked()
+                        {
+                            self.dialog = background.map(Dialog::Background);
+                        }
+                    },
+                );
+                if menu_item(
+                    ui,
+                    icon::CUBE,
+                    crate::i18n::tr("Importar modelo 3D…"),
+                    "",
+                    true,
+                ) {
                     self.import_model();
                 }
-                if menu_item(ui, icon::COMPASS, "Casa e bússola…", "", true) {
+                if menu_item(
+                    ui,
+                    icon::COMPASS,
+                    crate::i18n::tr("Casa e bússola…"),
+                    "",
+                    true,
+                ) {
                     self.open_home_settings();
                 }
             });
-            ui.menu_button("Ver", |ui| {
-                if menu_item(ui, icon::CORNERS_OUT, "Enquadrar planta", "Ctrl+0", true) {
+            ui.menu_button(crate::i18n::tr("Ver"), |ui| {
+                if menu_item(
+                    ui,
+                    icon::CORNERS_OUT,
+                    crate::i18n::tr("Enquadrar planta"),
+                    "Ctrl+0",
+                    true,
+                ) {
                     self.plan.request_fit();
                 }
-                if menu_item(ui, icon::CUBE, "Enquadrar 3D", "", true) {
+                if menu_item(ui, icon::CUBE, crate::i18n::tr("Enquadrar 3D"), "", true) {
                     self.scene.request_frame();
                 }
-                if menu_item(ui, icon::CAMERA, "Criar foto…", "", true) {
+                if menu_item(ui, icon::CAMERA, crate::i18n::tr("Criar foto…"), "", true) {
                     self.photo.get_or_insert_with(Default::default);
                     ui.close();
                 }
@@ -1056,13 +1179,34 @@ impl NewEraApp {
                 ui.separator();
                 self.viewpoints_menu(ui);
                 ui.separator();
-                ui.label("Unidade");
+                ui.label(crate::i18n::tr("Unidade"));
                 for unit in LengthUnit::ALL {
                     ui.radio_value(&mut self.settings.unit, unit, unit.label());
                 }
             });
-            ui.menu_button("Ajuda", |ui| {
-                if menu_item(ui, icon::KEYBOARD, "Atalhos e ferramentas", "", true) {
+            ui.menu_button(crate::i18n::tr("Ajuda"), |ui| {
+                ui.menu_button(format!("{} Idioma / Language", icon::TRANSLATE), |ui| {
+                    if ui
+                        .radio(!self.settings.english, "Português (Brasil)")
+                        .clicked()
+                    {
+                        self.settings.english = false;
+                        crate::i18n::set_english(false);
+                        self.plan.invalidate_scene();
+                    }
+                    if ui.radio(self.settings.english, "English").clicked() {
+                        self.settings.english = true;
+                        crate::i18n::set_english(true);
+                        self.plan.invalidate_scene();
+                    }
+                });
+                if menu_item(
+                    ui,
+                    icon::KEYBOARD,
+                    crate::i18n::tr("Atalhos e ferramentas"),
+                    "",
+                    true,
+                ) {
                     self.dialog = Some(Dialog::Help);
                 }
             });
@@ -1075,21 +1219,21 @@ impl NewEraApp {
             let big = |text: &str| RichText::new(text).size(18.0);
             if ui
                 .button(big(icon::FILE_PLUS))
-                .on_hover_text("Novo (Ctrl+N)")
+                .on_hover_text(crate::i18n::tr("Novo (Ctrl+N)"))
                 .clicked()
             {
                 self.request(Pending::New);
             }
             if ui
                 .button(big(icon::FOLDER_OPEN))
-                .on_hover_text("Abrir (Ctrl+O)")
+                .on_hover_text(crate::i18n::tr("Abrir (Ctrl+O)"))
                 .clicked()
             {
                 self.request(Pending::Open(None));
             }
             if ui
                 .button(big(icon::FLOPPY_DISK))
-                .on_hover_text("Salvar (Ctrl+S)")
+                .on_hover_text(crate::i18n::tr("Salvar (Ctrl+S)"))
                 .clicked()
             {
                 self.save(false);
@@ -1104,14 +1248,14 @@ impl NewEraApp {
                     can_undo,
                     egui::Button::new(big(icon::ARROW_COUNTER_CLOCKWISE)),
                 )
-                .on_hover_text("Desfazer (Ctrl+Z)")
+                .on_hover_text(crate::i18n::tr("Desfazer (Ctrl+Z)"))
                 .clicked()
             {
                 self.run(Document::undo);
             }
             if ui
                 .add_enabled(can_redo, egui::Button::new(big(icon::ARROW_CLOCKWISE)))
-                .on_hover_text("Refazer (Ctrl+Shift+Z)")
+                .on_hover_text(crate::i18n::tr("Refazer (Ctrl+Shift+Z)"))
                 .clicked()
             {
                 self.run(Document::redo);
@@ -1129,14 +1273,14 @@ impl NewEraApp {
             ui.separator();
             if ui
                 .button(big(icon::IMAGE))
-                .on_hover_text("Importar imagem de fundo")
+                .on_hover_text(crate::i18n::tr("Importar imagem de fundo"))
                 .clicked()
             {
                 self.import_background();
             }
             if ui
                 .button(big(icon::COMPASS))
-                .on_hover_text("Casa e bússola")
+                .on_hover_text(crate::i18n::tr("Casa e bússola"))
                 .clicked()
             {
                 self.open_home_settings();
@@ -1144,21 +1288,21 @@ impl NewEraApp {
             ui.separator();
             if ui
                 .button(big(icon::MAGNIFYING_GLASS_PLUS))
-                .on_hover_text("Aproximar (Ctrl +)")
+                .on_hover_text(crate::i18n::tr("Aproximar (Ctrl +)"))
                 .clicked()
             {
                 self.plan.zoom_by(self.plan_rect, 1.25);
             }
             if ui
                 .button(big(icon::MAGNIFYING_GLASS_MINUS))
-                .on_hover_text("Afastar (Ctrl -)")
+                .on_hover_text(crate::i18n::tr("Afastar (Ctrl -)"))
                 .clicked()
             {
                 self.plan.zoom_by(self.plan_rect, 0.8);
             }
             if ui
                 .button(big(icon::CORNERS_OUT))
-                .on_hover_text("Enquadrar (Ctrl+0)")
+                .on_hover_text(crate::i18n::tr("Enquadrar (Ctrl+0)"))
                 .clicked()
             {
                 self.plan.request_fit();
@@ -1173,7 +1317,11 @@ impl NewEraApp {
                     RichText::new(format!("{} MCP {url}", icon::ROBOT))
                         .color(ui.visuals().hyperlink_color),
                 ),
-                None => ui.weak(format!("{} MCP desligado", icon::ROBOT)),
+                None => ui.weak(format!(
+                    "{} {}",
+                    icon::ROBOT,
+                    crate::i18n::tr("MCP desligado")
+                )),
             };
             ui.separator();
             if let Some(p) = self.plan.cursor() {
@@ -1235,29 +1383,29 @@ pub(crate) const TOOLS: [(Tool, &str, &str, &str); 7] = [
 
 fn tool_hint(tool: Tool) -> &'static str {
     match tool {
-        Tool::Select => {
-            "Clique seleciona · Ctrl+clique soma · arraste move · alças editam · duplo clique modifica"
-        }
-        Tool::Pan => "Arraste para mover a vista",
-        Tool::Walls => {
-            "Clique encadeia paredes · digite o comprimento + Enter · Shift desliga o ímã · duplo clique encerra"
-        }
-        Tool::Rooms => {
-            "Clique os cantos e duplo clique fecha · duplo clique dentro de paredes detecta o cômodo"
-        }
-        Tool::Dimensions => {
-            "Clique início e fim, mova para afastar e clique · duplo clique numa parede cota a parede"
-        }
-        Tool::Labels => "Clique onde o texto deve ficar",
-        Tool::Lines => {
-            "Clique os pontos e duplo clique encerra · na Elétrica/Hidráulica a linha vira eletroduto/tubulação"
-        }
-        Tool::Calibrate => {
-            "Clique dois pontos de medida conhecida · arraste para posicionar a imagem"
-        }
-        Tool::Place(_) => {
-            "Clique para posicionar · portas e janelas encaixam na parede mais próxima · Esc cancela"
-        }
+        Tool::Select => crate::i18n::tr(
+            "Clique seleciona · Ctrl+clique soma · arraste move · alças editam · duplo clique modifica",
+        ),
+        Tool::Pan => crate::i18n::tr("Arraste para mover a vista"),
+        Tool::Walls => crate::i18n::tr(
+            "Clique encadeia paredes · digite o comprimento + Enter · Shift desliga o ímã · duplo clique encerra",
+        ),
+        Tool::Rooms => crate::i18n::tr(
+            "Clique os cantos e duplo clique fecha · duplo clique dentro de paredes detecta o cômodo",
+        ),
+        Tool::Dimensions => crate::i18n::tr(
+            "Clique início e fim, mova para afastar e clique · duplo clique numa parede cota a parede",
+        ),
+        Tool::Labels => crate::i18n::tr("Clique onde o texto deve ficar"),
+        Tool::Lines => crate::i18n::tr(
+            "Clique os pontos e duplo clique encerra · na Elétrica/Hidráulica a linha vira eletroduto/tubulação",
+        ),
+        Tool::Calibrate => crate::i18n::tr(
+            "Clique dois pontos de medida conhecida · arraste para posicionar a imagem",
+        ),
+        Tool::Place(_) => crate::i18n::tr(
+            "Clique para posicionar · portas e janelas encaixam na parede mais próxima · Esc cancela",
+        ),
     }
 }
 
@@ -1277,7 +1425,7 @@ fn shift_with_new_id(doc: &mut Document, mut element: Element, offset: f64) -> E
     match element {
         Element::Level(mut level) => {
             level.id = doc.new_level_id();
-            level.name = format!("{} (cópia)", level.name);
+            level.name = format!("{} {}", level.name, crate::i18n::tr("(cópia)"));
             Element::Level(level)
         }
         Element::Wall(mut w) => {
