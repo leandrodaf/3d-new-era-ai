@@ -77,6 +77,11 @@ pub struct Finding {
     pub place: String,
     /// What is wrong, with the numbers and what to do.
     pub message: String,
+    /// A checked change that solves it, as MCP tool arguments:
+    /// `{"tool":"move","ids":["f12"],"dx":-20,"dy":0}` or
+    /// `{"tool":"update","items":[{"id":"f3","hinge_right":true}]}`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fix: Option<serde_json::Value>,
 }
 
 /// What the home offers its people.
@@ -128,6 +133,7 @@ impl Review<'_, '_> {
             severity,
             place: place.into(),
             message: message.into(),
+            fix: None,
         });
     }
 
@@ -276,22 +282,66 @@ impl Review<'_, '_> {
         for (i, u) in scene.units.iter().enumerate() {
             let label = u.label();
             let need = |side: Side, min: f64, span: (f64, f64), severity: Severity, what: &str| {
-                let free = scene.free(i, side, min + 1.0, span);
+                let (free, blocker) = scene.free_and_blocker(i, side, min + 1.0, span);
                 if free + 0.5 < min {
                     let where_ = match side {
                         Side::Front => "à frente",
                         Side::Left => "à esquerda",
                         Side::Right => "à direita",
                     };
+                    let short = min - free;
+                    // Sideways, the piece can slide over if the other side keeps its own room.
+                    let fix = match side {
+                        // In front: push the piece in the way back by the shortfall.
+                        Side::Front => blocker.and_then(|j| {
+                            let piece = scene.units[i].piece;
+                            let way = piece.to_plan((0.0, 1.0));
+                            let dir = (way.x - piece.position.x, way.y - piece.position.y);
+                            push_away(scene.home, scene.units[j].piece.id, dir, short.ceil())
+                        }),
+                        Side::Left | Side::Right => {
+                            let (other, sign) = if side == Side::Left {
+                                (Side::Right, 1.0)
+                            } else {
+                                (Side::Left, -1.0)
+                            };
+                            let spare = scene.free(i, other, short + min + 1.0, span);
+                            (spare - short + 0.5 >= min).then(|| {
+                                let piece = scene.units[i].piece;
+                                let to = piece.to_plan((sign * short.ceil(), 0.0));
+                                let round = |v: f64| (v * 10.0).round() / 10.0;
+                                serde_json::json!({
+                                    "tool": "move",
+                                    "ids": [piece.id.to_string()],
+                                    "dx": round(to.x - piece.position.x),
+                                    "dy": round(to.y - piece.position.y),
+                                })
+                            })
+                        }
+                    };
+                    let advice = if let (Side::Front, Some(f), Some(j)) = (side, &fix, blocker) {
+                        format!(
+                            "afaste {} {} cm",
+                            scene.units[j].label(),
+                            cm(f["dx"]
+                                .as_f64()
+                                .unwrap_or_default()
+                                .hypot(f["dy"].as_f64().unwrap_or_default()))
+                        )
+                    } else if fix.is_some() || side == Side::Front {
+                        format!("afaste {} cm", cm(short))
+                    } else {
+                        "não há espaço do outro lado: use peça menor ou reorganize".to_owned()
+                    };
                     Some(Finding {
                         severity,
                         place: label.clone(),
                         message: format!(
-                            "{} cm livres {where_} ({what}: mínimo {} cm); afaste {} cm.",
+                            "{} cm livres {where_} ({what}: mínimo {} cm); {advice}.",
                             cm(free),
-                            cm(min),
-                            cm(min - free)
+                            cm(min)
                         ),
+                        fix,
                     })
                 } else {
                     None
@@ -506,19 +556,80 @@ impl Review<'_, '_> {
                     .map_or_else(|| id.to_string(), |f| format!("{} {}", f.name, f.id))
             };
             match issue {
-                Issue::BlocksDoor { door, by } => self.push(
-                    Severity::Erro,
-                    name(door),
-                    format!(
-                        "A folha da porta bate em {}: mova a peça ou inverta o lado da abertura.",
-                        name(by)
-                    ),
-                ),
-                Issue::Overlap(a, b) => self.push(
-                    Severity::Erro,
-                    name(a),
-                    format!("Ocupa o mesmo lugar que {}: afaste as duas peças.", name(b)),
-                ),
+                Issue::BlocksDoor { door, by } => {
+                    // Would the leaf clear it swinging from the other jamb?
+                    let mut flipped = home.clone();
+                    let flips = flipped
+                        .furniture
+                        .iter_mut()
+                        .find(|f| f.id == door)
+                        .and_then(|f| f.opening.as_mut())
+                        .filter(|o| o.leaves < 2 && !o.sliding && o.sashes.is_empty())
+                        .map(|o| {
+                            o.hinge_right = !o.hinge_right;
+                            o.hinge_right
+                        });
+                    let fix = flips.filter(|_| {
+                        !newera_core::check_layout(&flipped)
+                            .iter()
+                            .any(|i| matches!(i, Issue::BlocksDoor { door: d, .. } if *d == door))
+                    });
+                    let moved = if fix.is_none() { nudge(home, by) } else { None };
+                    if let Some(m) = moved {
+                        self.findings.push(Finding {
+                            severity: Severity::Erro,
+                            place: name(door),
+                            message: format!(
+                                "A folha da porta bate em {}: movendo a peça {} cm a porta abre livre.",
+                                name(by),
+                                cm(m["d"].as_f64().unwrap_or_default())
+                            ),
+                            fix: Some(without_distance(m)),
+                        });
+                        continue;
+                    }
+                    self.findings.push(Finding {
+                        severity: Severity::Erro,
+                        place: name(door),
+                        message: if fix.is_some() {
+                            format!(
+                                "A folha da porta bate em {}: invertendo o lado da dobradiça ela abre livre.",
+                                name(by)
+                            )
+                        } else {
+                            format!(
+                                "A folha da porta bate em {}: mova a peça ou use porta de correr.",
+                                name(by)
+                            )
+                        },
+                        fix: fix.map(|right| {
+                            serde_json::json!({
+                                "tool": "update",
+                                "items": [{"id": door.to_string(), "hinge_right": right}],
+                            })
+                        }),
+                    });
+                }
+                Issue::Overlap(a, b) => {
+                    let fix = nudge(home, b).or_else(|| nudge(home, a));
+                    self.findings.push(Finding {
+                        severity: Severity::Erro,
+                        place: name(a),
+                        message: match &fix {
+                            Some(f) => format!(
+                                "Ocupa o mesmo lugar que {}: movendo {} {} cm fica livre.",
+                                name(b),
+                                f["ids"][0].as_str().unwrap_or_default(),
+                                cm(f["d"].as_f64().unwrap_or_default())
+                            ),
+                            None => format!(
+                                "Ocupa o mesmo lugar que {}: não há lugar livre por perto, reorganize.",
+                                name(b)
+                            ),
+                        },
+                        fix: fix.map(without_distance),
+                    });
+                }
                 _ => {}
             }
         }
@@ -913,6 +1024,146 @@ impl Midpoint for Point2 {
     }
 }
 
+fn piece_after(home: &Home, id: newera_core::FurnitureId) -> Option<&newera_core::Furniture> {
+    home.furniture.iter().find(|f| f.id == id)
+}
+
+/// How many of a piece's sides rest against a wall (within 2 cm).
+fn wall_contacts(home: &Home, piece: &newera_core::Furniture) -> usize {
+    use geo::Contains;
+    let outlines: Vec<_> = home
+        .wall_outlines()
+        .iter()
+        .filter(|o| o.len() >= 3)
+        .map(|o| scene::polygon(o))
+        .collect();
+    let (hw, hd) = (piece.width / 2.0, piece.depth / 2.0);
+    [
+        (0.0, -hd - 2.0),
+        (0.0, hd + 2.0),
+        (-hw - 2.0, 0.0),
+        (hw + 2.0, 0.0),
+    ]
+    .into_iter()
+    .filter(|&p| {
+        let at = piece.to_plan(p);
+        outlines
+            .iter()
+            .any(|o| o.contains(&geo::Point::new(at.x, at.y)))
+    })
+    .count()
+}
+
+/// Layout problems a piece is part of.
+fn troubles(home: &Home, id: newera_core::FurnitureId) -> usize {
+    newera_core::check_layout(home)
+        .iter()
+        .filter(|i| match i {
+            Issue::Overlap(a, b) => *a == id || *b == id,
+            Issue::InWall(f, _) | Issue::OutsideRooms(f) => *f == id,
+            Issue::BlocksDoor { door, by } => *door == id || *by == id,
+        })
+        .count()
+}
+
+/// The shortest slide (along the piece's own axes, up to 1,5 m) that leaves
+/// it clear of every layout problem without leaving its room. Returns move
+/// arguments plus the distance as `d`.
+fn nudge(home: &Home, id: newera_core::FurnitureId) -> Option<serde_json::Value> {
+    let top = home
+        .furniture
+        .iter()
+        .find(|f| f.id == id || f.children.iter().any(|c| c.id == id))?;
+    if top.is_opening() || !top.locks.movable {
+        return None;
+    }
+    let room = home.rooms.iter().find(|r| {
+        use geo::Contains;
+        scene::polygon(&r.points).contains(&geo::Point::new(top.position.x, top.position.y))
+    });
+    let mut step = 5.0;
+    while step <= 150.0 {
+        for (lx, ly) in [(step, 0.0), (-step, 0.0), (0.0, step), (0.0, -step)] {
+            let to = top.to_plan((lx, ly));
+            let (dx, dy) = (to.x - top.position.x, to.y - top.position.y);
+            let mut moved = home.clone();
+            let piece = moved.furniture.iter_mut().find(|f| f.id == top.id)?;
+            piece.translate(dx, dy);
+            let center = piece.position;
+            let stays = room.is_none_or(|r| {
+                use geo::Contains;
+                scene::polygon(&r.points).contains(&geo::Point::new(center.x, center.y))
+            });
+            let on_walls = wall_contacts(home, top)
+                <= moved
+                    .furniture
+                    .iter()
+                    .find(|f| f.id == top.id)
+                    .map_or(0, |f| wall_contacts(&moved, f));
+            if stays && on_walls && troubles(&moved, id) == 0 {
+                let round = |v: f64| (v * 10.0).round() / 10.0;
+                return Some(serde_json::json!({
+                    "tool": "move",
+                    "ids": [top.id.to_string()],
+                    "dx": round(dx),
+                    "dy": round(dy),
+                    "d": step,
+                }));
+            }
+        }
+        step += 5.0;
+    }
+    None
+}
+
+/// Moves a piece `dist` cm along `dir` if that leaves it trouble-free and
+/// in its room: move arguments.
+fn push_away(
+    home: &Home,
+    id: newera_core::FurnitureId,
+    dir: (f64, f64),
+    dist: f64,
+) -> Option<serde_json::Value> {
+    let top = home.furniture.iter().find(|f| f.id == id)?;
+    if top.is_opening() || !top.locks.movable {
+        return None;
+    }
+    let len = dir.0.hypot(dir.1).max(1e-9);
+    let (dx, dy) = (dir.0 / len * dist, dir.1 / len * dist);
+    let mut moved = home.clone();
+    let piece = moved.furniture.iter_mut().find(|f| f.id == id)?;
+    let before = piece.position;
+    piece.translate(dx, dy);
+    let after = piece.position;
+    let room_of = |p: Point2| {
+        use geo::Contains;
+        home.rooms
+            .iter()
+            .position(|r| scene::polygon(&r.points).contains(&geo::Point::new(p.x, p.y)))
+    };
+    let round = |v: f64| (v * 10.0).round() / 10.0;
+    let stays_on_walls =
+        wall_contacts(home, top) <= wall_contacts(&moved, piece_after(&moved, id)?);
+    (stays_on_walls
+        && room_of(before) == room_of(after)
+        && troubles(&moved, id) <= troubles(home, id))
+    .then(|| {
+        serde_json::json!({
+            "tool": "move",
+            "ids": [id.to_string()],
+            "dx": round(dx),
+            "dy": round(dy),
+        })
+    })
+}
+
+fn without_distance(mut fix: serde_json::Value) -> serde_json::Value {
+    if let Some(map) = fix.as_object_mut() {
+        map.remove("d");
+    }
+    fix
+}
+
 /// Whether `p` lies on the outline of a polygon, within `tolerance` cm.
 fn near_outline(points: &[Point2], p: Point2, tolerance: f64) -> bool {
     (0..points.len())
@@ -1075,6 +1326,13 @@ mod tests {
             "{pushed:#?}"
         );
         assert!(says(&pushed, Severity::Alerta, "afaste 30 cm"));
+        let fix = pushed
+            .findings
+            .iter()
+            .find_map(|f| f.fix.clone())
+            .expect("a move that frees the side");
+        assert_eq!(fix["tool"], "move");
+        assert_eq!(fix["dx"], 30.0, "{fix}");
     }
 
     #[test]
@@ -1120,6 +1378,58 @@ mod tests {
         assert!(
             !says(&report, Severity::Alerta, "Vão livre"),
             "60 cm clear is enough without a wheelchair"
+        );
+        // A dresser in the door's swing: the review offers a checked way out.
+        let mut blocked = home.clone();
+        blocked.furniture.retain(|f| f.id != FurnitureId(22));
+        // The door swings into the room.
+        blocked
+            .furniture
+            .iter_mut()
+            .find(|f| f.id == FurnitureId(23))
+            .unwrap()
+            .angle = 180.0;
+        blocked.furniture.push(piece(
+            24,
+            "dresser",
+            (228.0, 232.5 - 25.0 - 40.0),
+            (60.0, 50.0, 85.0),
+            180.0,
+        ));
+        let report = review(&blocked, &Profile::default());
+        let door = report
+            .findings
+            .iter()
+            .find(|f| f.message.contains("A folha da porta bate"))
+            .unwrap_or_else(|| panic!("{report:#?}"));
+        let fix = door.fix.clone().expect("a fix");
+        let mut fixed = blocked.clone();
+        match fix["tool"].as_str() {
+            Some("update") => {
+                let d = fixed
+                    .furniture
+                    .iter_mut()
+                    .find(|f| f.id == FurnitureId(23))
+                    .unwrap();
+                d.opening.as_mut().unwrap().hinge_right = fix["items"][0]["hinge_right"] == true;
+            }
+            Some("move") => {
+                let id = fix["ids"][0].as_str().unwrap().to_owned();
+                let f = fixed
+                    .furniture
+                    .iter_mut()
+                    .find(|f| f.id.to_string() == id)
+                    .unwrap();
+                f.translate(fix["dx"].as_f64().unwrap(), fix["dy"].as_f64().unwrap());
+            }
+            _ => panic!("{fix}"),
+        }
+        assert!(
+            !review(&fixed, &Profile::default())
+                .findings
+                .iter()
+                .any(|f| f.message.contains("A folha da porta bate")),
+            "{fix}"
         );
         // A wheelchair user needs 150 cm to turn and 80 cm doors.
         let wheel = review(

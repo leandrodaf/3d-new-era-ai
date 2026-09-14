@@ -992,7 +992,7 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Ergonomics and habitability review for the people living there (occupants, children, elderly, wheelchair, stature cm): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen triangle and heights, doors, ceiling heights, windows, minimum furniture, wheelchair turning. Brazilian references (NBR 9050, NBR 15575-1, IBGE; building codes vary by city). Reply {score, capacity, findings:[[erro|alerta|dica, place, message with the fix]]}."
+        description = "Ergonomics and habitability review for the people living there (occupants, children, elderly, wheelchair, stature cm): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen triangle and heights, doors, ceiling heights, windows, minimum furniture, wheelchair turning. Brazilian references (NBR 9050, NBR 15575-1, IBGE; building codes vary by city). Reply {score, capacity, findings:[[erro|alerta|dica, place, message, fix?]]}; fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap)."
     )]
     fn ergonomics(&self, Parameters(p): Parameters<newera_ergonomics::Profile>) -> String {
         let doc = self.document.read();
@@ -1000,7 +1000,10 @@ impl NewEraMcp {
         let findings: Vec<serde_json::Value> = report
             .findings
             .iter()
-            .map(|f| serde_json::json!([f.severity, f.place, f.message]))
+            .map(|f| match &f.fix {
+                Some(fix) => serde_json::json!([f.severity, f.place, f.message, fix]),
+                None => serde_json::json!([f.severity, f.place, f.message]),
+            })
             .collect();
         serde_json::json!({
             "score": report.score,

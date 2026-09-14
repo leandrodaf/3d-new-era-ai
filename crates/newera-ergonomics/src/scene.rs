@@ -351,6 +351,17 @@ impl<'a> Scene<'a> {
     /// standing piece within the band `from..to` along that side (fractions
     /// of the side's length, from the back or the left).
     pub fn free(&self, i: usize, side: Side, max: f64, span: (f64, f64)) -> f64 {
+        self.free_and_blocker(i, side, max, span).0
+    }
+
+    /// Like [`Self::free`], with the unit that stops it (`None` for a wall or nothing).
+    pub fn free_and_blocker(
+        &self,
+        i: usize,
+        side: Side,
+        max: f64,
+        span: (f64, f64),
+    ) -> (f64, Option<usize>) {
         let piece = self.units[i].piece;
         let (hw, hd) = (piece.width / 2.0, piece.depth / 2.0);
         // The band in the piece's frame, 2 cm in from the corners so
@@ -380,7 +391,8 @@ impl<'a> Scene<'a> {
             .collect();
         let band = polygon(&band);
         let mut free = max;
-        let mut measure = |shape: &Polygon<f64>| {
+        let mut blocker = None;
+        let mut measure = |shape: &Polygon<f64>, who: Option<usize>| {
             for poly in shape.intersection(&band) {
                 for c in poly.exterior().coords() {
                     let (x, y) = piece.to_local(Point2::new(c.x, c.y));
@@ -389,12 +401,15 @@ impl<'a> Scene<'a> {
                         Side::Left => -hw - x,
                         Side::Right => x - hw,
                     };
-                    free = free.min(d.max(0.0));
+                    if d.max(0.0) < free {
+                        free = d.max(0.0);
+                        blocker = who;
+                    }
                 }
             }
         };
         for wall in &self.walls {
-            measure(wall);
+            measure(wall, None);
         }
         for (j, other) in self.units.iter().enumerate() {
             let (lo, hi) = other.piece.height_range();
@@ -410,9 +425,9 @@ impl<'a> Scene<'a> {
             {
                 continue;
             }
-            measure(&self.footprints[j]);
+            measure(&self.footprints[j], Some(j));
         }
-        free
+        (free, blocker)
     }
 
     /// Largest circle (diameter, cm) that fits on the free floor of a room,
