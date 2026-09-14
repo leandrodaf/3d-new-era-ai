@@ -12,9 +12,17 @@ keywords.workspace = true
 categories.workspace = true
 readme = "../../README.md"
 
+[lib]
+name = "newera_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "newera"
 path = "src/main.rs"
+
+[[bin]]
+name = "newera-gui"
+path = "src/gui.rs"
 
 [dependencies]
 anyhow.workspace = true

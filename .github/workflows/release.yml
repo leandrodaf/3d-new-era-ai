@@ -13,20 +13,23 @@ env:
 
 jobs:
   build:
-    name: Build ${{ matrix.target }}
+    name: Build ${{ matrix.asset }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            archive: tar.gz
+            asset: newera-linux-x64.tar.gz
           - os: macos-latest
             target: aarch64-apple-darwin
-            archive: tar.gz
+            asset: newera-macos-apple-silicon.zip
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            asset: newera-macos-intel.zip
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            archive: zip
+            asset: newera-windows-x64.zip
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -40,25 +43,36 @@ jobs:
           key: release-${{ matrix.target }}
       - run: cargo build -p newera --release --locked --target ${{ matrix.target }}
 
+      # Asset names carry no version, so releases/latest/download/<asset>
+      # always points at the newest build.
       - name: Package
         shell: bash
         run: |
-          name="newera-${GITHUB_REF_NAME}-${{ matrix.target }}"
-          mkdir "$name"
-          cp README.md LICENSE-MIT LICENSE-APACHE "$name/"
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            cp "target/${{ matrix.target }}/release/newera.exe" "$name/"
-            7z a "$name.zip" "$name" >/dev/null
-          else
-            cp "target/${{ matrix.target }}/release/newera" "$name/"
-            tar czf "$name.tar.gz" "$name"
-          fi
-          echo "ASSET=$name.${{ matrix.archive }}" >> "$GITHUB_ENV"
+          bin="target/${{ matrix.target }}/release"
+          stage="$RUNNER_TEMP/stage"
+          mkdir -p "$stage"
+          case "${{ runner.os }}" in
+            Windows)
+              mkdir "$stage/3D New Era AI"
+              cp "$bin/newera.exe" "$bin/newera-gui.exe" README.md LICENSE-MIT LICENSE-APACHE "$stage/3D New Era AI/"
+              (cd "$stage" && 7z a "$GITHUB_WORKSPACE/${{ matrix.asset }}" "3D New Era AI" >/dev/null)
+              ;;
+            macOS)
+              scripts/macos-app.sh "$bin/newera" "$stage" "$GITHUB_SHA"
+              # ditto keeps the signature and permissions inside the zip.
+              ditto -c -k --keepParent "$stage/3D New Era AI.app" "${{ matrix.asset }}"
+              ;;
+            Linux)
+              mkdir "$stage/newera"
+              cp "$bin/newera" README.md LICENSE-MIT LICENSE-APACHE "$stage/newera/"
+              tar czf "${{ matrix.asset }}" -C "$stage" newera
+              ;;
+          esac
 
       - uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.target }}
-          path: ${{ env.ASSET }}
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
 
   publish:
     name: Publish GitHub release
@@ -69,7 +83,11 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
+      - name: Checksums
+        run: sha256sum newera-* > SHA256SUMS.txt
       - uses: softprops/action-gh-release@v3
         with:
-          files: newera-*
+          files: |
+            newera-*
+            SHA256SUMS.txt
           generate_release_notes: true

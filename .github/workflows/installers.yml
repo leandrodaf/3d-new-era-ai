@@ -1,0 +1,77 @@
+name: Installers
+
+# Installs the published release the way people do (the one-line commands in
+# the README), checks the app runs, then uninstalls.
+on:
+  # A release published by the Release workflow's token doesn't start other
+  # workflows, so follow that workflow instead.
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: macOS
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Outside the clone, so the script takes the release download path.
+      - name: Install
+        working-directory: ${{ runner.temp }}
+        run: bash "$GITHUB_WORKSPACE/scripts/install-macos.sh" < /dev/null
+      - name: Check
+        run: |
+          app="$HOME/Applications/3D New Era AI.app"
+          "$app/Contents/MacOS/newera" --version
+          codesign --verify --deep "$app"
+          "$HOME/.local/bin/newera" --version
+          ls "${TMPDIR:-/tmp}" | grep -q newera-install && { echo "temporary folder left behind"; exit 1; } || true
+      - name: Run again (nothing to download)
+        working-directory: ${{ runner.temp }}
+        run: bash "$GITHUB_WORKSPACE/scripts/install-macos.sh" < /dev/null | tee out.txt && grep -q "já instalado" out.txt
+      - name: Uninstall
+        working-directory: ${{ runner.temp }}
+        run: |
+          bash "$GITHUB_WORKSPACE/scripts/install-macos.sh" --uninstall
+          test ! -e "$HOME/Applications/3D New Era AI.app"
+
+  windows:
+    name: Windows
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install
+        shell: powershell
+        run: Get-Content -Raw -Encoding UTF8 scripts/install-windows.ps1 | Invoke-Expression
+      - name: Check
+        shell: powershell
+        run: |
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\3D New Era AI'
+          & "$dir\newera.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw 'newera.exe did not run' }
+          foreach ($f in "$dir\newera-gui.exe", "$dir\uninstall.ps1",
+                         (Join-Path ([Environment]::GetFolderPath('Programs')) '3D New Era AI.lnk')) {
+            if (-not (Test-Path $f)) { throw "missing $f" }
+          }
+          if (-not (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\NewEraAI' -ErrorAction SilentlyContinue)) {
+            throw 'not listed in Settings > Apps'
+          }
+          if (-not ([Environment]::GetEnvironmentVariable('Path', 'User') -split ';' | Where-Object { $_ -eq $dir })) {
+            throw 'not on the user PATH'
+          }
+      - name: Run again (nothing to download)
+        shell: powershell
+        run: |
+          $out = Get-Content -Raw -Encoding UTF8 scripts/install-windows.ps1 | Invoke-Expression 6>&1 | Out-String
+          if ($out -notmatch 'instalado nesta') { throw "expected no download: $out" }
+      - name: Uninstall
+        shell: powershell
+        run: |
+          & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/install-windows.ps1))) -Uninstall
+          if (Test-Path (Join-Path $env:LOCALAPPDATA 'Programs\3D New Era AI')) { throw 'still installed' }

@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/leandrodaf/3d-new-era-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/leandrodaf/3d-new-era-ai/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+[![Latest release](https://img.shields.io/github/v/release/leandrodaf/3d-new-era-ai)](https://github.com/leandrodaf/3d-new-era-ai/releases/latest)
 
 An open-source home design editor in Rust, inspired by Sweet Home 3D, that is
 **AI-native from day one**: the editor ships with a built-in
@@ -9,6 +10,43 @@ An open-source home design editor in Rust, inspired by Sweet Home 3D, that is
 can design alongside you and every change shows up live on screen.
 
 ![Editor with a furnished 105 m² apartment: catalog, rendered floor plan and live 3D view](docs/images/editor.png)
+
+## Download
+
+**Windows** — open PowerShell and paste:
+
+```powershell
+irm https://raw.githubusercontent.com/leandrodaf/3d-new-era-ai/main/scripts/install-windows.ps1 | iex
+```
+
+**macOS** (Apple Silicon and Intel) — open Terminal and paste:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/leandrodaf/3d-new-era-ai/main/scripts/install-macos.sh | bash
+```
+
+That's it: the app shows up in the Start menu / Launchpad, no administrator password,
+and the same command updates it. Prefer a plain download?
+
+| [Windows (64-bit)](https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-windows-x64.zip) | [Mac Apple Silicon](https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-macos-apple-silicon.zip) | [Mac Intel](https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-macos-intel.zip) | [Linux (x64)](https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-linux-x64.tar.gz) |
+|:---:|:---:|:---:|:---:|
+
+<details>
+<summary>First launch of a plain download</summary>
+
+The builds aren't signed with a paid Apple or Microsoft certificate, so the system asks
+once:
+
+- **Windows:** unzip, open `newera-gui.exe`; if SmartScreen appears, click
+  *More info* → *Run anyway*.
+- **macOS:** unzip and move *3D New Era AI* to Applications. Right-click it → *Open* →
+  *Open*. On macOS 15 and later, open it once, then go to *System Settings* →
+  *Privacy & Security* → *Open Anyway*. Or run
+  `xattr -dr com.apple.quarantine "/Applications/3D New Era AI.app"`.
+- **Linux:** `tar xzf newera-linux-x64.tar.gz && ./newera/newera`.
+
+The one-line installers above skip these prompts.
+</details>
 
 ## Showcase
 
@@ -72,28 +110,16 @@ Every image below came out of the editor itself.
   lightweight WebAssembly viewer, plugins in any language over the HTTP API and several
   people on the same project with named cursors.
 
-## Install
+## Build from source
 
-### macOS
+The installers from [Download](#download) work for your user only: they put the app in
+`~/Applications` or `%LOCALAPPDATA%\Programs`, add `newera` to your `PATH`, register the
+MCP server in Claude Code if you have it, and delete their temporary files. Uninstall
+with `install-macos.sh --uninstall` or from *Settings → Apps* on Windows. On a Mac with no
+build for it, or with `NEWERA_REF=<branch>`, the installer compiles from source instead.
 
-There is no signed build (no Apple Developer account), so the installer compiles the
-editor on your Mac. A binary built on the machine itself opens without Gatekeeper
-warnings:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/leandrodaf/3d-new-era-ai/main/scripts/install-macos.sh | bash
-```
-
-It installs what is missing (Xcode Command Line Tools, Rust), builds the release,
-creates **3D New Era AI.app** in `~/Applications`, puts `newera` on your `PATH` and
-registers the MCP server in Claude Code if you have it. The first build takes a few
-minutes; run the same command again to update. See
-[`scripts/install-macos.sh`](scripts/install-macos.sh) for the details and how to uninstall.
-
-### Linux and Windows
-
-Requires Rust 1.95+ ([rustup](https://rustup.rs)). On Linux you also need
-`libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev`.
+To work on the code you need Rust 1.95+ ([rustup](https://rustup.rs)). On Linux you also
+need `libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev`.
 
 ```sh
 git clone https://github.com/leandrodaf/3d-new-era-ai
@@ -157,16 +183,18 @@ Clients that spawn a process can use stdio instead:
 ## Modes
 
 ```sh
-newera [FILE]        # desktop editor with embedded HTTP + MCP server
-newera --demo        # start with a sample house
-newera serve [FILE]  # headless HTTP + MCP server
-newera mcp           # MCP over stdio
+newera [FILE]           # desktop editor with embedded HTTP + MCP server
+newera --demo           # start with a sample house
+newera gui --no-server  # editor only
+newera serve [FILE]     # headless HTTP + MCP server
+newera mcp              # MCP over stdio
 ```
 
 Options: `--addr 127.0.0.1:7878` (or `NEWERA_ADDR`), `--token` (or `NEWERA_TOKEN`, required
 to listen beyond loopback), log filter via `NEWERA_LOG`, `NEWERA_RENDER_THREADS` for
 photo renders (half the cores by default). The server binds to loopback by default and
-validates the `Host` header.
+validates the `Host` header. On Windows, `newera-gui.exe` opens the editor without a
+console window.
 
 ## Project layout
 
