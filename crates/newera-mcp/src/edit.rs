@@ -145,6 +145,8 @@ pub(crate) struct CreateParams {
     /// decks with any shape) or cross-sections swept from `a` to `b` (gables, ramps).
     #[serde(default)]
     pub solids: Vec<SolidSpec>,
+    /// Plan version (tab) to write to; switches to it first.
+    pub v: Option<usize>,
     /// Every point is given in pixels of the background image (converted with its
     /// scale and offset); lengths (t, h, off) stay in cm.
     #[serde(default)]

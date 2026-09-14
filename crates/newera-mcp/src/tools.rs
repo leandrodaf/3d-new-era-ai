@@ -41,6 +41,8 @@ pub(crate) struct GetHomeParams {
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct UpdateParams {
     items: Vec<UpdateSpec>,
+    /// Plan version (tab) to write to; switches to it first.
+    v: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -276,6 +278,8 @@ pub(crate) struct PlaceParams {
     /// Coordinates (`at`, `into`, `a`, `b`, `along`) are pixels of the background image.
     #[serde(default)]
     px: bool,
+    /// Plan version (tab) to write to; switches to it first.
+    v: Option<usize>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -348,6 +352,7 @@ impl NewEraMcp {
     )]
     fn create(&self, Parameters(mut p): Parameters<CreateParams>) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
+        on_variant(&mut doc, p.v)?;
         if p.px {
             let bg = background_scale(&doc)?;
             p.map_points(&|q| bg.point(q));
@@ -361,6 +366,7 @@ impl NewEraMcp {
     )]
     fn update(&self, Parameters(p): Parameters<UpdateParams>) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
+        on_variant(&mut doc, p.v)?;
         edit::update(&mut doc, p.items).map_err(invalid)?;
         Ok(ok(&doc, &[]))
     }
@@ -682,6 +688,7 @@ impl NewEraMcp {
     )]
     fn place(&self, Parameters(p): Parameters<PlaceParams>) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
+        on_variant(&mut doc, p.v)?;
         let mut items = edit::with_defaults(p.items, p.defaults.as_ref()).map_err(invalid)?;
         if p.px {
             let bg = background_scale(&doc)?;
@@ -1502,6 +1509,15 @@ fn background_scale(doc: &Document) -> Result<BackgroundScale, ErrorData> {
     })
 }
 
+/// Makes version `v` the active one before a write, so the write lands where
+/// the agent means even if someone switched tabs meanwhile.
+fn on_variant(doc: &mut Document, v: Option<usize>) -> Result<(), ErrorData> {
+    match v {
+        Some(v) if v != doc.active_variant() => doc.switch_variant(v).map_err(core),
+        _ => Ok(()),
+    }
+}
+
 fn round2(v: f64) -> f64 {
     (v * 100.0).round() / 100.0
 }
@@ -1716,7 +1732,11 @@ mod tests {
             ids[0], ids[1], ids[2]
         ))
         .unwrap();
-        s.update(Parameters(UpdateParams { items: specs })).unwrap();
+        s.update(Parameters(UpdateParams {
+            items: specs,
+            v: None,
+        }))
+        .unwrap();
         let doc = s.document.read();
         let home = doc.home();
         assert_eq!(home.labels[0].pitch, None);
@@ -1736,8 +1756,11 @@ mod tests {
         let spec: UpdateSpec =
             serde_json::from_str(r#"{"id":"t1","bold":true,"align":"left","color":[0,0,255]}"#)
                 .unwrap();
-        s.update(Parameters(UpdateParams { items: vec![spec] }))
-            .unwrap();
+        s.update(Parameters(UpdateParams {
+            items: vec![spec],
+            v: None,
+        }))
+        .unwrap();
         let home = s.get_home(Parameters(GetHomeParams::default()));
         assert!(
             home.contains(r#""bold":true"#) && home.contains(r#""align":"left""#),
@@ -1834,8 +1857,11 @@ mod tests {
             r#"{{"id":"{id}","brand":"Tok&Stok","url":"https://example.com/sofa"}}"#
         ))
         .unwrap();
-        s.update(Parameters(UpdateParams { items: vec![spec] }))
-            .unwrap();
+        s.update(Parameters(UpdateParams {
+            items: vec![spec],
+            v: None,
+        }))
+        .unwrap();
         let reply = s
             .annotations(Parameters(AnnotationParams {
                 dims: Some(true),
@@ -2112,8 +2138,11 @@ mod tests {
         let wall = s.document.read().home().walls[0].id.to_string();
         let spec: UpdateSpec =
             serde_json::from_str(&format!(r#"{{"id":"{wall}","h_end":300}}"#)).unwrap();
-        s.update(Parameters(UpdateParams { items: vec![spec] }))
-            .unwrap();
+        s.update(Parameters(UpdateParams {
+            items: vec![spec],
+            v: None,
+        }))
+        .unwrap();
         assert_eq!(s.document.read().home().walls[0].height_at_end, Some(300.0));
 
         // A 400 cm rafter tilted 45°: its far end rises.
@@ -2302,8 +2331,11 @@ mod tests {
         let spec: UpdateSpec =
             serde_json::from_str(&format!(r#"{{"id":"{line}","pts":[[350,0],[350,400]]}}"#))
                 .unwrap();
-        s.update(Parameters(UpdateParams { items: vec![spec] }))
-            .unwrap();
+        s.update(Parameters(UpdateParams {
+            items: vec![spec],
+            v: None,
+        }))
+        .unwrap();
         let doc = s.document.read();
         let h = doc.home();
         assert!(
@@ -2612,5 +2644,28 @@ mod tests {
             serde_json::from_str(r#"{"rooms":[{"name":"Sala","at":[275,150]}]}"#).unwrap();
         s.create(Parameters(room)).unwrap();
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn writes_can_name_their_version() {
+        let s = server();
+        s.variants(Parameters(VariantsParams {
+            action: Some("new".into()),
+            ..VariantsParams::default()
+        }))
+        .unwrap();
+        // Someone switches back to the first tab meanwhile.
+        s.document.write().switch_variant(0).unwrap();
+        let params: CreateParams =
+            serde_json::from_str(r#"{"v":1,"walls":[{"pts":[[0,0],[100,0]]}]}"#).unwrap();
+        let reply = s.create(Parameters(params)).unwrap();
+        assert!(reply.contains(" v=1 "), "{reply}");
+        let doc = s.document.read();
+        assert_eq!(doc.active_variant(), 1);
+        assert_eq!(doc.home().walls.len(), 1);
+        drop(doc);
+        let bad: CreateParams =
+            serde_json::from_str(r#"{"v":9,"walls":[{"pts":[[0,0],[100,0]]}]}"#).unwrap();
+        assert!(s.create(Parameters(bad)).is_err());
     }
 }
