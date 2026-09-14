@@ -3350,4 +3350,66 @@ mod tests {
             "{upper}"
         );
     }
+
+    #[test]
+    fn cabinet_runs_redo_hand_drawn_cabinets_around_the_appliances_in_them() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}],"rooms":[{"name":"Cozinha","at":[200,150]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        // Imported-style pieces: cabinets and a cooktop known only by their names.
+        let place: PlaceParams = serde_json::from_str(
+            r#"{"items":[
+                {"cat":"box","name":"Geladeira Electrolux 480 L","wall":"w1","along":45,"w":70,"d":72,"h":185},
+                {"cat":"box","name":"7 — Armário portas ao lado cooktop","wall":"w1","along":160,"w":80,"d":58,"h":87},
+                {"cat":"box","name":"Gavetões sob cooktop","wall":"w1","along":245,"w":90,"d":58,"h":87},
+                {"cat":"box","name":"Cooktop Brastemp — 4 bocas","wall":"w1","along":245,"w":59,"d":48,"h":8,"elev":87},
+                {"cat":"box","name":"Bancada contínua","wall":"w1","along":230,"w":220,"d":60,"h":3,"elev":87}
+            ]}"#,
+        )
+        .unwrap();
+        let ids = s.place(Parameters(place)).unwrap();
+        let ids: Vec<String> = ids
+            .rsplit('=')
+            .next()
+            .unwrap()
+            .split(',')
+            .map(str::to_owned)
+            .collect();
+        let p: newera_joinery::CabinetRunParams = serde_json::from_str(r#"{"near":"f6"}"#).unwrap();
+        let reply: serde_json::Value =
+            serde_json::from_str(&s.cabinet_run(Parameters(p)).unwrap()).unwrap();
+        let removed = reply["removed"].to_string();
+        // The cabinets and the old countertop go; the fridge and the cooktop stay.
+        for id in [&ids[1], &ids[2], &ids[4]] {
+            assert!(removed.contains(id.as_str()), "{id} not replaced: {reply}");
+        }
+        assert!(
+            !removed.contains(&format!("\"{}\"", ids[0]))
+                && !removed.contains(&format!("\"{}\"", ids[3])),
+            "{reply}"
+        );
+        // The new drawer unit stands under the cooktop that was there.
+        let cooktop = reply["modules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m[1] == "cooktop")
+            .unwrap_or_else(|| panic!("{reply}"))
+            .clone();
+        let (from, w) = (cooktop[2].as_f64().unwrap(), cooktop[3].as_f64().unwrap());
+        assert!(from <= 215.5 && from + w >= 274.5, "{reply}");
+        assert!(
+            reply["notes"].to_string().contains("Cooktop existente"),
+            "{reply}"
+        );
+        assert!(
+            reply["notes"]
+                .to_string()
+                .contains("ventilação da geladeira"),
+            "{reply}"
+        );
+    }
 }

@@ -115,6 +115,74 @@ fn row_key(row: RunRow) -> &'static str {
     }
 }
 
+/// Lowercase without accents, for matching names.
+fn plain(text: &str) -> String {
+    text.to_lowercase()
+        .chars()
+        .map(|c| match c {
+            'á' | 'à' | 'â' | 'ã' => 'a',
+            'é' | 'ê' => 'e',
+            'í' => 'i',
+            'ó' | 'ô' | 'õ' => 'o',
+            'ú' | 'ü' => 'u',
+            'ç' => 'c',
+            c => c,
+        })
+        .collect()
+}
+
+/// Cabinets drawn by hand or imported, recognized by name: they belong to
+/// the run being redone. Appliances and fixtures never do.
+fn named_cabinet(f: &Furniture, row: RunRow) -> bool {
+    let full = plain(&f.name);
+    // Designers number their modules: `7 — Armário portas ao lado do cooktop`.
+    let name = full
+        .split_once(" — ")
+        .filter(|(head, _)| head.chars().all(|c| c.is_ascii_alphanumeric()))
+        .map_or(full.as_str(), |(_, rest)| rest);
+    let has = |words: &[&str]| words.iter().any(|w| name.contains(w));
+    let cabinet = has(&[
+        "armario",
+        "gaveteiro",
+        "gavetao",
+        "gavetoes",
+        "balcao",
+        "gabinete",
+        "modulo",
+        "nicho",
+        "paneleiro",
+        "tamponamento",
+        "arremate",
+        "separador",
+        "rodape",
+    ]);
+    let appliance = [
+        "geladeira",
+        "refrigerador",
+        "fogao",
+        "cooktop",
+        "forno",
+        "micro",
+        "lava",
+        "maquina",
+        "cuba",
+        "coifa",
+        "tanque",
+        "torneira",
+        "pia",
+    ]
+    .iter()
+    .any(|w| name.starts_with(w));
+    if appliance && !cabinet {
+        return false;
+    }
+    match row {
+        RunRow::Base => cabinet || has(&["bancada", "tampo", "peninsula"]),
+        RunRow::Wall => cabinet || name.starts_with("aereo"),
+        RunRow::Tall => cabinet || has(&["torre", "despensa", "guarda-roupa", "roupeiro"]),
+    }
+}
+
 /// Whether `p` is inside a polygon (ray casting).
 fn inside(points: &[Point2], p: Point2) -> bool {
     let mut odd = false;
@@ -318,7 +386,7 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
             && match joinery_kind(f).as_deref() {
                 Some("cabinet" | "filler") => true,
                 Some("countertop") => params.row == RunRow::Base,
-                _ => f.catalog == catalog_cabinet,
+                _ => f.catalog == catalog_cabinet || named_cabinet(f, params.row),
             }
     };
     let piece = |id: FurnitureId| home.furniture.iter().find(|f| f.id == id);
@@ -355,19 +423,67 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
             params.color = old.color;
         }
     }
+    // A sink or cooktop already set into the old countertop keeps its place:
+    // the new run puts its cabinet and cutout right there.
+    let mut embedded: Vec<FurnitureId> = Vec::new();
+    let mut found_notes = Vec::new();
+    if params.row == RunRow::Base && !removed.is_empty() {
+        let along = |p: Point2| (p.x - wall.start.x) * u.0 + (p.y - wall.start.y) * u.1;
+        for o in first.obstacles.iter().filter(|o| inside(o)) {
+            let RunBlock::Piece { id, .. } = &o.block else {
+                continue;
+            };
+            let Some(f) = piece(*id).filter(|f| !removed.contains(&f.id)) else {
+                continue;
+            };
+            let (lo, hi) = f.height_range();
+            let name = plain(&f.name);
+            if lo < 50.0 || hi - lo > 45.0 || joinery_kind(f).is_some() {
+                continue;
+            }
+            let center = along(f.position);
+            if name.contains("cooktop") && params.cooktop.is_none() {
+                params.cooktop = Some(center);
+                params.cooktop_w = ((f.width + 6.0) / 5.0).ceil().max(12.0) * 5.0;
+                embedded.push(f.id);
+                found_notes.push("cooktop".to_owned());
+            } else if (name.contains("pia") || name.contains("cuba") || name.starts_with("tanque"))
+                && params.sink.is_none()
+                && !name.contains("gavet")
+                && !name.contains("armario")
+            {
+                params.sink = Some(center);
+                params.sink_w = ((f.width + 10.0) / 5.0).ceil().max(12.0) * 5.0;
+                embedded.push(f.id);
+                found_notes.push("sink".to_owned());
+            }
+        }
+    }
     let skip_top = params.row == RunRow::Base && !params.top;
     let skip = |f: &Furniture| {
-        removed.contains(&f.id) || (skip_top && joinery_kind(f).as_deref() == Some("countertop"))
+        removed.contains(&f.id)
+            || embedded.contains(&f.id)
+            || (skip_top && joinery_kind(f).as_deref() == Some("countertop"))
     };
     let mut run = newera_core::wall_run(home, wall_id, side, band, z, &skip)
         .ok_or_else(|| format!("{wall_id} can't hold a run"))?;
+    let named = |id: FurnitureId, words: &[&str]| {
+        piece(id).is_some_and(|f| {
+            let n = plain(&f.name);
+            words.iter().any(|w| n.starts_with(w))
+        })
+    };
     // A stove or a cooktop cabinet; a countertop only holds its cooktop in one
     // place, handled where it matters (the hood gap).
     let heat = |id: FurnitureId, catalog: &str| {
         catalog == "stove"
             || catalog == "cooktop"
+            || named(id, &["fogao"])
             || piece(id)
                 .is_some_and(|f| has_cooktop(f) && joinery_kind(f).as_deref() != Some("countertop"))
+    };
+    let fridge = |id: FurnitureId, catalog: &str| {
+        catalog == "fridge" || named(id, &["geladeira", "refrigerador"])
     };
     let hot_top = |id: FurnitureId| {
         piece(id)
@@ -430,7 +546,7 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
         run.obstacles.sort_by(|a, b| a.from.total_cmp(&b.from));
         for o in &run.obstacles {
             if let RunBlock::Piece { id, catalog } = &o.block
-                && catalog == "fridge"
+                && fridge(*id, catalog)
                 && let Some(f) = piece(*id)
             {
                 over.push(RunOver {
@@ -446,7 +562,7 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
         Some(RunBlock::Wall(_)) => EndKind::Wall,
         Some(RunBlock::Opening { .. }) => EndKind::Frame,
         Some(RunBlock::Piece { id, catalog }) => {
-            if catalog == "fridge" {
+            if fridge(*id, catalog) {
                 EndKind::Fridge
             } else if heat(*id, catalog) {
                 // Over the stove the hood gap is exact; beside it, air.
@@ -569,7 +685,46 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
                 .collect()
         })
         .unwrap_or_default();
+    // Old cabinets outside every free stretch (behind a shaft, beside the
+    // laundry sink) stay: nothing would take their place.
+    let along_of = |id: &FurnitureId| {
+        piece(*id)
+            .map(|f| (f.position.x - wall.start.x) * u.0 + (f.position.y - wall.start.y) * u.1)
+    };
+    let kept_back: Vec<FurnitureId> = removed
+        .iter()
+        .filter(|id| {
+            along_of(id).is_some_and(|c| {
+                !gaps.iter().any(|g| c >= g.from - 1.0 && c <= g.to + 1.0)
+                    && !over.iter().any(|o| c >= o.from - 1.0 && c <= o.to + 1.0)
+            })
+        })
+        .copied()
+        .collect();
     let (modules, plan_notes) = crate::plan_run(&gaps, &over, &joints, &params)?;
+    let removed: Vec<FurnitureId> = removed
+        .into_iter()
+        .filter(|id| !kept_back.contains(id))
+        .collect();
+    // Say where the sink or cooktop already there got its cabinet.
+    for m in &modules {
+        let (kind, text) = match m.role {
+            crate::Role::Sink => ("sink", "Pia existente mantida"),
+            crate::Role::Cooktop => ("cooktop", "Cooktop existente mantido"),
+            _ => continue,
+        };
+        if found_notes.iter().any(|f| f == kind) {
+            notes.insert(
+                0,
+                format!(
+                    "{text}: módulo de {} cm embaixo, de {} a {} cm.",
+                    brazilian(m.width),
+                    brazilian(m.from),
+                    brazilian(m.from + m.width)
+                ),
+            );
+        }
+    }
     notes.extend(plan_notes);
     let mut seen = std::collections::HashSet::new();
     notes.retain(|n| seen.insert(n.clone()));

@@ -689,7 +689,7 @@ pub fn plan_run(
             m.role = Role::Drawers;
             m.build = Build::Cabinet(cabinet(m.width, DoorType::Drawers, drawer_rows, h, 0));
         }
-        if eligible.len() < wanted as usize {
+        if p.drawers.is_some() && eligible.len() < wanted as usize {
             notes.push(format!(
                 "Só {} módulo(s) têm entre 40 e 90 cm para virar gaveteiro; pedidos {wanted}.",
                 eligible.len()
