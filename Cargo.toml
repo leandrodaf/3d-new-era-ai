@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT OR Apache-2.0"
@@ -15,17 +15,17 @@ categories = ["graphics", "command-line-utilities"]
 
 [workspace.dependencies]
 # Internal crates
-newera-core = { path = "crates/newera-core", version = "0.1.0" }
-newera-mcp = { path = "crates/newera-mcp", version = "0.1.0" }
-newera-server = { path = "crates/newera-server", version = "0.1.0" }
-newera-app = { path = "crates/newera-app", version = "0.1.0" }
-newera-draw = { path = "crates/newera-draw", version = "0.1.0" }
-newera-catalog = { path = "crates/newera-catalog", version = "0.1.0" }
-newera-sh3d = { path = "crates/newera-sh3d", version = "0.1.0" }
-newera-render = { path = "crates/newera-render", version = "0.1.0" }
-newera-plugins = { path = "crates/newera-plugins", version = "0.1.0" }
-newera-joinery = { path = "crates/newera-joinery", version = "0.1.0" }
-newera-ergonomics = { path = "crates/newera-ergonomics", version = "0.1.0" }
+newera-core = { path = "crates/newera-core", version = "1.0.0" }
+newera-mcp = { path = "crates/newera-mcp", version = "1.0.0" }
+newera-server = { path = "crates/newera-server", version = "1.0.0" }
+newera-app = { path = "crates/newera-app", version = "1.0.0" }
+newera-draw = { path = "crates/newera-draw", version = "1.0.0" }
+newera-catalog = { path = "crates/newera-catalog", version = "1.0.0" }
+newera-sh3d = { path = "crates/newera-sh3d", version = "1.0.0" }
+newera-render = { path = "crates/newera-render", version = "1.0.0" }
+newera-plugins = { path = "crates/newera-plugins", version = "1.0.0" }
+newera-joinery = { path = "crates/newera-joinery", version = "1.0.0" }
+newera-ergonomics = { path = "crates/newera-ergonomics", version = "1.0.0" }
 
 # External crates
 ab_glyph = "0.2.32"

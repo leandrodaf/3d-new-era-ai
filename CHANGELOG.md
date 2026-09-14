@@ -6,11 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-14
+
+First release: the desktop editor, the browser editor and viewer, the HTTP API and the
+MCP server, with everything below.
+
 ### Added
 
-- macOS installer that builds from source on the Mac (`scripts/install-macos.sh`): installs
-  the Command Line Tools and Rust when missing, creates `3D New Era AI.app` with an ad-hoc
-  signature, puts `newera` on the `PATH` and registers the MCP server in Claude Code.
+- Downloads for Windows, macOS (Apple Silicon and Intel) and Linux on every release, with
+  one-line installers that need no administrator: `install-windows.ps1` (Start menu and
+  desktop shortcuts, user `PATH`, listed in Settings > Apps) and `install-macos.sh`
+  (`3D New Era AI.app`, ad-hoc signed; builds from source when there is no binary).
+  Both skip what is already installed, clean up after themselves and register the MCP
+  server in Claude Code. `newera-gui.exe` opens the editor without a console window.
 
 - Smaller `.newera` files: every project is a deflated bundle with compact JSON, and large
   JPEG textures are recompressed once on save (quality 85, at most 2048 px). The showcase
@@ -130,3 +138,6 @@ All notable changes to this project are documented here. The format follows
 - Wall joins (miters, T/X junctions) and concave room floors, shared by plan and 3D.
 - `scripts/mcp.sh` / `make mcp` to call MCP tools from the shell.
 - CI for formatting, clippy, tests on Linux/macOS/Windows, MCP smoke test, MSRV and cargo-deny; release builds.
+
+[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/leandrodaf/3d-new-era-ai/releases/tag/v1.0.0

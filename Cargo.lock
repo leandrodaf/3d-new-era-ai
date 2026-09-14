@@ -2646,7 +2646,7 @@ dependencies = [
 
 [[package]]
 name = "newera"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2664,7 +2664,7 @@ dependencies = [
 
 [[package]]
 name = "newera-app"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "bytemuck",
  "eframe",
@@ -2693,7 +2693,7 @@ dependencies = [
 
 [[package]]
 name = "newera-catalog"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "gltf",
  "newera-core",
@@ -2703,7 +2703,7 @@ dependencies = [
 
 [[package]]
 name = "newera-core"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "geo",
  "image",
@@ -2716,7 +2716,7 @@ dependencies = [
 
 [[package]]
 name = "newera-draw"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "ab_glyph",
  "epaint_default_fonts",
@@ -2731,7 +2731,7 @@ dependencies = [
 
 [[package]]
 name = "newera-editor-web"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "console_error_panic_hook",
  "log",
@@ -2743,7 +2743,7 @@ dependencies = [
 
 [[package]]
 name = "newera-ergonomics"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "geo",
  "newera-core",
@@ -2754,7 +2754,7 @@ dependencies = [
 
 [[package]]
 name = "newera-joinery"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "newera-core",
  "schemars",
@@ -2764,7 +2764,7 @@ dependencies = [
 
 [[package]]
 name = "newera-mcp"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
  "image",
@@ -2786,7 +2786,7 @@ dependencies = [
 
 [[package]]
 name = "newera-plugins"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "newera-core",
  "serde",
@@ -2795,7 +2795,7 @@ dependencies = [
 
 [[package]]
 name = "newera-render"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "ab_glyph",
  "bytemuck",
@@ -2813,7 +2813,7 @@ dependencies = [
 
 [[package]]
 name = "newera-server"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "axum",
  "futures-util",
@@ -2834,7 +2834,7 @@ dependencies = [
 
 [[package]]
 name = "newera-sh3d"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "image",
  "newera-catalog",
@@ -2845,7 +2845,7 @@ dependencies = [
 
 [[package]]
 name = "newera-web"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "image",
  "newera-core",
