@@ -10,6 +10,20 @@ can design alongside you and every change shows up live on screen.
 
 ![Editor: catalog on the left, floor plan on top, native 3D view below](docs/images/editor.png)
 
+## Showcase
+
+A real 105 m² apartment, traced from an openly licensed floor plan and furnished, lit
+and photographed by an AI agent through MCP alone — walls from the scan, doors that
+swing the right way, slatted TV wall, L kitchen and wardrobe from `cabinet_run`,
+downlights sized by photometry against NBR ISO/CIE 8995-1, path-traced photos.
+**[See how it was built →](docs/SHOWCASE.md)**
+
+| | |
+|---|---|
+| ![Living room with slatted TV wall](docs/images/showcase/01-estar-janela.jpg) | ![Dining at dusk](docs/images/showcase/09-jantar-noite.jpg) |
+| ![L-shaped kitchen](docs/images/showcase/04-cozinha.jpg) | ![Slatted TV wall](docs/images/showcase/03-painel-tv.jpg) |
+| ![Rendered floor plan with real finishes](docs/images/showcase/13-planta-humanizada.jpg) | ![Aerial cutaway](docs/images/showcase/12-aerea.jpg) |
+
 ## Why
 
 - **Fast and light.** Native Rust, GPU rendering through `wgpu` (Vulkan, Metal, DirectX 12).
@@ -70,6 +84,7 @@ Clients that spawn a process can use stdio instead:
 | `cabinet_run` | Fill a wall with cabinets sized for it: even modules around corners, doors, windows, fridge and stove, drawer unit by the stove, blind corners in L kitchens |
 | `fit_roof` | Walls, glass and panels take the shape of the roof above (A-frame gables, sheds) and keep following it |
 | `embed` | Embed a sink bowl or cooktop in a countertop (exact cutout) or an oven/microwave in a cabinet niche; the item moves with its host |
+| `lighting` | Lux per room by photometry (fixtures in lm/W, color temperature, spots, LED panels and strips) against NBR ISO/CIE 8995-1; `fill` places the fixtures a room needs |
 | `ergonomics` | Review for the people living there: circulation, beds/seats/bathrooms per person, kitchen, doors, ceiling heights, windows, wheelchair use (NBR 9050, NBR 15575-1) |
 | `cut_list` | Cut list of the joinery builds (boards merged, edge banding, hardware) as CSV, or DXF/SVG sheets |
 | `render_plan` | PNG of the plan, exactly as the user sees it (`bg` overlays the scan) |
