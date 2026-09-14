@@ -2,7 +2,7 @@
 //! rooms sorted into how they are used, and a way to measure the free
 //! floor beside a piece.
 
-use geo::{BooleanOps, Contains, Coord, LineString, Polygon};
+use geo::{Area, BooleanOps, Contains, Coord, LineString, Polygon};
 use newera_core::{Furniture, Home, Point2, Room};
 
 /// What a piece is for.
@@ -90,7 +90,8 @@ fn classify(piece: &Furniture, params: Option<&serde_json::Value>) -> Use {
             Some("cabinet") if lo >= 100.0 => Use::WallCabinet,
             Some("cabinet") if p["cooktop"] == true => Use::Stove,
             Some("cabinet") if hi > 150.0 => Use::Wardrobe,
-            Some("cabinet" | "filler") => Use::Counter,
+            Some("cabinet") => Use::Counter,
+            // Fillers close gaps; nobody uses them.
             _ => Use::Other,
         };
     }
@@ -422,6 +423,14 @@ impl<'a> Scene<'a> {
                 || hi <= 5.0
                 // Cabinets on the wall above a counter don't stop a person.
                 || (lo >= 100.0 && self.units[i].piece.height_range().1 <= 100.0)
+            {
+                continue;
+            }
+            // Resting on or joined to this piece (a countertop over cabinets).
+            if self.footprints[j]
+                .intersection(&self.footprints[i])
+                .unsigned_area()
+                > 25.0
             {
                 continue;
             }

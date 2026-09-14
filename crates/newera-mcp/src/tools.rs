@@ -3276,4 +3276,78 @@ mod tests {
         assert!(text.contains("transferência da cadeira"), "{text}");
         assert!(report["score"].as_u64().unwrap() < 80, "{report}");
     }
+
+    #[test]
+    fn cabinet_runs_place_sink_and_cooktop_and_line_up_the_wall_row() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[420,0],[420,300],[0,300]],"closed":true}],"rooms":[{"name":"Cozinha","at":[210,150]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let place: PlaceParams = serde_json::from_str(
+            r#"{"items":[{"cat":"fridge","wall":"w1","along":372},{"cat":"window","wall":"w1","along":130,"elev":110,"w":100}]}"#,
+        )
+        .unwrap();
+        s.place(Parameters(place)).unwrap();
+        let run = |json: &str| -> serde_json::Value {
+            let p: crate::run::CabinetRunParams = serde_json::from_str(json).unwrap();
+            serde_json::from_str(&s.cabinet_run(Parameters(p)).unwrap()).unwrap()
+        };
+        let base = run(r#"{"wall":"w1","p":{"sink":130,"cooktop":260}}"#);
+        let modules = base["modules"].as_array().unwrap();
+        let find = |role: &str| {
+            modules
+                .iter()
+                .find(|m| m[1] == role)
+                .unwrap_or_else(|| panic!("no {role}: {base}"))
+        };
+        let (sink, cooktop) = (find("sink"), find("cooktop"));
+        let span = |m: &serde_json::Value| {
+            (
+                m[2].as_f64().unwrap(),
+                m[2].as_f64().unwrap() + m[3].as_f64().unwrap(),
+            )
+        };
+        assert!(span(sink).0 <= 90.0 && span(sink).1 >= 170.0, "{base}");
+        assert!(
+            span(cooktop).0 <= 230.0 && span(cooktop).1 >= 290.0,
+            "{base}"
+        );
+        // The countertop carries both cutouts.
+        let top_id = find("countertop")[0].as_str().unwrap().to_owned();
+        let stored = s
+            .document
+            .read()
+            .home()
+            .furniture
+            .iter()
+            .find(|f| f.id.to_string() == top_id)
+            .unwrap()
+            .properties[newera_joinery::PARAMS_KEY]
+            .clone();
+        assert!(
+            stored.contains("\"sink\"") && stored.contains("\"cooktop\""),
+            "{stored}"
+        );
+        // Wall row: one hood gap over the cooktop, and the modules after it start where
+        // the base cabinets do.
+        let upper = run(r#"{"wall":"w1","p":{"row":"wall"}}"#);
+        assert_eq!(
+            upper["notes"].to_string().matches("coifa").count(),
+            1,
+            "{upper}"
+        );
+        let after_hood = upper["modules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m[1] == "doors" && m[2].as_f64().unwrap() > 200.0)
+            .unwrap()
+            .clone();
+        assert!(
+            (after_hood[2].as_f64().unwrap() - span(cooktop).1).abs() < 0.2,
+            "{upper}"
+        );
+    }
 }

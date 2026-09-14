@@ -189,16 +189,20 @@ pub fn wall_run(
         }
     }
     obstacles.sort_by(|a, b| a.from.total_cmp(&b.from));
-    // One obstacle per piece of a group: merge overlapping stretches of it.
+    // One obstacle per piece of a group: merge the stretches of its parts,
+    // even when another piece's stretch starts in between.
     let mut merged: Vec<RunObstacle> = Vec::new();
     for o in obstacles {
-        match merged.last_mut() {
-            Some(last) if last.block == o.block && o.from <= last.to + 0.5 => {
-                last.to = last.to.max(o.to);
-            }
-            _ => merged.push(o),
+        match merged
+            .iter_mut()
+            .rev()
+            .find(|m| m.block == o.block && o.from <= m.to + 0.5)
+        {
+            Some(same) => same.to = same.to.max(o.to),
+            None => merged.push(o),
         }
     }
+    merged.sort_by(|a, b| a.from.total_cmp(&b.from));
     Some(WallRun {
         length,
         side,

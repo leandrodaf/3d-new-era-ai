@@ -34,7 +34,8 @@ pub(crate) struct CabinetRunParams {
     pub room: Option<String>,
     /// Flat choices, all optional: row base|wall|tall, h, d, elev, t (mm), front,
     /// color [r,g,b], drawers (drawer units), max (widest module, 90), target (60),
-    /// top (base countertop, true), `top_material`.
+    /// top (base countertop, true), `top_material`, sink / cooktop (center cm along
+    /// the wall: cabinet under it and the countertop cutout), `sink_w` (80), `cooktop_w` (60).
     pub p: Option<serde_json::Map<String, Value>>,
     /// Stretch to fill, cm from the wall start (default: all of it).
     pub from: Option<f64>,
@@ -324,15 +325,49 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
     if params.row == RunRow::Wall {
         // Leave the hood's width free over a stove or cooktop.
         let below = newera_core::wall_run(home, wall_id, side, 60.0, (0.0, 95.0), &skip);
+        let along = |p: Point2| (p.x - wall.start.x) * u.0 + (p.y - wall.start.y) * u.1;
         for o in below.iter().flat_map(|b| b.obstacles.iter()) {
-            if let RunBlock::Piece { id, catalog } = &o.block
-                && heat(*id, catalog)
-                && !run.obstacles.iter().any(|r| r.block == o.block)
-            {
-                run.obstacles.push(o.clone());
+            let RunBlock::Piece { id, catalog } = &o.block else {
+                continue;
+            };
+            if !heat(*id, catalog) || run.obstacles.iter().any(|r| r.block == o.block) {
+                continue;
+            }
+            // A countertop holds its cooktop somewhere along it: only there.
+            let spans: Vec<(f64, f64)> =
+                match piece(*id).filter(|f| joinery_kind(f).as_deref() == Some("countertop")) {
+                    Some(top) => serde_json::from_str::<Value>(&top.properties[PARAMS_KEY])
+                        .ok()
+                        .and_then(|v| v["cutouts"].as_array().cloned())
+                        .unwrap_or_default()
+                        .iter()
+                        .filter(|c| c["kind"] == "cooktop")
+                        .filter_map(|c| {
+                            let x = c["x"].as_f64()? - top.width / 2.0;
+                            let half = c["w"].as_f64().unwrap_or(56.0).max(60.0) / 2.0;
+                            let center = along(top.to_plan((x, 0.0)));
+                            Some((center - half, center + half))
+                        })
+                        .collect(),
+                    None => vec![(o.from, o.to)],
+                };
+            for (a, b) in spans {
+                // A cooktop cabinet under its countertop's cutout is one hood.
+                if run.obstacles.iter().any(|r| {
+                    r.from < b - 5.0
+                        && r.to > a + 5.0
+                        && matches!(&r.block, RunBlock::Piece { id, catalog } if heat(*id, catalog))
+                }) {
+                    continue;
+                }
+                run.obstacles.push(RunObstacle {
+                    from: a.max(0.0),
+                    to: b.min(length),
+                    block: o.block.clone(),
+                });
                 notes.push(format!(
                     "Vão de {} cm deixado para a coifa sobre o fogão.",
-                    brazilian(o.to - o.from)
+                    brazilian(b - a)
                 ));
             }
         }
@@ -358,7 +393,12 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
             if catalog == "fridge" {
                 EndKind::Fridge
             } else if heat(*id, catalog) {
-                EndKind::Heat
+                // Over the stove the hood gap is exact; beside it, air.
+                if params.row == RunRow::Wall {
+                    EndKind::Kept
+                } else {
+                    EndKind::Heat
+                }
             } else if let Some(f) = piece(*id).filter(|f| f.properties.contains_key(PARAMS_KEY)) {
                 // Another wall's run owns the corner: fronts need a filler.
                 if other_run(f).is_some() {
@@ -449,7 +489,28 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
         .into_iter()
         .filter(|o| o.from >= from - 0.5 && o.to <= to + 0.5)
         .collect();
-    let (modules, plan_notes) = newera_joinery::plan_run(&gaps, &over, &params)?;
+    // Joints of the other row on this wall, to line the modules up with.
+    let other_row = match params.row {
+        RunRow::Base => Some("wall"),
+        RunRow::Wall => Some("base"),
+        RunRow::Tall => None,
+    };
+    let joints: Vec<f64> = other_row
+        .map(|r| format!("{wall_id}:{r}"))
+        .map(|t| {
+            home.furniture
+                .iter()
+                .filter(|f| f.properties.get(RUN_KEY) == Some(&t))
+                .filter(|f| matches!(joinery_kind(f).as_deref(), Some("cabinet" | "filler")))
+                .flat_map(|f| {
+                    let c =
+                        (f.position.x - wall.start.x) * u.0 + (f.position.y - wall.start.y) * u.1;
+                    [c - f.width / 2.0, c + f.width / 2.0]
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let (modules, plan_notes) = newera_joinery::plan_run(&gaps, &over, &joints, &params)?;
     notes.extend(plan_notes);
     let mut seen = std::collections::HashSet::new();
     notes.retain(|n| seen.insert(n.clone()));

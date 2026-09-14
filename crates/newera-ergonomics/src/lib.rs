@@ -1201,7 +1201,19 @@ pub fn review(home: &Home, profile: &Profile) -> Report {
     review.rooms();
     review.kitchen();
     review.reach();
-    let mut findings = review.findings;
+    // The same finding on a row of modules is one finding about all of them.
+    let mut findings: Vec<Finding> = Vec::new();
+    for f in review.findings {
+        match findings.iter_mut().find(|g| {
+            g.severity == f.severity && g.message == f.message && g.fix.is_none() && f.fix.is_none()
+        }) {
+            Some(same) => {
+                same.place.push_str(", ");
+                same.place.push_str(&f.place);
+            }
+            None => findings.push(f),
+        }
+    }
     findings.sort_by_key(|f| f.severity);
     let penalty: u32 = findings
         .iter()

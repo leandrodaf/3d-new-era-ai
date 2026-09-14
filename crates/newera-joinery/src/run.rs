@@ -6,7 +6,9 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{Build, CabinetParams, CountertopParams, DoorType, Output, Part, cm, num};
+use crate::{
+    Build, CabinetParams, CountertopParams, Cutout, CutoutKind, DoorType, Output, Part, cm, num,
+};
 
 /// Which row of a kitchen or wardrobe wall.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
@@ -111,6 +113,16 @@ pub struct RunParams {
     pub top: bool,
     /// Countertop finish (default `stone`).
     pub top_material: Option<String>,
+    /// Sink center, cm along the wall (where the plumbing is): a sink
+    /// cabinet under it and the cutout in the countertop.
+    pub sink: Option<f64>,
+    /// Sink cabinet width, cm (default 80).
+    pub sink_w: f64,
+    /// Cooktop center, cm along the wall: a drawer unit under it, the cutout,
+    /// and a hood gap in the wall row above.
+    pub cooktop: Option<f64>,
+    /// Cooktop cabinet width, cm (default 60; 75 or 90 for 5 burners).
+    pub cooktop_w: f64,
 }
 
 impl Default for RunParams {
@@ -128,6 +140,10 @@ impl Default for RunParams {
             target: 60.0,
             top: true,
             top_material: None,
+            sink: None,
+            sink_w: 80.0,
+            cooktop: None,
+            cooktop_w: 60.0,
         }
     }
 }
@@ -177,6 +193,10 @@ pub enum Role {
     Corner,
     /// Above a fridge.
     Over,
+    /// Under the sink.
+    Sink,
+    /// Under the cooktop (drawers).
+    Cooktop,
     Filler,
     Countertop,
 }
@@ -250,17 +270,123 @@ pub(crate) fn filler(p: &FillerParams) -> Result<Output, String> {
     })
 }
 
-/// How many equal modules split `length`: widths within `NARROW..=max`,
-/// closest to `target`, fewer modules when it is a tie.
-fn split(length: f64, target: f64, max: f64) -> u32 {
-    let lo = (length / max).ceil().max(1.0) as u32;
-    let hi = ((length / NARROW).floor() as u32).max(lo);
-    (lo..=hi)
-        .min_by(|a, b| {
-            let score = |n: u32| (length / f64::from(n) - target).abs() + 2.0 * f64::from(n);
-            score(*a).total_cmp(&score(*b))
-        })
-        .unwrap_or(1)
+/// What a stretch of a row becomes.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Piece {
+    Doors,
+    Slim,
+    Filler,
+    Sink,
+    Cooktop,
+}
+
+/// A countertop stretch `(from, to)` and its cutouts `(kind, center)`.
+type Top = (f64, f64, Vec<(CutoutKind, f64)>);
+
+/// A cabinet that must stand at a given place: `(from, to, piece, widest)`.
+type Fixed = (f64, f64, Piece, f64);
+
+/// Splits `a..b` into modules: fixed ones where they must be, the rest in
+/// widths near `target` (equal where nothing else matters), aligned with
+/// `joints` of the other row when that costs little, blind panels of `b0`/`b1`
+/// cm at the ends. Dynamic programming over candidate cut points.
+#[allow(clippy::too_many_lines)]
+fn segment(
+    (a, b): (f64, f64),
+    (b0, b1): (f64, f64),
+    fixed: &[Fixed],
+    joints: &[f64],
+    p: &RunParams,
+) -> Option<Vec<(f64, f64, Piece)>> {
+    const EPS: f64 = 0.05;
+    // Blind panels' edges too: doors beside a corner split like the rest.
+    let mut anchors = vec![a, b, a + b0, b - b1];
+    for &(s, e, _, _) in fixed {
+        anchors.push(s);
+        anchors.push(e);
+    }
+    let joints: Vec<f64> = joints
+        .iter()
+        .copied()
+        .filter(|j| *j > a + SLIM && *j < b - SLIM)
+        .collect();
+    anchors.extend(&joints);
+    anchors.sort_by(f64::total_cmp);
+    anchors.dedup_by(|x, y| (*x - *y).abs() < EPS);
+    let mut cuts = anchors.clone();
+    for (i, &u) in anchors.iter().enumerate() {
+        for &v in &anchors[i + 1..] {
+            for n in 2..=8 {
+                for k in 1..n {
+                    let offset = ((v - u) * f64::from(k) / f64::from(n) * 10.0).round() / 10.0;
+                    cuts.push(u + offset);
+                }
+            }
+        }
+    }
+    cuts.retain(|c| *c >= a - EPS && *c <= b + EPS);
+    cuts.sort_by(f64::total_cmp);
+    cuts.dedup_by(|x, y| (*x - *y).abs() < EPS);
+    let is_joint = |x: f64| joints.iter().any(|j| (j - x).abs() < EPS);
+    let near = |x: f64, y: f64| (x - y).abs() < EPS;
+    let cost = |u: f64, v: f64| -> Option<(f64, Piece)> {
+        let w = v - u;
+        // A fixed cabinet: exactly over its place, maybe widened a little.
+        let crossing: Vec<&Fixed> = fixed
+            .iter()
+            .filter(|(s, e, _, _)| u < e - EPS && v > s + EPS)
+            .collect();
+        let bonus = f64::from(u8::from(is_joint(u)) + u8::from(is_joint(v))) * 4.0;
+        if let [(s, e, piece, widest)] = crossing[..] {
+            let blinds = (near(u, a) && b0 > 0.0) || (near(v, b) && b1 > 0.0);
+            if u <= s + EPS && v >= e - EPS && w <= widest + EPS && !blinds {
+                return Some((3.0 + (w - (e - s)) * 0.8 - bonus, *piece));
+            }
+            return None;
+        }
+        if !crossing.is_empty() {
+            return None;
+        }
+        let blind = if near(u, a) { b0 } else { 0.0 } + if near(v, b) { b1 } else { 0.0 };
+        let door = w - blind;
+        if (NARROW - EPS..=p.max + EPS).contains(&door) {
+            Some(((door - p.target).powi(2) / 30.0 + 3.0 - bonus, Piece::Doors))
+        } else if blind > 0.0 {
+            None
+        } else if (SLIM - EPS..NARROW).contains(&w) {
+            Some((25.0 + (NARROW - w) - bonus, Piece::Slim))
+        } else if w > EPS && w < SLIM {
+            Some((60.0 + w, Piece::Filler))
+        } else {
+            None
+        }
+    };
+    let n = cuts.len();
+    let mut best: Vec<Option<(f64, usize, Piece)>> = vec![None; n];
+    best[0] = Some((0.0, 0, Piece::Doors));
+    for j in 1..n {
+        for i in 0..j {
+            let Some((so_far, _, _)) = best[i] else {
+                continue;
+            };
+            if let Some((c, piece)) = cost(cuts[i], cuts[j]) {
+                let total = so_far + c;
+                if best[j].is_none_or(|(t, _, _)| total < t) {
+                    best[j] = Some((total, i, piece));
+                }
+            }
+        }
+    }
+    best[n - 1]?;
+    let mut out = Vec::new();
+    let mut j = n - 1;
+    while j > 0 {
+        let (_, i, piece) = best[j]?;
+        out.push((cuts[i], cuts[j] - cuts[i], piece));
+        j = i;
+    }
+    out.reverse();
+    Some(out)
 }
 
 /// Plans the modules for the free stretches of one row.
@@ -271,6 +397,7 @@ fn split(length: f64, target: f64, max: f64) -> u32 {
 pub fn plan_run(
     gaps: &[RunGap],
     over: &[RunOver],
+    joints: &[f64],
     p: &RunParams,
 ) -> Result<(Vec<RunModule>, Vec<String>), String> {
     let (h, d, elev) = p.sizes();
@@ -303,7 +430,7 @@ pub fn plan_run(
     };
     let mut modules: Vec<RunModule> = Vec::new();
     let mut notes = Vec::new();
-    let mut tops: Vec<(f64, f64)> = Vec::new();
+    let mut tops: Vec<Top> = Vec::new();
     // Where a drawer unit helps most: next to the stove.
     let mut heat_ends: Vec<f64> = Vec::new();
     for g in gaps {
@@ -354,103 +481,158 @@ pub fn plan_run(
                 num(x),
                 num(SLIM)
             ));
-            tops.push((g.from + c0, x + w));
+            tops.push((g.from + c0, x + w, Vec::new()));
             continue;
         }
         if f0 > 0.0 {
             modules.push(filler_module(x, f0, h, d, elev, p));
             x += f0;
         }
-        if b0 + b1 > 0.0 && usable - b0 - b1 < NARROW {
-            // No room for a door beside the blind panel: close the corner.
-            modules.push(filler_module(x, usable, h, d, elev, p));
-            notes.push(format!(
-                "Canto de {} cm em {} cm fechado: não sobra porta de {} cm ao lado da outra bancada.",
-                num(usable),
-                num(x),
-                num(NARROW)
-            ));
-            x += usable;
-        } else if b0 + b1 > 0.0 {
-            let open = usable - b0 - b1;
-            let n = split(open, p.target, p.max);
-            let each = (open / f64::from(n) * 10.0).round() / 10.0;
-            for k in 0..n {
-                let door = if k + 1 == n {
-                    open - each * f64::from(n - 1)
-                } else {
-                    each
+        let (a, b) = (x, x + usable);
+        // Sink and cooktop cabinets centered where the connections are.
+        let mut fixed: Vec<Fixed> = Vec::new();
+        if p.row == RunRow::Base {
+            for (center, width, piece, widest, name) in [
+                (p.sink, p.sink_w, Piece::Sink, p.sink_w + 20.0, "pia"),
+                (
+                    p.cooktop,
+                    p.cooktop_w,
+                    Piece::Cooktop,
+                    p.cooktop_w + 15.0,
+                    "cooktop",
+                ),
+            ] {
+                let Some(center) = center.filter(|c| *c > g.from && *c < g.to) else {
+                    continue;
                 };
-                let left = if k == 0 { b0 } else { 0.0 };
-                let right = if k + 1 == n { b1 } else { 0.0 };
-                let w = door + left + right;
-                let mut params = cabinet(w, DoorType::Hinged, 0, h, shelves);
-                params.blind_left = left;
-                params.blind_right = right;
-                modules.push(RunModule {
-                    from: x,
-                    width: w,
-                    depth: d,
-                    elevation: elev,
-                    role: if left + right > 0.0 {
-                        Role::Corner
-                    } else {
-                        Role::Doors
-                    },
-                    build: Build::Cabinet(params),
-                });
-                x += w;
+                let (lo, hi) = (a + b0, b - b1);
+                if hi - lo < width {
+                    notes.push(format!(
+                        "O módulo de {} cm da {name} não cabe no vão de {} cm em {} cm.",
+                        num(width),
+                        num(hi - lo),
+                        num(lo)
+                    ));
+                    continue;
+                }
+                let s = (center - width / 2.0).clamp(lo, hi - width);
+                if (s + width / 2.0 - center).abs() > 0.5 {
+                    notes.push(format!(
+                        "A {name} ficou centrada em {} cm (pedida em {} cm) para caber no vão.",
+                        num(s + width / 2.0),
+                        num(center)
+                    ));
+                }
+                if fixed
+                    .iter()
+                    .any(|(fs, fe, _, _)| s < *fe && s + width > *fs)
+                {
+                    notes.push(format!(
+                        "A {name} cairia sobre outro módulo fixo; afaste os pontos."
+                    ));
+                    continue;
+                }
+                fixed.push((s, s + width, piece, widest));
             }
+        }
+        let Some(pieces) = segment((a, b), (b0, b1), &fixed, joints, p) else {
+            modules.push(filler_module(a, usable, h, d, elev, p));
+            notes.push(format!(
+                "Vão de {} cm em {} cm sem divisão possível: fechado com tamponamento.",
+                num(usable),
+                num(a)
+            ));
+            x = b;
+            if f1 > 0.0 {
+                modules.push(filler_module(x, f1, h, d, elev, p));
+                x += f1;
+            }
+            tops.push((g.from + c0, x, Vec::new()));
+            continue;
+        };
+        let mut cutouts = Vec::new();
+        let mut blind_note = false;
+        for (from, w, piece) in pieces {
+            let (role, build) = match piece {
+                Piece::Filler => {
+                    let m = filler_module(from, w, h, d, elev, p);
+                    (m.role, m.build)
+                }
+                Piece::Slim => (
+                    Role::Slim,
+                    Build::Cabinet(cabinet(
+                        w,
+                        DoorType::Hinged,
+                        0,
+                        h,
+                        if p.row == RunRow::Wall { 1 } else { 2 },
+                    )),
+                ),
+                Piece::Sink => {
+                    // The bowl over the drain, as long as it fits the cabinet.
+                    let at = p
+                        .sink
+                        .unwrap_or(from + w / 2.0)
+                        .clamp(from + 30.0, from + w - 30.0);
+                    cutouts.push((CutoutKind::Sink, at));
+                    (
+                        Role::Sink,
+                        Build::Cabinet(cabinet(w, DoorType::Hinged, 0, h, 0)),
+                    )
+                }
+                Piece::Cooktop => {
+                    let at = p
+                        .cooktop
+                        .unwrap_or(from + w / 2.0)
+                        .clamp(from + 29.0, from + w - 29.0);
+                    cutouts.push((CutoutKind::Cooktop, at));
+                    heat_ends.push(from + w / 2.0);
+                    let mut c = cabinet(w, DoorType::Drawers, 2, h, 0);
+                    c.cooktop = true;
+                    (Role::Cooktop, Build::Cabinet(c))
+                }
+                Piece::Doors => {
+                    let left = if (from - a).abs() < 0.05 { b0 } else { 0.0 };
+                    let right = if (from + w - b).abs() < 0.05 { b1 } else { 0.0 };
+                    let mut c = cabinet(w, DoorType::Hinged, 0, h, shelves);
+                    c.blind_left = left;
+                    c.blind_right = right;
+                    if left + right > 0.0 {
+                        blind_note = true;
+                        (Role::Corner, Build::Cabinet(c))
+                    } else {
+                        (Role::Doors, Build::Cabinet(c))
+                    }
+                }
+            };
+            modules.push(RunModule {
+                from,
+                width: w,
+                depth: d,
+                elevation: elev,
+                role,
+                build,
+            });
+        }
+        if blind_note {
             notes.push(
                 "Canto em L: módulo de canto cego com painel fixo onde a outra bancada encosta."
                     .into(),
             );
-        } else if usable < NARROW {
-            modules.push(RunModule {
-                from: x,
-                width: usable,
-                depth: d,
-                elevation: elev,
-                role: Role::Slim,
-                build: Build::Cabinet(cabinet(
-                    usable,
-                    DoorType::Hinged,
-                    0,
-                    h,
-                    if p.row == RunRow::Wall { 1 } else { 2 },
-                )),
-            });
-            x += usable;
-        } else {
-            let n = split(usable, p.target, p.max);
-            // Tenths of a millimeter never add up exactly: the last one takes the rest.
-            let each = (usable / f64::from(n) * 10.0).round() / 10.0;
-            for k in 0..n {
-                let w = if k + 1 == n {
-                    usable - each * f64::from(n - 1)
-                } else {
-                    each
-                };
-                modules.push(RunModule {
-                    from: x,
-                    width: w,
-                    depth: d,
-                    elevation: elev,
-                    role: Role::Doors,
-                    build: Build::Cabinet(cabinet(w, DoorType::Hinged, 0, h, shelves)),
-                });
-                x += w;
-            }
         }
+        x = b;
         if f1 > 0.0 {
             modules.push(filler_module(x, f1, h, d, elev, p));
             x += f1;
         }
-        tops.push((g.from + c0, x));
+        tops.push((g.from + c0, x, cutouts));
     }
 
     // Drawer units: on a base row, the modules closest to the stove.
-    let wanted = p.drawers.unwrap_or(u32::from(p.row == RunRow::Base));
+    let has_cooktop = modules.iter().any(|m| m.role == Role::Cooktop);
+    let wanted = p
+        .drawers
+        .unwrap_or(u32::from(p.row == RunRow::Base && !has_cooktop));
     if wanted > 0 {
         let mut eligible: Vec<usize> = modules
             .iter()
@@ -501,7 +683,7 @@ pub fn plan_run(
     }
 
     if p.row == RunRow::Base && p.top {
-        for (from, to) in tops.into_iter().filter(|(a, b)| b - a >= 20.0) {
+        for (from, to, cuts) in tops.into_iter().filter(|(a, b, _)| b - a >= 20.0) {
             modules.push(RunModule {
                 from,
                 width: to - from,
@@ -514,6 +696,15 @@ pub fn plan_run(
                     height: h + TOP_T,
                     thickness: TOP_T,
                     material: p.top_material.clone(),
+                    cutouts: cuts
+                        .iter()
+                        .map(|(kind, at)| Cutout {
+                            kind: *kind,
+                            x: at - from,
+                            w: None,
+                            d: None,
+                        })
+                        .collect(),
                     ..CountertopParams::default()
                 }),
             });
@@ -577,6 +768,7 @@ mod tests {
         let (modules, notes) = plan_run(
             &[gap(0.0, 250.0, EndKind::Wall, EndKind::Fridge)],
             &[],
+            &[],
             &RunParams::default(),
         )
         .unwrap();
@@ -608,6 +800,7 @@ mod tests {
                 gap(400.0, 410.0, EndKind::Frame, EndKind::Free),
             ],
             &[],
+            &[],
             &RunParams::default(),
         )
         .unwrap();
@@ -633,7 +826,7 @@ mod tests {
         // 7,5..300 with the other run's fronts covering 58 cm from the corner.
         let mut g = gap(7.5, 300.0, EndKind::Wall, EndKind::Wall);
         g.blind_start = 58.0;
-        let (modules, notes) = plan_run(&[g], &[], &RunParams::default()).unwrap();
+        let (modules, notes) = plan_run(&[g], &[], &[], &RunParams::default()).unwrap();
         let sizes = cabinets(&modules);
         // No filler at the blind end, one at the far corner.
         assert_eq!(sizes.first().unwrap().0, Role::Corner, "{sizes:?}");
@@ -663,6 +856,78 @@ mod tests {
     }
 
     #[test]
+    fn sink_and_cooktop_cabinets_stand_under_their_points() {
+        let params = RunParams {
+            sink: Some(100.0),
+            cooktop: Some(230.0),
+            ..RunParams::default()
+        };
+        let (modules, notes) = plan_run(
+            &[gap(0.0, 330.0, EndKind::Wall, EndKind::Wall)],
+            &[],
+            &[],
+            &params,
+        )
+        .unwrap();
+        let sizes = cabinets(&modules);
+        let sink = modules.iter().find(|m| m.role == Role::Sink).unwrap();
+        let cooktop = modules.iter().find(|m| m.role == Role::Cooktop).unwrap();
+        // Centered on the plumbing and the gas point, or widened around them.
+        assert!(
+            (sink.from - 60.0).abs() < 10.5 && sink.from + sink.width >= 140.0,
+            "{sizes:?}"
+        );
+        assert!(
+            cooktop.from <= 200.0 && cooktop.from + cooktop.width >= 260.0,
+            "{sizes:?}"
+        );
+        let Build::Cabinet(c) = &cooktop.build else {
+            panic!()
+        };
+        assert!(c.cooktop && c.door == DoorType::Drawers);
+        // No extra drawer unit: the cooktop's is enough.
+        assert!(sizes.iter().all(|s| s.0 != Role::Drawers), "{sizes:?}");
+        // The countertop has both holes where the cabinets are.
+        let top = modules.iter().find(|m| m.role == Role::Countertop).unwrap();
+        let Build::Countertop(t) = &top.build else {
+            panic!()
+        };
+        assert_eq!(t.cutouts.len(), 2);
+        assert!((t.cutouts[0].x - (100.0 - top.from)).abs() < 1e-6, "{t:?}");
+        // Nothing left over and no module out of range.
+        let total: f64 = sizes.iter().map(|s| s.1).sum();
+        assert!((total - 330.0).abs() < 1e-6, "{sizes:?} {notes:?}");
+        assert!(sizes.iter().all(|s| s.0 == Role::Filler || s.1 >= 15.0));
+    }
+
+    #[test]
+    fn modules_line_up_with_the_other_row_when_it_costs_little() {
+        // Alone, 240 cm would be 4 × 60; the base below has joints at 55, 120 and 185.
+        let params = RunParams {
+            row: RunRow::Wall,
+            ..RunParams::default()
+        };
+        let (modules, _) = plan_run(
+            &[gap(0.0, 240.0, EndKind::Free, EndKind::Free)],
+            &[],
+            &[55.0, 120.0, 185.0],
+            &params,
+        )
+        .unwrap();
+        let cuts: Vec<f64> = modules.iter().skip(1).map(|m| m.from).collect();
+        assert_eq!(cuts, vec![55.0, 120.0, 185.0], "{:?}", cabinets(&modules));
+        // A joint that would force an 80 cm and a 50 cm module is not worth it.
+        let (modules, _) = plan_run(
+            &[gap(0.0, 240.0, EndKind::Free, EndKind::Free)],
+            &[],
+            &[35.0],
+            &params,
+        )
+        .unwrap();
+        assert!(modules.iter().all(|m| (m.from - 35.0).abs() > 1.0));
+    }
+
+    #[test]
     fn wall_rows_add_a_cabinet_over_the_fridge() {
         let params = RunParams {
             row: RunRow::Wall,
@@ -675,6 +940,7 @@ mod tests {
                 to: 170.0,
                 bottom: 180.0,
             }],
+            &[],
             &params,
         )
         .unwrap();
@@ -685,6 +951,7 @@ mod tests {
         assert!(modules.iter().all(|m| m.role != Role::Drawers));
         assert!(
             plan_run(
+                &[],
                 &[],
                 &[],
                 &RunParams {
