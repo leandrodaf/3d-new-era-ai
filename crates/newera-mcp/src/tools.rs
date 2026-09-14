@@ -224,6 +224,8 @@ pub(crate) struct LevelsParams {
     name: Option<String>,
     /// Storey height cm for `add`.
     h: Option<f64>,
+    /// Floor elevation cm for `add` (e.g. a house on stilts).
+    elev: Option<f64>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -1004,7 +1006,7 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Storeys. list (default): rows [id,name,elev,h,selected,layout_index,viewable]. add {name?,h?} adds one on top and selects it; select {id}; delete {id} removes it and its content. Other tools act on the selected storey."
+        description = "Storeys. list (default): rows [id,name,elev,h,selected,layout_index,viewable]. add {name?,h?,elev?} adds one on top (or at elev cm) and selects it; select {id}; delete {id} removes it and its content. update {id,elev} raises a storey with its walls, floors and openings (houses on stilts). Other tools act on the selected storey."
     )]
     fn levels(&self, Parameters(p): Parameters<LevelsParams>) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
@@ -1018,6 +1020,12 @@ impl NewEraMcp {
             "list" => Ok(compact::levels(doc.home()).to_string()),
             "add" => {
                 let level = ops::add_level(&mut doc, p.name.clone(), p.h).map_err(core)?;
+                if let Some(elev) = p.elev
+                    && let Some(mut raised) = doc.home().level(level).cloned()
+                {
+                    raised.elevation = elev;
+                    doc.execute(Command::update(raised)).map_err(core)?;
+                }
                 Ok(ok(&doc, &[level.to_string()]))
             }
             "select" => {
@@ -1833,5 +1841,33 @@ mod tests {
         assert!(reply.contains(" v=1 i=1"), "{reply}");
         let reply = s.create(Parameters(wall())).unwrap();
         assert!(reply.contains(" v=1 ids="), "{reply}");
+    }
+
+    #[test]
+    fn storeys_can_start_above_the_ground() {
+        let s = server();
+        let reply = s
+            .levels(Parameters(LevelsParams {
+                action: Some("add".into()),
+                elev: Some(55.0),
+                ..LevelsParams::default()
+            }))
+            .unwrap();
+        assert!(reply.starts_with("ok"), "{reply}");
+        let params: CreateParams =
+            serde_json::from_str(r#"{"walls":[{"pts":[[0,0],[300,0]],"h":250}]}"#).unwrap();
+        s.create(Parameters(params)).unwrap();
+        let doc = s.document.read();
+        let home = doc.home();
+        let wall = &home.walls[0];
+        assert!((home.elevation_of(wall.level) - 55.0).abs() < 1e-9);
+        let mesh =
+            newera_render::Mesh::from_home(home, &newera_render::Selection::new(), &|_| None);
+        let top = mesh
+            .vertices
+            .iter()
+            .map(|v| v.position[1])
+            .fold(f32::MIN, f32::max);
+        assert!((top - 3.05).abs() < 0.02, "wall top at 55 + 250 cm: {top}");
     }
 }

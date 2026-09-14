@@ -919,7 +919,8 @@ pub(crate) struct PlaceSpec {
     pub cat: String,
     /// Instead of `cat`: path of an .obj/.gltf/.glb model to import.
     pub model: Option<String>,
-    /// Center on the plan. Optional when `wall` is given.
+    /// Center on the plan. Optional when `wall` is given; a door or window
+    /// placed `at` a point near a wall snaps into it.
     pub at: Option<Point2>,
     /// Put it in/against this wall (doors and windows cut it).
     pub wall: Option<String>,
@@ -939,6 +940,52 @@ pub(crate) struct PlaceSpec {
     pub color: Option<[u8; 3]>,
     pub mirror: Option<bool>,
     pub hinge_right: Option<bool>,
+    /// Doors: a point `[x,y]` on the side the leaf swings into (e.g. inside the bathroom).
+    pub into: Option<Point2>,
+}
+
+/// The wall of the current storey closest to `at` within snapping distance,
+/// with the distance along it.
+fn nearest_wall(doc: &Document, at: Point2) -> Option<(newera_core::Wall, f64)> {
+    let home = doc.home();
+    let level = home.current_level();
+    home.walls
+        .iter()
+        .filter(|w| home.on_level(w.level, level))
+        .filter_map(|w| {
+            let (a, b) = (w.start, w.end);
+            let (dx, dy) = (b.x - a.x, b.y - a.y);
+            let len2 = (dx * dx + dy * dy).max(1e-9);
+            let t = (((at.x - a.x) * dx + (at.y - a.y) * dy) / len2).clamp(0.0, 1.0);
+            let p = Point2::new(a.x + dx * t, a.y + dy * t);
+            let distance = p.distance(at);
+            (distance <= (w.thickness / 2.0 + 30.0)).then(|| (distance, w, t * len2.sqrt()))
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(_, w, along)| (w.clone(), along))
+}
+
+/// Turns a door so its leaf swings to the side of `into`, keeping the hinge
+/// at the same end of the opening.
+fn swing_into(piece: &mut newera_core::Furniture, into: Point2) {
+    let Some(swing) = newera_core::door_swing(piece) else {
+        return;
+    };
+    #[allow(clippy::cast_precision_loss)]
+    let n = swing.len() as f64;
+    let (cx, cy) = swing
+        .iter()
+        .fold((0.0, 0.0), |(x, y), p| (x + p.x / n, y + p.y / n));
+    let a = piece.angle.to_radians();
+    let normal = (-a.sin(), a.cos());
+    let side =
+        |x: f64, y: f64| (x - piece.position.x) * normal.0 + (y - piece.position.y) * normal.1;
+    if side(cx, cy) * side(into.x, into.y) < 0.0 {
+        piece.angle += 180.0;
+        if let Some(opening) = piece.opening.as_mut() {
+            opening.hinge_right = !opening.hinge_right;
+        }
+    }
 }
 
 /// Places catalog pieces in one undoable step; returns their ids.
@@ -1027,8 +1074,20 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
                     );
                 }
             }
-            (None, Some(_)) => {}
+            (None, Some(at)) => {
+                if piece.is_opening()
+                    && let Some((wall, along)) = nearest_wall(doc, at)
+                {
+                    newera_core::align_to_wall(&mut piece, &wall, along);
+                    if let Some(depth) = spec.d {
+                        piece.depth = depth;
+                    }
+                }
+            }
             (None, None) => return Err(format!("`{}` needs `at` or `wall`", spec.cat)),
+        }
+        if let Some(into) = spec.into {
+            swing_into(&mut piece, into);
         }
         if let Some(angle) = spec.angle {
             piece.angle = angle;
@@ -1043,6 +1102,65 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
 #[cfg(test)]
 mod place_tests {
     use super::*;
+
+    #[test]
+    fn doors_snap_to_the_nearest_wall_and_swing_into_a_chosen_side() {
+        let mut doc = Document::default();
+        create(
+            &mut doc,
+            CreateParams {
+                walls: vec![WallPath {
+                    pts: vec![Point2::new(0.0, 0.0), Point2::new(500.0, 0.0)],
+                    ..WallPath::default()
+                }],
+                ..CreateParams::default()
+            },
+        )
+        .unwrap();
+        for into_y in [100.0, -100.0] {
+            let ids = place(
+                &mut doc,
+                vec![PlaceSpec {
+                    cat: "door".into(),
+                    at: Some(Point2::new(203.0, 12.0)),
+                    into: Some(Point2::new(200.0, into_y)),
+                    ..PlaceSpec::default()
+                }],
+            )
+            .unwrap();
+            let door = doc
+                .home()
+                .furniture
+                .iter()
+                .find(|f| f.id.to_string() == ids[0])
+                .unwrap()
+                .clone();
+            // Snapped onto the wall axis, as thick as the wall.
+            assert!(door.position.y.abs() < 1e-6 && (door.position.x - 203.0).abs() < 1e-6);
+            assert!((door.depth - doc.home().walls[0].thickness).abs() < 1e-9);
+            let swing = newera_core::door_swing(&door).unwrap();
+            #[allow(clippy::cast_precision_loss)]
+            let cy = swing.iter().map(|p| p.y).sum::<f64>() / swing.len() as f64;
+            assert!(cy * into_y > 0.0, "swings toward {into_y}: {cy}");
+        }
+        // Far from every wall a door stays where it was put.
+        let ids = place(
+            &mut doc,
+            vec![PlaceSpec {
+                cat: "door".into(),
+                at: Some(Point2::new(200.0, 300.0)),
+                ..PlaceSpec::default()
+            }],
+        )
+        .unwrap();
+        let door = doc
+            .home()
+            .furniture
+            .iter()
+            .find(|f| f.id.to_string() == ids[0])
+            .unwrap();
+        assert!((door.position.y - 300.0).abs() < 1e-6);
+    }
 
     #[test]
     fn doors_align_to_walls_and_furniture_backs_onto_them() {
