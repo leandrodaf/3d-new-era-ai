@@ -328,6 +328,8 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
         let mut palette = base.clone();
         if let Some(d) = d {
             palette.furniture_line = fade(discipline_color(d), d.into());
+            // Solid parts of technical symbols take the discipline color.
+            palette.furniture_detail = palette.furniture_line;
         }
         palette
     };
@@ -514,6 +516,9 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
     }
     if home.annotations.references {
         reference_items(&mut scene, home, options);
+    }
+    if home.annotations.legend {
+        legend_items(&mut scene, home, options);
     }
     scene
 }
@@ -784,6 +789,84 @@ fn room_texts(scene: &mut Scene, room: &Room, options: &SceneOptions) {
                 look: TextLook::default(),
             },
         );
+    }
+}
+
+/// Legend below the drawing: every electrical and plumbing symbol in use,
+/// drawn as on the plan, with its name and how many there are.
+fn legend_items(scene: &mut Scene, home: &Home, options: &SceneOptions) {
+    use std::collections::BTreeMap;
+    let mut used: BTreeMap<(newera_core::Discipline, String), (Furniture, usize)> = BTreeMap::new();
+    for top in &home.furniture {
+        for piece in top.flatten() {
+            let Some(d) = piece.discipline.or(top.discipline) else {
+                continue;
+            };
+            if home.hidden_disciplines.contains(&d) {
+                continue;
+            }
+            used.entry((d, piece.catalog.clone()))
+                .or_insert_with(|| (piece.clone(), 0))
+                .1 += 1;
+        }
+    }
+    if used.is_empty() {
+        return;
+    }
+    let Some((min, max)) = scene.bounds() else {
+        return;
+    };
+    let ink = Color::rgb(40, 44, 52);
+    let text = |scene: &mut Scene, content: String, at: Point2, size: f64, bold: bool| {
+        scene.push(
+            None,
+            Primitive::Text {
+                text: content,
+                position: at,
+                size: Size::Cm(size * EM_TO_HEIGHT),
+                color: ink,
+                align: Align::BaselineLeft,
+                angle: 0.0,
+                look: TextLook {
+                    bold,
+                    italic: false,
+                    outline: None,
+                },
+            },
+        );
+    };
+    let x = min.x;
+    let mut y = max.y + 90.0;
+    text(scene, "LEGENDA".to_owned(), Point2::new(x, y), 22.0, true);
+    y += 40.0;
+    let mut current = None;
+    for ((discipline, _), (piece, count)) in &used {
+        if current != Some(*discipline) {
+            current = Some(*discipline);
+            text(
+                scene,
+                discipline.name().to_uppercase(),
+                Point2::new(x, y),
+                16.0,
+                true,
+            );
+            y += 36.0;
+        }
+        let mut sample = piece.clone();
+        sample.position = Point2::new(x + 20.0, y - 6.0);
+        sample.angle = 0.0;
+        let mut palette = options.palette.clone();
+        palette.furniture_line = discipline_color(*discipline);
+        palette.furniture_detail = palette.furniture_line;
+        furniture_items(scene, &sample, false, &palette);
+        text(
+            scene,
+            format!("{}  ×{count}", piece.name),
+            Point2::new(x + 50.0, y),
+            13.0,
+            false,
+        );
+        y += 38.0;
     }
 }
 

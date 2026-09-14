@@ -298,6 +298,13 @@ impl NewEraApp {
                 "Detalhes: marca, modelo e link",
             ),
         );
+        ui.checkbox(
+            &mut next.legend,
+            format!(
+                "{} Legenda de símbolos (elétrica e hidráulica)",
+                icon::LIST_DASHES
+            ),
+        );
         if next != current {
             self.run(|doc| doc.execute(Command::SetAnnotations { annotations: next }));
         }

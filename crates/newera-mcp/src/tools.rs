@@ -147,6 +147,8 @@ pub(crate) struct AnnotationParams {
     details: Option<bool>,
     /// Convert the automatic dimension chains into editable dimensions.
     bake: Option<bool>,
+    /// Legend of electrical/plumbing symbols with counts.
+    legend: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -646,7 +648,7 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Plan annotations. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs); bake=true turns the automatic chains into editable dimensions (ids returned). Otherwise returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
+        description = "Plan annotations. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs), legend (symbol legend with counts); bake=true turns the automatic chains into editable dimensions (ids returned). Otherwise returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
     )]
     fn annotations(
         &self,
@@ -672,6 +674,7 @@ impl NewEraMcp {
         next.auto_dimensions = p.dims.unwrap_or(next.auto_dimensions);
         next.references = p.refs.unwrap_or(next.references);
         next.reference_details = p.details.unwrap_or(next.reference_details);
+        next.legend = p.legend.unwrap_or(next.legend);
         if next != doc.home().annotations {
             doc.execute(Command::SetAnnotations { annotations: next })
                 .map_err(core)?;
@@ -709,6 +712,7 @@ impl NewEraMcp {
             "dims": next.auto_dimensions,
             "refs": next.references,
             "details": next.reference_details,
+            "legend": next.legend,
             "rooms": rooms,
         })
         .to_string())
@@ -1230,6 +1234,7 @@ mod tests {
                 refs: Some(true),
                 details: Some(true),
                 bake: None,
+                legend: None,
             }))
             .unwrap();
         assert!(reply.contains(r#""rooms":[["Sala",[[1,"#), "{reply}");

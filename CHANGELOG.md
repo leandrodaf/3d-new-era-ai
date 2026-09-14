@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Symbol legend for electrical/plumbing; sloping walls, baseboards and elevated
+  polylines in 3D.
+
 - Server: token auth for network exposure, SSE revision events, REST commands endpoint.
 
 - Furniture top views on the plan (Ver › Móveis na planta), rendered in the background.

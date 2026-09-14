@@ -23,6 +23,9 @@ pub struct PlanAnnotations {
     /// Add brand, model and link to the schedule.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub reference_details: bool,
+    /// Legend of the electrical and plumbing symbols used, with counts.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub legend: bool,
 }
 
 /// Distance of the first chain from the outer wall faces, cm.

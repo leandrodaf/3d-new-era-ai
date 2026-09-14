@@ -211,6 +211,13 @@ impl Mesh {
                 let selected = selection.contains(&ElementId::Wall(wall.id));
                 mesh.add_wall(&outline, wall, wall_cuts, base, selected);
             }
+            for line in view.polylines.iter().filter(|l| {
+                l.elevation.is_some()
+                    && l.discipline
+                        .is_none_or(|d| !home.hidden_disciplines.contains(&d))
+            }) {
+                mesh.add_polyline(line, base);
+            }
             for top in &view.furniture {
                 let highlight = selection.contains(&ElementId::Furniture(top.id));
                 if top
@@ -434,6 +441,10 @@ impl Mesh {
             (wall.end.y - wall.start.y) / len,
         );
         let along = |p: Point2| (p.x - wall.start.x) * dir.0 + (p.y - wall.start.y) * dir.1;
+        // Sloping walls rise linearly from `height` to `height_at_end`.
+        let rise = wall.height_at_end.map_or(0.0, |end| end - wall.height);
+        let top_at = |p: Point2| top + rise * (along(p) / len).clamp(0.0, 1.0);
+        let mut baseboards: Vec<(Point2, Point2, newera_core::Baseboard)> = Vec::new();
 
         let n = points.len();
         for k in 0..n {
@@ -443,13 +454,25 @@ impl Mesh {
                 continue;
             }
             let mid = Point2::new(p.x.midpoint(q.x), p.y.midpoint(q.y));
-            let surface = match Self::side_of(wall, &centerline, mid) {
+            let side = Self::side_of(wall, &centerline, mid);
+            let surface = match side {
                 Some(left) => self.wall_surface(wall, left, p, q, selected),
                 None => plain,
             };
+            let parallel_edge = ((q.x - p.x) * dir.1 - (q.y - p.y) * dir.0).abs() / edge_len < 1e-3;
+            if let Some(left) = side
+                && parallel_edge
+                && let Some(board) = if left {
+                    &wall.left_baseboard
+                } else {
+                    &wall.right_baseboard
+                }
+            {
+                baseboards.push((p, q, board.clone()));
+            }
             let parallel = ((q.x - p.x) * dir.1 - (q.y - p.y) * dir.0).abs() / edge_len < 1e-3;
             if cuts.is_empty() || !parallel || wall.is_arc() {
-                self.add_side(p, q, bottom, top, &surface);
+                self.add_side_sloped(p, q, bottom, top_at(p), top_at(q), &surface);
                 continue;
             }
             // Split the long face at every cut boundary it crosses.
@@ -478,24 +501,107 @@ impl Mesh {
             for pair in stops.windows(2) {
                 let (s0, s1) = (pair[0], pair[1]);
                 let mid = s0.midpoint(s1);
-                match cuts.iter().find(|c| c.from <= mid && c.to >= mid) {
-                    Some(cut) => {
-                        if base + cut.bottom > bottom {
-                            self.add_side(at(s0), at(s1), bottom, base + cut.bottom, &surface);
-                        }
-                        if base + cut.top < top {
-                            self.add_side(at(s0), at(s1), base + cut.top, top, &surface);
-                        }
+                let (a0, a1) = (at(s0), at(s1));
+                if let Some(cut) = cuts.iter().find(|c| c.from <= mid && c.to >= mid) {
+                    if base + cut.bottom > bottom {
+                        self.add_side(a0, a1, bottom, base + cut.bottom, &surface);
                     }
-                    None => self.add_side(at(s0), at(s1), bottom, top, &surface),
+                    if base + cut.top < top.min(top + rise) {
+                        self.add_side_sloped(
+                            a0,
+                            a1,
+                            base + cut.top,
+                            top_at(a0),
+                            top_at(a1),
+                            &surface,
+                        );
+                    }
+                } else {
+                    self.add_side_sloped(a0, a1, bottom, top_at(a0), top_at(a1), &surface);
                 }
             }
         }
-        self.add_cap(&points, top, &plain);
+        if rise.abs() < 1e-9 {
+            self.add_cap(&points, top, &plain);
+        } else {
+            let heights: Vec<f64> = points.iter().map(|p| top_at(*p)).collect();
+            self.add_cap_heights(&points, &heights, &plain);
+        }
         if !wall.is_arc() {
             for cut in cuts {
                 self.add_reveals(wall, dir, cut, base);
             }
+        }
+        for (p, q, board) in baseboards {
+            self.add_baseboard(p, q, &board, base, cuts, wall, along(p), along(q));
+        }
+    }
+
+    /// A skirting board in front of a wall face `p → q` (outward winding),
+    /// interrupted where doors reach the floor.
+    #[allow(clippy::too_many_arguments)]
+    fn add_baseboard(
+        &mut self,
+        p: Point2,
+        q: Point2,
+        board: &newera_core::Baseboard,
+        base: f64,
+        cuts: &[WallCut],
+        _wall: &Wall,
+        a: f64,
+        b: f64,
+    ) {
+        let surface = match &board.material {
+            Some(m) => Surface::plain(srgb_to_linear(m.base_color([240, 240, 235]))),
+            None => Surface::plain(REVEAL_COLOR),
+        };
+        let (lo, hi) = (a.min(b), a.max(b));
+        let mut spans = vec![(lo, hi)];
+        for cut in cuts.iter().filter(|c| c.bottom < board.height) {
+            spans = spans
+                .into_iter()
+                .flat_map(|(s0, s1)| {
+                    let mut out = Vec::new();
+                    if cut.from > s0 {
+                        out.push((s0, cut.from.min(s1)));
+                    }
+                    if cut.to < s1 {
+                        out.push((cut.to.max(s0), s1));
+                    }
+                    out
+                })
+                .filter(|(s0, s1)| s1 - s0 > 0.5)
+                .collect();
+        }
+        let at = |s: f64| {
+            let t = if (b - a).abs() < 1e-9 {
+                0.0
+            } else {
+                (s - a) / (b - a)
+            };
+            Point2::new(p.x + (q.x - p.x) * t, p.y + (q.y - p.y) * t)
+        };
+        let len = p.distance(q).max(1e-9);
+        // Outward normal of the face in plan axes (matches `add_side`).
+        let (out_x, out_y) = (-(q.y - p.y) / len, (q.x - p.x) / len);
+        let (bottom, top) = (base, base + board.height);
+        for (s0, s1) in spans {
+            let (mut f0, mut f1) = (at(s0), at(s1));
+            if a > b {
+                std::mem::swap(&mut f0, &mut f1);
+            }
+            let shift = |pt: Point2| {
+                Point2::new(
+                    pt.x + out_x * board.thickness,
+                    pt.y + out_y * board.thickness,
+                )
+            };
+            let (g0, g1) = (shift(f0), shift(f1));
+            self.add_side(g0, g1, bottom, top, &surface);
+            self.add_side(f0, g0, bottom, top, &surface);
+            self.add_side(g1, f1, bottom, top, &surface);
+            let cap = up_facing(&[f0, g0, g1, f1]);
+            self.add_cap(&cap, top, &surface);
         }
     }
 
@@ -543,6 +649,71 @@ impl Mesh {
     }
 
     /// Vertical face over plan edge `p → q` (up-facing winding, so outward).
+    /// A polyline shown in 3D: a flat strip of its width at its elevation,
+    /// visible from above and below.
+    fn add_polyline(&mut self, line: &newera_core::Polyline, base: f64) {
+        let height = base + line.elevation.unwrap_or(0.0);
+        let surface = Surface::plain(srgb_to_linear(line.color));
+        let half = line.thickness.max(0.5) / 2.0;
+        let mut points = line.points.clone();
+        if line.closed && points.len() > 2 {
+            points.push(points[0]);
+        }
+        for pair in points.windows(2) {
+            let (p, q) = (pair[0], pair[1]);
+            let len = p.distance(q);
+            if len < 1e-6 {
+                continue;
+            }
+            let (nx, ny) = (-(q.y - p.y) / len * half, (q.x - p.x) / len * half);
+            let corners = [
+                Point2::new(p.x + nx, p.y + ny),
+                Point2::new(q.x + nx, q.y + ny),
+                Point2::new(q.x - nx, q.y - ny),
+                Point2::new(p.x - nx, p.y - ny),
+            ];
+            let up = up_facing(&corners);
+            self.add_cap(&up, height, &surface);
+            let down: Vec<Point2> = up.iter().rev().copied().collect();
+            let start = self.next_index();
+            for c in &down {
+                self.vertices
+                    .push(surface.vertex(to_world(*c, height - 0.1), -Vec3::Y));
+            }
+            self.indices
+                .extend([start, start + 1, start + 2, start, start + 2, start + 3]);
+        }
+    }
+
+    /// Vertical face whose top slopes from `top_p` to `top_q`.
+    fn add_side_sloped(
+        &mut self,
+        p: Point2,
+        q: Point2,
+        bottom: f64,
+        top_p: f64,
+        top_q: f64,
+        surface: &Surface,
+    ) {
+        let (pb, qb) = (to_world(p, bottom), to_world(q, bottom));
+        let (pt, qt) = (to_world(p, top_p), to_world(q, top_q));
+        let normal = (qb - pb).cross(Vec3::Y).normalize_or_zero();
+        self.add_quad([pb, qb, qt, pt], normal, surface);
+    }
+
+    /// Cap with a height per point (sloping wall tops).
+    fn add_cap_heights(&mut self, points: &[Point2], heights: &[f64], surface: &Surface) {
+        let base = self.next_index();
+        for (p, h) in points.iter().zip(heights) {
+            self.vertices
+                .push(surface.vertex(to_world(*p, *h), Vec3::Y));
+        }
+        for [a, b, c] in newera_core::triangulate(points) {
+            let idx = |i: usize| base + u32::try_from(i).expect("index fits in u32");
+            self.indices.extend([idx(a), idx(b), idx(c)]);
+        }
+    }
+
     fn add_side(&mut self, p: Point2, q: Point2, bottom: f64, top: f64, surface: &Surface) {
         let (pb, qb) = (to_world(p, bottom), to_world(q, bottom));
         let (pt, qt) = (to_world(p, top), to_world(q, top));
@@ -850,6 +1021,53 @@ mod tests {
             .map(|v| v.position[1])
             .fold(f32::MIN, f32::max);
         assert!((max_y - 2.5).abs() < 1e-5);
+    }
+}
+
+#[cfg(test)]
+mod wall_detail_tests {
+    use super::*;
+
+    #[test]
+    fn sloping_walls_and_baseboards() {
+        let mut home = Home::default();
+        let id = home.new_wall_id();
+        let mut wall = Wall::new(id, Point2::new(0.0, 0.0), Point2::new(400.0, 0.0));
+        wall.height_at_end = Some(350.0);
+        wall.left_side = None;
+        wall.left_baseboard = Some(newera_core::Baseboard {
+            thickness: 1.5,
+            height: 10.0,
+            material: None,
+        });
+        home.walls.push(wall);
+        let mesh = Mesh::from_home(&home, &Selection::new(), &|_| None);
+        let max_y = mesh
+            .vertices
+            .iter()
+            .map(|v| v.position[1])
+            .fold(f32::MIN, f32::max);
+        assert!((max_y - 3.5).abs() < 1e-4, "top rises to 350 cm: {max_y}");
+        for tri in mesh.indices.chunks(3) {
+            let [a, b, c] = [0, 1, 2].map(|k| Vec3::from(mesh.vertices[tri[k] as usize].position));
+            let declared = Vec3::from(mesh.vertices[tri[0] as usize].normal);
+            assert!(
+                (b - a).cross(c - a).dot(declared) >= -1e-9,
+                "faces point outward"
+            );
+        }
+        // The baseboard stands in front of the left face (plan -y, beyond the
+        // 7.5 cm half thickness).
+        let front = mesh
+            .vertices
+            .iter()
+            .filter(|v| (v.position[1] - 0.10).abs() < 1e-4)
+            .map(|v| v.position[2])
+            .fold(f32::MAX, f32::min);
+        assert!(
+            (front + 0.09).abs() < 1e-3,
+            "baseboard 1.5 cm proud of the face: {front}"
+        );
     }
 }
 

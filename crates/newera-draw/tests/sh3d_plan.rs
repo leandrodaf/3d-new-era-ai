@@ -88,6 +88,7 @@ fn render_sh3d_levels() {
         auto_dimensions: true,
         references: true,
         reference_details: true,
+        legend: true,
     };
     if let Some(piece) = view
         .furniture

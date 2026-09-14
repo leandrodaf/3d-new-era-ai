@@ -86,7 +86,8 @@ The core of what makes the editor useful: placing real objects with real dimensi
       water, sewer, drains, valves, boxes, meter, gas), line tool for conduits and pipes,
       bill of quantities (points and line lengths); MCP `disciplines`
 - [x] Points of view: aerial/visitor views, stored cameras (menu + MCP `cameras`)
-- [ ] Discipline legend on exported sheets
+- [x] Discipline legend on the plan and exported sheets (symbols in use with counts)
+- [x] 3D detail from imported data: sloping walls, baseboards, polylines at elevation
 - [x] **Engineering dimensioning**: automatic dimension chains like standard drawings —
       per façade openings, wall axes and totals, plus clear room sizes; Ver menu and MCP
       `annotations`
