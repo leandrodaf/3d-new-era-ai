@@ -99,6 +99,9 @@ pub(crate) fn home(home: &Home, revision: u64) -> Value {
             if l.bold {
                 v["bold"] = json!(true);
             }
+            if let Some(d) = l.discipline {
+                v["layer"] = json!(d);
+            }
             if l.italic {
                 v["italic"] = json!(true);
             }
@@ -123,6 +126,9 @@ pub(crate) fn home(home: &Home, revision: u64) -> Value {
             ]);
             if p.closed {
                 v["closed"] = json!(true);
+            }
+            if let Some(d) = p.discipline {
+                v["layer"] = json!(d);
             }
             if p.dash != newera_core::DashStyle::Solid {
                 v["dash"] = json!(p.dash);
@@ -207,6 +213,9 @@ fn piece(home: &Home, cuts: &[Vec<newera_core::WallCut>], f: &newera_core::Furni
     }
     if f.is_group() {
         v["parts"] = json!(f.flatten().len() - 1);
+    }
+    if let Some(d) = f.discipline {
+        v["layer"] = json!(d);
     }
     if let Some(light) = &f.light {
         v["light"] = num(light.power);

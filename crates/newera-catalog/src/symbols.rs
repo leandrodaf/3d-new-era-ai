@@ -64,6 +64,168 @@ impl Sym {
     }
 }
 
+/// Conventional symbol of a technical point, drawn at a readable size
+/// (at least 32 cm across) whatever the physical size of the device.
+fn point_symbol(s: &mut Sym, symbol: crate::PointSymbol, size: f64) {
+    use crate::PointSymbol as P;
+    let r = size.max(32.0) / 2.0;
+    let circle = |cx: f64, cy: f64, radius: f64| {
+        ellipse(cx, cy, radius, radius, 0.0, std::f64::consts::TAU, 28)
+    };
+    let triangle = vec![(0.0, -r), (r * 0.9, r * 0.6), (-r * 0.9, r * 0.6)];
+    let square = rect(-r, -r, r, r);
+    match symbol {
+        P::OutletLow => {
+            s.fill(triangle.clone(), false);
+            s.line(triangle, true, true);
+        }
+        P::OutletMid => {
+            s.fill(triangle.clone(), false);
+            s.fill(vec![(0.0, -r), (0.0, r * 0.6), (-r * 0.9, r * 0.6)], true);
+            s.line(triangle, true, true);
+        }
+        P::OutletHigh => {
+            s.fill(triangle.clone(), true);
+            s.line(triangle, true, true);
+        }
+        P::DataOutlet => {
+            s.fill(triangle.clone(), false);
+            s.line(triangle, true, true);
+            s.line(vec![(-r * 0.5, r * 0.1), (r * 0.5, r * 0.1)], false, true);
+        }
+        P::Switch1 => {
+            s.fill(circle(0.0, 0.0, r * 0.45), true);
+            s.line(circle(0.0, 0.0, r * 0.45), true, true);
+        }
+        P::Switch2 => {
+            for x in [-r * 0.5, r * 0.5] {
+                s.fill(circle(x, 0.0, r * 0.4), true);
+                s.line(circle(x, 0.0, r * 0.4), true, true);
+            }
+        }
+        P::Switch3Way => {
+            s.fill(circle(0.0, 0.0, r * 0.45), true);
+            s.line(circle(0.0, 0.0, r * 0.45), true, true);
+            s.line(vec![(-r, r * 0.8), (r, -r * 0.8)], false, true);
+        }
+        P::LightCeiling => {
+            s.fill(circle(0.0, 0.0, r), false);
+            s.line(circle(0.0, 0.0, r), true, true);
+            let k = r * 0.7;
+            s.line(vec![(-k, -k), (k, k)], false, true);
+            s.line(vec![(-k, k), (k, -k)], false, true);
+        }
+        P::LightWall => {
+            let half = ellipse(
+                0.0,
+                0.0,
+                r,
+                r,
+                std::f64::consts::PI,
+                std::f64::consts::TAU,
+                16,
+            );
+            s.fill(half.clone(), false);
+            s.line(half, true, true);
+            s.line(
+                vec![(-r * 0.6, -r * 0.6), (r * 0.6, -r * 0.2)],
+                false,
+                false,
+            );
+        }
+        P::Panel => {
+            let panel = rect(-r * 1.2, -r * 0.45, r * 1.2, r * 0.45);
+            s.fill(panel.clone(), false);
+            s.fill(
+                vec![
+                    (-r * 1.2, -r * 0.45),
+                    (r * 1.2, -r * 0.45),
+                    (r * 1.2, r * 0.45),
+                ],
+                true,
+            );
+            s.line(panel, true, true);
+        }
+        P::AirConditioner => {
+            s.fill(square.clone(), false);
+            s.line(square, true, true);
+            s.line(vec![(-r, r), (r, -r)], false, true);
+            s.fill(vec![(-r, -r), (r, -r), (-r, r)], true);
+        }
+        P::ShowerPoint => {
+            s.fill(circle(0.0, 0.0, r), false);
+            s.line(circle(0.0, 0.0, r), true, true);
+            let t = vec![(0.0, -r * 0.6), (r * 0.5, r * 0.4), (-r * 0.5, r * 0.4)];
+            s.fill(t.clone(), true);
+        }
+        P::Doorbell => {
+            let small = rect(-r * 0.6, -r * 0.6, r * 0.6, r * 0.6);
+            s.fill(small.clone(), false);
+            s.line(small, true, true);
+            s.fill(circle(0.0, 0.0, r * 0.3), true);
+        }
+        P::ColdWater => {
+            s.fill(circle(0.0, 0.0, r * 0.6), true);
+            s.line(circle(0.0, 0.0, r), true, true);
+        }
+        P::HotWater => {
+            s.fill(circle(0.0, 0.0, r), false);
+            s.fill(
+                ellipse(
+                    0.0,
+                    0.0,
+                    r,
+                    r,
+                    std::f64::consts::FRAC_PI_2,
+                    std::f64::consts::FRAC_PI_2 * 3.0,
+                    14,
+                ),
+                true,
+            );
+            s.line(circle(0.0, 0.0, r), true, true);
+        }
+        P::Sewer => {
+            s.fill(square.clone(), false);
+            s.line(square, true, true);
+            s.line(circle(0.0, 0.0, r * 0.55), true, true);
+        }
+        P::FloorDrain => {
+            s.fill(square.clone(), false);
+            s.line(square, true, true);
+            for k in [-0.5, 0.0, 0.5] {
+                s.line(vec![(-r * 0.8, r * k), (r * 0.8, r * k)], false, false);
+            }
+        }
+        P::Valve => {
+            let bow = vec![(-r, -r * 0.6), (r, r * 0.6), (r, -r * 0.6), (-r, r * 0.6)];
+            s.fill(vec![(-r, -r * 0.6), (0.0, 0.0), (-r, r * 0.6)], true);
+            s.fill(vec![(r, -r * 0.6), (0.0, 0.0), (r, r * 0.6)], true);
+            s.line(bow, true, true);
+        }
+        P::GreaseTrap => {
+            s.fill(square.clone(), false);
+            s.line(square, true, true);
+            s.line(vec![(-r, -r), (r, r)], false, false);
+            s.line(vec![(-r, r), (r, -r)], false, false);
+        }
+        P::InspectionBox => {
+            s.fill(square.clone(), false);
+            s.line(square, true, true);
+            s.line(rect(-r * 0.7, -r * 0.7, r * 0.7, r * 0.7), true, false);
+        }
+        P::WaterMeter => {
+            s.fill(circle(0.0, 0.0, r), false);
+            s.line(circle(0.0, 0.0, r), true, true);
+            s.line(vec![(-r, 0.0), (r, 0.0)], false, true);
+        }
+        P::Gas => {
+            let diamond = vec![(0.0, -r), (r, 0.0), (0.0, r), (-r, 0.0)];
+            s.fill(diamond.clone(), true);
+            s.line(diamond, true, true);
+        }
+    }
+}
+
 /// Plan symbol of a piece at its size, in its local frame.
 pub fn plan_symbol(piece: &Furniture) -> Vec<SymbolShape> {
     let (w, d) = (piece.width, piece.depth);
@@ -143,6 +305,11 @@ pub fn plan_symbol(piece: &Furniture) -> Vec<SymbolShape> {
         // Jambs across the wall thickness.
         s.line(vec![(-hw, -hd), (-hw, hd)], false, true);
         s.line(vec![(hw, -hd), (hw, hd)], false, true);
+        return s.shapes;
+    }
+
+    if let Model::Point(symbol) = model {
+        point_symbol(&mut s, symbol, w.max(d));
         return s.shapes;
     }
 
@@ -378,6 +545,10 @@ mod tests {
                 "{} has no symbol",
                 item.id
             );
+            // Technical symbols keep a readable minimum size on purpose.
+            if item.category.discipline().is_some() {
+                continue;
+            }
             let swings = item
                 .opening
                 .is_some_and(|o| o.kind == OpeningKind::Door && !o.sliding);

@@ -127,6 +127,8 @@ pub(crate) fn bar(app: &mut NewEraApp, ui: &mut egui::Ui) {
                 .clicked();
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             levels(app, ui);
+            ui.separator();
+            disciplines(app, ui);
         });
         if compare {
             app.open_compare();
@@ -148,6 +150,99 @@ pub(crate) fn bar(app: &mut NewEraApp, ui: &mut egui::Ui) {
         let name = infos[index].name.clone();
         app.set_dialog(Dialog::ConfirmCloseVariant { index, name });
     }
+}
+
+/// Architecture / electrical / plumbing switch, visibility and quantities.
+fn disciplines(app: &mut NewEraApp, ui: &mut egui::Ui) {
+    use newera_core::Discipline;
+    let (active, hidden) = {
+        let doc = app.document.read();
+        let home = doc.home();
+        (home.active_discipline, home.hidden_disciplines.clone())
+    };
+    let label = |d: Option<Discipline>| match d {
+        None => format!("{} Arquitetura", icon::HOUSE_LINE),
+        Some(Discipline::Electrical) => format!("{} Elétrica", icon::LIGHTNING),
+        Some(Discipline::Plumbing) => format!("{} Hidráulica", icon::DROP),
+    };
+    let mut choice = None;
+    let mut toggle = None;
+    let mut quantities = false;
+    egui::ComboBox::from_id_salt("discipline_select")
+        .selected_text(label(active))
+        .show_ui(ui, |ui| {
+            for d in [
+                None,
+                Some(Discipline::Electrical),
+                Some(Discipline::Plumbing),
+            ] {
+                if ui.selectable_label(active == d, label(d)).clicked() {
+                    choice = Some(d);
+                }
+            }
+            ui.separator();
+            for d in Discipline::ALL {
+                let mut visible = !hidden.contains(&d);
+                if ui
+                    .checkbox(&mut visible, format!("Mostrar {}", d.name().to_lowercase()))
+                    .changed()
+                {
+                    toggle = Some((d, visible));
+                }
+            }
+            ui.separator();
+            if ui
+                .button(format!("{} Quantitativos", icon::LIST_NUMBERS))
+                .clicked()
+            {
+                quantities = true;
+            }
+        })
+        .response
+        .on_hover_text("Projeto em edição: novos símbolos e linhas vão para ele");
+    if let Some(d) = choice {
+        app.document.write().set_active_discipline(d);
+        if let Some(d) = d {
+            app.document.write().set_discipline_visible(d, true);
+        }
+    }
+    if let Some((d, visible)) = toggle {
+        app.document.write().set_discipline_visible(d, visible);
+    }
+    if quantities {
+        let rows = quantity_rows(app.document.read().home());
+        app.set_dialog(Dialog::Quantities(rows));
+    }
+}
+
+/// One line of a bill of quantities.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct QuantityRow {
+    pub(crate) discipline: newera_core::Discipline,
+    pub(crate) name: String,
+    pub(crate) count: usize,
+}
+
+/// Counts technical points per discipline and catalog item, plus the
+/// length of each discipline's lines.
+pub(crate) fn quantity_rows(home: &Home) -> Vec<QuantityRow> {
+    let mut counts: std::collections::BTreeMap<(newera_core::Discipline, String), usize> =
+        std::collections::BTreeMap::new();
+    for top in &home.furniture {
+        for piece in top.flatten() {
+            if let Some(d) = piece.discipline.or(top.discipline) {
+                *counts.entry((d, piece.name.clone())).or_default() += 1;
+            }
+        }
+    }
+    counts
+        .into_iter()
+        .map(|((discipline, name), count)| QuantityRow {
+            discipline,
+            name,
+            count,
+        })
+        .collect()
 }
 
 /// Storey selector: pick, add, edit and delete levels.

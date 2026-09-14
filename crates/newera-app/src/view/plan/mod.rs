@@ -35,6 +35,8 @@ pub(crate) enum Tool {
     Rooms,
     Dimensions,
     Labels,
+    /// Free lines: annotations, conduits, pipes.
+    Lines,
     /// Mark two points of known distance on the background image.
     Calibrate,
     /// Place one piece of this catalog item.
@@ -96,6 +98,7 @@ pub(crate) struct PlanView {
     cursor: Option<Point2>,
     wall_chain: Option<Point2>,
     room_points: Vec<Point2>,
+    line_points: Vec<Point2>,
     dim_points: Vec<Point2>,
     calibration: Vec<Point2>,
     typed_length: String,
@@ -120,6 +123,7 @@ impl PlanView {
         self.drag = None;
         self.wall_chain = None;
         self.room_points.clear();
+        self.line_points.clear();
         self.dim_points.clear();
         self.calibration.clear();
         self.typed_length.clear();
@@ -128,6 +132,7 @@ impl PlanView {
     pub(crate) fn is_drawing(&self) -> bool {
         self.wall_chain.is_some()
             || !self.room_points.is_empty()
+            || !self.line_points.is_empty()
             || !self.dim_points.is_empty()
             || !self.calibration.is_empty()
     }
@@ -357,6 +362,49 @@ impl PlanView {
                         let mut pts = self.room_points.clone();
                         pts.push(snapped);
                         overlays.push(Overlay::Polygon(pts));
+                    }
+                    overlays.push(Overlay::Cross(snapped));
+                }
+            }
+            Tool::Lines => {
+                if let Some(p) = raw {
+                    let snapped = match self.line_points.last() {
+                        Some(a) if magnetism => magnet::snap_segment(&home, *a, p, zoom, &[]),
+                        _ if magnetism => magnet::snap_point(&home, p, zoom, &[]),
+                        _ => p,
+                    };
+                    if multi_click(&response) {
+                        if self.line_points.len() >= 2 {
+                            let points = std::mem::take(&mut self.line_points);
+                            commit(&mut events, &mut |doc| {
+                                let mut line = newera_core::Polyline::new(
+                                    doc.new_polyline_id(),
+                                    points.clone(),
+                                );
+                                line.thickness = 1.5;
+                                line.color = match doc.home().active_discipline {
+                                    Some(d) => newera_draw::discipline_color(d).0[..3]
+                                        .try_into()
+                                        .unwrap_or([0, 0, 0]),
+                                    None => [40, 40, 48],
+                                };
+                                doc.execute(Command::insert(line))
+                            });
+                        } else {
+                            self.line_points.clear();
+                        }
+                    } else if response.clicked_by(PointerButton::Primary)
+                        && self
+                            .line_points
+                            .last()
+                            .is_none_or(|last| last.distance(snapped) > 0.5)
+                    {
+                        self.line_points.push(snapped);
+                    }
+                    if !self.line_points.is_empty() {
+                        let mut pts = self.line_points.clone();
+                        pts.push(snapped);
+                        overlays.push(Overlay::Path(pts));
                     }
                     overlays.push(Overlay::Cross(snapped));
                 }
@@ -854,6 +902,10 @@ impl PlanView {
                     angle,
                 );
             }
+            Overlay::Path(points) => {
+                let screen: Vec<Pos2> = points.iter().map(|p| to(*p)).collect();
+                painter.add(egui::Shape::line(screen, Stroke::new(1.5, accent)));
+            }
             Overlay::Polygon(points) => {
                 let mut screen: Vec<Pos2> = points.iter().map(|p| to(*p)).collect();
                 if let Some(&first) = screen.first() {
@@ -901,6 +953,8 @@ enum Overlay {
     WallPreview(Vec<Wall>),
     WallLength(Wall),
     Polygon(Vec<Point2>),
+    /// Open polyline being drawn.
+    Path(Vec<Point2>),
     Dimension(Point2, Point2, f64),
     Measure(Point2, Point2),
 }

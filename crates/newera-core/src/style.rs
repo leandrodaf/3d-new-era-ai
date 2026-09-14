@@ -33,6 +33,27 @@ pub(crate) fn is_default<T: Default + PartialEq>(value: &T) -> bool {
     *value == T::default()
 }
 
+/// A technical project drawn over the architectural plan.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum Discipline {
+    Electrical,
+    Plumbing,
+}
+
+impl Discipline {
+    pub const ALL: [Self; 2] = [Self::Electrical, Self::Plumbing];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Electrical => "Elétrica",
+            Self::Plumbing => "Hidráulica",
+        }
+    }
+}
+
 /// Free-form key/value metadata kept with an element.
 pub type Properties = BTreeMap<String, String>;
 
@@ -158,6 +179,9 @@ pub struct Polyline {
     pub elevation: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub level: Option<LevelId>,
+    /// Technical project it belongs to; `None` is the architectural plan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discipline: Option<Discipline>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub properties: Properties,
 }
@@ -179,6 +203,7 @@ impl Polyline {
             end_arrow: ArrowStyle::default(),
             elevation: None,
             level: None,
+            discipline: None,
             properties: Properties::new(),
         }
     }

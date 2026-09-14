@@ -324,6 +324,9 @@ pub struct Dimension {
     /// Style of the length text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<TextStyle>,
+    /// Technical project it belongs to; `None` is the architectural plan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discipline: Option<crate::style::Discipline>,
     /// Drawn in the 3D view too.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub visible_in_3d: bool,
@@ -349,6 +352,7 @@ impl Default for Dimension {
             end_mark: Self::DEFAULT_END_MARK,
             style: None,
             visible_in_3d: false,
+            discipline: None,
             elevation: [0.0, 0.0],
             pitch: 0.0,
             properties: Properties::new(),
@@ -408,6 +412,9 @@ pub struct Label {
     pub align: crate::style::TextAlign,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<[u8; 3]>,
+    /// Technical project it belongs to; `None` is the architectural plan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discipline: Option<crate::style::Discipline>,
     /// Halo drawn around the letters.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outline: Option<[u8; 3]>,
@@ -435,6 +442,7 @@ impl Default for Label {
             italic: false,
             align: crate::style::TextAlign::Center,
             color: None,
+            discipline: None,
             outline: None,
             elevation: 0.0,
             pitch: None,
@@ -707,6 +715,35 @@ impl Element {
             Self::Furniture(e) => e.level = level,
             Self::Polyline(e) => e.level = level,
             Self::Level(_) => {}
+        }
+    }
+
+    /// Technical project of an element; `None` for architecture.
+    pub fn discipline(&self) -> Option<crate::style::Discipline> {
+        match self {
+            Self::Furniture(e) => e.discipline,
+            Self::Polyline(e) => e.discipline,
+            Self::Label(e) => e.discipline,
+            Self::Dimension(e) => e.discipline,
+            Self::Wall(_) | Self::Room(_) | Self::Level(_) => None,
+        }
+    }
+
+    /// Whether the element can belong to a technical project.
+    pub fn takes_discipline(&self) -> bool {
+        matches!(
+            self,
+            Self::Furniture(_) | Self::Polyline(_) | Self::Label(_) | Self::Dimension(_)
+        )
+    }
+
+    pub fn set_discipline(&mut self, discipline: Option<crate::style::Discipline>) {
+        match self {
+            Self::Furniture(e) => e.discipline = discipline,
+            Self::Polyline(e) => e.discipline = discipline,
+            Self::Label(e) => e.discipline = discipline,
+            Self::Dimension(e) => e.discipline = discipline,
+            Self::Wall(_) | Self::Room(_) | Self::Level(_) => {}
         }
     }
 }

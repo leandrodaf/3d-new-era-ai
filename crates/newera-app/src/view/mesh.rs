@@ -212,6 +212,12 @@ impl Mesh {
             }
             for top in &view.furniture {
                 let highlight = selection.contains(&ElementId::Furniture(top.id));
+                if top
+                    .discipline
+                    .is_some_and(|d| home.hidden_disciplines.contains(&d))
+                {
+                    continue;
+                }
                 for piece in top.visible_leaves() {
                     let local = models(piece).unwrap_or_else(|| newera_catalog::piece_mesh(piece));
                     mesh.add_piece(piece, &local, base, highlight);

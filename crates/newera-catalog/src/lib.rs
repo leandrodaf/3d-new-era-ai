@@ -28,10 +28,12 @@ pub enum Category {
     Structure,
     Decor,
     Outdoor,
+    Electrical,
+    Plumbing,
 }
 
 impl Category {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 13] = [
         Self::Living,
         Self::Dining,
         Self::Kitchen,
@@ -43,7 +45,18 @@ impl Category {
         Self::Structure,
         Self::Decor,
         Self::Outdoor,
+        Self::Electrical,
+        Self::Plumbing,
     ];
+
+    /// Technical project whose symbols this category holds.
+    pub fn discipline(self) -> Option<newera_core::Discipline> {
+        match self {
+            Self::Electrical => Some(newera_core::Discipline::Electrical),
+            Self::Plumbing => Some(newera_core::Discipline::Plumbing),
+            _ => None,
+        }
+    }
 
     pub fn id(self) -> &'static str {
         match self {
@@ -58,6 +71,8 @@ impl Category {
             Self::Structure => "structure",
             Self::Decor => "decor",
             Self::Outdoor => "outdoor",
+            Self::Electrical => "electrical",
+            Self::Plumbing => "plumbing",
         }
     }
 
@@ -74,6 +89,8 @@ impl Category {
             Self::Structure => "Estrutura",
             Self::Decor => "Decoração",
             Self::Outdoor => "Área externa",
+            Self::Electrical => "Elétrica",
+            Self::Plumbing => "Hidráulica",
         }
     }
 }
@@ -81,14 +98,25 @@ impl Category {
 /// Which procedural generator builds an item, with its style parameters.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Model {
-    Sofa { seats: u8 },
-    Bed { pillows: u8 },
-    Table { round: bool },
+    Sofa {
+        seats: u8,
+    },
+    Bed {
+        pillows: u8,
+    },
+    Table {
+        round: bool,
+    },
     Chair,
     Stool,
     OfficeChair,
-    Cabinet { doors: u8, drawers: u8 },
-    Shelf { levels: u8 },
+    Cabinet {
+        doors: u8,
+        drawers: u8,
+    },
+    Shelf {
+        levels: u8,
+    },
     TvStand,
     Tv,
     Fridge,
@@ -96,16 +124,22 @@ pub enum Model {
     SinkCounter,
     Counter,
     WallCabinet,
-    Appliance { round_door: bool },
+    Appliance {
+        round_door: bool,
+    },
     Microwave,
     Toilet,
     Basin,
     Shower,
     Bathtub,
     Door,
-    Window { panes: u8 },
+    Window {
+        panes: u8,
+    },
     Passage,
-    Stairs { steps: u8 },
+    Stairs {
+        steps: u8,
+    },
     Plant,
     Tree,
     Lamp,
@@ -113,8 +147,40 @@ pub enum Model {
     Car,
     Desk,
     Crib,
-    Column { round: bool },
+    Column {
+        round: bool,
+    },
     Box,
+    /// A technical point drawn with a conventional plan symbol.
+    Point(PointSymbol),
+}
+
+/// Plan symbols of electrical and plumbing points, after the usual
+/// Brazilian drawing conventions (NBR 5444 style).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PointSymbol {
+    OutletLow,
+    OutletMid,
+    OutletHigh,
+    Switch1,
+    Switch2,
+    Switch3Way,
+    LightCeiling,
+    LightWall,
+    Panel,
+    AirConditioner,
+    ShowerPoint,
+    DataOutlet,
+    Doorbell,
+    ColdWater,
+    HotWater,
+    Sewer,
+    FloorDrain,
+    Valve,
+    GreaseTrap,
+    InspectionBox,
+    WaterMeter,
+    Gas,
 }
 
 /// Opening settings a catalog door or window starts with.
@@ -197,6 +263,7 @@ const WOOD: [u8; 3] = [168, 124, 84];
 const WHITE: [u8; 3] = [236, 236, 232];
 const STEEL: [u8; 3] = [196, 199, 204];
 const DARK: [u8; 3] = [52, 54, 60];
+const ELECTRIC: [u8; 3] = [236, 234, 228];
 
 use Category as C;
 
@@ -768,6 +835,260 @@ pub static CATALOG: &[CatalogItem] = &[
         Model::Car,
         "car automovel carro garagem",
     ),
+    // --- Elétrica -----------------------------------------------------------
+    raised(
+        item(
+            "outlet-low",
+            "Tomada baixa (30 cm)",
+            C::Electrical,
+            [10.0, 4.0, 10.0],
+            ELECTRIC,
+            Model::Point(PointSymbol::OutletLow),
+            "tomada baixa outlet socket plug",
+        ),
+        25.0,
+    ),
+    raised(
+        item(
+            "outlet-mid",
+            "Tomada média (1,10 m)",
+            C::Electrical,
+            [10.0, 4.0, 10.0],
+            ELECTRIC,
+            Model::Point(PointSymbol::OutletMid),
+            "tomada media bancada outlet counter",
+        ),
+        105.0,
+    ),
+    raised(
+        item(
+            "outlet-high",
+            "Tomada alta (2,20 m)",
+            C::Electrical,
+            [10.0, 4.0, 10.0],
+            ELECTRIC,
+            Model::Point(PointSymbol::OutletHigh),
+            "tomada alta outlet high",
+        ),
+        215.0,
+    ),
+    raised(
+        item(
+            "switch",
+            "Interruptor simples",
+            C::Electrical,
+            [8.0, 4.0, 12.0],
+            ELECTRIC,
+            Model::Point(PointSymbol::Switch1),
+            "interruptor simples switch light",
+        ),
+        104.0,
+    ),
+    raised(
+        item(
+            "switch-double",
+            "Interruptor duplo",
+            C::Electrical,
+            [8.0, 4.0, 12.0],
+            ELECTRIC,
+            Model::Point(PointSymbol::Switch2),
+            "interruptor duplo two switches",
+        ),
+        104.0,
+    ),
+    raised(
+        item(
+            "switch-3way",
+            "Interruptor paralelo (three-way)",
+            C::Electrical,
+            [8.0, 4.0, 12.0],
+            ELECTRIC,
+            Model::Point(PointSymbol::Switch3Way),
+            "interruptor paralelo three way hotel",
+        ),
+        104.0,
+    ),
+    raised(
+        item(
+            "light-ceiling",
+            "Ponto de luz no teto",
+            C::Electrical,
+            [20.0, 20.0, 6.0],
+            [250, 245, 220],
+            Model::Point(PointSymbol::LightCeiling),
+            "ponto luz teto lampada plafon ceiling light",
+        ),
+        244.0,
+    ),
+    raised(
+        item(
+            "light-wall",
+            "Arandela (ponto de luz na parede)",
+            C::Electrical,
+            [20.0, 10.0, 15.0],
+            [250, 245, 220],
+            Model::Point(PointSymbol::LightWall),
+            "arandela luz parede wall light sconce",
+        ),
+        180.0,
+    ),
+    raised(
+        item(
+            "electrical-panel",
+            "Quadro de distribuição",
+            C::Electrical,
+            [40.0, 10.0, 60.0],
+            [210, 210, 205],
+            Model::Point(PointSymbol::Panel),
+            "quadro distribuicao disjuntores panel breaker qdc",
+        ),
+        120.0,
+    ),
+    raised(
+        item(
+            "ac-point",
+            "Ponto de ar-condicionado",
+            C::Electrical,
+            [15.0, 6.0, 15.0],
+            ELECTRIC,
+            Model::Point(PointSymbol::AirConditioner),
+            "ar condicionado split tomada ac air conditioner",
+        ),
+        220.0,
+    ),
+    raised(
+        item(
+            "shower-point",
+            "Ponto para chuveiro elétrico",
+            C::Electrical,
+            [12.0, 6.0, 12.0],
+            ELECTRIC,
+            Model::Point(PointSymbol::ShowerPoint),
+            "chuveiro eletrico ponto shower",
+        ),
+        210.0,
+    ),
+    raised(
+        item(
+            "data-outlet",
+            "Tomada de dados / TV",
+            C::Electrical,
+            [10.0, 4.0, 10.0],
+            [90, 90, 100],
+            Model::Point(PointSymbol::DataOutlet),
+            "tomada rede dados internet tv antena rj45 data",
+        ),
+        30.0,
+    ),
+    raised(
+        item(
+            "doorbell",
+            "Campainha",
+            C::Electrical,
+            [8.0, 4.0, 8.0],
+            ELECTRIC,
+            Model::Point(PointSymbol::Doorbell),
+            "campainha doorbell",
+        ),
+        140.0,
+    ),
+    // --- Hidráulica ---------------------------------------------------------
+    raised(
+        item(
+            "cold-water",
+            "Ponto de água fria",
+            C::Plumbing,
+            [8.0, 8.0, 8.0],
+            [40, 110, 210],
+            Model::Point(PointSymbol::ColdWater),
+            "agua fria ponto af cold water",
+        ),
+        60.0,
+    ),
+    raised(
+        item(
+            "hot-water",
+            "Ponto de água quente",
+            C::Plumbing,
+            [8.0, 8.0, 8.0],
+            [210, 60, 40],
+            Model::Point(PointSymbol::HotWater),
+            "agua quente ponto aq hot water",
+        ),
+        60.0,
+    ),
+    item(
+        "sewer",
+        "Ponto de esgoto",
+        C::Plumbing,
+        [10.0, 10.0, 5.0],
+        [120, 90, 60],
+        Model::Point(PointSymbol::Sewer),
+        "esgoto ponto saida sewer drain waste",
+    ),
+    item(
+        "floor-drain",
+        "Ralo",
+        C::Plumbing,
+        [15.0, 15.0, 2.0],
+        [170, 170, 170],
+        Model::Point(PointSymbol::FloorDrain),
+        "ralo sifonado piso floor drain",
+    ),
+    raised(
+        item(
+            "valve",
+            "Registro",
+            C::Plumbing,
+            [8.0, 8.0, 8.0],
+            [180, 150, 60],
+            Model::Point(PointSymbol::Valve),
+            "registro gaveta pressao valve",
+        ),
+        110.0,
+    ),
+    item(
+        "grease-trap",
+        "Caixa de gordura",
+        C::Plumbing,
+        [40.0, 40.0, 40.0],
+        [150, 150, 145],
+        Model::Point(PointSymbol::GreaseTrap),
+        "caixa gordura grease trap",
+    ),
+    item(
+        "inspection-box",
+        "Caixa de inspeção",
+        C::Plumbing,
+        [60.0, 60.0, 60.0],
+        [150, 150, 145],
+        Model::Point(PointSymbol::InspectionBox),
+        "caixa inspecao passagem inspection",
+    ),
+    raised(
+        item(
+            "water-meter",
+            "Hidrômetro",
+            C::Plumbing,
+            [20.0, 15.0, 15.0],
+            [60, 60, 70],
+            Model::Point(PointSymbol::WaterMeter),
+            "hidrometro medidor agua water meter",
+        ),
+        80.0,
+    ),
+    raised(
+        item(
+            "gas-point",
+            "Ponto de gás",
+            C::Plumbing,
+            [8.0, 8.0, 8.0],
+            [220, 170, 30],
+            Model::Point(PointSymbol::Gas),
+            "gas ponto fogao cooktop glp",
+        ),
+        60.0,
+    ),
 ];
 
 pub fn find(id: &str) -> Option<&'static CatalogItem> {
@@ -831,6 +1152,7 @@ impl CatalogItem {
             model: None,
             visible: true,
             level: None,
+            discipline: self.category.discipline(),
             ..Default::default()
         }
     }

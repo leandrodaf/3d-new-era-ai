@@ -80,11 +80,15 @@ The core of what makes the editor useful: placing real objects with real dimensi
       patterns drawn by the GPU at any distance (wood, parquet, tiles, subway, brick,
       stone, concrete, marble, carpet, grass) plus image textures, all tiled at real
       size in cm with tint and rotation; short text form for the MCP (`tiles #fff 60`)
-- [ ] **Electrical and plumbing plans** on top of the same floor plan: outlets,
-      switches, light points, circuits; water/sewer points and pipes; each discipline
-      as a toggleable layer with its own symbols, legend, export and MCP tools
+- [x] **Electrical and plumbing plans** on top of the same floor plan: disciplines as
+      layers (active one editable, others dimmed, each can be hidden), 22 conventional
+      symbols (outlets by height, switches, lights, panel, AC, shower, data; cold/hot
+      water, sewer, drains, valves, boxes, meter, gas), line tool for conduits and pipes,
+      bill of quantities (points and line lengths); MCP `disciplines`
+- [x] Points of view: aerial/visitor views, stored cameras (menu + MCP `cameras`)
+- [ ] Discipline legend on exported sheets
 - [ ] Lighting: sun from compass + date/time, light sources from furniture
-- [ ] Virtual visitor camera; stored points of view
+- [x] Virtual visitor camera; stored points of view
 - [ ] Photo renderer (GPU path tracing) and video along a camera path
 - [ ] Export: OBJ, glTF, PDF plan (SVG/PNG plan done in M1)
 - [ ] MCP: `set_camera`, `render_photo` with size/quality budget

@@ -134,6 +134,30 @@ impl Document {
         }
     }
 
+    /// Chooses the technical project being edited (`None`: architecture).
+    /// View state, like the selected level.
+    pub fn set_active_discipline(&mut self, discipline: Option<crate::style::Discipline>) {
+        let home = &mut self.current_mut().home;
+        if home.active_discipline != discipline {
+            home.active_discipline = discipline;
+            self.revision += 1;
+        }
+    }
+
+    /// Shows or hides a technical project.
+    pub fn set_discipline_visible(&mut self, discipline: crate::style::Discipline, visible: bool) {
+        let home = &mut self.current_mut().home;
+        let hidden = home.hidden_disciplines.contains(&discipline);
+        if hidden == visible {
+            if visible {
+                home.hidden_disciplines.retain(|d| *d != discipline);
+            } else {
+                home.hidden_disciplines.push(discipline);
+            }
+            self.revision += 1;
+        }
+    }
+
     pub fn can_undo(&self) -> bool {
         !self.current().undo_stack.is_empty()
     }

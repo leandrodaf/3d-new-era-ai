@@ -49,6 +49,7 @@ pub(crate) enum Dialog {
     Compare(Vec<crate::tabs::VariantStats>),
     ModifyLevel(newera_core::Level),
     ModifyPolyline(newera_core::Polyline),
+    Quantities(Vec<crate::tabs::QuantityRow>),
     ConfirmDeleteLevel {
         id: newera_core::LevelId,
         name: String,
@@ -805,6 +806,67 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                 }
                 Some(false) => DialogOutcome::Close,
                 None => DialogOutcome::Keep(Dialog::ConfirmCloseVariant { index, name }),
+            }
+        }
+        Dialog::Quantities(rows) => {
+            let mut close = false;
+            let lengths: Vec<(newera_core::Discipline, f64)> = {
+                let doc = app.document.read();
+                newera_core::Discipline::ALL
+                    .iter()
+                    .map(|d| {
+                        let total = doc
+                            .home()
+                            .polylines
+                            .iter()
+                            .filter(|p| p.discipline == Some(*d))
+                            .map(|p| {
+                                p.points
+                                    .windows(2)
+                                    .map(|s| s[0].distance(s[1]))
+                                    .sum::<f64>()
+                            })
+                            .sum();
+                        (*d, total)
+                    })
+                    .collect()
+            };
+            egui::Modal::new(egui::Id::new("quantities")).show(ctx, |ui| {
+                ui.set_min_width(380.0);
+                ui.heading(format!("{} Quantitativos", icon::LIST_NUMBERS));
+                ui.add_space(6.0);
+                for d in newera_core::Discipline::ALL {
+                    ui.strong(d.name());
+                    let mine: Vec<_> = rows.iter().filter(|r| r.discipline == d).collect();
+                    if mine.is_empty() {
+                        ui.weak("Nenhum ponto");
+                    }
+                    egui::Grid::new(format!("q-{d:?}"))
+                        .striped(true)
+                        .show(ui, |ui| {
+                            for row in mine {
+                                ui.label(&row.name);
+                                ui.label(RichText::new(row.count.to_string()).strong());
+                                ui.end_row();
+                            }
+                            if let Some((_, length)) = lengths.iter().find(|(x, _)| *x == d)
+                                && *length > 0.0
+                            {
+                                ui.label("Linhas (tubulação / eletroduto)");
+                                ui.label(RichText::new(unit.format_length(*length)).strong());
+                                ui.end_row();
+                            }
+                        });
+                    ui.add_space(8.0);
+                }
+                if ui.button("Fechar").clicked() {
+                    close = true;
+                }
+            });
+            if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                DialogOutcome::Close
+            } else {
+                DialogOutcome::Keep(Dialog::Quantities(rows))
             }
         }
         Dialog::ModifyPolyline(mut line) => {

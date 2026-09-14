@@ -55,6 +55,12 @@ pub struct Home {
     pub furniture_descending: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub base_plan_locked: bool,
+    /// Technical project being edited; new symbols and lines go there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_discipline: Option<crate::style::Discipline>,
+    /// Technical projects hidden from the plan and 3D.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hidden_disciplines: Vec<crate::style::Discipline>,
     #[serde(default, skip_serializing_if = "Properties::is_empty")]
     pub properties: Properties,
     /// Next number handed out for any id. Monotonic, so ids an agent saw
@@ -85,6 +91,8 @@ impl Default for Home {
             furniture_sort: None,
             furniture_descending: false,
             base_plan_locked: false,
+            active_discipline: None,
+            hidden_disciplines: Vec::new(),
             properties: Properties::new(),
             next_id: 1,
         }
@@ -265,6 +273,8 @@ impl Home {
             furniture_sort: self.furniture_sort.clone(),
             furniture_descending: self.furniture_descending,
             base_plan_locked: self.base_plan_locked,
+            active_discipline: self.active_discipline,
+            hidden_disciplines: self.hidden_disciplines.clone(),
             properties: self.properties.clone(),
             next_id: self.next_id,
             polylines: self

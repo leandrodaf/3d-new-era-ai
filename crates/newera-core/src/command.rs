@@ -85,6 +85,10 @@ impl Command {
                 {
                     element.set_level(Some(selected));
                 }
+                // Symbols and lines drawn while editing a technical project join it.
+                if element.takes_discipline() && element.discipline().is_none() {
+                    element.set_discipline(home.active_discipline);
+                }
                 home.insert(element, index)?;
                 Ok(Self::Remove { id })
             }

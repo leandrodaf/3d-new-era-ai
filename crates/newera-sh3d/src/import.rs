@@ -771,6 +771,7 @@ impl<'g> Importer<'g> {
             elevation: [d.f("elevationStart"), d.f("elevationEnd")],
             pitch: d.deg("pitch"),
             properties: self.properties(d),
+            ..Default::default()
         }
     }
 
@@ -792,6 +793,7 @@ impl<'g> Importer<'g> {
             elevation: l.f("elevation"),
             pitch: l.num("pitch").map(f64::to_degrees),
             properties: self.properties(l),
+            ..Default::default()
         }
     }
 
@@ -970,6 +972,7 @@ impl<'g> Importer<'g> {
             name_offset: [p.f("nameXOffset"), p.f("nameYOffset")],
             name_angle: p.deg("nameAngle"),
             properties: self.properties(p),
+            ..Default::default()
         }
     }
 

@@ -275,6 +275,9 @@ pub struct Furniture {
     /// Storey it belongs to; `None` means the lowest level.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub level: Option<LevelId>,
+    /// Technical project it belongs to; `None` is the architectural plan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discipline: Option<crate::style::Discipline>,
     /// Tilt around its width axis, degrees.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub pitch: f64,
@@ -340,6 +343,7 @@ impl Default for Furniture {
             level: None,
             pitch: 0.0,
             roll: 0.0,
+            discipline: None,
             info: PieceInfo::default(),
             locks: PieceLocks::default(),
             model_transform: ModelTransform::default(),

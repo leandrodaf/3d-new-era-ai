@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Electrical and plumbing projects over the plan (disciplines, symbols, line tool,
+  quantities, MCP `disciplines`); points of view with visitor camera and MCP `cameras`;
+  polyline and label style editing; groups carry their pieces.
+
 - Sweet Home 3D import (`.sh3d`) with a lossless model: polylines, text styles, cameras,
   environment, print settings, furniture metadata, groups, lights, sashes, wall
   cut-outs, level layouts; project bundles (`.newera` ZIP with assets).

@@ -648,6 +648,7 @@ impl NewEraApp {
                 (Key::R, Tool::Rooms),
                 (Key::D, Tool::Dimensions),
                 (Key::T, Tool::Labels),
+                (Key::L, Tool::Lines),
             ] {
                 if ctx.input(|i| i.key_pressed(key) && i.modifiers.is_none()) {
                     self.set_tool(tool);
@@ -1058,13 +1059,14 @@ impl NewEraApp {
     }
 }
 
-pub(crate) const TOOLS: [(Tool, &str, &str, &str); 6] = [
+pub(crate) const TOOLS: [(Tool, &str, &str, &str); 7] = [
     (Tool::Select, icon::CURSOR, "Selecionar", "V"),
     (Tool::Pan, icon::HAND, "Mover vista", "H"),
     (Tool::Walls, icon::WALL, "Criar paredes", "W"),
     (Tool::Rooms, icon::POLYGON, "Criar cômodos", "R"),
     (Tool::Dimensions, icon::RULER, "Criar cotas", "D"),
     (Tool::Labels, icon::TEXT_T, "Adicionar texto", "T"),
+    (Tool::Lines, icon::LINE_SEGMENTS, "Desenhar linhas", "L"),
 ];
 
 fn tool_hint(tool: Tool) -> &'static str {
@@ -1083,6 +1085,9 @@ fn tool_hint(tool: Tool) -> &'static str {
             "Clique início e fim, mova para afastar e clique · duplo clique numa parede cota a parede"
         }
         Tool::Labels => "Clique onde o texto deve ficar",
+        Tool::Lines => {
+            "Clique os pontos e duplo clique encerra · na Elétrica/Hidráulica a linha vira eletroduto/tubulação"
+        }
         Tool::Calibrate => {
             "Clique dois pontos de medida conhecida · arraste para posicionar a imagem"
         }

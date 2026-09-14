@@ -50,8 +50,8 @@ pub use project::{
     resolve_asset, resolve_project_path, save_project, to_project_json,
 };
 pub use style::{
-    ArrowStyle, Camera, Cameras, DashStyle, DrawingMode, Environment, LineCap, LineJoin,
-    PaperOrientation, PhotoSettings, Polyline, PrintSettings, Properties, TextAlign, TextStyle,
-    VideoSettings,
+    ArrowStyle, Camera, Cameras, DashStyle, Discipline, DrawingMode, Environment, LineCap,
+    LineJoin, PaperOrientation, PhotoSettings, Polyline, PrintSettings, Properties, TextAlign,
+    TextStyle, VideoSettings,
 };
 pub use units::LengthUnit;

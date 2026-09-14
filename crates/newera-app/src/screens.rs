@@ -142,3 +142,67 @@ fn sh3d_import() {
         render(&format!("sh3d-import-level{i}"), shared.clone(), |_| {});
     }
 }
+
+#[test]
+#[ignore = "visual review; needs a GPU"]
+fn disciplines() {
+    use newera_core::Discipline;
+    let mut doc = Document::default();
+    house(&mut doc, 700.0);
+    let place = |doc: &mut Document, cat: &str, x: f64, y: f64| {
+        let piece = newera_catalog::find(cat)
+            .unwrap()
+            .instantiate(doc.new_furniture_id(), Point2::new(x, y));
+        doc.execute(Command::insert(piece)).unwrap();
+    };
+    doc.set_active_discipline(Some(Discipline::Plumbing));
+    for (cat, x, y) in [
+        ("cold-water", 620.0, 60.0),
+        ("hot-water", 660.0, 60.0),
+        ("sewer", 640.0, 120.0),
+        ("floor-drain", 560.0, 420.0),
+        ("valve", 600.0, 20.0),
+    ] {
+        place(&mut doc, cat, x, y);
+    }
+    let mut pipe = newera_core::Polyline::new(
+        doc.new_polyline_id(),
+        vec![
+            Point2::new(600.0, 20.0),
+            Point2::new(620.0, 60.0),
+            Point2::new(660.0, 60.0),
+        ],
+    );
+    pipe.color = [30, 110, 200];
+    pipe.thickness = 2.0;
+    doc.execute(Command::insert(pipe)).unwrap();
+    doc.set_active_discipline(Some(Discipline::Electrical));
+    for (cat, x, y) in [
+        ("outlet-low", 100.0, 20.0),
+        ("outlet-mid", 300.0, 20.0),
+        ("outlet-high", 500.0, 20.0),
+        ("switch", 40.0, 250.0),
+        ("switch-double", 40.0, 320.0),
+        ("light-ceiling", 350.0, 250.0),
+        ("light-wall", 680.0, 250.0),
+        ("electrical-panel", 40.0, 450.0),
+        ("ac-point", 350.0, 480.0),
+        ("data-outlet", 200.0, 480.0),
+    ] {
+        place(&mut doc, cat, x, y);
+    }
+    let mut run = newera_core::Polyline::new(
+        doc.new_polyline_id(),
+        vec![
+            Point2::new(40.0, 250.0),
+            Point2::new(350.0, 250.0),
+            Point2::new(680.0, 250.0),
+        ],
+    );
+    run.color = [214, 96, 20];
+    run.thickness = 1.5;
+    run.dash = newera_core::DashStyle::Dash;
+    run.join = newera_core::LineJoin::Curved;
+    doc.execute(Command::insert(run)).unwrap();
+    render("disciplines-electrical", SharedDocument::new(doc), |_| {});
+}

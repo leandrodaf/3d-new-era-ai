@@ -106,6 +106,14 @@ pub(crate) struct CatalogParams {
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct DisciplineParams {
+    /// `active` (default), `select`, `show`, `hide`, `quantities`.
+    action: Option<String>,
+    /// `electrical`, `plumbing` or `architecture`.
+    d: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct CamerasParams {
     /// `list` (default), `view`, `aerial`, `store`, `delete`.
     action: Option<String>,
@@ -377,6 +385,81 @@ impl NewEraMcp {
     fn check_layout(&self) -> String {
         let doc = self.document.read();
         compact::issues(&doc.home().level_view(doc.home().current_level())).to_string()
+    }
+
+    #[tool(
+        description = "Electrical and plumbing projects over the plan. active (default) reports {active, hidden}. select {d: electrical|plumbing|architecture}: new symbols (catalog cat electrical/plumbing) and lines go there and the rest is dimmed. show/hide {d}. quantities: {electrical:[[name,count]], plumbing:[...], lines_cm:{...}}."
+    )]
+    fn disciplines(
+        &self,
+        Parameters(p): Parameters<DisciplineParams>,
+    ) -> Result<String, ErrorData> {
+        use newera_core::Discipline;
+        let mut doc = self.document.write();
+        let parse = |raw: Option<&str>| -> Result<Option<Discipline>, ErrorData> {
+            match raw {
+                Some("electrical") => Ok(Some(Discipline::Electrical)),
+                Some("plumbing") => Ok(Some(Discipline::Plumbing)),
+                Some("architecture") => Ok(None),
+                _ => Err(invalid("`d` must be electrical, plumbing or architecture")),
+            }
+        };
+        match p.action.as_deref().unwrap_or("active") {
+            "active" => {}
+            "select" => {
+                let d = parse(p.d.as_deref())?;
+                doc.set_active_discipline(d);
+                if let Some(d) = d {
+                    doc.set_discipline_visible(d, true);
+                }
+            }
+            "show" | "hide" => {
+                let d = parse(p.d.as_deref())?
+                    .ok_or_else(|| invalid("architecture is always shown"))?;
+                doc.set_discipline_visible(d, p.action.as_deref() == Some("show"));
+            }
+            "quantities" => {
+                let home = doc.home();
+                let mut out = serde_json::Map::new();
+                let mut lengths = serde_json::Map::new();
+                for d in Discipline::ALL {
+                    let key = serde_json::to_value(d)
+                        .ok()
+                        .and_then(|v| v.as_str().map(str::to_owned))
+                        .unwrap_or_default();
+                    let mut counts: std::collections::BTreeMap<String, usize> =
+                        std::collections::BTreeMap::new();
+                    for top in &home.furniture {
+                        for piece in top.flatten() {
+                            if piece.discipline.or(top.discipline) == Some(d) {
+                                *counts.entry(piece.name.clone()).or_default() += 1;
+                            }
+                        }
+                    }
+                    out.insert(
+                        key.clone(),
+                        serde_json::json!(counts.into_iter().collect::<Vec<_>>()),
+                    );
+                    let length: f64 = home
+                        .polylines
+                        .iter()
+                        .filter(|l| l.discipline == Some(d))
+                        .map(|l| {
+                            l.points
+                                .windows(2)
+                                .map(|s| s[0].distance(s[1]))
+                                .sum::<f64>()
+                        })
+                        .sum();
+                    lengths.insert(key, compact::num(length));
+                }
+                out.insert("lines_cm".into(), serde_json::Value::Object(lengths));
+                return Ok(serde_json::Value::Object(out).to_string());
+            }
+            other => return Err(invalid(format!("unknown action `{other}`"))),
+        }
+        let home = doc.home();
+        Ok(serde_json::json!({"active": home.active_discipline, "hidden": home.hidden_disciplines}).to_string())
     }
 
     #[tool(
@@ -823,5 +906,41 @@ mod tests {
             !s.document.read().home().cameras.observer_active,
             "undo restores the aerial view"
         );
+    }
+
+    #[test]
+    fn electrical_project_over_the_plan() {
+        let s = server();
+        s.disciplines(Parameters(DisciplineParams {
+            action: Some("select".into()),
+            d: Some("electrical".into()),
+        }))
+        .unwrap();
+        let params: PlaceParams = serde_json::from_str(
+            r#"{"items":[{"cat":"outlet-low","at":[10,10]},{"cat":"outlet-low","at":[60,10]},{"cat":"switch","at":[100,10]}]}"#,
+        )
+        .unwrap();
+        s.place(Parameters(params)).unwrap();
+        let lines: CreateParams =
+            serde_json::from_str(r#"{"polylines":[{"pts":[[10,10],[110,10]]}]}"#).unwrap();
+        s.create(Parameters(lines)).unwrap();
+        let home = s.get_home(Parameters(GetHomeParams::default()));
+        assert!(home.contains(r#""layer":"electrical""#), "{home}");
+        let q = s
+            .disciplines(Parameters(DisciplineParams {
+                action: Some("quantities".into()),
+                d: None,
+            }))
+            .unwrap();
+        assert!(q.contains(r#"["Tomada baixa (30 cm)",2]"#), "{q}");
+        assert!(q.contains(r#""electrical":100"#), "{q}");
+        let png = s
+            .render_plan(Parameters(RenderParams {
+                w: Some(200),
+                h: Some(150),
+                ..RenderParams::default()
+            }))
+            .unwrap();
+        assert!(!png.content.is_empty());
     }
 }

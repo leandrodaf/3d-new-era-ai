@@ -117,7 +117,7 @@ pub(crate) fn build(model: Model, piece: &Furniture, color: Rgb) -> Mesh {
                 );
             }
         }
-        Model::Rug | Model::Box => {
+        Model::Rug | Model::Box | Model::Point(_) => {
             let c = ctx.c;
             ctx.cube(
                 [-ctx.w / 2.0, ctx.w / 2.0],

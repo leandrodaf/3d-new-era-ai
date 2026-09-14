@@ -260,7 +260,41 @@ pub struct SceneOptions {
 /// Builds the plan scene. Draw order: background, rooms, furniture, walls
 /// (with door and window holes), openings, dimensions, labels, compass.
 pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
-    let palette = &options.palette;
+    // While a technical project is edited, everything else steps back.
+    let focus = home.active_discipline;
+    let dimmed = |d: Option<newera_core::Discipline>| focus.is_some() && d != focus;
+    let shown = |d: Option<newera_core::Discipline>| {
+        d.is_none_or(|d| !home.hidden_disciplines.contains(&d))
+    };
+    let faded_options = SceneOptions {
+        palette: options.palette.faded(),
+        ..options.clone()
+    };
+    let fade = |c: Color, d: Option<newera_core::Discipline>| {
+        if dimmed(d) {
+            blend(c, options.palette.paper, FADE)
+        } else {
+            c
+        }
+    };
+    let arch_options = if focus.is_some() {
+        &faded_options
+    } else {
+        options
+    };
+    let options_for = |d: Option<newera_core::Discipline>| {
+        let base = if dimmed(d) {
+            &faded_options.palette
+        } else {
+            &options.palette
+        };
+        let mut palette = base.clone();
+        if let Some(d) = d {
+            palette.furniture_line = fade(discipline_color(d), d.into());
+        }
+        palette
+    };
+    let palette = &arch_options.palette;
     let mut scene = Scene::default();
     let pick = |id: ElementId, normal: Color| {
         if options.selected.contains(&id) {
@@ -294,7 +328,7 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
         room_items(
             &mut scene,
             room,
-            options,
+            arch_options,
             pick(room.id.into(), palette.room_line),
         );
     }
@@ -312,11 +346,11 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
                 (piece, selected)
             })
         })
-        .filter(|(f, _)| !f.is_opening())
+        .filter(|(f, _)| !f.is_opening() && shown(f.discipline))
         .collect();
     pieces.sort_by(|(a, _), (b, _)| (a.elevation + a.height).total_cmp(&(b.elevation + b.height)));
     for (piece, selected) in &pieces {
-        furniture_items(&mut scene, piece, *selected, palette);
+        furniture_items(&mut scene, piece, *selected, &options_for(piece.discipline));
     }
 
     let cuts = home.wall_cuts();
@@ -367,30 +401,36 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
         );
     }
 
-    for polyline in &home.polylines {
+    for polyline in home.polylines.iter().filter(|p| shown(p.discipline)) {
         let own = {
             let [r, g, b] = polyline.color;
-            Color::rgb(r, g, b)
+            fade(Color::rgb(r, g, b), polyline.discipline)
         };
         polyline_items(&mut scene, polyline, pick(polyline.id.into(), own));
     }
 
     for room in &home.rooms {
-        room_texts(&mut scene, room, options);
+        room_texts(&mut scene, room, arch_options);
     }
 
-    for dimension in &home.dimensions {
-        let own = dimension
-            .color
-            .map_or(palette.dimension, |[r, g, b]| Color::rgb(r, g, b));
+    for dimension in home.dimensions.iter().filter(|d| shown(d.discipline)) {
+        let own = fade(
+            dimension
+                .color
+                .map_or(options.palette.dimension, |[r, g, b]| Color::rgb(r, g, b)),
+            dimension.discipline,
+        );
         let color = pick(dimension.id.into(), own);
         dimension_items(&mut scene, dimension, options.unit, color);
     }
 
-    for label in &home.labels {
-        let own = label
-            .color
-            .map_or(palette.label, |[r, g, b]| Color::rgb(r, g, b));
+    for label in home.labels.iter().filter(|l| shown(l.discipline)) {
+        let own = fade(
+            label
+                .color
+                .map_or(options.palette.label, |[r, g, b]| Color::rgb(r, g, b)),
+            label.discipline,
+        );
         let color = pick(label.id.into(), own);
         label_items(&mut scene, label, color);
     }
@@ -475,6 +515,46 @@ fn hatch(polygon: &[Point2], spacing: f64) -> Vec<(Point2, Point2)> {
         c += spacing;
     }
     out
+}
+
+/// How far dimmed elements blend toward the paper.
+const FADE: f64 = 0.65;
+
+/// Line color of a technical project's symbols.
+pub fn discipline_color(discipline: newera_core::Discipline) -> Color {
+    match discipline {
+        newera_core::Discipline::Electrical => Color::rgb(214, 96, 20),
+        newera_core::Discipline::Plumbing => Color::rgb(30, 110, 200),
+    }
+}
+
+impl Palette {
+    /// The same palette, washed out toward the paper.
+    #[must_use]
+    pub fn faded(&self) -> Self {
+        let f = |c: Color| blend(c, self.paper, FADE);
+        Self {
+            paper: self.paper,
+            grid_minor: self.grid_minor,
+            grid_major: self.grid_major,
+            wall: f(self.wall),
+            wall_background: self.wall_background,
+            wall_drywall: f(self.wall_drywall),
+            wall_concrete: f(self.wall_concrete),
+            wall_glass: f(self.wall_glass),
+            wall_wood: f(self.wall_wood),
+            room_fill: f(self.room_fill),
+            room_line: f(self.room_line),
+            room_text: f(self.room_text),
+            dimension: f(self.dimension),
+            label: f(self.label),
+            compass: f(self.compass),
+            selection: self.selection,
+            furniture_fill: self.furniture_fill,
+            furniture_detail: f(self.furniture_detail),
+            furniture_line: f(self.furniture_line),
+        }
+    }
 }
 
 /// Plan fill of a wall, by construction family.
