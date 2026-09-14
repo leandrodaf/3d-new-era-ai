@@ -11,7 +11,7 @@ use newera_core::{ElementId, Home};
 
 use super::plan::Selection;
 
-use super::mesh::{Mesh, Vertex};
+use newera_render::{Mesh, Vertex};
 
 const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -79,7 +79,7 @@ impl OrbitCamera {
     }
 
     fn look_at_home(&mut self, home: &Home) {
-        if let Some((min, max)) = home.bounds() {
+        if let Some((min, max)) = home.building_bounds() {
             #[allow(clippy::cast_possible_truncation)]
             let center = Vec3::new(
                 ((min.x + max.x) / 200.0) as f32,

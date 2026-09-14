@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `newera-render`: software 3D renderer; MCP `render_3d` and REST `/api/view.png`;
+  precise dimension magnet; dimensions by intent over MCP; compacted tool schemas.
+
 - Engineering dimension chains and room reference schedules (tags, sizes, brand/model/
   link) drawn on the plan; MCP `annotations`.
 

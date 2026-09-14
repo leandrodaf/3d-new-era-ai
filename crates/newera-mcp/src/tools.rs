@@ -106,6 +106,20 @@ pub(crate) struct CatalogParams {
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct Render3dParams {
+    /// `aerial` (default) or `visitor`.
+    view: Option<String>,
+    /// Stored point of view index (see cameras).
+    cam: Option<usize>,
+    /// Aerial turn, degrees.
+    yaw: Option<f32>,
+    /// Aerial height angle, degrees.
+    pitch: Option<f32>,
+    w: Option<u32>,
+    h: Option<u32>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct AnnotationParams {
     /// Show engineering dimension chains.
     dims: Option<bool>,
@@ -310,6 +324,53 @@ impl NewEraMcp {
             p.region,
             p.grid.unwrap_or(true),
         )?;
+        let data = base64::engine::general_purpose::STANDARD.encode(png);
+        Ok(CallToolResult::success(vec![ContentBlock::image(
+            data,
+            "image/png",
+        )]))
+    }
+
+    #[tool(
+        description = "PNG of the home in 3D (software render, no GPU needed). view: aerial (default; yaw/pitch degrees), visitor (current visitor camera) or cam=i (stored point of view). Keep w/h small."
+    )]
+    fn render_3d(
+        &self,
+        Parameters(p): Parameters<Render3dParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let (w, h) = (
+            p.w.unwrap_or(480).clamp(64, 1600),
+            p.h.unwrap_or(360).clamp(64, 1200),
+        );
+        #[allow(clippy::cast_precision_loss)]
+        let aspect = w as f32 / h as f32;
+        let doc = self.document.read();
+        let home = doc.home();
+        let view = match (p.cam, p.view.as_deref()) {
+            (Some(i), _) => {
+                let camera = home
+                    .cameras
+                    .stored
+                    .get(i)
+                    .ok_or_else(|| invalid(format!("no stored camera {i}")))?;
+                newera_render::View::from_camera(camera, aspect)
+            }
+            (None, Some("visitor")) => {
+                newera_render::View::from_camera(&home.cameras.observer, aspect)
+            }
+            (None, None | Some("aerial")) => {
+                newera_render::View::aerial(home, p.yaw.unwrap_or(-60.0), p.pitch.unwrap_or(45.0))
+            }
+            (None, Some(other)) => return Err(invalid(format!("unknown view `{other}`"))),
+        };
+        let home = home.clone();
+        let assets = doc.asset_dir();
+        drop(doc);
+        let image = newera_render::render_home(&home, &view, w, h, assets.as_deref());
+        let mut png = Vec::new();
+        image::DynamicImage::ImageRgba8(image)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .map_err(|e| invalid(e.to_string()))?;
         let data = base64::engine::general_purpose::STANDARD.encode(png);
         Ok(CallToolResult::success(vec![ContentBlock::image(
             data,
@@ -1133,5 +1194,33 @@ mod tests {
         }
         let update = tools.iter().find(|t| t.name == "update").unwrap();
         println!("{}", serde_json::to_string(&update.input_schema).unwrap());
+    }
+
+    #[test]
+    fn render_3d_returns_a_png() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}],"rooms":[{"name":"Sala","at":[200,150],"floor_mat":"wood"}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let result = s
+            .render_3d(Parameters(Render3dParams {
+                w: Some(96),
+                h: Some(72),
+                ..Render3dParams::default()
+            }))
+            .unwrap();
+        let ContentBlock::Image(image) = &result.content[0] else {
+            panic!("expected image")
+        };
+        assert_eq!(image.mime_type, "image/png");
+        assert!(
+            s.render_3d(Parameters(Render3dParams {
+                cam: Some(3),
+                ..Render3dParams::default()
+            }))
+            .is_err()
+        );
     }
 }

@@ -2665,6 +2665,7 @@ dependencies = [
  "newera-catalog",
  "newera-core",
  "newera-draw",
+ "newera-render",
  "newera-sh3d",
  "rfd",
  "serde",
@@ -2716,6 +2717,7 @@ dependencies = [
  "newera-catalog",
  "newera-core",
  "newera-draw",
+ "newera-render",
  "newera-sh3d",
  "rmcp",
  "schemars",
@@ -2723,6 +2725,18 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-util",
+]
+
+[[package]]
+name = "newera-render"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "glam",
+ "image",
+ "newera-catalog",
+ "newera-core",
+ "newera-sh3d",
 ]
 
 [[package]]
@@ -2734,6 +2748,7 @@ dependencies = [
  "newera-core",
  "newera-draw",
  "newera-mcp",
+ "newera-render",
  "serde",
  "serde_json",
  "tokio",

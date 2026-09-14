@@ -46,6 +46,7 @@ pub fn router(document: SharedDocument, addr: SocketAddr, shutdown: Cancellation
         .route("/api/home", get(get_home))
         .route("/api/plan.png", get(plan_png))
         .route("/api/plan.svg", get(plan_svg))
+        .route("/api/view.png", get(view_png))
         .nest_service("/mcp", mcp)
         .layer(TraceLayer::new_for_http())
         .with_state(document)
@@ -111,6 +112,53 @@ async fn plan_png(
     };
     let png = newera_draw::render_png(&scene, &options, &load)
         .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(([(axum::http::header::CONTENT_TYPE, "image/png")], png))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ViewQuery {
+    w: Option<u32>,
+    h: Option<u32>,
+    /// Stored point of view index.
+    cam: Option<usize>,
+    yaw: Option<f32>,
+    pitch: Option<f32>,
+}
+
+/// The home in 3D, rendered in software (aerial view, or a stored camera).
+async fn view_png(
+    State(document): State<SharedDocument>,
+    axum::extract::Query(query): axum::extract::Query<ViewQuery>,
+) -> Result<([(axum::http::header::HeaderName, &'static str); 1], Vec<u8>), axum::http::StatusCode>
+{
+    let (w, h) = (
+        query.w.unwrap_or(800).clamp(64, 2048),
+        query.h.unwrap_or(600).clamp(64, 2048),
+    );
+    let (home, assets) = {
+        let doc = document.read();
+        (doc.home().clone(), doc.asset_dir())
+    };
+    let png = tokio::task::spawn_blocking(move || {
+        #[allow(clippy::cast_precision_loss)]
+        let aspect = w as f32 / h as f32;
+        let view = match query.cam.and_then(|i| home.cameras.stored.get(i)) {
+            Some(camera) => newera_render::View::from_camera(camera, aspect),
+            None => newera_render::View::aerial(
+                &home,
+                query.yaw.unwrap_or(-60.0),
+                query.pitch.unwrap_or(45.0),
+            ),
+        };
+        let image = newera_render::render_home(&home, &view, w, h, assets.as_deref());
+        let mut png = Vec::new();
+        image::DynamicImage::ImageRgba8(image)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .map(|()| png)
+    })
+    .await
+    .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(([(axum::http::header::CONTENT_TYPE, "image/png")], png))
 }
 

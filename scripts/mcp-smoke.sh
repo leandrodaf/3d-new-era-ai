@@ -48,7 +48,7 @@ SESSION=$(grep -i '^mcp-session-id:' "$LOG.headers" | awk '{print $2}' | tr -d '
 rpc '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
 
 reply=$(rpc '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
-for tool in get_home create update delete move split_wall set_home set_background render_plan export_plan save_home open_home new_home undo redo catalog place check_layout variants levels materials cameras disciplines annotations; do
+for tool in get_home create update delete move split_wall set_home set_background render_plan export_plan save_home open_home new_home undo redo catalog place check_layout variants levels materials cameras disciplines annotations render_3d; do
   check "tool $tool listed" "$reply" "\"name\":\"$tool\""
 done
 
@@ -92,6 +92,10 @@ reply=$(call check_layout '{}')
 check "check_layout reports issues as JSON" "$reply" '{'
 reply=$(call render_plan '{"w":320,"h":240}')
 check "render_plan with furniture still works" "$reply" '"mimeType":"image/png"'
+
+reply=$(call render_3d '{"w":160,"h":120}')
+check "render_3d returns a PNG image" "$reply" '"mimeType":"image/png"'
+check "REST serves the 3D view" "$(curl -s -o /dev/null -w '%{content_type}' "$BASE/api/view.png?w=120&h=90")" "image/png"
 
 reply=$(call materials '{}')
 check "materials lists drywall" "$reply" 'drywall-95'

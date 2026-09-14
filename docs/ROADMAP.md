@@ -103,7 +103,10 @@ The core of what makes the editor useful: placing real objects with real dimensi
 - [x] Virtual visitor camera; stored points of view
 - [ ] Photo renderer (GPU path tracing) and video along a camera path
 - [ ] Export: OBJ, glTF, PDF plan (SVG/PNG plan done in M1)
-- [ ] MCP: `set_camera`, `render_photo` with size/quality budget
+- [x] Software 3D renderer (`newera-render`): same meshes, materials and patterns as
+      the GPU view, z-buffered and supersampled; MCP `render_3d` (aerial, visitor or
+      stored camera) and REST `/api/view.png` so agents see the home in 3D without a GPU
+- [ ] MCP `render_photo` with global illumination (path tracing) and quality budget
 
 ## M4 — Interop and reach
 

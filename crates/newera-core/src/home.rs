@@ -392,6 +392,32 @@ impl Home {
         wall_cuts(&self.walls, &pieces)
     }
 
+    /// Bounds of what is built (walls, rooms, furniture), ignoring texts,
+    /// dimensions and lines that may sit far from the house. Falls back to
+    /// [`Home::bounds`] for drawings without construction.
+    pub fn building_bounds(&self) -> Option<(Point2, Point2)> {
+        let points = self
+            .walls
+            .iter()
+            .flat_map(Wall::centerline)
+            .chain(self.rooms.iter().flat_map(|r| r.points.iter().copied()))
+            .chain(
+                self.furniture
+                    .iter()
+                    .filter(|f| f.visible)
+                    .flat_map(Furniture::footprint),
+            );
+        points
+            .fold(None, |acc: Option<(Point2, Point2)>, p| {
+                let (min, max) = acc.unwrap_or((p, p));
+                Some((
+                    Point2::new(min.x.min(p.x), min.y.min(p.y)),
+                    Point2::new(max.x.max(p.x), max.y.max(p.y)),
+                ))
+            })
+            .or_else(|| self.bounds())
+    }
+
     /// Axis-aligned bounds `(min, max)` of the drawing.
     pub fn bounds(&self) -> Option<(Point2, Point2)> {
         let points = self

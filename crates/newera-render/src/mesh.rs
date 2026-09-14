@@ -8,32 +8,33 @@ use bytemuck::{Pod, Zeroable};
 use glam::{Vec3, Vec4};
 use newera_core::{ElementId, Furniture, Home, LevelId, Material, Point2, Wall, WallCut};
 
-use super::plan::Selection;
+/// Elements drawn highlighted.
+pub type Selection = std::collections::BTreeSet<ElementId>;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
-pub(crate) struct Vertex {
-    pub(crate) position: [f32; 3],
-    pub(crate) normal: [f32; 3],
+pub struct Vertex {
+    pub position: [f32; 3],
+    pub normal: [f32; 3],
     /// Linear color and opacity.
-    pub(crate) color: [f32; 4],
+    pub color: [f32; 4],
     /// Texture coordinates in tiles.
-    pub(crate) uv: [f32; 2],
+    pub uv: [f32; 2],
     /// 0 plain, `1..` procedural pattern, [`IMAGE_BASE`]`+n` image layer `n`.
-    pub(crate) kind: u32,
+    pub kind: u32,
 }
 
 /// Material kinds at or above this sample image layer `kind - IMAGE_BASE`.
-pub(crate) const IMAGE_BASE: u32 = 100;
+pub const IMAGE_BASE: u32 = 100;
 
 #[derive(Debug, Default)]
-pub(crate) struct Mesh {
-    pub(crate) vertices: Vec<Vertex>,
-    pub(crate) indices: Vec<u32>,
+pub struct Mesh {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
     /// Triangles drawn after the opaque ones, blended (glass, curtains).
-    pub(crate) transparent: Vec<u32>,
+    pub transparent: Vec<u32>,
     /// Image files referenced by materials, in layer order.
-    pub(crate) images: Vec<String>,
+    pub images: Vec<String>,
 }
 
 const CM_TO_M: f32 = 0.01;
@@ -139,10 +140,10 @@ impl Surface {
 
 /// Supplies meshes for pieces with imported models; `None` falls back to the
 /// catalog generator.
-pub(crate) type ModelSource<'a> = &'a dyn Fn(&Furniture) -> Option<newera_catalog::Mesh>;
+pub type ModelSource<'a> = &'a dyn Fn(&Furniture) -> Option<newera_catalog::Mesh>;
 
 impl Mesh {
-    pub(crate) fn from_home(home: &Home, selection: &Selection, models: ModelSource<'_>) -> Self {
+    pub fn from_home(home: &Home, selection: &Selection, models: ModelSource<'_>) -> Self {
         let mut mesh = Self::default();
         mesh.add_ground(home);
         // Show the viewable storeys up to the one being edited (in elevation,
@@ -319,7 +320,7 @@ impl Mesh {
 
     fn add_ground(&mut self, home: &Home) {
         let (min, max) = home
-            .bounds()
+            .building_bounds()
             .unwrap_or((Point2::new(-500.0, -500.0), Point2::new(500.0, 500.0)));
         let margin = 1000.0;
         let a = to_world(Point2::new(min.x - margin, min.y - margin), -1.0);
