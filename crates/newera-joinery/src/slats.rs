@@ -33,6 +33,8 @@ pub struct SlatsParams {
     pub backing: bool,
     /// Slat finish (default `wood`).
     pub finish: Option<String>,
+    /// Top following a roof: points `[x from the left, height]` cm; empty is flat at `h`.
+    pub top: Vec<[f64; 2]>,
 }
 
 impl Default for SlatsParams {
@@ -46,6 +48,7 @@ impl Default for SlatsParams {
             orientation: Orientation::Vertical,
             backing: true,
             finish: None,
+            top: Vec::new(),
         }
     }
 }
@@ -100,33 +103,107 @@ pub(crate) fn generate(p: &SlatsParams) -> Result<Output, String> {
         .unwrap_or("wood")
         .parse::<newera_core::Material>()
         .ok();
+    // Height available at x: the roof line when there is one, never above h.
+    let top_at = |x: f64| -> f64 {
+        if p.top.len() < 2 {
+            return p.h;
+        }
+        let pts = &p.top;
+        let x = x.clamp(pts[0][0], pts[pts.len() - 1][0]);
+        let seg = pts
+            .windows(2)
+            .find(|s| x >= s[0][0] && x <= s[1][0])
+            .unwrap_or(&pts[..2]);
+        let t = (x - seg[0][0]) / (seg[1][0] - seg[0][0]).max(1e-9);
+        (seg[0][1] + (seg[1][1] - seg[0][1]) * t).min(p.h)
+    };
+    let lowest_over = |x0: f64, x1: f64| {
+        let mut low = top_at(x0).min(top_at(x1));
+        for c in &p.top {
+            if c[0] > x0 && c[0] < x1 {
+                low = low.min(c[1].min(p.h));
+            }
+        }
+        low
+    };
+    let slat_board = format!("Ripa {}×{} mm", num(p.slat), num(p.thickness));
     let mut parts = Vec::new();
     if p.backing {
-        parts.push(Part::board(
+        let mut back = Part::board(
             "Painel de fundo",
             [0.0, 0.0, 0.0],
             [p.w, backing, p.h],
             "MDF 15",
             [40, 40, 42],
-        ));
+        );
+        if p.top.len() >= 2 {
+            let mut ring = vec![[0.0, 0.0], [p.w, 0.0], [p.w, top_at(p.w)]];
+            ring.extend(
+                p.top
+                    .iter()
+                    .rev()
+                    .filter(|c| c[0] > 0.0 && c[0] < p.w)
+                    .map(|c| [c[0], c[1].min(p.h)]),
+            );
+            ring.push([0.0, top_at(0.0)]);
+            back.profile = Some(ring);
+        }
+        parts.push(back);
     }
     for k in 0..n {
         let offset = f64::from(k) * (slat + gap_cm);
-        let (at, size) = if vertical {
-            ([offset, backing, 0.0], [slat, depth, p.h])
+        if vertical {
+            let height = lowest_over(offset, offset + slat);
+            if height < 5.0 {
+                continue;
+            }
+            let mut part = Part::board(
+                &format!("Ripa {}", k + 1),
+                [offset, backing, 0.0],
+                [slat, depth, height],
+                &slat_board,
+                [168, 124, 84],
+            );
+            part.finish.clone_from(&finish);
+            parts.push(part);
         } else {
-            ([0.0, backing, offset], [p.w, depth, slat])
-        };
-        let mut part = Part::board(
-            &format!("Ripa {}", k + 1),
-            at,
-            size,
-            &format!("Ripa {}×{} mm", num(p.slat), num(p.thickness)),
-            [168, 124, 84],
-        );
-        part.finish.clone_from(&finish);
-        parts.push(part);
+            // A horizontal slat runs where the roof is above its top edge.
+            let needed = offset + slat;
+            let mut x = 0.0;
+            let mut piece = 0;
+            while x < p.w {
+                while x < p.w && top_at(x) < needed {
+                    x += 1.0;
+                }
+                let start = x;
+                while x < p.w && top_at(x) >= needed {
+                    x += 1.0;
+                }
+                let end = x.min(p.w);
+                if end - start >= 5.0 {
+                    piece += 1;
+                    let mut part = Part::board(
+                        &format!(
+                            "Ripa {}{}",
+                            k + 1,
+                            if piece > 1 {
+                                format!(".{piece}")
+                            } else {
+                                String::new()
+                            }
+                        ),
+                        [start, backing, offset],
+                        [end - start, depth, slat],
+                        &slat_board,
+                        [168, 124, 84],
+                    );
+                    part.finish.clone_from(&finish);
+                    parts.push(part);
+                }
+            }
+        }
     }
+
     let mut notes = Vec::new();
     if (gap - p.gap).abs() > 0.05 {
         notes.push(format!(
@@ -193,6 +270,31 @@ mod tests {
             .rfind(|p| p.name.starts_with("Ripa"))
             .unwrap();
         assert!((top.at[2] + top.size[2] - 100.0).abs() < 1e-9);
+        // Under a roof rising to the right, slats get taller toward it and the
+        // backing is cut along the slope.
+        let sloped = generate(&SlatsParams {
+            w: 120.0,
+            h: 240.0,
+            top: vec![[0.0, 150.0], [120.0, 230.0]],
+            ..SlatsParams::default()
+        })
+        .unwrap();
+        let slats: Vec<&Part> = sloped
+            .parts
+            .iter()
+            .filter(|p| p.name.starts_with("Ripa"))
+            .collect();
+        assert!(slats[0].size[2] < slats[slats.len() - 1].size[2]);
+        assert!(
+            (slats[0].size[2] - 150.0).abs() < 1e-9,
+            "the low edge of the first slat"
+        );
+        let back = sloped
+            .parts
+            .iter()
+            .find(|p| p.name == "Painel de fundo")
+            .unwrap();
+        assert!(back.profile.as_ref().is_some_and(|r| r.len() >= 4));
         assert!(
             generate(&SlatsParams {
                 w: 3.0,

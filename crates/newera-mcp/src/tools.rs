@@ -1028,7 +1028,7 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Fit walls, glass and panels to the roof above them: under an A-frame or shed roof a wall gets a sloping top and is split at the ridge, a panel becomes a triangle or trapezoid (a glass gable with no math). They keep following the roof when it changes, in the same undo step; off stops that. Reply ok with the count."
+        description = "Fit walls, glass and panels to the roof above them: under an A-frame or shed roof a wall gets a sloping top and is split at the ridge, a panel becomes a triangle or trapezoid (a glass gable with no math); a joinery slatted panel gets its slats cut to the roof line. They keep following the roof when it changes, in the same undo step; off stops that. Reply ok with the count."
     )]
     fn fit_roof(&self, Parameters(p): Parameters<FitRoofParams>) -> Result<String, ErrorData> {
         let ids = edit::parse_ids(&p.ids).map_err(invalid)?;
@@ -1057,13 +1057,31 @@ impl NewEraMcp {
             doc.execute(Command::Batch { commands }).map_err(core)?;
             return Ok(ok(&doc, &[]));
         }
+        // Slatted panels are rebuilt by their rules under the roof line.
+        let above = p.above.unwrap_or(newera_core::ROOF_FIT_ABOVE);
+        let mut joinery = 0;
+        let mut rest = Vec::new();
+        for id in ids {
+            let is_joinery =
+                match id {
+                    newera_core::ElementId::Furniture(f) => doc.home().furniture.iter().any(|x| {
+                        x.id == f && x.properties.contains_key(newera_joinery::PARAMS_KEY)
+                    }),
+                    _ => false,
+                };
+            if let (true, newera_core::ElementId::Furniture(f)) = (is_joinery, id) {
+                newera_joinery::fit_joinery_to_roof(&mut doc, f, above).map_err(invalid)?;
+                joinery += 1;
+            } else {
+                rest.push(id);
+            }
+        }
+        let ids = rest;
+        if ids.is_empty() {
+            return Ok(format!("{} fitted={joinery}", ok(&doc, &[])));
+        }
         let before: Vec<String> = doc.home().walls.iter().map(|w| w.id.to_string()).collect();
-        let count = newera_core::fit_to_roof(
-            &mut doc,
-            &ids,
-            p.above.unwrap_or(newera_core::ROOF_FIT_ABOVE),
-        )
-        .map_err(core)?;
+        let count = newera_core::fit_to_roof(&mut doc, &ids, above).map_err(core)? + joinery;
         let added: Vec<String> = doc
             .home()
             .walls

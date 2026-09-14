@@ -24,6 +24,7 @@ mod ceiling;
 mod countertop;
 mod cutlist;
 mod embed;
+mod roof;
 mod run;
 mod slats;
 mod sofa;
@@ -34,6 +35,7 @@ pub use ceiling::{CoveParams, CoveType, ShadowGapParams};
 pub use countertop::{CountertopParams, Cutout, CutoutKind, Support};
 pub use cutlist::{CutRow, cut_list, cut_list_csv, cut_list_dxf, cut_list_svg};
 pub use embed::{EMBED_KEY, EmbedRequest, Fixture, carry_embedded, embed, fixture_of};
+pub use roof::fit_joinery_to_roof;
 pub use run::{
     EndKind, FillerParams, Interior, Role, RunGap, RunModule, RunOver, RunParams, RunRow, plan_run,
 };
@@ -106,6 +108,9 @@ pub struct Part {
     /// Holes through the board for the workshop `[x, y, w, d]`, cm from its
     /// left-back corner (sink and cooktop cutouts in a stone top).
     pub holes: Vec<[f64; 4]>,
+    /// Face shape `[x, z]` from its left-bottom corner instead of a rectangle
+    /// (a board cut along a roof slope), swept through its depth.
+    pub profile: Option<Vec<[f64; 2]>>,
 }
 
 impl Part {
@@ -128,6 +133,7 @@ impl Part {
             outline: None,
             cut: None,
             holes: Vec::new(),
+            profile: None,
         }
     }
 
@@ -269,18 +275,31 @@ pub fn assemble(
                     .clone()
                     .filter(|f| f.pattern.is_some() || f.image.is_some()),
                 opacity: part.opacity,
-                shape: part.outline.as_ref().map(|points| {
-                    let center = [
-                        part.at[0] + part.size[0] / 2.0,
-                        part.at[1] + part.size[1] / 2.0,
-                    ];
-                    newera_core::SolidShape::Outline(
-                        points
-                            .iter()
-                            .map(|p| [p[0] - center[0], p[1] - center[1]])
-                            .collect(),
-                    )
-                }),
+                shape: part
+                    .profile
+                    .as_ref()
+                    .map(|points| {
+                        newera_core::SolidShape::Profile(
+                            points
+                                .iter()
+                                .map(|p| [p[0] - part.size[0] / 2.0, p[1]])
+                                .collect(),
+                        )
+                    })
+                    .or_else(|| {
+                        part.outline.as_ref().map(|points| {
+                            let center = [
+                                part.at[0] + part.size[0] / 2.0,
+                                part.at[1] + part.size[1] / 2.0,
+                            ];
+                            newera_core::SolidShape::Outline(
+                                points
+                                    .iter()
+                                    .map(|p| [p[0] - center[0], p[1] - center[1]])
+                                    .collect(),
+                            )
+                        })
+                    }),
                 properties,
                 ..Furniture::default()
             }
