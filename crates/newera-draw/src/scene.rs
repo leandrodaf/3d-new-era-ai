@@ -846,15 +846,20 @@ fn label_spot(room: &Room, obstacles: &[[Point2; 4]]) -> Option<Point2> {
                 ))
         })
         .collect();
+    // Room edges count too: a name hugging a wall or a doorway reads as
+    // belonging to the room next door.
+    let edges = |p: Point2| {
+        let pts = &room.points;
+        (0..pts.len())
+            .map(|i| p.distance_to_segment(pts[i], pts[(i + 1) % pts.len()]))
+            .fold(f64::MAX, f64::min)
+    };
     let score = |p: Point2| {
         nearby
             .iter()
             .map(|o| clearance(p, o))
-            .fold(f64::MAX, f64::min)
+            .fold(edges(p), f64::min)
     };
-    if nearby.is_empty() || score(centroid) >= LABEL_CLEARANCE {
-        return Some(centroid);
-    }
     let (lo, hi) = room
         .points
         .iter()
@@ -864,18 +869,26 @@ fn label_spot(room: &Room, obstacles: &[[Point2; 4]]) -> Option<Point2> {
                 Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
             )
         });
-    let mut best = (score(centroid), centroid);
-    for i in 1..16 {
-        for j in 1..16 {
+    // The most open spot, near the middle when several are open enough.
+    let rate = |p: Point2| score(p).min(LABEL_CLEARANCE * 2.0) - p.distance(centroid) * 0.05;
+    let mut best = if inside(centroid) {
+        (rate(centroid), centroid)
+    } else {
+        (f64::MIN, centroid)
+    };
+    if best.0 >= LABEL_CLEARANCE * 2.0 - 1e-9 {
+        return Some(centroid);
+    }
+    for i in 1..24 {
+        for j in 1..24 {
             let p = Point2::new(
-                lo.x + (hi.x - lo.x) * f64::from(i) / 16.0,
-                lo.y + (hi.y - lo.y) * f64::from(j) / 16.0,
+                lo.x + (hi.x - lo.x) * f64::from(i) / 24.0,
+                lo.y + (hi.y - lo.y) * f64::from(j) / 24.0,
             );
             if !inside(p) {
                 continue;
             }
-            // Prefer clear spots, then spots near the middle.
-            let s = score(p).min(LABEL_CLEARANCE * 2.0) - p.distance(centroid) * 0.05;
+            let s = rate(p);
             if s > best.0 {
                 best = (s, p);
             }
