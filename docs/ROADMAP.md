@@ -143,8 +143,12 @@ The core of what makes the editor useful: placing real objects with real dimensi
       loopback (Bearer header or `?token=`), MCP host checks relaxed only then
 - [x] Live updates: `GET /api/events` (SSE revision events)
 - [x] REST commands: `POST /api/commands` applies core commands as one undoable step
-- [ ] Multi-user sessions
-- [ ] Plugin API on top of commands (REST commands and MCP are the foundation)
+- [x] Multi-user sessions: join/presence/leave over REST, `sessions` SSE events, named
+      cursors on the plan and collaborators in the status bar, edits credited per
+      session, stale edits rejected with 409 (`base_revision`); MCP `sessions`
+- [x] Plugin API: `plugin.json` folders run as external programs with the API URL,
+      token and a session of their own (Plugins menu, `/api/plugins`, MCP `plugins`);
+      example `plugins/quadro-areas`
 - [x] i18n: interface in Portuguese or English (Ajuda › Idioma / Language), saved in
       preferences; project data and catalog item names stay as written
 

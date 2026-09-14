@@ -2676,10 +2676,12 @@ dependencies = [
  "newera-catalog",
  "newera-core",
  "newera-draw",
+ "newera-plugins",
  "newera-render",
  "newera-sh3d",
  "rfd",
  "serde",
+ "serde_json",
  "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -2744,6 +2746,7 @@ dependencies = [
  "newera-catalog",
  "newera-core",
  "newera-draw",
+ "newera-plugins",
  "newera-render",
  "newera-sh3d",
  "rmcp",
@@ -2752,6 +2755,15 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-util",
+]
+
+[[package]]
+name = "newera-plugins"
+version = "0.1.0"
+dependencies = [
+ "newera-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2781,6 +2793,7 @@ dependencies = [
  "newera-core",
  "newera-draw",
  "newera-mcp",
+ "newera-plugins",
  "newera-render",
  "serde",
  "serde_json",

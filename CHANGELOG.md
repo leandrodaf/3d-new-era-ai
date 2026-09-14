@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Plugins (external programs over the HTTP API) and multi-user sessions with presence,
+  named cursors on the plan and conflict detection.
+
 - Full editor in the browser on WebGPU (`make web-editor`, `/editor/`).
 
 - Live sun in the 3D view from the compass and hour; labels and dimensions shown in

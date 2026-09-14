@@ -1,0 +1,6 @@
+{
+  "name": "quadro-areas",
+  "title": "Quadro de áreas",
+  "description": "Escreve ao lado da planta um quadro com a área de cada cômodo e o total.",
+  "command": ["python3", "main.py"]
+}

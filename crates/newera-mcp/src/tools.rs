@@ -203,6 +203,15 @@ pub(crate) struct VideoParams {
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct PluginsParams {
+    /// `list` (default) or `run`.
+    action: Option<String>,
+    name: Option<String>,
+    /// Arguments passed to the plugin as JSON.
+    args: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct LevelsParams {
     /// `list` (default), `add`, `select`, `delete`.
     action: Option<String>,
@@ -741,6 +750,59 @@ impl NewEraMcp {
             "rooms": rooms,
         })
         .to_string())
+    }
+
+    #[tool(
+        description = "Plugins (external programs editing through the HTTP API). list (default): rows [name,title,description]. run {name,args?}: {ok,code,stdout,stderr,edits,revision}."
+    )]
+    fn plugins(&self, Parameters(p): Parameters<PluginsParams>) -> Result<String, ErrorData> {
+        let dirs = newera_plugins::plugin_dirs();
+        match p.action.as_deref().unwrap_or("list") {
+            "list" => {
+                let rows: Vec<serde_json::Value> = newera_plugins::discover(&dirs)
+                    .iter()
+                    .map(|p| serde_json::json!([p.name, p.title, p.description]))
+                    .collect();
+                Ok(serde_json::json!({ "rows": rows }).to_string())
+            }
+            "run" => {
+                let name = p
+                    .name
+                    .as_deref()
+                    .ok_or_else(|| invalid("`name` is required"))?;
+                let args = p.args.unwrap_or(serde_json::Value::Null);
+                newera_plugins::run_for_document(&self.document, &dirs, name, &args)
+                    .map(|v| v.to_string())
+                    .map_err(|e| invalid(e.to_string()))
+            }
+            other => Err(invalid(format!("unknown action `{other}`"))),
+        }
+    }
+
+    #[tool(
+        description = "People and agents on this project now: rows [id,name,cursor,selection,edits]."
+    )]
+    fn sessions(&self) -> String {
+        let mut doc = self.document.write();
+        doc.sessions_mut().expire(newera_core::collab::now_ms());
+        let rows: Vec<serde_json::Value> = doc
+            .sessions()
+            .list()
+            .iter()
+            .map(|s| {
+                serde_json::json!([
+                    s.id,
+                    s.name,
+                    s.cursor.map(|c| [compact::num(c.x), compact::num(c.y)]),
+                    s.selection
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>(),
+                    s.edits
+                ])
+            })
+            .collect();
+        serde_json::json!({ "rev": doc.revision(), "rows": rows }).to_string()
     }
 
     #[tool(
@@ -1637,5 +1699,28 @@ mod tests {
         assert!(std::fs::read(&file).unwrap().starts_with(b"RIFF"));
         s.video(Parameters(act("clear"))).unwrap();
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn plugins_and_sessions_tools() {
+        let s = server();
+        let list: serde_json::Value =
+            serde_json::from_str(&s.plugins(Parameters(PluginsParams::default())).unwrap())
+                .unwrap();
+        assert!(list["rows"].is_array());
+        // Without an HTTP server there is nothing for plugins to call back.
+        assert!(
+            s.plugins(Parameters(PluginsParams {
+                action: Some("run".into()),
+                ..PluginsParams::default()
+            }))
+            .is_err()
+        );
+        s.document
+            .write()
+            .sessions_mut()
+            .join("Ana", newera_core::collab::now_ms());
+        let rows: serde_json::Value = serde_json::from_str(&s.sessions()).unwrap();
+        assert_eq!(rows["rows"][0][1], "Ana");
     }
 }

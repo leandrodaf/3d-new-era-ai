@@ -7,7 +7,12 @@
 //! - `GET /api/plan.svg` — floor plan at true scale
 //! - `GET /api/view.png?w=&h=&cam=&yaw=&pitch=` — 3D view (software render)
 //! - `GET /api/events` — server-sent `revision` events when the document changes
-//! - `POST /api/commands` — apply core commands atomically (`{"commands": [...]}`)
+//!   and `sessions` events (the session list) when collaborators come, go or move
+//! - `POST /api/commands` — apply core commands atomically (`{"commands": [...]}`);
+//!   `base_revision` rejects stale edits with 409, `session` credits the edit
+//! - `GET|POST /api/sessions`, `POST|DELETE /api/sessions/{id}` — collaborators:
+//!   join with a name, report cursor/level/selection, leave
+//! - `GET /api/plugins`, `POST /api/plugins/{name}/run` — list and run plugins
 //! - `/mcp` — Model Context Protocol (Streamable HTTP)
 //!
 //! With a token configured, every route except `/health` requires
@@ -41,7 +46,13 @@ struct HomeResponse {
 pub struct ServerOptions {
     /// Shared secret required on every request when set.
     pub token: Option<String>,
+    /// Plugin directories searched before the default ones.
+    pub plugin_dirs: Vec<std::path::PathBuf>,
 }
+
+/// Directories the plugin routes search.
+#[derive(Debug, Clone)]
+struct PluginDirs(std::sync::Arc<Vec<std::path::PathBuf>>);
 
 /// Builds the application router (no authentication).
 pub fn router(document: SharedDocument, addr: SocketAddr, shutdown: CancellationToken) -> Router {
@@ -80,7 +91,22 @@ pub fn router_with(
         .route("/api/view.png", get(view_png))
         .route("/api/events", get(events))
         .route("/api/commands", axum::routing::post(post_commands))
+        .route("/api/sessions", get(get_sessions).post(post_session))
+        .route(
+            "/api/sessions/{id}",
+            axum::routing::post(post_presence).delete(delete_session),
+        )
+        .route("/api/plugins", get(get_plugins))
+        .route("/api/plugins/{name}/run", axum::routing::post(run_plugin))
         .nest_service("/mcp", mcp)
+        .layer(axum::Extension(PluginDirs(std::sync::Arc::new(
+            options
+                .plugin_dirs
+                .iter()
+                .cloned()
+                .chain(newera_plugins::plugin_dirs())
+                .collect(),
+        ))))
         .layer(axum::middleware::from_fn(require_token(
             options.token.clone(),
         )))
@@ -137,7 +163,8 @@ fn require_token(
     }
 }
 
-/// `revision` events whenever the document changes (checked 4× per second).
+/// `revision` events whenever the document changes and `sessions` events
+/// when collaborators change (checked 4× per second).
 async fn events(
     State(document): State<SharedDocument>,
 ) -> axum::response::sse::Sse<
@@ -145,17 +172,33 @@ async fn events(
 > {
     let start = document.read().revision();
     let stream = futures_util::stream::unfold(
-        (document, None::<u64>),
-        move |(document, last)| async move {
-            let mut last = last;
+        (document, None::<u64>, None::<u64>),
+        move |(document, last, last_sessions)| async move {
+            let (mut last, mut last_sessions) = (last, last_sessions);
             loop {
-                let revision = document.read().revision();
+                let (revision, generation, sessions) = {
+                    let mut doc = document.write();
+                    doc.sessions_mut().expire(newera_core::collab::now_ms());
+                    let sessions = doc.sessions();
+                    (
+                        doc.revision(),
+                        sessions.generation(),
+                        sessions.list().to_vec(),
+                    )
+                };
                 if last != Some(revision) {
                     last = Some(revision);
                     let event = axum::response::sse::Event::default()
                         .event("revision")
                         .data(revision.to_string());
-                    return Some((Ok(event), (document, last)));
+                    return Some((Ok(event), (document, last, last_sessions)));
+                }
+                if last_sessions != Some(generation) {
+                    last_sessions = Some(generation);
+                    let event = axum::response::sse::Event::default()
+                        .event("sessions")
+                        .data(serde_json::to_string(&sessions).unwrap_or_default());
+                    return Some((Ok(event), (document, last, last_sessions)));
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(250)).await;
             }
@@ -168,19 +211,161 @@ async fn events(
 #[derive(Debug, serde::Deserialize)]
 struct CommandsBody {
     commands: Vec<newera_core::Command>,
+    /// Revision the client based its edit on; a newer document is a conflict.
+    #[serde(default)]
+    base_revision: Option<u64>,
+    /// Session to credit the edit to.
+    #[serde(default)]
+    session: Option<String>,
 }
+
+type ApiError = (axum::http::StatusCode, String);
 
 /// Applies commands as one undoable step.
 async fn post_commands(
     State(document): State<SharedDocument>,
     Json(body): Json<CommandsBody>,
-) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, String)> {
+) -> Result<Json<serde_json::Value>, ApiError> {
     let mut doc = document.write();
+    if let Some(base) = body.base_revision
+        && base != doc.revision()
+    {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            format!(
+                "the project changed since revision {base} (now {}); reload and retry",
+                doc.revision()
+            ),
+        ));
+    }
     doc.execute(newera_core::Command::Batch {
         commands: body.commands,
     })
     .map_err(|e| (axum::http::StatusCode::UNPROCESSABLE_ENTITY, e.to_string()))?;
-    Ok(Json(serde_json::json!({ "revision": doc.revision() })))
+    let revision = doc.revision();
+    if let Some(session) = &body.session {
+        doc.sessions_mut()
+            .record_edit(session, revision, newera_core::collab::now_ms());
+    }
+    Ok(Json(serde_json::json!({ "revision": revision })))
+}
+
+async fn get_sessions(State(document): State<SharedDocument>) -> Json<serde_json::Value> {
+    let mut doc = document.write();
+    doc.sessions_mut().expire(newera_core::collab::now_ms());
+    Json(serde_json::json!({
+        "revision": doc.revision(),
+        "sessions": doc.sessions().list(),
+    }))
+}
+
+#[derive(Debug, Default, serde::Deserialize)]
+struct JoinBody {
+    #[serde(default)]
+    name: String,
+}
+
+async fn post_session(
+    State(document): State<SharedDocument>,
+    body: Option<Json<JoinBody>>,
+) -> Json<newera_core::collab::Session> {
+    let name = body.map(|b| b.0.name).unwrap_or_default();
+    Json(
+        document
+            .write()
+            .sessions_mut()
+            .join(&name, newera_core::collab::now_ms()),
+    )
+}
+
+#[derive(Debug, Default, serde::Deserialize)]
+struct PresenceBody {
+    #[serde(default)]
+    cursor: Option<newera_core::Point2>,
+    #[serde(default)]
+    level: Option<String>,
+    #[serde(default)]
+    selection: Vec<String>,
+}
+
+async fn post_presence(
+    State(document): State<SharedDocument>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    body: Option<Json<PresenceBody>>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    let body = body.map(|b| b.0).unwrap_or_default();
+    let bad = |e: &dyn std::fmt::Display| (axum::http::StatusCode::BAD_REQUEST, e.to_string());
+    let presence = newera_core::collab::Presence {
+        cursor: body.cursor,
+        level: body
+            .level
+            .as_deref()
+            .map(str::parse)
+            .transpose()
+            .map_err(|e| bad(&e))?,
+        selection: body
+            .selection
+            .iter()
+            .map(|s| s.parse())
+            .collect::<Result<_, _>>()
+            .map_err(|e| bad(&e))?,
+    };
+    if document
+        .write()
+        .sessions_mut()
+        .update(&id, presence, newera_core::collab::now_ms())
+    {
+        Ok(axum::http::StatusCode::NO_CONTENT)
+    } else {
+        Err((
+            axum::http::StatusCode::NOT_FOUND,
+            format!("no session {id}"),
+        ))
+    }
+}
+
+async fn delete_session(
+    State(document): State<SharedDocument>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> axum::http::StatusCode {
+    if document.write().sessions_mut().leave(&id) {
+        axum::http::StatusCode::NO_CONTENT
+    } else {
+        axum::http::StatusCode::NOT_FOUND
+    }
+}
+
+async fn get_plugins(
+    axum::Extension(dirs): axum::Extension<PluginDirs>,
+) -> Json<serde_json::Value> {
+    let plugins = tokio::task::spawn_blocking(move || newera_plugins::discover(&dirs.0))
+        .await
+        .unwrap_or_default();
+    Json(serde_json::json!({ "plugins": plugins }))
+}
+
+/// Runs a plugin (arguments = request body) under its own session.
+async fn run_plugin(
+    State(document): State<SharedDocument>,
+    axum::Extension(dirs): axum::Extension<PluginDirs>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+    body: Option<Json<serde_json::Value>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let args = body.map_or(serde_json::Value::Null, |b| b.0);
+    let output = tokio::task::spawn_blocking(move || {
+        newera_plugins::run_for_document(&document, &dirs.0, &name, &args)
+    })
+    .await
+    .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| {
+        let status = match e {
+            newera_plugins::RunError::NotFound(_) => axum::http::StatusCode::NOT_FOUND,
+            newera_plugins::RunError::NoServer => axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            newera_plugins::RunError::Start(_) => axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        (status, e.to_string())
+    })?;
+    Ok(Json(output))
 }
 
 /// Binds `addr` and serves until `shutdown` is cancelled.
@@ -216,6 +401,19 @@ pub async fn serve_listener_with(
         )));
     }
     tracing::info!("HTTP em http://{local} · MCP em http://{local}/mcp");
+    // Plugins call back through the loopback when the server listens on all
+    // interfaces.
+    let reach = if local.ip().is_unspecified() {
+        SocketAddr::new(std::net::Ipv4Addr::LOCALHOST.into(), local.port())
+    } else {
+        local
+    };
+    document
+        .write()
+        .set_server(Some(newera_core::collab::ServerInfo {
+            url: format!("http://{reach}"),
+            token: options.token.clone(),
+        }));
 
     let app = router_with(document, local, shutdown.clone(), &options);
     axum::serve(listener, app)
@@ -371,6 +569,7 @@ mod tests {
         let document = SharedDocument::default();
         let options = ServerOptions {
             token: Some("s3cret".into()),
+            ..ServerOptions::default()
         };
         let app = router_with(
             document.clone(),
@@ -437,5 +636,189 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
+    }
+
+    async fn call(app: &Router, request: Request<Body>) -> (StatusCode, serde_json::Value) {
+        let response = app.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json = serde_json::from_slice(&bytes)
+            .unwrap_or_else(|_| serde_json::Value::String(String::from_utf8_lossy(&bytes).into()));
+        (status, json)
+    }
+
+    fn post_json(uri: &str, body: &serde_json::Value) -> Request<Body> {
+        Request::post(uri)
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    }
+
+    fn wall_command(id: &str, y: f64) -> serde_json::Value {
+        serde_json::json!({"op": "insert", "element": {"kind": "wall", "id": id, "start": [0, y], "end": [300, y], "thickness": 15, "height": 250}})
+    }
+
+    #[tokio::test]
+    async fn sessions_share_presence_credit_edits_and_reject_stale_ones() {
+        let document = SharedDocument::default();
+        let app = router(document.clone(), DEFAULT_ADDR, CancellationToken::new());
+        let (status, ana) = call(
+            &app,
+            post_json("/api/sessions", &serde_json::json!({"name": "Ana"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (_, bia) = call(
+            &app,
+            post_json("/api/sessions", &serde_json::json!({"name": "Bia"})),
+        )
+        .await;
+        let ana_id = ana["id"].as_str().unwrap().to_owned();
+
+        let presence = serde_json::json!({"cursor": [120, 40], "selection": ["w1"]});
+        let (status, _) = call(
+            &app,
+            post_json(&format!("/api/sessions/{ana_id}"), &presence),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let (status, _) = call(&app, post_json("/api/sessions/s99", &presence)).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        let (status, _) = call(
+            &app,
+            post_json(
+                &format!("/api/sessions/{ana_id}"),
+                &serde_json::json!({"selection": ["nope"]}),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+
+        // Both start from revision 0; Ana's edit lands, Bia's is now stale.
+        let edit = |id: &str, session: &str| serde_json::json!({"commands": [wall_command(id, 0.0)], "base_revision": 0, "session": session});
+        let (status, body) = call(&app, post_json("/api/commands", &edit("w1", &ana_id))).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let (status, _) = call(
+            &app,
+            post_json("/api/commands", &edit("w2", bia["id"].as_str().unwrap())),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(document.read().home().walls.len(), 1);
+
+        let (_, list) = call(
+            &app,
+            Request::get("/api/sessions").body(Body::empty()).unwrap(),
+        )
+        .await;
+        let sessions = list["sessions"].as_array().unwrap();
+        assert_eq!(sessions.len(), 2);
+        assert_eq!(sessions[0]["name"], "Ana");
+        assert_eq!(sessions[0]["cursor"], serde_json::json!([120.0, 40.0]));
+        assert_eq!(sessions[0]["edits"], 1);
+        assert_eq!(sessions[1]["edits"], 0);
+
+        let delete = Request::delete(format!("/api/sessions/{ana_id}"))
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(call(&app, delete).await.0, StatusCode::NO_CONTENT);
+        assert_eq!(document.read().sessions().list().len(), 1);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn plugins_edit_the_home_through_the_api() {
+        let root =
+            std::env::temp_dir().join(format!("newera-server-plugins-{}", std::process::id()));
+        let dir = root.join("parede");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("plugin.json"),
+            r#"{"name":"parede","title":"Parede de teste","command":["sh","run.sh"]}"#,
+        )
+        .unwrap();
+        // A plugin in plain shell: reads its arguments, posts one command.
+        std::fs::write(
+            dir.join("run.sh"),
+            r#"read -r args
+body="{\"session\":\"$NEWERA_SESSION\",\"commands\":[{\"op\":\"insert\",\"element\":{\"kind\":\"wall\",\"id\":\"w9\",\"start\":[0,0],\"end\":[420,0],\"thickness\":15,\"height\":250}}]}"
+curl -sf -H 'content-type: application/json' -d "$body" "$NEWERA_URL/api/commands" >/dev/null || exit 2
+echo "args=$args"
+"#,
+        )
+        .unwrap();
+
+        let document = SharedDocument::default();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let shutdown = CancellationToken::new();
+        let options = ServerOptions {
+            plugin_dirs: vec![root.clone()],
+            ..ServerOptions::default()
+        };
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(serve_listener_with(
+            document.clone(),
+            listener,
+            shutdown.clone(),
+            options,
+        ));
+        let base = format!("http://{addr}");
+        let client = |method: &str, path: &str, body: Option<&str>| {
+            let mut cmd = std::process::Command::new("curl");
+            cmd.args(["-s", "-X", method, &format!("{base}{path}")]);
+            if let Some(body) = body {
+                cmd.args(["-H", "content-type: application/json", "-d", body]);
+            }
+            cmd
+        };
+        // Wait for the server to accept connections.
+        for _ in 0..50 {
+            if client("GET", "/health", None)
+                .output()
+                .is_ok_and(|o| o.stdout == b"ok")
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        let list = tokio::task::spawn_blocking({
+            let mut c = client("GET", "/api/plugins", None);
+            move || c.output().unwrap().stdout
+        })
+        .await
+        .unwrap();
+        let list: serde_json::Value = serde_json::from_slice(&list).unwrap();
+        assert_eq!(list["plugins"][0]["name"], "parede", "{list}");
+
+        let run = tokio::task::spawn_blocking({
+            let mut c = client("POST", "/api/plugins/parede/run", Some(r#"{"n":1}"#));
+            move || c.output().unwrap().stdout
+        })
+        .await
+        .unwrap();
+        let run: serde_json::Value = serde_json::from_slice(&run).unwrap();
+        assert_eq!(run["ok"], true, "{run}");
+        assert_eq!(run["stdout"], "args={\"n\":1}\n");
+        assert_eq!(
+            run["edits"], 1,
+            "the edit is credited to the plugin session"
+        );
+        assert_eq!(document.read().home().walls.len(), 1);
+        assert!(
+            document.read().sessions().list().is_empty(),
+            "its session ends with it"
+        );
+
+        let missing = tokio::task::spawn_blocking({
+            let mut c = client("POST", "/api/plugins/nada/run", None);
+            c.args(["-o", "/dev/null", "-w", "%{http_code}"]);
+            move || c.output().unwrap().stdout
+        })
+        .await
+        .unwrap();
+        assert_eq!(missing, b"404");
+        shutdown.cancel();
+        server.await.unwrap().unwrap();
+        std::fs::remove_dir_all(root).ok();
     }
 }

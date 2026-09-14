@@ -225,3 +225,23 @@ fn english_interface() {
     });
     crate::i18n::set_english(false);
 }
+
+#[test]
+#[ignore = "visual review; needs a GPU"]
+fn collaborators() {
+    let mut doc = Document::default();
+    house(&mut doc, 600.0);
+    let now = newera_core::collab::now_ms();
+    for (name, at) in [("Ana", (150.0, 120.0)), ("Agente IA", (420.0, 330.0))] {
+        let session = doc.sessions_mut().join(name, now);
+        doc.sessions_mut().update(
+            &session.id,
+            newera_core::collab::Presence {
+                cursor: Some(Point2::new(at.0, at.1)),
+                ..Default::default()
+            },
+            now,
+        );
+    }
+    render("collaborators", SharedDocument::new(doc), |_| {});
+}

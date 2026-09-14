@@ -92,6 +92,9 @@ pub(crate) struct NewEraApp {
     )>,
     /// Background top views finished when the plan was last rebuilt.
     top_view_generation: u64,
+    /// A plugin running in the background: `(title, outcome slot)`.
+    #[cfg(not(target_arch = "wasm32"))]
+    plugin_job: Option<(String, PluginSlot)>,
     /// A browser file picker to open on the next frame.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pick_request: Option<crate::files::PickKind>,
@@ -145,6 +148,8 @@ impl NewEraApp {
             video: None,
             top_views: None,
             top_view_generation: 0,
+            #[cfg(not(target_arch = "wasm32"))]
+            plugin_job: None,
             pick_request: None,
             waited_frames: 0,
             catalog_query: String::new(),
@@ -1295,6 +1300,8 @@ impl NewEraApp {
                     ui.radio_value(&mut self.settings.unit, unit, unit.label());
                 }
             });
+            #[cfg(not(target_arch = "wasm32"))]
+            self.plugins_menu(ui);
             ui.menu_button(crate::i18n::tr("Ajuda"), |ui| {
                 ui.menu_button(format!("{} Idioma / Language", icon::TRANSLATE), |ui| {
                     if ui
@@ -1439,6 +1446,23 @@ impl NewEraApp {
                     crate::i18n::tr("MCP desligado")
                 )),
             };
+            let people: Vec<(String, [u8; 3])> = self
+                .document
+                .read()
+                .sessions()
+                .list()
+                .iter()
+                .map(|s| (s.name.clone(), s.color))
+                .collect();
+            if !people.is_empty() {
+                ui.separator();
+                ui.label(format!("{} {}", icon::USERS, people.len()))
+                    .on_hover_ui(|ui| {
+                        for (name, [r, g, b]) in &people {
+                            ui.colored_label(egui::Color32::from_rgb(*r, *g, *b), name);
+                        }
+                    });
+            }
             ui.separator();
             if let Some(p) = self.plan.cursor() {
                 let unit = self.settings.unit;
@@ -1579,6 +1603,113 @@ fn shift_with_new_id(doc: &mut Document, mut element: Element, offset: f64) -> E
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+type PluginSlot = std::sync::Arc<std::sync::Mutex<Option<Result<serde_json::Value, String>>>>;
+
+#[cfg(not(target_arch = "wasm32"))]
+impl NewEraApp {
+    /// Plugins found on disk; running one edits the home through the API.
+    fn plugins_menu(&mut self, ui: &mut egui::Ui) {
+        ui.menu_button(crate::i18n::tr("Plugins"), |ui| {
+            let plugins = newera_plugins::discover(&newera_plugins::plugin_dirs());
+            if plugins.is_empty() {
+                ui.weak(crate::i18n::tr("Nenhum plugin instalado"));
+            }
+            let running = self.plugin_job.is_some();
+            for plugin in plugins {
+                let button =
+                    egui::Button::new(format!("{} {}", icon::PUZZLE_PIECE, plugin.label()));
+                let response = ui.add_enabled(!running, button);
+                let response = if plugin.description.is_empty() {
+                    response
+                } else {
+                    response.on_hover_text(&plugin.description)
+                };
+                if response.clicked() {
+                    self.run_plugin(&plugin);
+                    ui.close();
+                }
+            }
+            ui.separator();
+            ui.weak(format!(
+                "{}: {}",
+                crate::i18n::tr("Pastas"),
+                newera_plugins::plugin_dirs()
+                    .iter()
+                    .map(|d| d.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        });
+    }
+
+    pub(crate) fn run_plugin(&mut self, plugin: &newera_plugins::Plugin) {
+        let slot: PluginSlot = std::sync::Arc::default();
+        let (out, document, name) = (slot.clone(), self.document.clone(), plugin.name.clone());
+        std::thread::spawn(move || {
+            let result = newera_plugins::run_for_document(
+                &document,
+                &newera_plugins::plugin_dirs(),
+                &name,
+                &serde_json::Value::Null,
+            )
+            .map_err(|e| e.to_string());
+            if let Ok(mut guard) = out.lock() {
+                *guard = Some(result);
+            }
+        });
+        self.set_status(format!(
+            "{} {}…",
+            crate::i18n::tr("Rodando"),
+            plugin.label()
+        ));
+        self.plugin_job = Some((plugin.label().to_owned(), slot));
+    }
+
+    /// Reports a finished plugin in the status bar.
+    fn collect_plugin(&mut self) {
+        let Some((title, slot)) = &self.plugin_job else {
+            return;
+        };
+        let Some(result) = slot.lock().ok().and_then(|mut g| g.take()) else {
+            return;
+        };
+        let title = title.clone();
+        self.plugin_job = None;
+        let status = match result {
+            Ok(out) if out["ok"] == true => {
+                let first = out["stdout"]
+                    .as_str()
+                    .unwrap_or("")
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .to_owned();
+                format!(
+                    "{title}: {}",
+                    if first.is_empty() {
+                        crate::i18n::tr("concluído").to_owned()
+                    } else {
+                        first
+                    }
+                )
+            }
+            Ok(out) => {
+                let err = out["stderr"]
+                    .as_str()
+                    .unwrap_or("")
+                    .lines()
+                    .last()
+                    .unwrap_or("")
+                    .to_owned();
+                format!("⚠ {title}: {err}")
+            }
+            Err(err) => format!("⚠ {title}: {err}"),
+        };
+        self.set_status(status);
+    }
+}
+
 #[cfg(target_arch = "wasm32")]
 impl NewEraApp {
     /// Opens requested pickers and loads the files the browser handed over.
@@ -1637,6 +1768,8 @@ impl eframe::App for NewEraApp {
         }
         #[cfg(target_arch = "wasm32")]
         self.web_files(&ctx);
+        #[cfg(not(target_arch = "wasm32"))]
+        self.collect_plugin();
         self.follow_document_camera();
         if self
             .top_views
@@ -1782,6 +1915,53 @@ mod tests {
 
     fn walls(h: &Harness<'_, NewEraApp>) -> Vec<Wall> {
         h.state().document.read().home().walls.clone()
+    }
+
+    #[test]
+    fn collaborators_show_up_and_plugins_report_back() {
+        let mut h = app_with_wall();
+        {
+            let mut doc = h.state().document.write();
+            let ana = doc
+                .sessions_mut()
+                .join("Ana", newera_core::collab::now_ms());
+            doc.sessions_mut().update(
+                &ana.id,
+                newera_core::collab::Presence {
+                    cursor: Some(Point2::new(100.0, 0.0)),
+                    ..Default::default()
+                },
+                newera_core::collab::now_ms(),
+            );
+        }
+        h.run_steps(3);
+        h.get_by_label_contains(&format!("{} 1", icon::USERS));
+
+        // No HTTP server in this test: the plugin can't run and says why.
+        let root = std::env::temp_dir().join(format!("newera-app-plugin-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("p")).unwrap();
+        std::fs::write(
+            root.join("p/plugin.json"),
+            r#"{"name":"p","title":"P","command":["true"]}"#,
+        )
+        .unwrap();
+        let plugin = newera_plugins::load(&root.join("p")).unwrap();
+        h.state_mut().run_plugin(&plugin);
+        for _ in 0..200 {
+            h.run_steps(1);
+            if h.state().plugin_job.is_none() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let status = h
+            .state()
+            .status
+            .as_ref()
+            .map(|(s, _)| s.clone())
+            .unwrap_or_default();
+        assert!(status.starts_with("⚠ P:"), "{status}");
+        std::fs::remove_dir_all(root).ok();
     }
 
     #[test]

@@ -623,6 +623,7 @@ impl PlanView {
         for overlay in &overlays {
             self.paint_overlay(&painter, rect, overlay, input.unit, input.palette);
         }
+        self.paint_collaborators(&painter, rect, input.document, home.current_level());
         if !self.typed_length.is_empty()
             && let Some(p) = raw
         {
@@ -705,6 +706,48 @@ impl PlanView {
                 }
             }
             None => Drag::Box { start: origin },
+        }
+    }
+
+    /// Pointers of the other people and agents on this storey, with names.
+    fn paint_collaborators(
+        &self,
+        painter: &egui::Painter,
+        rect: Rect,
+        document: &SharedDocument,
+        level: Option<newera_core::LevelId>,
+    ) {
+        let doc = document.read();
+        for session in doc.sessions().list() {
+            let Some(cursor) = session.cursor else {
+                continue;
+            };
+            if session.level.is_some() && session.level != level {
+                continue;
+            }
+            let at = self.camera.to_screen(rect, cursor);
+            if !rect.contains(at) {
+                continue;
+            }
+            let [r, g, b] = session.color;
+            let fill = Color32::from_rgb(r, g, b);
+            let arrow = vec![at, at + Vec2::new(0.0, 16.0), at + Vec2::new(11.0, 11.0)];
+            painter.add(egui::Shape::convex_polygon(
+                arrow,
+                fill,
+                Stroke::new(1.0, Color32::WHITE),
+            ));
+            let galley = painter.layout_no_wrap(
+                session.name.clone(),
+                egui::FontId::proportional(11.0),
+                Color32::WHITE,
+            );
+            let tag = Rect::from_min_size(
+                at + Vec2::new(12.0, 14.0),
+                galley.size() + Vec2::new(8.0, 4.0),
+            );
+            painter.rect_filled(tag, 3.0, fill);
+            painter.galley(tag.min + Vec2::new(4.0, 2.0), galley, Color32::WHITE);
         }
     }
 

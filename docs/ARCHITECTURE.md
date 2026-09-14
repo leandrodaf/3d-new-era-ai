@@ -41,8 +41,11 @@ That is what makes these properties hold everywhere, for free:
 | `newera-catalog` | core, tobj, gltf | Parametric furniture: procedural 3D meshes and plan symbols at any size; model import. |
 | `newera-draw` | core, catalog, tiny-skia | Plan scene (styled primitives in cm) and its PNG/SVG backends. |
 | `newera-mcp` | core, draw, rmcp | MCP tools and their token-efficient wire format. |
-| `newera-server` | core, mcp, axum | HTTP transport: REST API and the Streamable HTTP MCP endpoint. |
-| `newera-app` | core, eframe | Desktop editor. Never talks to the network. |
+| `newera-render` | core, catalog | 3D meshes, software renderer, photos, videos, GLB/OBJ export. |
+| `newera-plugins` | core | Plugin discovery and runs: external programs that edit through the HTTP API. |
+| `newera-server` | core, mcp, plugins, axum | HTTP transport: REST API, sessions, plugins and the Streamable HTTP MCP endpoint. |
+| `newera-app` | core, eframe | Desktop editor (also built for the browser). Never talks to the network. |
+| `newera-web`, `newera-editor-web` | core / app | WebAssembly viewer and the full editor in the browser. |
 | `newera` | all | CLI entry point and process wiring. |
 
 Dependencies only point downwards. `newera-core` must stay free of heavy
@@ -137,6 +140,25 @@ The window must own the main thread (a macOS requirement). The binary starts a t
 runtime on a background thread for the HTTP/MCP server, binds the port **before**
 opening the window so a busy port fails loudly, and cancels the server when the
 window closes.
+
+## Collaboration and plugins
+
+Everyone edits the same `Document` through the same commands: the window, MCP
+agents, REST clients and plugins. Collaborators join with `POST /api/sessions`,
+report cursor, storey and selection (`POST /api/sessions/{id}`) and are listed in
+`GET /api/sessions`, on the `sessions` SSE event and as named cursors on the plan.
+Presence lives beside the document: it is never saved and never undone. An edit
+may carry `base_revision` — if someone changed the project since, it is rejected
+with 409 so the client reloads instead of overwriting blindly — and `session`,
+which credits it to that collaborator. Undo history stays shared per variant.
+
+A plugin is a folder with `plugin.json` (`name`, `title`, `description`, `command`)
+in `NEWERA_PLUGINS` or `<config>/3d-new-era-ai/plugins`. Running it (Plugins menu,
+`POST /api/plugins/{name}/run`, MCP `plugins`) starts the command with
+`NEWERA_URL`, `NEWERA_TOKEN` and `NEWERA_SESSION`, arguments as JSON on stdin; the
+program reads and edits through the public API like any other client, under its
+own session, and its output is returned. `plugins/quadro-areas` is an example in
+plain Python.
 
 ## Security
 

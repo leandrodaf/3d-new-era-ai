@@ -55,6 +55,10 @@ pub struct Document {
     /// Directory relative asset paths resolve against, when it isn't the
     /// project file's directory (unpacked bundles, fresh imports).
     asset_dir: Option<PathBuf>,
+    /// People and agents working on it right now (not saved, not undoable).
+    sessions: crate::collab::Sessions,
+    /// The HTTP API serving this document, when one runs.
+    server: Option<crate::collab::ServerInfo>,
 }
 
 impl Default for Document {
@@ -74,7 +78,25 @@ impl Document {
             saved_revision: 0,
             path: None,
             asset_dir: None,
+            sessions: crate::collab::Sessions::default(),
+            server: None,
         }
+    }
+
+    pub fn sessions(&self) -> &crate::collab::Sessions {
+        &self.sessions
+    }
+
+    pub fn sessions_mut(&mut self) -> &mut crate::collab::Sessions {
+        &mut self.sessions
+    }
+
+    pub fn server(&self) -> Option<&crate::collab::ServerInfo> {
+        self.server.as_ref()
+    }
+
+    pub fn set_server(&mut self, server: Option<crate::collab::ServerInfo>) {
+        self.server = server;
     }
 
     fn current(&self) -> &Variant {

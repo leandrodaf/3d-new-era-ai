@@ -116,7 +116,10 @@ async fn serve_until_ctrl_c(
         document,
         listener,
         shutdown,
-        newera_server::ServerOptions { token },
+        newera_server::ServerOptions {
+            token,
+            ..Default::default()
+        },
     )
     .await
     .with_context(|| format!("HTTP server failed on {addr}"))
@@ -148,7 +151,10 @@ fn run_gui(
 
         let (doc, token, access) = (document.clone(), shutdown.clone(), token.map(str::to_owned));
         server_thread = Some(std::thread::spawn(move || {
-            let options = newera_server::ServerOptions { token: access };
+            let options = newera_server::ServerOptions {
+                token: access,
+                ..Default::default()
+            };
             if let Err(err) = runtime.block_on(newera_server::serve_listener_with(
                 doc, listener, token, options,
             )) {
