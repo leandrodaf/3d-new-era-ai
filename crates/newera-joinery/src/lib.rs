@@ -30,7 +30,7 @@ mod slats;
 mod sofa;
 mod wall;
 
-pub use cabinet::{CabinetParams, DoorType, Niche};
+pub use cabinet::{CabinetParams, DoorType, HandleColor, HandleStyle, Niche};
 pub use ceiling::{CoveParams, CoveType, ShadowGapParams};
 pub use countertop::{CountertopParams, Cutout, CutoutKind, Support};
 pub use cutlist::{CutRow, cut_list, cut_list_csv, cut_list_dxf, cut_list_svg};

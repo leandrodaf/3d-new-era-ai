@@ -9,13 +9,77 @@ use crate::camera::View;
 use crate::mesh::Mesh;
 use crate::raster::{Images, detail};
 
-/// A small spherical light (a lamp's source).
+/// A light source: a small sphere shining in every direction or as a spot
+/// pointing down, or a flat panel facing down.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PointLight {
     pub position: Vec3,
-    /// Radiant intensity per color channel.
+    /// Peak intensity per color channel (scene units per steradian); for
+    /// panels, the radiance of their surface.
     pub intensity: Vec3,
     pub radius: f32,
+    /// Spots: angle off straight down where intensity halves, radians; 0
+    /// for light in every direction.
+    pub half_angle: f32,
+    /// Panels: half extents along the ceiling (normal pointing down).
+    pub panel: Option<(Vec3, Vec3)>,
+    /// Geometry this close to the source (its own shade or reflector) doesn't
+    /// block it, m.
+    pub clearance: f32,
+}
+
+impl PointLight {
+    /// Intensity toward the unit direction `dir` leaving the light.
+    fn toward(&self, dir: Vec3) -> Vec3 {
+        if self.panel.is_some() {
+            return self.intensity * (-dir.y).max(0.0);
+        }
+        if self.half_angle <= 0.0 {
+            return self.intensity;
+        }
+        let cos = -dir.y;
+        if cos <= 0.0 {
+            return Vec3::ZERO;
+        }
+        let theta = cos.min(1.0).acos();
+        self.intensity * (-std::f32::consts::LN_2 * (theta / self.half_angle).powi(2)).exp()
+    }
+
+    /// How much it could light a point `d2` m² away (for picking one).
+    fn weight(&self, d2: f32) -> f32 {
+        let area = self
+            .panel
+            .map_or(1.0, |(u, v)| 4.0 * u.length() * v.length());
+        luminance(self.intensity) * area / d2.max(0.04)
+    }
+
+    /// Where a camera ray meets its glowing surface, and the radiance seen.
+    fn seen(&self, origin: Vec3, dir: Vec3) -> Option<(f32, Vec3)> {
+        if let Some((u, v)) = self.panel {
+            if dir.y >= 0.0 || origin.y <= self.position.y {
+                return None;
+            }
+            let t = (self.position.y - origin.y) / dir.y;
+            let offset = origin + dir * t - self.position;
+            let (a, b) = (
+                offset.dot(u) / u.length_squared(),
+                offset.dot(v) / v.length_squared(),
+            );
+            return (t > 0.0 && a.abs() <= 1.0 && b.abs() <= 1.0).then_some((t, self.intensity));
+        }
+        let oc = origin - self.position;
+        let b = oc.dot(dir);
+        let c = oc.length_squared() - self.radius * self.radius;
+        let disc = b * b - c;
+        if disc < 0.0 {
+            return None;
+        }
+        let t = -b - disc.sqrt();
+        (t > 0.0).then(|| {
+            let area = std::f32::consts::PI * self.radius * self.radius;
+            (t, self.toward(-dir) / area.max(1e-6))
+        })
+    }
 }
 
 /// The thread-shareable part of the options.
@@ -331,6 +395,20 @@ fn hemisphere(n: Vec3, rng: &mut Rng) -> Vec3 {
     (t * x + b * y + n * z).normalize()
 }
 
+/// Transparent surfaces at most this opaque are clear glass (window glass is
+/// 0.35): rays always cross them.
+const CLEAR_GLASS_ALPHA: f32 = 0.5;
+
+/// A tent-distributed offset in -1..1 from a uniform number.
+fn tent(r: f32) -> f32 {
+    let r = 2.0 * r;
+    if r < 1.0 {
+        r.sqrt() - 1.0
+    } else {
+        1.0 - (2.0 - r).sqrt()
+    }
+}
+
 fn aces(x: Vec3) -> Vec3 {
     let (a, b, c, d, e) = (2.51, 0.03, 2.43, 0.59, 0.14);
     ((x * (x * a + b)) / (x * (x * c + d) + e)).clamp(Vec3::ZERO, Vec3::ONE)
@@ -362,7 +440,29 @@ fn radiance(
     let mut depth = 0;
     let mut pass_through = 0;
     loop {
-        let Some((t, k, u, v)) = scene.intersect(origin, dir, 1e4) else {
+        let hit = scene.intersect(origin, dir, 1e4);
+        // Lamps seen straight from the camera glow; a lens or diffuser just
+        // in front of the source counts as the source.
+        if depth == 0 {
+            let nearest = options
+                .lights
+                .iter()
+                .filter_map(|l| l.seen(origin, dir))
+                .min_by(|a, b| a.0.total_cmp(&b.0));
+            if let Some((t_light, glow)) = nearest
+                && hit.is_none_or(|h| t_light <= h.0 + 0.02)
+            {
+                if first.is_none() {
+                    *first = Some(Surface {
+                        albedo: Vec3::ONE,
+                        normal: -dir,
+                        depth: t_light,
+                    });
+                }
+                return total + throughput * glow;
+            }
+        }
+        let Some((t, k, u, v)) = hit else {
             let sun_disc = options.sun.map_or(Vec3::ZERO, |(sun_dir, sun)| {
                 if depth == 0 && dir.dot(sun_dir) > 0.9995 {
                     sun * 0.02
@@ -404,8 +504,28 @@ fn radiance(
         let base = (color.truncate() * to_linear(detail(va.kind, uv, 0.002, &scene.images)))
             .min(Vec3::splat(0.95));
 
-        // Glass lets light through.
-        if scene.transparent[k] && pass_through < 6 && rng.next() > color.w.clamp(0.0, 1.0) * 0.6 {
+        // Clear glass lets light through on every sample, reflecting some
+        // sky (Schlick, F0 = 0.04): picking between surface and
+        // see-through at random left windows full of white dots.
+        let alpha = color.w.clamp(0.0, 1.0);
+        if scene.transparent[k] && pass_through < 6 && alpha <= CLEAR_GLASS_ALPHA {
+            let fresnel = 0.04 + 0.96 * (1.0 - normal.dot(-dir).abs()).powi(5);
+            // Only where the mirror image is open sky: glass inside a room
+            // reflects the room, which is dim next to the sky.
+            let mirror = dir - normal * 2.0 * dir.dot(normal);
+            if scene
+                .intersect(point + mirror * 1e-3, mirror, 1e4)
+                .is_none()
+            {
+                total += throughput * options.sky * fresnel;
+            }
+            origin = point + dir * 1e-3;
+            throughput *= Vec3::ONE.lerp(base, 0.15 + alpha * 0.3) * (1.0 - fresnel);
+            pass_through += 1;
+            continue;
+        }
+        // Frosted or tinted panels: seen as a surface part of the time.
+        if scene.transparent[k] && pass_through < 6 && rng.next() > alpha * 0.6 {
             origin = point + dir * 1e-3;
             throughput *= Vec3::ONE.lerp(base, 0.15);
             pass_through += 1;
@@ -435,10 +555,10 @@ fn radiance(
             .iter()
             .map(|l| {
                 let to = l.position - at;
-                if normal.dot(to) <= 0.0 {
+                if normal.dot(to) <= 0.0 && l.panel.is_none() {
                     0.0
                 } else {
-                    luminance(l.intensity) / to.length_squared().max(0.04)
+                    l.weight(to.length_squared())
                 }
             })
             .collect();
@@ -455,17 +575,28 @@ fn radiance(
             }
             let probability = weights[pick] / weight_sum;
             let light = options.lights[pick];
-            let jitter = hemisphere(Vec3::Y, rng) * light.radius;
-            let to_light = light.position + jitter - at;
+            // A point on the panel, or on the bulb.
+            let (source, area) = match light.panel {
+                Some((u, v)) => (
+                    light.position + u * (rng.next() * 2.0 - 1.0) + v * (rng.next() * 2.0 - 1.0),
+                    4.0 * u.length() * v.length(),
+                ),
+                None => (
+                    light.position + hemisphere(Vec3::Y, rng) * light.radius,
+                    1.0,
+                ),
+            };
+            let to_light = source - at;
             let distance = to_light.length();
             let l = to_light / distance.max(1e-4);
             let cos = normal.dot(l);
             if cos > 0.0 {
-                let visible = scene.transmittance(at, l, (distance - light.radius).max(0.0));
+                let reach = (distance - light.radius.max(light.clearance)).max(0.0);
+                let visible = scene.transmittance(at, l, reach);
                 total += throughput
                     * base
-                    * light.intensity
-                    * (cos * visible
+                    * light.toward(-l)
+                    * (cos * area * visible
                         / probability.max(1e-6)
                         / (distance * distance).max(0.04)
                         / std::f32::consts::PI);
@@ -538,12 +669,37 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
         lights: options.lights.clone(),
     };
     let (eye, exposure) = (options.view.eye, options.exposure);
+    // Where the final exposure will land, from a coarse grid of rays: samples
+    // are averaged after squeezing their brightness at that exposure (and
+    // expanded back), so one bright sky or lamp sample can't take over a
+    // pixel on an edge and bring the staircase back.
+    let squeeze = {
+        let mut rng = Rng(0x5EED_1234_ABCD_0001);
+        let (gw, gh) = (24usize, 18usize);
+        let mut log_sum = 0.0f32;
+        for gy in 0..gh {
+            for gx in 0..gw {
+                let sx = ((gx as f32 + 0.5) / gw as f32 * 2.0 - 1.0) * tan * aspect;
+                let sy = (1.0 - (gy as f32 + 0.5) / gh as f32 * 2.0) * tan;
+                let dir = (forward + right * sx + up * sy).normalize();
+                let value = radiance(&scene, &lighting, eye, dir, &mut rng, &mut None);
+                let value = if value.is_finite() {
+                    value.min(Vec3::splat(20.0))
+                } else {
+                    Vec3::ZERO
+                };
+                log_sum += (luminance(value) + 1e-4).ln();
+            }
+        }
+        let auto = (AUTO_EXPOSURE_KEY / (log_sum / (gw * gh) as f32).exp()).clamp(0.3, 4000.0);
+        exposure * auto
+    };
     let mut pixels = vec![(Vec3::ZERO, Surface::default()); w * h];
     // Browsers (wasm32) have no threads: work on the calling one there.
     let threads = if cfg!(target_arch = "wasm32") {
         1
     } else {
-        std::thread::available_parallelism().map_or(4, std::num::NonZero::get)
+        render_threads()
     };
     let rows_per = h.div_ceil(threads);
     let work = |chunk_index: usize, chunk: &mut [(Vec3, Surface)]| {
@@ -557,14 +713,17 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
                     let mut sum = Vec3::ZERO;
                     let mut surface = Surface::default();
                     for _ in 0..samples {
-                        let sx = ((x as f32 + rng.next()) / w as f32 * 2.0 - 1.0) * tan * aspect;
-                        let sy = (1.0 - (y as f32 + rng.next()) / h as f32 * 2.0) * tan;
+                        // Tent filter over neighboring pixels: smooth edges.
+                        let (jx, jy) = (0.5 + tent(rng.next()), 0.5 + tent(rng.next()));
+                        let sx = ((x as f32 + jx) / w as f32 * 2.0 - 1.0) * tan * aspect;
+                        let sy = (1.0 - (y as f32 + jy) / h as f32 * 2.0) * tan;
                         let dir = (forward + right * sx + up * sy).normalize();
                         let mut first = None;
                         let value = radiance(scene, lighting, eye, dir, &mut rng, &mut first);
                         // Clamp fireflies from rare paths; a broken sample adds nothing.
                         if value.is_finite() {
-                            sum += value.min(Vec3::splat(20.0));
+                            let value = value.min(Vec3::splat(20.0));
+                            sum += value / (1.0 + luminance(value) * squeeze);
                         }
                         let f = first.unwrap_or_default();
                         surface.albedo += f.albedo;
@@ -572,8 +731,9 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
                         surface.depth += f.depth;
                     }
                     let n = samples as f32;
+                    let squeezed = sum / n;
                     *pixel = (
-                        sum / n,
+                        squeezed / (1.0 - luminance(squeezed) * squeeze).max(0.05),
                         Surface {
                             albedo: surface.albedo / n,
                             normal: surface.normal.normalize_or_zero(),
@@ -595,7 +755,8 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
         });
     }
 
-    let denoised = denoise(&pixels, w, h);
+    let mut denoised = denoise(&pixels, w, h);
+    white_balance(&mut denoised, WHITE_BALANCE);
     // Auto exposure: bring the scene's average brightness to a middle tone
     // (calibrated against Sweet Home 3D photos of the same cameras).
     let log_mean = denoised
@@ -603,7 +764,7 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
         .map(|c| (luminance(*c) + 1e-4).ln())
         .sum::<f32>()
         / denoised.len().max(1) as f32;
-    let auto = (AUTO_EXPOSURE_KEY / log_mean.exp()).clamp(0.3, 30.0);
+    let auto = (AUTO_EXPOSURE_KEY / log_mean.exp()).clamp(0.3, 4000.0);
     let mut image = RgbaImage::new(w as u32, h as u32);
     for (i, value) in denoised.iter().enumerate() {
         let mapped = aces(*value * exposure * auto).powf(1.0 / 2.2) * 255.0;
@@ -614,6 +775,58 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
         );
     }
     image
+}
+
+/// Worker threads for a photo: `NEWERA_RENDER_THREADS` when set, otherwise
+/// half the cores. Every core flat out for minutes has tripped a desktop's
+/// power protection, and the machine stays usable while it renders.
+fn render_threads() -> usize {
+    std::env::var("NEWERA_RENDER_THREADS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism().map_or(4, std::num::NonZero::get) / 2
+        })
+        .max(1)
+}
+
+/// How far photos are pulled toward neutral (0 none, 1 full gray world):
+/// halfway keeps warm lamps warm but stops daylight rooms with 3000 K
+/// downlights on from turning orange, as a camera's auto white balance does.
+const WHITE_BALANCE: f32 = 0.5;
+
+/// Gray-world white balance: channel gains that make the scene's average
+/// color neutral, raised to `strength` and keeping luminance. Very bright
+/// pixels (sky through windows, lamp glow) don't vote.
+#[allow(clippy::cast_precision_loss)]
+fn white_balance(pixels: &mut [Vec3], strength: f32) {
+    let mean_lum = pixels.iter().map(|c| luminance(*c)).sum::<f32>() / pixels.len().max(1) as f32;
+    let cap = mean_lum * 4.0;
+    let (sum, count) = pixels
+        .iter()
+        .filter(|c| c.is_finite() && luminance(**c) <= cap)
+        .fold((Vec3::ZERO, 0usize), |(s, n), c| (s + *c, n + 1));
+    if count == 0 || strength <= 0.0 {
+        return;
+    }
+    let average = sum / count as f32;
+    let lum = luminance(average);
+    if lum <= 1e-8 || average.min_element() <= 1e-8 {
+        return;
+    }
+    let raw = Vec3::splat(lum) / average;
+    let gains = Vec3::new(
+        raw.x.powf(strength),
+        raw.y.powf(strength),
+        raw.z.powf(strength),
+    )
+    .clamp(Vec3::splat(0.5), Vec3::splat(2.0));
+    // Same brightness after the gains.
+    let gains = gains * (lum / luminance(average * gains).max(1e-8));
+    for c in pixels.iter_mut() {
+        *c *= gains;
+    }
 }
 
 /// Edge-aware à-trous filter on lighting (radiance divided by albedo), so
@@ -679,6 +892,23 @@ fn denoise(pixels: &[(Vec3, Surface)], w: usize, h: usize) -> Vec<Vec3> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn white_balance_pulls_an_orange_room_halfway_to_neutral() {
+        let orange = Vec3::new(0.9, 0.55, 0.3);
+        let mut pixels = vec![orange; 64];
+        // A blown-out window doesn't count.
+        pixels[0] = Vec3::splat(50.0);
+        white_balance(&mut pixels, 0.5);
+        let c = pixels[10];
+        let ratio = |v: Vec3| v.x / v.z;
+        assert!(ratio(c) < ratio(orange) && ratio(c) > 1.2, "{c:?}");
+        assert!((luminance(c) - luminance(orange)).abs() < 1e-3, "{c:?}");
+        let mut full = vec![orange; 8];
+        white_balance(&mut full, 1.0);
+        // Gains are capped at 2×, so blue lands a hair short.
+        assert!((full[0].x - full[0].z).abs() < 0.02, "{:?}", full[0]);
+    }
 
     #[test]
     fn noon_sun_is_high_and_midnight_below_the_horizon() {

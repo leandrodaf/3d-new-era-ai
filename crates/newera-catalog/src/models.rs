@@ -36,6 +36,20 @@ impl Ctx {
         }
     }
 
+    /// Straight leg (or post) from the floor, tapering from `size[0]` at the
+    /// bottom to `size[1]` at `top`.
+    fn leg(&mut self, x: f64, z: f64, top: f64, size: [f64; 2], color: Rgb) {
+        let square = |s: f64| [[x - s / 2.0, x + s / 2.0], [z - s / 2.0, z + s / 2.0]];
+        prism(
+            &mut self.m,
+            Place::HOME,
+            [0.0, top],
+            square(size[0]),
+            square(size[1]),
+            color,
+        );
+    }
+
     fn handle(&mut self, x: f64, y: f64, z: f64, vertical: bool) {
         let (w, h) = if vertical { (1.5, 14.0) } else { (12.0, 1.5) };
         self.cube(
@@ -45,6 +59,63 @@ impl Ctx {
             rgb(METAL),
         );
     }
+}
+
+/// Horizontal rectangle `[x0, x1], [z0, z1]` in a piece's local frame.
+type Span = [[f64; 2]; 2];
+
+/// Where a sub-part (a chair of a dining set) sits: its center on the floor,
+/// and whether it is turned half around so its front faces −z.
+#[derive(Clone, Copy)]
+struct Place {
+    x: f64,
+    z: f64,
+    turned: bool,
+}
+
+impl Place {
+    const HOME: Self = Self {
+        x: 0.0,
+        z: 0.0,
+        turned: false,
+    };
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn at(self, p: [f64; 3]) -> [f32; 3] {
+        let s = if self.turned { -1.0 } else { 1.0 };
+        [
+            (self.x + s * p[0]) as f32,
+            p[1] as f32,
+            (self.z + s * p[2]) as f32,
+        ]
+    }
+}
+
+/// Box whose bottom face is `lo` and top face is `hi`, from `y[0]` to
+/// `y[1]`. Different spans taper (legs) or shear it (leaning backrests,
+/// stringers); every face stays planar since its edges run along x or z.
+fn prism(m: &mut Mesh, place: Place, y: [f64; 2], lo: Span, hi: Span, color: Rgb) {
+    let ring = |s: Span, y: f64| {
+        [
+            [s[0][0], y, s[1][0]],
+            [s[0][1], y, s[1][0]],
+            [s[0][1], y, s[1][1]],
+            [s[0][0], y, s[1][1]],
+        ]
+        .map(|p| place.at(p))
+    };
+    let (b, t) = (ring(lo, y[0]), ring(hi, y[1]));
+    m.polygon(&[b[3], b[2], t[2], t[3]], color); // front +z
+    m.polygon(&[b[1], b[0], t[0], t[1]], color); // back -z
+    m.polygon(&[b[2], b[1], t[1], t[2]], color); // right +x
+    m.polygon(&[b[0], b[3], t[3], t[0]], color); // left -x
+    m.polygon(&[t[3], t[2], t[1], t[0]], shade(color, 0.06)); // top
+    m.polygon(&[b[0], b[1], b[2], b[3]], shade(color, -0.2)); // bottom
+}
+
+/// Upright box in a [`Place`]'s frame.
+fn part(m: &mut Mesh, place: Place, x: [f64; 2], y: [f64; 2], z: [f64; 2], color: Rgb) {
+    prism(m, place, y, [x, z], [x, z], color);
 }
 
 pub(crate) fn build(model: Model, piece: &Furniture, color: Rgb) -> Mesh {
@@ -152,52 +223,77 @@ fn sofa(ctx: &mut Ctx, seats: u8) {
     let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
     let arm = (w * 0.1).clamp(10.0, 22.0);
     let back = (d * 0.22).clamp(12.0, 25.0);
-    let feet = (h * 0.1).min(8.0);
+    let feet = (h * 0.11).min(10.0);
     let seat_top = h * 0.5;
-    // Base and feet.
-    ctx.legs(4.0, feet, 5.0, rgb(DARK));
+    let arm_top = h * 0.68;
+    // Slim tapered feet lift the whole body off the floor.
+    let (fx, fz) = (w / 2.0 - 6.0, d / 2.0 - 6.0);
+    for (sx, sz) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+        ctx.leg(sx * fx, sz * fz, feet, [3.2, 4.8], rgb(DARK));
+    }
     ctx.cube(
-        [-w / 2.0, w / 2.0],
+        [-w / 2.0 + arm, w / 2.0 - arm],
         [feet, seat_top - 12.0],
-        [-d / 2.0, d / 2.0],
+        [-d / 2.0 + back, d / 2.0 - 1.0],
         shade(c, -0.15),
     );
-    // Backrest and armrests.
+    // Backrest and armrests, each with a narrower cap so the top edges read
+    // as rounded upholstery rather than a sharp slab.
+    let cap = 4.0;
     ctx.cube(
         [-w / 2.0, w / 2.0],
-        [feet, h],
+        [feet, h - cap],
         [-d / 2.0, -d / 2.0 + back],
         c,
     );
     ctx.cube(
-        [-w / 2.0, -w / 2.0 + arm],
-        [feet, h * 0.68],
-        [-d / 2.0, d / 2.0],
+        [-w / 2.0 + 1.5, w / 2.0 - 1.5],
+        [h - cap, h],
+        [-d / 2.0 + 1.5, -d / 2.0 + back - 1.5],
         c,
     );
-    ctx.cube(
-        [w / 2.0 - arm, w / 2.0],
-        [feet, h * 0.68],
-        [-d / 2.0, d / 2.0],
-        c,
-    );
-    // Seat cushions with small gaps, and back cushions.
+    for x0 in [-w / 2.0, w / 2.0 - arm] {
+        ctx.cube(
+            [x0, x0 + arm],
+            [feet, arm_top - cap],
+            [-d / 2.0, d / 2.0],
+            c,
+        );
+        ctx.cube(
+            [x0 + 1.5, x0 + arm - 1.5],
+            [arm_top - cap, arm_top],
+            [-d / 2.0 + back - 1.0, d / 2.0 - 1.5],
+            c,
+        );
+    }
+    // Separate seat cushions with a softened top layer, and back cushions
+    // leaning slightly into the backrest.
     let n = f64::from(seats.max(1));
     let inner = w - 2.0 * arm;
     let slot = inner / n;
     for i in 0..seats.max(1) {
         let x0 = -w / 2.0 + arm + f64::from(i) * slot + 0.8;
         let x1 = x0 + slot - 1.6;
+        let front = d / 2.0 - 2.0;
         ctx.cube(
             [x0, x1],
-            [seat_top - 12.0, seat_top],
-            [-d / 2.0 + back, d / 2.0 - 2.0],
+            [seat_top - 12.0, seat_top - 2.0],
+            [-d / 2.0 + back, front],
             shade(c, 0.08),
         );
         ctx.cube(
-            [x0, x1],
-            [seat_top, h * 0.92],
-            [-d / 2.0 + back, -d / 2.0 + back + 12.0],
+            [x0 + 1.2, x1 - 1.2],
+            [seat_top - 2.0, seat_top],
+            [-d / 2.0 + back, front - 1.2],
+            shade(c, 0.08),
+        );
+        let z = -d / 2.0 + back;
+        prism(
+            &mut ctx.m,
+            Place::HOME,
+            [seat_top, h * 0.9],
+            [[x0, x1], [z, z + 14.0]],
+            [[x0 + 1.0, x1 - 1.0], [z - 3.0, z + 9.0]],
             shade(c, 0.12),
         );
     }
@@ -207,20 +303,43 @@ fn bed(ctx: &mut Ctx, pillows: u8) {
     let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
     let head = (d * 0.04).clamp(4.0, 8.0);
     let frame_top = h * 0.45;
+    let plinth = (frame_top * 0.35).min(10.0);
+    // A recessed plinth leaves a shadow gap under the frame.
+    ctx.cube(
+        [-w / 2.0 + 8.0, w / 2.0 - 8.0],
+        [0.0, plinth],
+        [-d / 2.0 + head, d / 2.0 - 8.0],
+        rgb([70, 52, 40]),
+    );
     ctx.cube(
         [-w / 2.0, w / 2.0],
-        [0.0, frame_top],
+        [plinth, frame_top],
         [-d / 2.0, d / 2.0],
         rgb([150, 110, 80]),
     );
-    // Headboard rises to the full height at the back.
+    // Headboard rises to the full height at the back, with an upholstered
+    // panel on its face.
+    let headboard = rgb([130, 95, 68]);
     ctx.cube(
         [-w / 2.0, w / 2.0],
         [0.0, h],
         [-d / 2.0, -d / 2.0 + head],
-        rgb([130, 95, 68]),
+        headboard,
     );
     let mattress_top = h * 0.82;
+    ctx.cube(
+        [-w / 2.0 + 6.0, w / 2.0 - 6.0],
+        [mattress_top - 4.0, h - 5.0],
+        [-d / 2.0 + head, -d / 2.0 + head + 2.5],
+        shade(headboard, 0.15),
+    );
+    // Folded-back edge of the duvet.
+    ctx.cube(
+        [-w / 2.0 + 1.0, w / 2.0 - 1.0],
+        [mattress_top - 6.0, mattress_top + 5.0],
+        [-d / 2.0 + d * 0.33, -d / 2.0 + d * 0.33 + 14.0],
+        shade(c, 0.1),
+    );
     ctx.cube(
         [-w / 2.0 + 2.0, w / 2.0 - 2.0],
         [frame_top, mattress_top],
@@ -249,60 +368,170 @@ fn bed(ctx: &mut Ctx, pillows: u8) {
 
 fn table(ctx: &mut Ctx, round: bool) {
     let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
-    let top = 3.5_f64.min(h * 0.1);
+    let top = 3.0_f64.min(h * 0.08);
     if round {
         ctx.m
             .frustum([0.0, h - top, 0.0], Axis::Y, top, w / 2.0, w / 2.0, 40, c);
-        ctx.m.cylinder(
-            [0.0, 0.0, 0.0],
+        // Recessed skirt, slim tapering pedestal and a low base disc.
+        let skirt = 5.0_f64.min(h * 0.1);
+        ctx.m.frustum(
+            [0.0, h - top - skirt, 0.0],
             Axis::Y,
-            h - top,
-            (w * 0.06).max(3.0),
+            skirt,
+            w * 0.4,
+            w * 0.4,
+            32,
+            shade(c, -0.1),
+        );
+        let r = (w * 0.05).max(2.5);
+        ctx.m.frustum(
+            [0.0, 2.5, 0.0],
+            Axis::Y,
+            h - top - skirt - 2.5,
+            r,
+            r * 0.7,
+            16,
             shade(c, -0.2),
         );
         ctx.m.frustum(
             [0.0, 0.0, 0.0],
             Axis::Y,
-            3.0,
+            2.5,
             w * 0.25,
             w * 0.22,
             28,
             shade(c, -0.25),
         );
     } else {
-        ctx.cube([-w / 2.0, w / 2.0], [h - top, h], [-d / 2.0, d / 2.0], c);
-        ctx.legs(5.0, h - top, 6.0, shade(c, -0.2));
+        table_frame(ctx, [0.0, 0.0], [w, d], h, c);
+        // Low tables (coffee tables) get a shelf between the legs.
+        if h < 55.0 {
+            let inset = (w.min(d) * 0.04).clamp(2.0, 5.0) + 2.0;
+            ctx.cube(
+                [-w / 2.0 + inset, w / 2.0 - inset],
+                [h * 0.2, h * 0.2 + 2.0],
+                [-d / 2.0 + inset, d / 2.0 - inset],
+                shade(c, -0.05),
+            );
+        }
+    }
+}
+
+/// Rectangular table centered at `center`: a 3 cm top over an apron and
+/// four slim tapered legs.
+fn table_frame(ctx: &mut Ctx, center: [f64; 2], size: [f64; 2], h: f64, c: Rgb) {
+    let ([cx, cz], [w, d]) = (center, size);
+    let top = 3.0_f64.min(h * 0.08);
+    ctx.cube(
+        [cx - w / 2.0, cx + w / 2.0],
+        [h - top, h],
+        [cz - d / 2.0, cz + d / 2.0],
+        c,
+    );
+    let leg = (w.min(d) * 0.06).clamp(3.5, 6.0);
+    let inset = (w.min(d) * 0.04).clamp(2.0, 5.0);
+    let (lx, lz) = (w / 2.0 - inset - leg / 2.0, d / 2.0 - inset - leg / 2.0);
+    let wood = shade(c, -0.12);
+    for (sx, sz) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+        ctx.leg(cx + sx * lx, cz + sz * lz, h - top, [leg * 0.7, leg], wood);
+    }
+    // Apron rails set just behind the outer faces of the legs.
+    let apron = [h - top - 8.0_f64.min(h * 0.15), h - top];
+    let (ox, oz) = (lx + leg / 2.0 - 0.6, lz + leg / 2.0 - 0.6);
+    for s in [-1.0, 1.0] {
+        let z = cz + s * oz;
+        ctx.cube(
+            [cx - lx, cx + lx],
+            apron,
+            [z.min(z - s * 2.0), z.max(z - s * 2.0)],
+            wood,
+        );
+        let x = cx + s * ox;
+        ctx.cube(
+            [x.min(x - s * 2.0), x.max(x - s * 2.0)],
+            apron,
+            [cz - lz, cz + lz],
+            wood,
+        );
     }
 }
 
 fn chair(ctx: &mut Ctx) {
     let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
-    let seat = h * 0.5;
-    ctx.legs(1.0, seat - 4.0, 4.0, shade(c, -0.2));
-    ctx.cube(
+    let seat = 45.0_f64.min(h * 0.52);
+    chair_at(&mut ctx.m, Place::HOME, [w, d, h], seat, c, shade(c, 0.12));
+}
+
+/// Contemporary dining chair filling `[w, d, h]` around `place`, front
+/// towards +z: four slim legs, a seat board under a thin cushion, apron
+/// rails, and a backrest panel held above the seat by rear posts that lean
+/// back slightly.
+fn chair_at(m: &mut Mesh, place: Place, size: [f64; 3], seat: f64, wood: Rgb, cushion: Rgb) {
+    let [w, d, h] = size;
+    let leg = 3.2_f64.min(w * 0.08);
+    let inset = 1.5;
+    let lean = (d * 0.05).min(2.5);
+    let legs = shade(wood, -0.15);
+    let xs = [-w / 2.0 + inset + leg / 2.0, w / 2.0 - inset - leg / 2.0];
+    let front = d / 2.0 - inset - leg / 2.0;
+    // Center of the rear posts at height y: leaning back towards the top.
+    let rear = |y: f64| -d / 2.0 + leg / 2.0 + lean * (1.0 - y / h);
+    let square = |x: f64, z: f64, s: f64| [[x - s / 2.0, x + s / 2.0], [z - s / 2.0, z + s / 2.0]];
+    let board = seat - 2.5;
+    for x in xs {
+        prism(
+            m,
+            place,
+            [0.0, board - 2.5],
+            square(x, front, leg * 0.8),
+            square(x, front, leg),
+            legs,
+        );
+        prism(
+            m,
+            place,
+            [0.0, h],
+            square(x, rear(0.0), leg),
+            square(x, rear(h), leg),
+            legs,
+        );
+    }
+    // Seat board, cushion and apron rails.
+    let back_edge = rear(board) - leg / 2.0;
+    part(
+        m,
+        place,
         [-w / 2.0, w / 2.0],
-        [seat - 4.0, seat],
-        [-d / 2.0, d / 2.0],
-        c,
+        [board - 2.5, board],
+        [back_edge, d / 2.0],
+        wood,
     );
-    ctx.cube(
-        [-w / 2.0, w / 2.0],
-        [seat, h],
-        [-d / 2.0, -d / 2.0 + 4.0],
-        c,
+    part(
+        m,
+        place,
+        [-w / 2.0 + 1.5, w / 2.0 - 1.5],
+        [board, seat],
+        [back_edge + 2.0, d / 2.0 - 1.5],
+        cushion,
     );
-    ctx.cube(
-        [-w / 2.0 + 1.0, -w / 2.0 + 5.0],
-        [0.0, seat],
-        [-d / 2.0, -d / 2.0 + 4.0],
-        shade(c, -0.2),
+    let rail = [board - 9.0, board - 2.5];
+    part(
+        m,
+        place,
+        [xs[0], xs[1]],
+        rail,
+        [front - 1.0, front + 1.0],
+        legs,
     );
-    ctx.cube(
-        [w / 2.0 - 5.0, w / 2.0 - 1.0],
-        [0.0, seat],
-        [-d / 2.0, -d / 2.0 + 4.0],
-        shade(c, -0.2),
-    );
+    let rz = rear(board - 6.0);
+    part(m, place, [xs[0], xs[1]], rail, [rz - 1.0, rz + 1.0], legs);
+    for x in xs {
+        part(m, place, [x - 1.0, x + 1.0], rail, [rz, front], legs);
+    }
+    // Backrest panel between the posts, clear of the seat.
+    let y = [seat + (h - seat) * 0.22, h - 1.5];
+    let panel = |y: f64| [[xs[0], xs[1]], [rear(y) - 1.1, rear(y) + 1.1]];
+    prism(m, place, y, panel(y[0]), panel(y[1]), wood);
 }
 
 fn stool(ctx: &mut Ctx) {
@@ -442,8 +671,35 @@ fn shelf(ctx: &mut Ctx, levels: u8) {
     }
 }
 
+/// Low media console on slim metal legs, with a row of front panels.
 fn tv_stand(ctx: &mut Ctx) {
-    cabinet(ctx, 0, 1);
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let feet = (h * 0.2).min(12.0);
+    let (lx, lz) = (w / 2.0 - 6.0, d / 2.0 - 5.0);
+    for (sx, sz) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+        ctx.leg(sx * lx, sz * lz, feet, [2.0, 3.0], rgb(METAL));
+    }
+    let front = d / 2.0 - 2.0;
+    ctx.cube([-w / 2.0, w / 2.0], [feet, h], [-d / 2.0, front], c);
+    let n = (w / 60.0).round().max(2.0);
+    let step = (w - 2.0) / n;
+    for i in 0..crate::count(n) {
+        let x0 = -w / 2.0 + 1.0 + f64::from(i) * step + 0.4;
+        ctx.cube(
+            [x0, x0 + step - 0.8],
+            [feet + 1.5, h - 1.5],
+            [front, d / 2.0 - 0.6],
+            shade(c, 0.06),
+        );
+        // Slim finger-pull along the panel's top edge.
+        let mid = x0 + step / 2.0;
+        ctx.cube(
+            [mid - 6.0, mid + 6.0],
+            [h - 5.0, h - 4.0],
+            [d / 2.0 - 0.6, d / 2.0],
+            rgb(METAL),
+        );
+    }
 }
 
 fn tv(ctx: &mut Ctx) {
@@ -999,49 +1255,136 @@ fn stairs(ctx: &mut Ctx, steps: u8) {
     let n = f64::from(steps.max(2));
     let rise = h / n;
     let run = d / n;
-    // Climbs from the front (+z) towards the back (-z).
+    // Climbs from the front (+z, first step at floor level) towards the back
+    // (-z, the last tread is flush with the top of the piece), matching the
+    // plan symbol's arrow.
+    let side = (w * 0.05).clamp(3.0, 5.0);
+    let stringer = shade(c, -0.25);
+    // Open treads between two sloped stringers. Each stringer is a sheared
+    // box running from the first tread at the floor to the last at the top.
+    let band = (run * 1.5).min(d / 2.0);
+    for x0 in [-w / 2.0, w / 2.0 - side] {
+        prism(
+            &mut ctx.m,
+            Place::HOME,
+            [0.0, h],
+            [[x0, x0 + side], [d / 2.0 - band, d / 2.0]],
+            [[x0, x0 + side], [-d / 2.0, -d / 2.0 + band]],
+            stringer,
+        );
+    }
+    let tread = 4.0_f64.min(rise * 0.4);
     for i in 0..steps.max(2) {
         let k = f64::from(i);
         let z1 = d / 2.0 - k * run;
+        let top = rise * (k + 1.0);
         ctx.cube(
-            [-w / 2.0, w / 2.0],
-            [0.0, rise * (k + 1.0)],
+            [-w / 2.0 + side - 0.5, w / 2.0 - side + 0.5],
+            [top - tread, top],
             [z1 - run, z1],
-            if i % 2 == 0 { c } else { shade(c, 0.05) },
+            if i % 2 == 0 { c } else { shade(c, 0.04) },
         );
+    }
+    // Handrail on the +x side, 90 cm above the nosings, as far up as the
+    // piece's height allows, with a baluster every few steps.
+    let rail = 90.0;
+    let last = ((h - rail) / rise).floor() - 1.0;
+    if last >= 2.0 {
+        let metal = rgb(METAL);
+        let x = [w / 2.0 - side / 2.0 - 1.5, w / 2.0 - side / 2.0 + 1.5];
+        let z = |k: f64| d / 2.0 - (k + 0.5) * run;
+        prism(
+            &mut ctx.m,
+            Place::HOME,
+            [rise + rail - 2.0, rise * (last + 1.0) + rail],
+            [x, [z(0.0) - 2.5, z(0.0) + 2.5]],
+            [x, [z(last) - 2.5, z(last) + 2.5]],
+            metal,
+        );
+        let mut k = 0.0;
+        while k <= last {
+            let top = rise * (k + 1.0);
+            ctx.cube(
+                [w / 2.0 - side / 2.0 - 1.0, w / 2.0 - side / 2.0 + 1.0],
+                [top, top + rail - 1.0],
+                [z(k) - 1.0, z(k) + 1.0],
+                metal,
+            );
+            k += 3.0;
+        }
     }
 }
 
 fn plant(ctx: &mut Ctx) {
     let (w, h, c) = (ctx.w, ctx.h, ctx.c);
-    let pot_h = h * 0.3;
+    // A matte ceramic pot with a rim and dark soil.
+    let pot_h = (h * 0.28).min(45.0);
+    let pot = rgb([226, 221, 212]);
+    ctx.m
+        .frustum([0.0, 0.0, 0.0], Axis::Y, pot_h, w * 0.24, w * 0.3, 28, pot);
     ctx.m.frustum(
-        [0.0, 0.0, 0.0],
+        [0.0, pot_h - 2.0, 0.0],
         Axis::Y,
-        pot_h,
-        w * 0.25,
-        w * 0.32,
-        20,
-        rgb([180, 110, 80]),
+        2.0,
+        w * 0.31,
+        w * 0.31,
+        28,
+        shade(pot, 0.05),
     );
     ctx.m.frustum(
-        [0.0, pot_h, 0.0],
+        [0.0, pot_h - 3.0, 0.0],
         Axis::Y,
-        (h - pot_h) * 0.55,
-        w * 0.5,
-        w * 0.35,
-        16,
-        c,
+        0.5,
+        w * 0.28,
+        w * 0.28,
+        24,
+        rgb([62, 46, 34]),
     );
-    ctx.m.frustum(
-        [0.0, pot_h + (h - pot_h) * 0.45, 0.0],
-        Axis::Y,
-        (h - pot_h) * 0.55,
-        w * 0.38,
-        0.0,
-        16,
-        shade(c, 0.12),
-    );
+    // Lance-shaped leaves on a golden-angle spiral: the inner ones stand
+    // up, the outer ones arch out, each a little longer, wider and a
+    // different green, seen from both sides.
+    let foliage = h - pot_h;
+    let base = [0.0, pot_h - 1.0, 0.0];
+    let count = 34u32;
+    let golden = std::f64::consts::PI * (3.0 - 5f64.sqrt());
+    for i in 0..count {
+        let k = f64::from(i) / f64::from(count - 1);
+        let azimuth = f64::from(i) * golden;
+        let tilt = (8.0 + 52.0 * k).to_radians();
+        // Deterministic jitter so no two plants of the same size differ.
+        let jitter = ((f64::from(i) * 12.9898).sin() * 43_758.545).fract().abs();
+        let reach = (w * 0.5 / tilt.sin().max(0.2)).min(foliage * (1.02 - 0.3 * k));
+        let length = reach * (0.8 + 0.2 * jitter);
+        let dir = [
+            tilt.sin() * azimuth.cos(),
+            tilt.cos(),
+            tilt.sin() * azimuth.sin(),
+        ];
+        // Across the leaf: horizontal, perpendicular to where it points.
+        let side = [-azimuth.sin(), 0.0, azimuth.cos()];
+        #[allow(clippy::cast_possible_truncation)]
+        let at = |t: f64, across: f64, droop: f64| -> [f32; 3] {
+            [
+                (base[0] + dir[0] * length * t + side[0] * across) as f32,
+                (base[1] + dir[1] * length * t - droop) as f32,
+                (base[2] + dir[2] * length * t + side[2] * across) as f32,
+            ]
+        };
+        let half = length * (0.1 + 0.05 * jitter);
+        // Outer leaves bend down toward their tips.
+        let sag = length * 0.18 * k;
+        let (root, left, right, tip) = (
+            at(0.0, 0.0, 0.0),
+            at(0.42, half, sag * 0.2),
+            at(0.42, -half, sag * 0.2),
+            at(1.0, 0.0, sag),
+        );
+        #[allow(clippy::cast_possible_truncation)]
+        let green = shade(c, (jitter as f32 - 0.5) * 0.22 - 0.08 * k as f32);
+        ctx.m.polygon(&[root, right, tip, left], green);
+        ctx.m
+            .polygon(&[root, left, tip, right], shade(green, -0.08));
+    }
 }
 
 fn tree(ctx: &mut Ctx) {
@@ -1433,23 +1776,61 @@ fn oval_pool(ctx: &mut Ctx) {
 
 fn lounger(ctx: &mut Ctx) {
     let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
-    let seat = h * 0.4;
-    ctx.legs(3.0, seat - 5.0, 4.0, rgb(METAL));
+    let metal = rgb(METAL);
+    // Frame on four short legs, lifted 10–15 cm off the deck.
+    let clear = (h * 0.16).clamp(10.0, 15.0);
+    let rail = 3.5;
+    let deck = clear + 4.0;
+    for (sx, sz) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+        ctx.leg(
+            sx * (w / 2.0 - rail / 2.0),
+            sz * (d / 2.0 - 6.0),
+            clear,
+            [3.0, 3.5],
+            metal,
+        );
+    }
+    for x0 in [-w / 2.0, w / 2.0 - rail] {
+        ctx.cube([x0, x0 + rail], [clear, deck], [-d / 2.0 + 2.0, d / 2.0], c);
+    }
+    for z in [-d / 2.0 + 4.0, d / 2.0 - 4.0] {
+        ctx.cube(
+            [-w / 2.0 + rail, w / 2.0 - rail],
+            [clear + 0.5, deck - 0.5],
+            [z - 1.5, z + 1.5],
+            shade(c, -0.1),
+        );
+    }
+    // Seat cushion, then the backrest reclining over the first third.
+    let hinge = -d / 2.0 + d * 0.3;
+    let x = [-w / 2.0 + 1.0, w / 2.0 - 1.0];
     ctx.cube(
-        [-w / 2.0, w / 2.0],
-        [seat - 5.0, seat],
-        [-d / 2.0 + d * 0.3, d / 2.0],
-        c,
+        x,
+        [deck, deck + 8.0],
+        [hinge, d / 2.0 - 1.5],
+        shade(c, 0.04),
     );
-    // Raised back over the first third, as a slanted slab.
-    let (z0, z1) = (-d / 2.0, -d / 2.0 + d * 0.3);
-    let (x0, x1) = (-w / 2.0, w / 2.0);
-    #[allow(clippy::cast_possible_truncation)]
-    let v = |x: f64, y: f64, z: f64| [x as f32, y as f32, z as f32];
-    let slab = [v(x0, h, z0), v(x1, h, z0), v(x1, seat, z1), v(x0, seat, z1)];
-    ctx.m.polygon(&[slab[3], slab[2], slab[1], slab[0]], c);
-    ctx.m
-        .polygon(&[slab[0], slab[1], slab[2], slab[3]], shade(c, -0.1));
+    let t = (d * 0.07).clamp(8.0, 14.0);
+    prism(
+        &mut ctx.m,
+        Place::HOME,
+        [deck, h],
+        [x, [hinge - t, hinge]],
+        [x, [-d / 2.0, -d / 2.0 + t]],
+        shade(c, 0.1),
+    );
+    // Two struts prop the backrest from the side rails.
+    let zs = -d / 2.0 + d * 0.1;
+    let under = |z: f64| deck + (h - deck) * (hinge - t - z) / (hinge - t + d / 2.0);
+    for sx in [-1.0, 1.0] {
+        let xs = sx * (w / 2.0 - rail / 2.0);
+        ctx.cube(
+            [xs - 1.2, xs + 1.2],
+            [deck, under(zs)],
+            [zs - 1.2, zs + 1.2],
+            metal,
+        );
+    }
 }
 
 fn grill(ctx: &mut Ctx) {
@@ -1540,50 +1921,29 @@ fn bench(ctx: &mut Ctx) {
 fn dining_set(ctx: &mut Ctx, chairs: u8) {
     let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
     let chair = 45.0_f64.min(d * 0.3);
-    let (tw, td) = (w - 2.0 * chair * 0.6, d - 2.0 * chair);
+    // The table spans the full width: chairs only sit along the long sides,
+    // and the old `w - 2·0.6·chair` top was stretched to `w` by `fit_to`
+    // anyway, so this keeps the rendered footprint without distorting it.
+    let (tw, td) = (w, d - 2.0 * chair);
     let top = 75.0_f64.min(h * 0.85);
-    // Table in the middle.
-    ctx.cube(
-        [-tw / 2.0, tw / 2.0],
-        [top - 4.0, top],
-        [-td / 2.0, td / 2.0],
-        c,
-    );
-    ctx.legs(chair + 5.0, top - 4.0, 6.0, shade(c, -0.2));
+    table_frame(ctx, [0.0, 0.0], [tw, td], top, c);
     let per_side = u32::from(chairs.max(2)) / 2;
     let seat = 45.0_f64.min(top * 0.6);
     let fabric = rgb([150, 140, 125]);
+    // Every chair is tucked the same few cm under the table edge, back out.
+    let tuck = 6.0_f64.min(td / 4.0);
+    let cd = chair + tuck;
+    let slot = tw / f64::from(per_side);
+    let cw = chair.min(slot * 0.8);
     for side in [-1.0, 1.0] {
         for i in 0..per_side {
-            let x = -tw / 2.0 + tw * (f64::from(i) + 0.5) / f64::from(per_side);
-            let (z0, z1) = if side < 0.0 {
-                (-d / 2.0, -d / 2.0 + chair)
-            } else {
-                (d / 2.0 - chair, d / 2.0)
+            let place = Place {
+                x: -tw / 2.0 + slot * (f64::from(i) + 0.5),
+                z: side * (d / 2.0 - cd / 2.0),
+                // Back towards the outside: the +z row faces −z.
+                turned: side > 0.0,
             };
-            ctx.cube(
-                [x - chair / 2.2, x + chair / 2.2],
-                [seat - 4.0, seat],
-                [z0 + 3.0, z1 - 3.0],
-                fabric,
-            );
-            let back = if side < 0.0 {
-                [z0, z0 + 4.0]
-            } else {
-                [z1 - 4.0, z1]
-            };
-            ctx.cube(
-                [x - chair / 2.2, x + chair / 2.2],
-                [seat - 4.0, h],
-                back,
-                fabric,
-            );
-            ctx.cube(
-                [x - 2.0, x + 2.0],
-                [0.0, seat - 4.0],
-                [f64::midpoint(z0, z1) - 2.0, f64::midpoint(z0, z1) + 2.0],
-                shade(c, -0.2),
-            );
+            chair_at(&mut ctx.m, place, [cw, cd, h], seat, c, fabric);
         }
     }
 }

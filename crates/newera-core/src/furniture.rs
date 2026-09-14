@@ -132,6 +132,23 @@ pub struct Light {
     /// Model materials that glow.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source_materials: Vec<String>,
+    /// Luminous flux, lm (overrides `watts` and `power`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lumens: Option<f64>,
+    /// Electrical power, W; flux follows from the lamp's efficacy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub watts: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lamp: Option<crate::lighting::LampType>,
+    /// Color temperature, K (overrides the sources' color).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kelvin: Option<f64>,
+    /// Full beam angle of a spot pointing down, degrees (at half intensity).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beam: Option<f64>,
+    /// Emitting panel facing down, width × depth cm (LED panels and strips).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area: Option<[f64; 2]>,
 }
 
 /// Override of one material of an imported model.

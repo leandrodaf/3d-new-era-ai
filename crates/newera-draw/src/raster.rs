@@ -126,7 +126,12 @@ pub fn render_pixmap(
 
     for item in &scene.items {
         match &item.primitive {
-            Primitive::Fill { points, color, .. } => {
+            Primitive::Fill {
+                points,
+                color,
+                texture,
+                ..
+            } => {
                 if let Some(path) = polygon_path(points, view, true) {
                     pixmap.fill_path(
                         &path,
@@ -135,6 +140,16 @@ pub fn render_pixmap(
                         Transform::identity(),
                         None,
                     );
+                    let image = texture.as_ref().and_then(|t| {
+                        images
+                            .entry(t.path.clone())
+                            .or_insert_with(|| load_image(&t.path).and_then(rgba_to_pixmap))
+                            .as_ref()
+                            .map(|image| (t, image))
+                    });
+                    if let Some((texture, image)) = image {
+                        fill_with_texture(&mut pixmap, &path, view, texture, image);
+                    }
                 }
             }
             Primitive::Line {
@@ -288,6 +303,42 @@ fn draw_grid(pixmap: &mut Pixmap, view: Viewport, palette: &Palette) {
     };
     lines(false);
     lines(true);
+}
+
+/// Tiles `image` over `path` at its real size: one copy spans
+/// `texture.tile` cm from the plan origin, turned with the finish.
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+fn fill_with_texture(
+    pixmap: &mut Pixmap,
+    path: &tiny_skia::Path,
+    view: Viewport,
+    texture: &crate::scene::FillTexture,
+    image: &Pixmap,
+) {
+    let [w, h] = texture.tile;
+    if w <= 0.0 || h <= 0.0 {
+        return;
+    }
+    let (ox, oy) = view.to_px(Point2::new(0.0, 0.0));
+    let transform = Transform::from_translate(ox, oy)
+        .pre_scale(view.scale as f32, view.scale as f32)
+        .pre_rotate(texture.angle as f32)
+        .pre_scale(
+            (w / f64::from(image.width())) as f32,
+            (h / f64::from(image.height())) as f32,
+        );
+    let paint = Paint {
+        shader: tiny_skia::Pattern::new(
+            image.as_ref(),
+            tiny_skia::SpreadMode::Repeat,
+            FilterQuality::Bicubic,
+            1.0,
+            transform,
+        ),
+        anti_alias: true,
+        ..Paint::default()
+    };
+    pixmap.fill_path(path, &paint, FillRule::Winding, Transform::identity(), None);
 }
 
 fn rgba_to_pixmap(image: image::RgbaImage) -> Option<Pixmap> {
@@ -495,6 +546,61 @@ mod tests {
             px.red().abs_diff(wall[0]) < 12 && px.green().abs_diff(wall[1]) < 12
         });
         assert!(dark, "no wall pixel found in column {column}");
+    }
+
+    #[test]
+    fn image_floors_are_tiled_at_their_real_size() {
+        let mut home = sample().home().clone();
+        let room = home.rooms[0].id;
+        home.rooms[0].floor_material = Some("img:checker.png 100x100".parse().unwrap());
+        let scene = plan_scene(&home, &SceneOptions::default());
+        let texture = scene
+            .items
+            .iter()
+            .filter(|i| i.owner == Some(room.into()))
+            .find_map(|i| match &i.primitive {
+                Primitive::Fill { texture, .. } => texture.clone(),
+                _ => None,
+            })
+            .expect("the floor carries its texture");
+        assert!((texture.tile[0] - 100.0).abs() < 1e-9 && (texture.tile[1] - 100.0).abs() < 1e-9);
+        // A 2×2 checker, red and blue: one meter per copy, 50 cm per square.
+        let checker = image::RgbaImage::from_fn(2, 2, |x, y| {
+            if (x + y) % 2 == 0 {
+                image::Rgba([220, 30, 30, 255])
+            } else {
+                image::Rgba([30, 30, 220, 255])
+            }
+        });
+        let options = RenderOptions {
+            width: 400,
+            height: 300,
+            margin_px: 0.0,
+            grid: false,
+            region: Some((Point2::new(0.0, 0.0), Point2::new(400.0, 300.0))),
+            ..RenderOptions::default()
+        };
+        let load = |path: &str| (path == "checker.png").then(|| checker.clone());
+        let pixmap = render_pixmap(&scene, &options, &load).unwrap();
+        let at = |x: f64, y: f64| {
+            let (px, py) = options_view(&options).to_px(Point2::new(x, y));
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            pixmap.pixel(px as u32, py as u32).unwrap().demultiply()
+        };
+        // Square centers 50 cm apart alternate colors; walls are far away.
+        let (a, b) = (at(125.0, 125.0), at(175.0, 125.0));
+        assert!(a.red() > 150 && a.blue() < 90, "{a:?}");
+        assert!(b.blue() > 150 && b.red() < 90, "{b:?}");
+        let below = at(125.0, 175.0);
+        assert!(
+            below.blue() > 150 && below.red() < 90,
+            "rows alternate too: {below:?}"
+        );
+    }
+
+    fn options_view(options: &RenderOptions) -> Viewport {
+        let (min, max) = options.region.unwrap();
+        Viewport::fit(min, max, options.width, options.height, options.margin_px)
     }
 
     #[test]

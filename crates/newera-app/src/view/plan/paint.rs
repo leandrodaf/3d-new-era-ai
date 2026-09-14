@@ -45,8 +45,32 @@ impl Textures {
         project: Option<&Path>,
         path: &str,
     ) -> Option<&TextureHandle> {
+        self.load(ctx, project, path, egui::TextureOptions::LINEAR)
+    }
+
+    /// The same image, repeating past its edges (floor finishes).
+    fn get_tiled(
+        &mut self,
+        ctx: &egui::Context,
+        project: Option<&Path>,
+        path: &str,
+    ) -> Option<&TextureHandle> {
+        let options = egui::TextureOptions {
+            wrap_mode: egui::TextureWrapMode::Repeat,
+            ..egui::TextureOptions::LINEAR
+        };
+        self.load(ctx, project, path, options)
+    }
+
+    fn load(
+        &mut self,
+        ctx: &egui::Context,
+        project: Option<&Path>,
+        path: &str,
+        options: egui::TextureOptions,
+    ) -> Option<&TextureHandle> {
         let resolved = resolve_asset(project, path);
-        let key = resolved.display().to_string();
+        let key = format!("{}#{:?}", resolved.display(), options.wrap_mode);
         self.loaded
             .entry(key.clone())
             .or_insert_with(|| {
@@ -55,7 +79,7 @@ impl Textures {
                     .to_rgba8();
                 let size = [image.width() as usize, image.height() as usize];
                 let pixels = egui::ColorImage::from_rgba_unmultiplied(size, image.as_raw());
-                Some(ctx.load_texture(key, pixels, egui::TextureOptions::LINEAR))
+                Some(ctx.load_texture(key, pixels, options))
             })
             .as_ref()
     }
@@ -76,11 +100,35 @@ pub(crate) fn paint_scene(
                 points,
                 triangles,
                 color: c,
+                texture,
             } => {
+                let tiled = texture.as_ref().and_then(|t| {
+                    textures
+                        .get_tiled(painter.ctx(), project, &t.path)
+                        .map(|handle| (t, handle.id()))
+                });
                 let mut mesh = egui::Mesh::default();
-                let fill = color(*c);
-                for p in points {
-                    mesh.colored_vertex(to(*p), fill);
+                if let Some((t, id)) = tiled {
+                    // Image finishes at their real tile size, turned with the finish.
+                    mesh.texture_id = id;
+                    let (sin, cos) = t.angle.to_radians().sin_cos();
+                    for p in points {
+                        #[allow(clippy::cast_possible_truncation)]
+                        let uv = Pos2::new(
+                            ((p.x * cos + p.y * sin) / t.tile[0]) as f32,
+                            ((-p.x * sin + p.y * cos) / t.tile[1]) as f32,
+                        );
+                        mesh.vertices.push(egui::epaint::Vertex {
+                            pos: to(*p),
+                            uv,
+                            color: Color32::WHITE,
+                        });
+                    }
+                } else {
+                    let fill = color(*c);
+                    for p in points {
+                        mesh.colored_vertex(to(*p), fill);
+                    }
                 }
                 for [a, b, c] in triangles {
                     #[allow(clippy::cast_possible_truncation)]

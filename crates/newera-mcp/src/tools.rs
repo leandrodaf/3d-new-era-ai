@@ -46,6 +46,19 @@ pub(crate) struct FitRoofParams {
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct LightingParams {
+    /// Room id (default: every room of the current storey).
+    room: Option<String>,
+    /// Work plane height cm (default 75).
+    plane: Option<f64>,
+    /// Fill `room` with a grid of this fixture until it reaches the lux wanted:
+    /// `downlight`, `led-panel`, `light-ceiling`, `pendant`.
+    fill: Option<String>,
+    /// Lux wanted instead of the room's reference.
+    lux: Option<f64>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct EmbedParams {
     /// Piece already in the plan to embed (id)…
     item: Option<String>,
@@ -1162,6 +1175,171 @@ impl NewEraMcp {
             "findings": findings,
         })
         .to_string()
+    }
+
+    #[tool(
+        description = "Lighting design by photometry: every fixture's flux (lm, or W × lamp efficacy), color temperature and distribution (bulb, spot beam, LED panel/strip) lights the work plane by the inverse-square cosine law, walls casting shadows, plus interreflection (split flux). Reply rooms [[id,name,m²,avg lx,min lx,uniformity,reference lx,fixtures,W/m²,verdict]] against ABNT NBR ISO/CIE 8995-1 residential references. fill=<fixture> with room places a verified grid reaching the reference (or lux). Set a piece's light with place/update light {lm|w,lamp,k,beam,area}."
+    )]
+    fn lighting(&self, Parameters(p): Parameters<LightingParams>) -> Result<String, ErrorData> {
+        use newera_core::lighting::{
+            Reflectance, emitters, fixtures_needed, grid_positions, room_lighting,
+        };
+        let plane = p.plane.unwrap_or(75.0);
+        let row = |r: &newera_core::RoomLighting, wanted: f64| {
+            let verdict = if r.average + 0.5 < wanted {
+                format!("abaixo: faltam {} lx", (wanted - r.average).round())
+            } else if r.average > wanted * 2.5 {
+                format!("acima: {:.1}× a referência", r.average / wanted)
+            } else if r.uniformity < 0.4 && r.points > 4 {
+                "ok na média, mas pouco uniforme (U0 < 0,4)".to_owned()
+            } else {
+                "ok".to_owned()
+            };
+            serde_json::json!([
+                r.room.to_string(),
+                r.name,
+                (r.area_m2 * 10.0).round() / 10.0,
+                r.average.round(),
+                r.min.round(),
+                (r.uniformity * 100.0).round() / 100.0,
+                wanted,
+                r.fixtures,
+                (r.watts_per_m2 * 10.0).round() / 10.0,
+                verdict,
+            ])
+        };
+        let mut doc = self.document.write();
+        let home = doc.home().clone();
+        let view = home.level_view(home.current_level());
+        let wanted_room: Option<newera_core::RoomId> = match &p.room {
+            Some(id) => Some(id.parse().map_err(|e| invalid(format!("{e}")))?),
+            None => None,
+        };
+        let rooms: Vec<&newera_core::Room> = view
+            .rooms
+            .iter()
+            .filter(|r| wanted_room.is_none_or(|id| r.id == id))
+            .collect();
+        if rooms.is_empty() {
+            return Err(invalid(match &p.room {
+                Some(id) => format!("{id} not found on this storey"),
+                None => "no rooms on this storey".to_owned(),
+            }));
+        }
+        let Some(cat) = &p.fill else {
+            let lights = emitters(&home, &newera_catalog::light_for);
+            let rows: Vec<serde_json::Value> = rooms
+                .iter()
+                .map(|room| {
+                    let r = room_lighting(&home, &lights, room, plane, Reflectance::default());
+                    let wanted = p.lux.unwrap_or(r.target);
+                    row(&r, wanted)
+                })
+                .collect();
+            let lumens: f64 = lights.iter().map(|e| e.flux).sum();
+            let watts: f64 = lights.iter().map(|e| e.watts).sum();
+            return Ok(serde_json::json!({
+                "rooms": rows,
+                "fixtures": lights.len(),
+                "lm": lumens.round(),
+                "W": watts.round(),
+            })
+            .to_string());
+        };
+        let [room] = rooms[..] else {
+            return Err(invalid("fill needs one `room`"));
+        };
+        let entry = newera_catalog::find(cat)
+            .filter(|e| e.light.is_some())
+            .ok_or_else(|| {
+                invalid(format!(
+                    "`{cat}` is not a light fixture (downlight, led-panel, light-ceiling, pendant)"
+                ))
+            })?;
+        let ceiling = home
+            .resolve_level(room.level)
+            .and_then(|id| home.levels.iter().find(|l| l.id == id))
+            .map_or(home.wall_height, |l| l.height);
+        let template = entry.instantiate(newera_core::FurnitureId(0), Point2::default());
+        let fixture_lm = newera_catalog::light_for(&template).map_or(0.0, |l| l.flux());
+        let before = room_lighting(
+            &home,
+            &emitters(&home, &newera_catalog::light_for),
+            room,
+            plane,
+            Reflectance::default(),
+        );
+        let wanted = p.lux.unwrap_or(before.target);
+        let area = before.area_m2;
+        if before.average + 0.5 >= wanted {
+            return Ok(serde_json::json!({
+                "placed": [],
+                "before": row(&before, wanted),
+                "note": "já atende; nada colocado",
+            })
+            .to_string());
+        }
+        let layout = |count: usize| -> (Vec<newera_core::Furniture>, newera_core::RoomLighting) {
+            // The whole grid, even a few more than asked: symmetric layouts.
+            let placed: Vec<newera_core::Furniture> = grid_positions(&room.points, count)
+                .into_iter()
+                .map(|at| {
+                    let mut piece = template.clone();
+                    piece.position = at;
+                    piece.level = room.level;
+                    // Hung from or set into the ceiling of the room (or the roof over it).
+                    let top = newera_core::roof_height_at(&view, at, newera_core::ROOF_FIT_ABOVE)
+                        .map_or(ceiling, |roof| roof.min(ceiling));
+                    piece.elevation = match cat.as_str() {
+                        "downlight" => top - piece.height + 0.6,
+                        _ => top - piece.height,
+                    };
+                    piece
+                })
+                .collect();
+            let mut trial = home.clone();
+            trial.furniture.extend(placed.iter().cloned());
+            let report = room_lighting(
+                &trial,
+                &emitters(&trial, &newera_catalog::light_for),
+                room,
+                plane,
+                Reflectance::default(),
+            );
+            (placed, report)
+        };
+        // The lumen method gives a first count; the photometry of that trial
+        // tells what each fixture really adds, then fixtures are added one by
+        // one until the room reaches the reference.
+        let mut count = fixtures_needed(wanted, area, fixture_lm).clamp(1, 60);
+        let (mut placed, mut after) = layout(count);
+        #[allow(clippy::cast_precision_loss)]
+        let gain = (after.average - before.average) / count as f64;
+        if gain > 0.0 {
+            // Clamped to 1..60 first, so the cast is exact.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let needed = ((wanted - before.average) / gain).ceil().clamp(1.0, 60.0) as usize;
+            count = needed;
+            (placed, after) = layout(count);
+        }
+        while after.average + 0.5 < wanted && count < 60 {
+            count += 1;
+            (placed, after) = layout(count);
+        }
+        let mut ids = Vec::new();
+        let mut commands = Vec::new();
+        for mut piece in placed {
+            piece.id = doc.new_furniture_id();
+            ids.push(piece.id.to_string());
+            commands.push(Command::insert(piece));
+        }
+        doc.execute(Command::Batch { commands }).map_err(core)?;
+        Ok(serde_json::json!({
+            "placed": ids,
+            "before": row(&before, wanted),
+            "after": row(&after, wanted),
+        })
+        .to_string())
     }
 
     #[tool(
@@ -2521,6 +2699,81 @@ mod tests {
     }
 
     #[test]
+    fn lighting_rates_rooms_and_fills_them_to_the_reference() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[500,0],[500,400],[0,400]],"closed":true}],"rooms":[{"name":"Cozinha","at":[250,200]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let rate = |p: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.lighting(Parameters(serde_json::from_str(p).unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        let dark = rate("{}");
+        assert_eq!(dark["rooms"][0][6], 300.0, "{dark}");
+        assert!(
+            dark["rooms"][0][9].as_str().unwrap().starts_with("abaixo"),
+            "{dark}"
+        );
+        // A warm bulb set by watts: 60 W incandescent is 720 lm.
+        let place: PlaceParams = serde_json::from_str(
+            r#"{"items":[{"cat":"pendant","at":[250,200],"light":{"w":60,"lamp":"incandescent","k":2700,"beam":0}}]}"#,
+        )
+        .unwrap();
+        s.place(Parameters(place)).unwrap();
+        let home = s.document.read().home().clone();
+        let bulb = home.furniture.last().unwrap().light.clone().unwrap();
+        assert!((bulb.flux() - 720.0).abs() < 1e-9 && bulb.beam.is_none());
+        let room = home.rooms[0].id.to_string();
+        let filled = rate(&format!(r#"{{"room":"{room}","fill":"downlight"}}"#));
+        let placed = filled["placed"].as_array().unwrap().len();
+        assert!(placed >= 6, "{filled}");
+        let after = &filled["after"];
+        assert!(after[3].as_f64().unwrap() >= 299.5, "{filled}");
+        assert_eq!(after[7], placed + 1);
+        // The spots hang at the ceiling, recessed.
+        let home = s.document.read().home().clone();
+        let spot = home.furniture.last().unwrap();
+        assert!(
+            spot.catalog == "downlight"
+                && (spot.elevation + spot.height - home.wall_height - 0.6).abs() < 1e-9
+        );
+        assert!(!s.document.read().can_redo());
+        let rated = rate(&format!(r#"{{"room":"{room}"}}"#));
+        assert!((rated["rooms"][0][3].as_f64().unwrap() - after[3].as_f64().unwrap()).abs() < 1.0);
+        // Turning a light off through update.
+        let id = home.furniture.last().unwrap().id.to_string();
+        let update: UpdateParams = serde_json::from_str(&format!(
+            r#"{{"items":[{{"id":"{id}","light":{{"on":false}}}}]}}"#
+        ))
+        .unwrap();
+        s.update(Parameters(update)).unwrap();
+        assert!(
+            s.document
+                .read()
+                .home()
+                .furniture
+                .last()
+                .unwrap()
+                .light
+                .as_ref()
+                .unwrap()
+                .flux()
+                < 1e-9
+        );
+        assert!(
+            s.lighting(Parameters(
+                serde_json::from_str(&format!(r#"{{"fill":"sofa-3","room":"{room}"}}"#)).unwrap()
+            ))
+            .is_err()
+        );
+    }
+
+    #[test]
     fn video_path_keyframes_and_render() {
         let s = server();
         let params: CreateParams = serde_json::from_str(
@@ -2740,14 +2993,15 @@ mod tests {
                     .any(|w| (w.height.max(w.height_at_end.unwrap_or(0.0)) - 675.0).abs() < 1e-6)
             );
             let roof = home.furniture.iter().find(|f| f.is_group()).unwrap();
-            assert_eq!(roof.children.len(), 2);
+            // Two slopes and the ridge cap closing the notch between them.
+            assert_eq!(roof.children.len(), 3);
             let mut only = home.clone();
             only.walls.clear();
             let mesh =
                 newera_render::Mesh::from_home(&only, &newera_render::Selection::new(), &|_| None);
             let points: Vec<[f32; 3]> = mesh.vertices[4..].iter().map(|v| v.position).collect();
             let top = points.iter().map(|p| p[1]).fold(f32::MIN, f32::max);
-            assert!((6.75..6.95).contains(&top), "ridge {top}");
+            assert!((6.75..7.0).contains(&top), "ridge {top}");
             // Up at the ridge the panels meet over the middle of the span.
             let ridge_x: Vec<f32> = points.iter().filter(|p| p[1] > 6.7).map(|p| p[0]).collect();
             assert!(ridge_x.iter().all(|x| (x - 3.0).abs() < 0.2), "{ridge_x:?}");
@@ -2755,6 +3009,29 @@ mod tests {
             let low = points.iter().filter(|p| p[1] < 0.3).map(|p| p[0]);
             let (min, max) = low.fold((f32::MAX, f32::MIN), |(a, b), x| (a.min(x), b.max(x)));
             assert!(min < 0.1 && max > 5.9, "{min} {max}");
+        }
+        // A room under the A-frame gets no flat ceiling: at the gables' peak it
+        // would stick out through the slopes (seen in photos, which show both
+        // sides of every face).
+        let room: CreateParams = serde_json::from_str(
+            r#"{"rooms":[{"name":"Sala","pts":[[10,10],[590,10],[590,690],[10,690]]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(room)).unwrap();
+        {
+            let doc = s.document.read();
+            let mesh = newera_render::Mesh::from_home(
+                doc.home(),
+                &newera_render::Selection::new(),
+                &|_| None,
+            );
+            let outside = mesh
+                .vertices
+                .iter()
+                .map(|v| v.position)
+                .filter(|p| p[1] > 3.0 && (p[0] - 3.0).abs() > 2.5)
+                .collect::<Vec<_>>();
+            assert!(outside.is_empty(), "{outside:?}");
         }
         let bad: CreateParams =
             serde_json::from_str(r#"{"roofs":[{"pts":[[0,0],[0,700]]}]}"#).unwrap();
@@ -2978,10 +3255,10 @@ mod tests {
         let doc = s.document.read();
         let home = doc.home();
         let roof = home.furniture.iter().find(|f| f.is_group()).unwrap();
-        // The slope with the skylight is split around it, plus the glass.
+        // The slope with the skylight is split around it, plus the glass and the ridge cap.
         assert_eq!(
             roof.children.len(),
-            1 + 5,
+            1 + 5 + 1,
             "{:?}",
             roof.children.iter().map(|c| &c.name).collect::<Vec<_>>()
         );

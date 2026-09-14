@@ -218,7 +218,14 @@ fn piece(home: &Home, cuts: &[Vec<newera_core::WallCut>], f: &newera_core::Furni
         v["layer"] = json!(d);
     }
     if let Some(light) = &f.light {
-        v["light"] = num(light.power);
+        let mut l = json!({"lm": light.flux().round()});
+        if let Some(k) = light.kelvin {
+            l["k"] = num(k);
+        }
+        if let Some(beam) = light.beam {
+            l["beam"] = num(beam);
+        }
+        v["light"] = l;
     }
     if !f.visible {
         v["visible"] = json!(false);

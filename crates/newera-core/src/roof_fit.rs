@@ -422,6 +422,10 @@ mod tests {
         assert!((fitted.height - 399.0).abs() < 4.0, "{}", fitted.height);
         // Bottom corners, then the roof line: low, peak, low.
         assert!(ring.len() >= 5, "{ring:?}");
+        // Its box reaches into the slopes, but it was cut to fit under them.
+        let mut shaped = home.clone();
+        shaped.furniture[2] = fitted.clone();
+        assert!(crate::check_layout(&shaped).is_empty());
         // Fitted for real, it keeps following: raising the roof raises the wall.
         let mut doc = crate::Document::new(home.clone());
         fit_to_roof(&mut doc, &[ElementId::Wall(WallId(10))], 10.0).unwrap();

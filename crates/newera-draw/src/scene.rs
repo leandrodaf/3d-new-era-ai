@@ -103,6 +103,9 @@ pub enum Primitive {
         points: Vec<Point2>,
         triangles: Vec<[usize; 3]>,
         color: Color,
+        /// A floor finish image tiled at real size over the color, for
+        /// backends that draw images (backends that don't keep the color).
+        texture: Option<FillTexture>,
     },
     Line {
         points: Vec<Point2>,
@@ -131,6 +134,15 @@ pub enum Primitive {
     },
 }
 
+/// An image repeated over a fill: one copy covers `tile` cm, turned `angle`
+/// degrees clockwise, starting at the plan origin.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FillTexture {
+    pub path: String,
+    pub tile: [f64; 2],
+    pub angle: f64,
+}
+
 /// A primitive tagged with the element it depicts, for hit-testing.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Item {
@@ -149,6 +161,16 @@ impl Scene {
     }
 
     fn fill(&mut self, owner: Option<ElementId>, points: &[Point2], color: Color) {
+        self.fill_textured(owner, points, color, None);
+    }
+
+    fn fill_textured(
+        &mut self,
+        owner: Option<ElementId>,
+        points: &[Point2],
+        color: Color,
+        texture: Option<FillTexture>,
+    ) {
         let triangles = triangulate(points);
         if !triangles.is_empty() {
             self.push(
@@ -157,6 +179,7 @@ impl Scene {
                     points: points.to_vec(),
                     triangles,
                     color,
+                    texture,
                 },
             );
         }
@@ -775,15 +798,25 @@ fn blend(a: Color, b: Color, t: f64) -> Color {
 fn room_items(scene: &mut Scene, room: &Room, options: &SceneOptions, line: Color) {
     let owner = Some(room.id.into());
     if room.floor_visible {
-        // Finished floors show their color, softened so the plan stays readable.
-        let fill = room
-            .floor_material
-            .as_ref()
-            .map_or(options.palette.room_fill, |m| {
-                let [r, g, b] = m.base_color([0, 0, 0]);
-                blend(options.palette.paper, Color::rgb(r, g, b), 0.45)
-            });
-        scene.fill(owner, &room.points, fill);
+        // Finished floors show their color, softened so the plan stays
+        // readable; image finishes are laid at their real tile size (a
+        // rendered plan), over the room color where images aren't drawn.
+        let material = room.floor_material.as_ref();
+        let fill = material.map_or(options.palette.room_fill, |m| {
+            if m.image.is_some() && m.color.is_none() {
+                return options.palette.room_fill;
+            }
+            let [r, g, b] = m.base_color([0, 0, 0]);
+            blend(options.palette.paper, Color::rgb(r, g, b), 0.45)
+        });
+        let texture = material.and_then(|m| {
+            m.image.as_ref().map(|path| FillTexture {
+                path: path.clone(),
+                tile: m.tile_size(),
+                angle: m.angle,
+            })
+        });
+        scene.fill_textured(owner, &room.points, fill, texture);
     }
     scene.push(
         owner,
@@ -975,16 +1008,30 @@ fn room_texts(scene: &mut Scene, room: &Room, options: &SceneOptions, obstacles:
         text.push_str(&options.unit.format_area(room.area()));
     }
     if !text.is_empty() {
+        // Over an image finish (wood, stone) the name needs a halo to read.
+        let textured = room
+            .floor_visible
+            .then_some(room.floor_material.as_ref())
+            .flatten()
+            .is_some_and(|m| m.image.is_some());
         scene.push(
             owner,
             Primitive::Text {
                 text,
                 position: center,
                 size: Size::Px(13.0),
-                color: options.palette.room_text,
+                color: if textured {
+                    Color::rgb(34, 36, 40)
+                } else {
+                    options.palette.room_text
+                },
                 align: Align::Center,
                 angle: 0.0,
-                look: TextLook::default(),
+                look: TextLook {
+                    bold: textured,
+                    outline: textured.then_some(options.palette.paper),
+                    ..TextLook::default()
+                },
             },
         );
     }

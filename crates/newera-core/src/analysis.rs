@@ -96,6 +96,11 @@ pub fn check_layout(home: &Home) -> Vec<Issue> {
     let mut groups: Vec<usize> = Vec::new();
     for (g, top) in home.furniture.iter().enumerate() {
         for leaf in top.visible_leaves() {
+            // Items embedded in joinery (a cooktop in its countertop) sit in
+            // their host's cutout or niche by design.
+            if leaf.properties.contains_key("joinery:embedded") {
+                continue;
+            }
             pieces.push(leaf);
             groups.push(g);
         }
@@ -115,6 +120,12 @@ pub fn check_layout(home: &Home) -> Vec<Issue> {
                 || groups[i] == groups[j]
                 || !heights_overlap(a, b)
             {
+                continue;
+            }
+            // A wall or panel cut to the roof's profile sits under its slopes.
+            let tilted = |f: &Furniture| f.pitch != 0.0 || f.roll != 0.0;
+            let fitted = |f: &Furniture| f.properties.contains_key(crate::roof_fit::ROOF_FIT_KEY);
+            if (fitted(a) && tilted(b)) || (fitted(b) && tilted(a)) {
                 continue;
             }
             let shared = footprints[i].intersection(&footprints[j]);

@@ -585,6 +585,7 @@ impl PlanView {
                     points: outline.clone(),
                     triangles: newera_core::triangulate(outline),
                     color: input.palette.wall.with_alpha(0.16),
+                    texture: None,
                 },
             });
             paint_scene(
@@ -965,6 +966,7 @@ impl PlanView {
                                 points: outline.clone(),
                                 triangles: newera_core::triangulate(outline),
                                 color: palette.selection.with_alpha(0.45),
+                                texture: None,
                             },
                         });
                         s

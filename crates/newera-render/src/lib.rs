@@ -296,6 +296,9 @@ pub fn sun_direction(compass: &newera_core::Compass, time_ms: i64) -> Option<(gl
     })
 }
 
+/// Lux in one unit of scene irradiance of photos.
+pub const LUX_PER_UNIT: f64 = 25_000.0;
+
 /// How long a photo may take: samples per pixel and bounces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PhotoQuality {
@@ -329,38 +332,104 @@ pub fn photo_home(
     use glam::Vec3;
     let cache = ModelCache::default();
     let models = |piece: &newera_core::Furniture| cache.piece_model(piece, assets);
+    // From above the walls, a dollhouse: the path tracer sees both sides of
+    // every face, so room ceilings would hide the inside that the 3D view
+    // (which culls back faces) shows.
+    let walls_top = home
+        .walls
+        .iter()
+        .map(|w| home.elevation_of(w.level) + w.height.max(w.height_at_end.unwrap_or(0.0)))
+        .fold(0.0, f64::max);
+    let open_top;
+    let home = if walls_top > 0.0 && f64::from(view.eye.y) * 100.0 > walls_top {
+        let mut clone = home.clone();
+        for room in &mut clone.rooms {
+            room.ceiling_visible = false;
+        }
+        open_top = clone;
+        &open_top
+    } else {
+        home
+    };
     let mesh = Mesh::from_home(home, &Selection::new(), &models);
 
     let sun = sun_direction(&home.compass, time_ms).map(|(dir, elevation)| {
         let strength = (elevation / 20.0).clamp(0.15, 1.0) as f32;
         (dir, Vec3::new(1.0, 0.95, 0.88) * 3.2 * strength)
     });
-    let daylight = sun.map_or(0.05, |(d, _)| 0.35 + 0.65 * d.y);
+    // Sky light fades through twilight: about ten times less every 3° the
+    // sun sinks below the horizon, down to a moonless night.
+    let (_, elevation) = photo::sun_position(
+        time_ms,
+        home.compass.latitude.unwrap_or(-23.55),
+        home.compass.longitude.unwrap_or(-46.63),
+    );
+    let daylight = match sun {
+        Some((d, _)) if elevation > 0.0 => 0.35 + 0.65 * d.y,
+        _ => (0.35 * 10f64.powf(elevation.min(0.0) / 3.0)).max(2e-6) as f32,
+    };
     let sky_color = Vec3::from(home.environment.sky_color.map(f32::from)) / 255.0;
-    let sky = sky_color.powf(2.2) * 1.4 * daylight;
+    // Twilight turns the sky deep blue.
+    let dusk = (1.0 - daylight / 0.35).clamp(0.0, 1.0);
+    let sky = sky_color.powf(2.2).lerp(Vec3::new(0.05, 0.09, 0.25), dusk) * 1.4 * daylight;
+    let sun = sun.filter(|_| elevation > 0.0);
 
-    // Lamps of the storeys shown.
-    let mut lights = Vec::new();
-    for top in &home.furniture {
-        for piece in top.visible_leaves() {
-            let Some(light) = &piece.light else { continue };
-            let floor = home.elevation_of(piece.level);
-            for source in &light.sources {
-                let at = piece.to_plan((
-                    (source.x - 0.5) * piece.width,
-                    (source.y - 0.5) * piece.depth,
-                ));
-                let z = floor + piece.elevation + source.z.clamp(0.0, 1.0) * piece.height;
-                let color = Vec3::from(source.color.map(f32::from)) / 255.0;
-                let share = light.sources.len().max(1) as f32;
-                lights.push(photo::PointLight {
-                    position: Vec3::new(at.x as f32, z as f32, at.y as f32) * 0.01,
-                    intensity: color.powf(2.2) * (light.power as f32 * 6.0 / share),
-                    radius: 0.05,
-                });
-            }
-        }
-    }
+    // Lamps of the storeys shown, in photometric units: 1 scene unit of
+    // irradiance is LUX_PER_UNIT lux (the noon sun is about 3).
+    let lights: Vec<photo::PointLight> =
+        newera_core::lighting::emitters(home, &newera_catalog::light_for)
+            .into_iter()
+            .filter(|e| {
+                home.furniture
+                    .iter()
+                    .find(|f| f.id == e.piece)
+                    .is_some_and(|f| f.visible)
+            })
+            .map(|e| {
+                let color = Vec3::new(e.color[0] as f32, e.color[1] as f32, e.color[2] as f32);
+                let position = Vec3::new(
+                    e.position[0] as f32,
+                    e.position[2] as f32,
+                    e.position[1] as f32,
+                ) * 0.01;
+                let piece = home.furniture.iter().find(|f| f.id == e.piece);
+                let size = piece.map_or(10.0, |f| f.width.max(f.depth)) as f32 * 0.01;
+                match e.distribution {
+                    newera_core::lighting::Distribution::Area { w, d, angle } => {
+                        let (sin, cos) = (angle as f32).to_radians().sin_cos();
+                        let (hw, hd) = (w as f32 * 0.005, d as f32 * 0.005);
+                        photo::PointLight {
+                            position,
+                            intensity: color
+                                * (e.panel_luminance().unwrap_or(0.0) / LUX_PER_UNIT) as f32,
+                            radius: 0.0,
+                            half_angle: 0.0,
+                            panel: Some((
+                                Vec3::new(cos, 0.0, sin) * hw,
+                                Vec3::new(-sin, 0.0, cos) * hd,
+                            )),
+                            clearance: 0.01,
+                        }
+                    }
+                    newera_core::lighting::Distribution::Spot { half } => photo::PointLight {
+                        position,
+                        intensity: color * (e.peak() / LUX_PER_UNIT) as f32,
+                        radius: (size * 0.3).clamp(0.01, 0.04),
+                        half_angle: (half as f32).to_radians(),
+                        panel: None,
+                        clearance: size * 0.6,
+                    },
+                    newera_core::lighting::Distribution::Point => photo::PointLight {
+                        position,
+                        intensity: color * (e.peak() / LUX_PER_UNIT) as f32,
+                        radius: 0.03,
+                        half_angle: 0.0,
+                        panel: None,
+                        clearance: size * 0.6,
+                    },
+                }
+            })
+            .collect();
     let (samples, bounces) = quality.budget();
     let load = |file: &str| {
         newera_core::vfs::read(&newera_core::resolve_asset(assets, file))
@@ -403,7 +472,14 @@ pub fn render_home(
 ) -> image::RgbaImage {
     let cache = ModelCache::default();
     let models = |piece: &newera_core::Furniture| cache.piece_model(piece, assets);
-    let mesh = Mesh::from_home(home, &Selection::new(), &models);
+    let mut mesh = Mesh::from_home(home, &Selection::new(), &models);
+    // A section seen from above shows the walls it cuts as solid.
+    if let (Some(near), Some(_)) = (view.near, view.ortho) {
+        let dir = (view.eye - view.target).normalize_or_zero();
+        if dir.y > 0.99 {
+            mesh.add_section_caps(home, f64::from(view.eye.y - near) * 100.0);
+        }
+    }
     #[allow(clippy::cast_precision_loss)]
     let aspect = width.max(1) as f32 / height.max(1) as f32;
     let load = |file: &str| {
@@ -484,6 +560,41 @@ mod tests {
             distinct.len() > 50,
             "shaded, textured pixels: {}",
             distinct.len()
+        );
+    }
+
+    #[test]
+    fn photos_from_above_look_into_the_rooms() {
+        let mut home = newera_core::Home::default();
+        let pts = [(0.0, 0.0), (500.0, 0.0), (500.0, 400.0), (0.0, 400.0)];
+        for i in 0..4 {
+            let (a, b) = (pts[i], pts[(i + 1) % 4]);
+            let id = home.new_wall_id();
+            home.walls
+                .push(Wall::new(id, Point2::new(a.0, a.1), Point2::new(b.0, b.1)));
+        }
+        let id = home.new_room_id();
+        let mut room = Room::new(
+            id,
+            "Sala",
+            pts.iter().map(|&(x, y)| Point2::new(x, y)).collect(),
+        );
+        room.floor_material = Some("#c83020".parse().unwrap());
+        home.rooms.push(room);
+        let image = photo_home(
+            &home,
+            &View::aerial(&home, -50.0, 80.0),
+            1_782_043_200_000,
+            48,
+            36,
+            None,
+            PhotoQuality::Draft,
+        );
+        // The red floor, not the white ceiling over it.
+        let [r, g, b, _] = image.get_pixel(24, 18).0;
+        assert!(
+            r > g.saturating_add(30) && r > b.saturating_add(30),
+            "{r} {g} {b}"
         );
     }
 

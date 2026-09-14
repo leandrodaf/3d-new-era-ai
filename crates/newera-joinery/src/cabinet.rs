@@ -61,6 +61,35 @@ pub struct CabinetParams {
     pub rod: bool,
     /// Open niches for built-in appliances (oven, microwave): no door across them.
     pub niches: Vec<Niche>,
+    /// Handles on doors and drawer fronts (default `bar`).
+    pub handle: HandleStyle,
+    /// Handle color `[r,g,b]` or `#rrggbb` (default brushed steel).
+    pub handle_color: Option<HandleColor>,
+}
+
+/// Handles on doors and drawer fronts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum HandleStyle {
+    /// Stainless bar pull on two posts.
+    #[default]
+    Bar,
+    /// Aluminum edge profile (perfil puxador) along the front.
+    Profile,
+    /// Small knob.
+    Knob,
+    /// Finger groove along the front (cava).
+    Cava,
+    /// Push-to-open, no handle.
+    None,
+}
+
+/// A color given as `[r,g,b]` or as `#rrggbb`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum HandleColor {
+    Rgb([u8; 3]),
+    Hex(String),
 }
 
 /// A doorless opening across the cabinet's inside, cm.
@@ -93,6 +122,8 @@ impl Default for CabinetParams {
             blind_right: 0.0,
             rod: false,
             niches: Vec::new(),
+            handle: HandleStyle::Bar,
+            handle_color: None,
         }
     }
 }
@@ -111,6 +142,262 @@ const SLIDE_CLEARANCE: f64 = 1.3;
 const MAX_DOOR: f64 = 60.0;
 /// Cooktops need this much depth for their niche, cm.
 const COOKTOP_NICHE: f64 = 50.0;
+/// Brushed stainless steel.
+const STEEL: [u8; 3] = [190, 192, 196];
+/// Shadow inside a finger groove.
+const GROOVE_SHADOW: [u8; 3] = [46, 44, 42];
+/// Doors at least this tall get a long handle at hand height, cm.
+const TALL_DOOR: f64 = 120.0;
+/// Center of a tall door's handle above the floor, cm.
+const HAND_HEIGHT: f64 = 105.0;
+/// How far a bar pull stands off the front, cm.
+const BAR_REACH: f64 = 2.5;
+/// Bar section, cm.
+const BAR: f64 = 1.2;
+
+/// Where a handle goes on one front.
+#[derive(Debug, Clone, Copy)]
+enum Grip {
+    /// A door opening on the `right` side; `upper` for wall cabinets
+    /// (handle near the bottom), `tall` for wardrobe and pantry doors.
+    Door {
+        right: bool,
+        upper: bool,
+        tall: bool,
+    },
+    /// Horizontal, centered near the top.
+    Drawer,
+    /// A sliding leaf, pulled at its `right` or left edge.
+    Leaf { right: bool },
+}
+
+/// One front to put a handle on: `[x, width, z, height]` and its face plane y, cm.
+struct Front<'a> {
+    label: &'a str,
+    rect: [f64; 4],
+    face: f64,
+    grip: Grip,
+}
+
+/// Handles bought, as `(description, count)` gathered for the hardware list.
+#[derive(Default)]
+struct Handles {
+    bars: Vec<(u32, u32)>,
+    knobs: u32,
+    profile: (u32, f64),
+    grooves: u32,
+    push: u32,
+}
+
+impl Handles {
+    fn lines(&self, hardware: &mut Vec<String>, notes: &mut Vec<String>) {
+        let plural = |n: u32, one: &str, many: &str| {
+            if n == 1 {
+                format!("1 {one}")
+            } else {
+                format!("{n} {many}")
+            }
+        };
+        for &(mm, n) in &self.bars {
+            hardware.push(format!(
+                "{} {mm} mm",
+                plural(n, "puxador barra inox", "puxadores barra inox")
+            ));
+        }
+        if self.knobs > 0 {
+            hardware.push(plural(self.knobs, "puxador botão", "puxadores botão"));
+        }
+        if self.profile.0 > 0 {
+            hardware.push(format!(
+                "{} ({} cm no total)",
+                plural(
+                    self.profile.0,
+                    "perfil puxador de alumínio",
+                    "perfis puxador de alumínio"
+                ),
+                num(self.profile.1)
+            ));
+        }
+        if self.grooves > 0 {
+            notes.push(format!(
+                "{} com cava usinada: peça a fresagem junto com o corte.",
+                plural(self.grooves, "frente", "frentes")
+            ));
+        }
+        if self.push > 0 {
+            hardware.push(plural(
+                self.push,
+                "fecho toque (push-to-open)",
+                "fechos toque (push-to-open)",
+            ));
+        }
+    }
+
+    fn bar(&mut self, mm: u32) {
+        match self.bars.iter_mut().find(|(m, _)| *m == mm) {
+            Some((_, n)) => *n += 1,
+            None => self.bars.push((mm, 1)),
+        }
+    }
+}
+
+/// Hole spacing of a bar pull for a front `width` cm wide, mm.
+fn bar_spacing(width: f64) -> u32 {
+    match width {
+        w if w <= 60.0 => 128,
+        w if w <= 80.0 => 160,
+        _ => 320,
+    }
+}
+
+/// Adds the handle of one front to `parts`.
+#[allow(clippy::too_many_lines)]
+fn add_handle(
+    style: HandleStyle,
+    color: [u8; 3],
+    front: &Front,
+    parts: &mut Vec<Part>,
+    count: &mut Handles,
+) {
+    let [x, width, z, height] = front.rect;
+    let face = front.face;
+    let label = front.label;
+    // Vertical or horizontal, the handle's center and the length it may take.
+    let (vertical, cx, cz, room) = match front.grip {
+        Grip::Drawer => (false, x + width / 2.0, z + height - 3.5, width - 8.0),
+        Grip::Leaf { right } => (
+            true,
+            if right { x + width - 3.5 } else { x + 3.5 },
+            HAND_HEIGHT.clamp(z + height * 0.25, z + height * 0.75),
+            height - 8.0,
+        ),
+        Grip::Door { right, upper, .. } => {
+            let cx = if right { x + width - 3.5 } else { x + 3.5 };
+            (true, cx, if upper { z } else { z + height }, height - 8.0)
+        }
+    };
+    let steel = |name: String, at: [f64; 3], size: [f64; 3]| {
+        let mut part = Part::solid(&name, at, size, color);
+        part.finish = Some(newera_core::Material {
+            color: Some(color),
+            shininess: 0.8,
+            ..newera_core::Material::default()
+        });
+        part
+    };
+    match style {
+        HandleStyle::None => count.push += 1,
+        HandleStyle::Cava | HandleStyle::Profile => {
+            let (name, depth, y, tint) = if style == HandleStyle::Cava {
+                count.grooves += 1;
+                // A dark recess just proud of the face so it reads.
+                (format!("Cava {label}"), 0.3, face - 0.28, GROOVE_SHADOW)
+            } else {
+                (format!("Puxador perfil {label}"), 0.5, face - 0.2, color)
+            };
+            let band = 1.8;
+            let (at, size) = match front.grip {
+                Grip::Drawer => ([x, y, z + height - band], [width, depth, band]),
+                Grip::Door {
+                    upper, tall: false, ..
+                } => {
+                    let bz = if upper { z } else { z + height - band };
+                    ([x, y, bz], [width, depth, band])
+                }
+                // Tall doors and leaves: along the opening edge.
+                Grip::Door { right, .. } | Grip::Leaf { right } => (
+                    [if right { x + width - band } else { x }, y, z],
+                    [band, depth, height],
+                ),
+            };
+            if style == HandleStyle::Profile {
+                count.profile.0 += 1;
+                count.profile.1 += size[0].max(size[2]);
+                parts.push(steel(name, at, size));
+            } else {
+                parts.push(Part::solid(&name, at, size, tint));
+            }
+        }
+        HandleStyle::Knob => {
+            count.knobs += 1;
+            let cz = match front.grip {
+                Grip::Door { tall: true, .. } => {
+                    HAND_HEIGHT.clamp(z + 5.0, (z + height - 5.0).max(z + 5.0))
+                }
+                Grip::Door { upper: true, .. } => cz + 5.0,
+                Grip::Door { .. } => cz - 5.0,
+                _ => cz,
+            };
+            let s = 2.4;
+            parts.push(steel(
+                format!("Puxador {label}"),
+                [cx - s / 2.0, face, cz - s / 2.0],
+                [s, BAR_REACH, s],
+            ));
+        }
+        HandleStyle::Bar => {
+            let tall = matches!(
+                front.grip,
+                Grip::Door { tall: true, .. } | Grip::Leaf { .. }
+            );
+            let mut spacing = if tall {
+                384
+            } else {
+                bar_spacing(if vertical { 60.0 } else { width })
+            };
+            // Short or narrow fronts take the next size down.
+            while spacing > 96 && f64::from(spacing) / 10.0 + 4.0 > room {
+                spacing = match spacing {
+                    384 => 320,
+                    320 => 160,
+                    160 => 128,
+                    _ => 96,
+                };
+            }
+            count.bar(spacing);
+            let gap = f64::from(spacing) / 10.0;
+            let length = gap + 4.0;
+            let cz = match front.grip {
+                Grip::Door { tall: true, .. } => HAND_HEIGHT.clamp(
+                    z + 4.0 + length / 2.0,
+                    (z + height - 4.0 - length / 2.0).max(z + 4.0 + length / 2.0),
+                ),
+                Grip::Door { upper: true, .. } => cz + 4.0 + length / 2.0,
+                Grip::Door { .. } => cz - 4.0 - length / 2.0,
+                _ => cz,
+            };
+            let post = 1.0;
+            let off = face + BAR_REACH - BAR;
+            if vertical {
+                parts.push(steel(
+                    format!("Puxador {label}"),
+                    [cx - BAR / 2.0, off, cz - length / 2.0],
+                    [BAR, BAR, length],
+                ));
+                for dz in [-gap / 2.0, gap / 2.0] {
+                    parts.push(steel(
+                        format!("Apoio do puxador {label}"),
+                        [cx - post / 2.0, face, cz + dz - post / 2.0],
+                        [post, off - face, post],
+                    ));
+                }
+            } else {
+                parts.push(steel(
+                    format!("Puxador {label}"),
+                    [cx - length / 2.0, off, cz - BAR / 2.0],
+                    [length, BAR, BAR],
+                ));
+                for dx in [-gap / 2.0, gap / 2.0] {
+                    parts.push(steel(
+                        format!("Apoio do puxador {label}"),
+                        [cx + dx - post / 2.0, face, cz - post / 2.0],
+                        [post, off - face, post],
+                    ));
+                }
+            }
+        }
+    }
+}
 
 /// Where shelves go: the whole zone, or with niches the tallest stretch
 /// left between them. Returns `(floor, height)`.
@@ -162,7 +449,22 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
         .as_deref()
         .map(str::parse::<newera_core::Material>)
         .transpose()?;
-    let front_color = carcass;
+    // Fronts a shade off the carcass so the reveals between them read.
+    let front_color = carcass.map(|c| (f64::from(c) * 0.95).round() as u8);
+    let handle_color = match &p.handle_color {
+        None => STEEL,
+        Some(HandleColor::Rgb(c)) => *c,
+        Some(HandleColor::Hex(text)) => text
+            .parse::<newera_core::Material>()
+            .ok()
+            .and_then(|m| m.color)
+            .ok_or_else(|| {
+                format!("Cor de puxador `{text}` não reconhecida; use #rrggbb ou [r,g,b].")
+            })?,
+    };
+    let mut handles = Handles::default();
+    // Wall cabinets hang without a plinth: handles near the bottom.
+    let wall_cabinet = p.plinth <= 0.0 && h <= TALL_DOOR;
     if w < 2.0 * t + 10.0 || h < 20.0 || d < 20.0 {
         return Err(format!(
             "Armário de {} × {} × {} cm é pequeno demais: mínimo {} cm de largura e 20 cm de altura e profundidade.",
@@ -425,7 +727,20 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
                     )
                     .banded(2, 2);
                     front.finish.clone_from(&front_finish);
+                    let rect = [front.at[0], front.size[0], front.at[2], front.size[2]];
                     parts.push(front);
+                    add_handle(
+                        p.handle,
+                        handle_color,
+                        &Front {
+                            label: &format!("da gaveta{label}"),
+                            rect,
+                            face: d,
+                            grip: Grip::Drawer,
+                        },
+                        &mut parts,
+                        &mut handles,
+                    );
                 }
             }
         }
@@ -712,6 +1027,29 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
                     .banded(2, 2);
                     door.finish.clone_from(&front_finish);
                     parts.push(door);
+                    // Pairs meet in the middle; a lone door beside a blind
+                    // panel hinges on the far side.
+                    let right = if n == 1 {
+                        blind_l <= 0.0
+                    } else {
+                        k % 2 == 0 && k + 1 < n
+                    };
+                    add_handle(
+                        p.handle,
+                        handle_color,
+                        &Front {
+                            label: &format!("{label} {}", k + 1),
+                            rect: [x, leaf, z0, height],
+                            face: d,
+                            grip: Grip::Door {
+                                right,
+                                upper: wall_cabinet || z0 > 110.0,
+                                tall: height >= TALL_DOOR,
+                            },
+                        },
+                        &mut parts,
+                        &mut handles,
+                    );
                 }
                 hinge_count += n * hinges(height);
             }
@@ -736,6 +1074,23 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
                 .banded(2, 2);
                 door.finish.clone_from(&front_finish);
                 parts.push(door);
+                // Leaves slide past each other: flush pulls only.
+                let style = match p.handle {
+                    HandleStyle::Bar | HandleStyle::Knob => HandleStyle::Profile,
+                    other => other,
+                };
+                add_handle(
+                    style,
+                    handle_color,
+                    &Front {
+                        label: &format!("da folha {}", k + 1),
+                        rect: [x, leaf, plinth + drawer_zone, door_h],
+                        face: y + t,
+                        grip: Grip::Leaf { right: k > 0 },
+                    },
+                    &mut parts,
+                    &mut handles,
+                );
             }
             hardware.push(format!(
                 "trilho de correr duplo de {} cm (superior e inferior)",
@@ -744,6 +1099,7 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
         }
         _ => {}
     }
+    handles.lines(&mut hardware, &mut notes);
 
     Ok(Output {
         parts,
@@ -995,6 +1351,172 @@ mod tests {
             })
             .unwrap_err()
             .contains("15, 18 ou 25")
+        );
+    }
+
+    fn handles(out: &Output) -> Vec<&Part> {
+        out.parts
+            .iter()
+            .filter(|p| p.name.starts_with("Puxador"))
+            .collect()
+    }
+
+    #[test]
+    fn doors_and_drawers_get_handles_where_hands_reach() {
+        // A base cabinet: one door, its bar vertical near the top on the right.
+        let base = generate(&CabinetParams {
+            w: 50.0,
+            h: 87.0,
+            d: 55.0,
+            shelves: 1,
+            ..CabinetParams::default()
+        })
+        .unwrap();
+        let door = part(&base, "Porta 1");
+        let [bar] = handles(&base)[..] else {
+            panic!("{:?}", handles(&base))
+        };
+        assert!(bar.size[2] > bar.size[0] && bar.board.is_none(), "{bar:?}");
+        assert!(bar.at[0] > door.at[0] + door.size[0] / 2.0, "opening side");
+        let top = door.at[2] + door.size[2];
+        assert!((top - (bar.at[2] + bar.size[2]) - 4.0).abs() < 1e-9);
+        assert!(
+            (bar.at[1] + bar.size[1] - 57.5).abs() < 1e-9,
+            "2,5 cm off the front"
+        );
+        assert_eq!(bar.color, STEEL);
+        assert!(
+            base.hardware
+                .iter()
+                .any(|h| h == "1 puxador barra inox 128 mm"),
+            "{:?}",
+            base.hardware
+        );
+        // The overall size stays the carcass: handles stand past it.
+        assert_eq!(base.size, [50.0, 55.0, 87.0]);
+        // Reveals read: fronts a shade off the carcass.
+        assert_ne!(door.color, part(&base, "Lateral esquerda").color);
+
+        // Double doors meet in the middle.
+        let double = generate(&CabinetParams {
+            w: 80.0,
+            h: 87.0,
+            shelves: 1,
+            ..CabinetParams::default()
+        })
+        .unwrap();
+        let bars = handles(&double);
+        assert_eq!(bars.len(), 2);
+        let centers: Vec<f64> = bars.iter().map(|b| b.at[0] + b.size[0] / 2.0).collect();
+        assert!((centers[0] + centers[1] - 80.0).abs() < 1e-9, "{centers:?}");
+        assert!(centers[0] > 30.0 && centers[1] < 50.0, "{centers:?}");
+
+        // A drawer stack: one horizontal bar centered near the top of each front.
+        let drawers = generate(&CabinetParams {
+            w: 60.0,
+            h: 87.0,
+            door: DoorType::Drawers,
+            drawers: 3,
+            ..CabinetParams::default()
+        })
+        .unwrap();
+        let bars = handles(&drawers);
+        assert_eq!(bars.len(), 3);
+        for k in 1..=3 {
+            let front = part(&drawers, &format!("Frente da gaveta {k}"));
+            let bar = part(&drawers, &format!("Puxador da gaveta {k}"));
+            assert!(bar.size[0] > bar.size[2]);
+            assert!((bar.at[0] + bar.size[0] / 2.0 - 30.0).abs() < 1e-9);
+            let center = bar.at[2] + bar.size[2] / 2.0;
+            assert!(
+                center > front.at[2] + front.size[2] / 2.0 && center < front.at[2] + front.size[2]
+            );
+        }
+
+        // Wall cabinets: near the bottom; tall doors: long bar at hand height.
+        let upper = generate(&CabinetParams {
+            w: 40.0,
+            h: 70.0,
+            d: 35.0,
+            plinth: 0.0,
+            shelves: 1,
+            ..CabinetParams::default()
+        })
+        .unwrap();
+        let bar = handles(&upper)[0];
+        assert!((bar.at[2] - (0.2 + 4.0)).abs() < 1e-9, "{bar:?}");
+        let tall = generate(&CabinetParams {
+            w: 50.0,
+            h: 220.0,
+            ..CabinetParams::default()
+        })
+        .unwrap();
+        let bar = handles(&tall)[0];
+        assert!((bar.at[2] + bar.size[2] / 2.0 - HAND_HEIGHT).abs() < 1e-9);
+        assert!(bar.size[2] > 30.0 && bar.size[2] < 60.0);
+
+        // Push-to-open: no handles, the latches in the hardware.
+        let push = generate(&CabinetParams {
+            w: 80.0,
+            h: 87.0,
+            handle: HandleStyle::None,
+            ..CabinetParams::default()
+        })
+        .unwrap();
+        assert!(handles(&push).is_empty());
+        assert!(
+            push.hardware
+                .iter()
+                .any(|h| h == "2 fechos toque (push-to-open)")
+        );
+        // Profiles run the whole top edge; a groove is no hardware.
+        let profile = generate(&CabinetParams {
+            w: 50.0,
+            h: 87.0,
+            handle: HandleStyle::Profile,
+            handle_color: Some(HandleColor::Hex("#202020".into())),
+            ..CabinetParams::default()
+        })
+        .unwrap();
+        let strip = handles(&profile)[0];
+        assert_eq!(
+            (strip.color, strip.size[0]),
+            ([32, 32, 32], part(&profile, "Porta 1").size[0])
+        );
+        let cava = generate(&CabinetParams {
+            w: 50.0,
+            h: 87.0,
+            handle: HandleStyle::Cava,
+            ..CabinetParams::default()
+        })
+        .unwrap();
+        assert!(handles(&cava).is_empty() && cava.parts.iter().any(|p| p.name == "Cava Porta 1"));
+        // Old saved parameters without handles get bars.
+        let old: CabinetParams = serde_json::from_str(r#"{"w":60,"h":87}"#).unwrap();
+        assert_eq!(old.handle, HandleStyle::Bar);
+        let rgb: CabinetParams =
+            serde_json::from_str(r#"{"handle":"knob","handle_color":[1,2,3]}"#).unwrap();
+        assert_eq!(rgb.handle_color, Some(HandleColor::Rgb([1, 2, 3])));
+    }
+
+    #[test]
+    fn handles_go_to_hardware_not_to_the_cut_list() {
+        let out = generate(&CabinetParams {
+            w: 60.0,
+            h: 87.0,
+            door: DoorType::Drawers,
+            drawers: 2,
+            ..CabinetParams::default()
+        })
+        .unwrap();
+        let rows = crate::cut_list(&out);
+        assert!(rows.iter().all(|r| !r.name.contains("uxador")), "{rows:?}");
+        assert!(
+            out.hardware
+                .iter()
+                .any(|h| h == "2 puxadores barra inox 128 mm"),
+            "{:?}",
+            out.hardware
         );
     }
 }

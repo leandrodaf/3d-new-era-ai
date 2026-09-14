@@ -611,6 +611,9 @@ pub(crate) struct UpdateSpec {
     pub mirror: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visible: Option<bool>,
+    /// Furniture light {lm|w, lamp, k, beam, area, z, on}.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub light: Option<LightSpec>,
     /// Door hinge on the right.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hinge_right: Option<bool>,
@@ -719,6 +722,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 "visible",
                 "hinge_right",
                 "level",
+                "light",
                 "brand",
                 "model_name",
                 "url",
@@ -870,6 +874,9 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 }
                 f.mirrored = spec.mirror.unwrap_or(f.mirrored);
                 f.visible = spec.visible.unwrap_or(f.visible);
+                if let Some(light) = &spec.light {
+                    apply_light(&mut f, light);
+                }
                 let text = |v: Option<String>, old: Option<String>| match v {
                     Some(v) if v.is_empty() => None,
                     Some(v) => Some(v),
@@ -1249,6 +1256,77 @@ pub(crate) struct PlaceSpec {
     /// `w`×`h` is the section (default 10×20).
     pub a: Option<[f64; 3]>,
     pub b: Option<[f64; 3]>,
+    /// Light it gives (fixtures come with theirs).
+    pub light: Option<LightSpec>,
+}
+
+/// A piece's light, photometric.
+#[derive(Debug, Default, Clone, Deserialize, serde::Serialize, JsonSchema)]
+pub(crate) struct LightSpec {
+    /// Luminous flux lm.
+    pub lm: Option<f64>,
+    /// Or electrical power W (flux from the lamp's efficacy).
+    pub w: Option<f64>,
+    /// led (100 lm/W), fluorescent (65), halogen (16), incandescent (12).
+    pub lamp: Option<newera_core::LampType>,
+    /// Color temperature K (2700 warm, 3000, 4000 neutral, 6500 daylight).
+    pub k: Option<f64>,
+    /// Spot beam angle degrees, pointing down; 0 = every direction.
+    pub beam: Option<f64>,
+    /// Emitting panel facing down, [w, d] cm.
+    pub area: Option<[f64; 2]>,
+    /// Source height as a fraction of the piece's height (default: its base
+    /// for spots and panels, the middle otherwise).
+    pub z: Option<f64>,
+    /// `false` turns it off.
+    pub on: Option<bool>,
+}
+
+/// Applies a light spec over the piece's current light.
+pub(crate) fn apply_light(piece: &mut newera_core::Furniture, spec: &LightSpec) {
+    let mut light = piece
+        .light
+        .clone()
+        .or_else(|| newera_catalog::light_for(piece))
+        .unwrap_or_else(|| newera_core::Light::led(800.0, 2700.0, (0.5, 0.5, 0.5)));
+    // Off keeps the fixture's data but gives no light (a catalog fixture
+    // without a light of its own would fall back to its preset).
+    if spec.on == Some(false) {
+        light.lumens = Some(0.0);
+        piece.light = Some(light);
+        return;
+    }
+    if spec.on == Some(true) && light.lumens == Some(0.0) {
+        light.lumens = newera_catalog::light_for(piece).and_then(|l| l.lumens);
+    }
+    if spec.lm.is_some() || spec.w.is_some() {
+        light.lumens = spec.lm;
+        light.watts = spec.w;
+    }
+    if spec.lamp.is_some() {
+        light.lamp = spec.lamp;
+    }
+    if let Some(k) = spec.k {
+        light.kelvin = Some(k.clamp(1000.0, 20_000.0));
+    }
+    if let Some(beam) = spec.beam {
+        light.beam = (beam > 0.0).then_some(beam.min(179.0));
+    }
+    if let Some(area) = spec.area {
+        light.area = (area[0] > 0.0 && area[1] > 0.0).then_some(area);
+    }
+    let directional = light.beam.is_some() || light.area.is_some();
+    let z = spec.z.unwrap_or(if directional { 0.0 } else { 0.5 });
+    if spec.z.is_some() || light.sources.is_empty() {
+        light.sources = vec![newera_core::LightSource {
+            x: 0.5,
+            y: 0.5,
+            z: z.clamp(0.0, 1.0),
+            color: [255, 255, 255],
+            diameter: None,
+        }];
+    }
+    piece.light = Some(light);
 }
 
 /// Shortens a beam from `a` toward `b` to where its top would
@@ -1442,6 +1520,21 @@ fn roof(doc: &mut Document, spec: &RoofSpec) -> EditResult<(newera_core::Furnitu
             cursor = s1;
         }
         make(doc, cursor, end, -overhang, run, false)?;
+    }
+    // Ridge cap: the panels' square ends leave a V notch along the top
+    // (t·sinθ wide, t/2·cosθ deep) that shows the sky; a cap closes it.
+    if !shed {
+        let hyp = (1.0 + slope * slope).sqrt();
+        let (sin, cos) = (slope / hyp, 1.0 / hyp);
+        let notch_depth = t / 2.0 * cos;
+        let cap_h = notch_depth + 3.0;
+        let top = eave + rise + lift + t / 2.0 * cos;
+        let (a, b) = (at(-overhang, span / 2.0), at(length + overhang, span / 2.0));
+        let z = top - notch_depth + cap_h / 2.0;
+        let mut cap = beam(doc, [a.x, a.y, z], [b.x, b.y, z], t * sin + 6.0, cap_h)?;
+        cap.name = "Cumeeira".into();
+        cap.color = Some(color);
+        panels.push(cap);
     }
     let mut gables = Vec::new();
     if spec.gables {
@@ -1642,6 +1735,15 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
             piece.opacity = (o < 1.0).then_some(o.clamp(0.0, 1.0));
         }
         piece.mirrored = spec.mirror.unwrap_or(false);
+        // Fixtures resized keep their panel matching the new size.
+        if piece.light.is_some()
+            && newera_catalog::find(&piece.catalog).is_some_and(|i| i.light.is_some())
+        {
+            piece.light = newera_catalog::light_for(&piece);
+        }
+        if let Some(light) = &spec.light {
+            apply_light(&mut piece, light);
+        }
         if let (Some(right), Some(opening)) = (spec.hinge_right, piece.opening.as_mut()) {
             opening.hinge_right = right;
         }

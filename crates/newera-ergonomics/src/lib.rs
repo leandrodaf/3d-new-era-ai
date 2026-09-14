@@ -425,14 +425,32 @@ impl Review<'_, '_> {
                     Severity::Dica,
                     "abrir gavetas e ficar diante delas",
                 )),
-                Use::Fridge | Use::Stove | Use::Sink | Use::Counter => {
-                    found.extend(need(
-                        Side::Front,
-                        kitchen_front,
-                        (0.05, 0.95),
-                        Severity::Alerta,
-                        kitchen_source,
-                    ));
+                // The cabinets under a countertop answer for it and for what is set in it.
+                Use::Fridge | Use::Stove | Use::Sink | Use::Counter
+                    if !scene.countertop(i) && !scene.embedded_item(i) =>
+                {
+                    // A blind corner's panel sits behind the other run: only its door counts.
+                    let blind = |key: &str| {
+                        u.params
+                            .as_ref()
+                            .and_then(|p| p[key].as_f64())
+                            .unwrap_or(0.0)
+                            / u.piece.width.max(1.0)
+                    };
+                    let span = if u.piece.mirrored {
+                        (0.05 + blind("blind_right"), 0.95 - blind("blind_left"))
+                    } else {
+                        (0.05 + blind("blind_left"), 0.95 - blind("blind_right"))
+                    };
+                    if span.1 > span.0 {
+                        found.extend(need(
+                            Side::Front,
+                            kitchen_front,
+                            span,
+                            Severity::Alerta,
+                            kitchen_source,
+                        ));
+                    }
                 }
                 Use::Island => {
                     found.extend(need(

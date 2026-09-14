@@ -194,15 +194,34 @@ impl Mesh {
                     material.as_ref(),
                 );
             }
+            // Without storeys, the tallest level-topped wall: gables and
+            // other sloping walls peak far above any ceiling.
             let ceiling_height = storey.map_or_else(
-                || view.walls.iter().map(|w| w.height).fold(0.0, f64::max),
+                || {
+                    view.walls
+                        .iter()
+                        .filter(|w| {
+                            w.height_at_end
+                                .is_none_or(|end| (end - w.height).abs() < 0.5)
+                        })
+                        .map(|w| w.height)
+                        .fold(0.0, f64::max)
+                },
                 |l| l.height,
             );
+            // Under a roof lower than the ceiling, the roof is the ceiling
+            // (attics, A-frames): a flat one would poke out through it.
+            let under_roof = |room: &newera_core::Room| {
+                room.points.iter().any(|p| {
+                    newera_core::roof_height_at(&view, *p, 0.0)
+                        .is_some_and(|roof| roof < ceiling_height - CEILING_GAP)
+                })
+            };
             if ceiling_height > 0.0 {
                 for room in view
                     .rooms
                     .iter()
-                    .filter(|r| r.ceiling_visible && r.points.len() >= 3)
+                    .filter(|r| r.ceiling_visible && r.points.len() >= 3 && !under_roof(r))
                 {
                     mesh.add_ceiling(
                         &room.points,
@@ -1068,6 +1087,33 @@ impl Mesh {
     }
 
     /// Horizontal face at `height` (cm); `points` must already face up.
+    /// Solid tops where a horizontal section at `height` cm cuts the walls
+    /// of the storey being edited (a plan cut seen from above), leaving out
+    /// the doors and windows the plane passes through.
+    pub fn add_section_caps(&mut self, home: &Home, height: f64) {
+        let level = home.current_level();
+        let view = home.level_view(level);
+        let base = home.elevation_of(level);
+        let cut = height - base;
+        let poche = Surface::plain([0.12, 0.12, 0.13]);
+        let cuts = view.wall_cuts();
+        for ((wall, outline), wall_cuts) in view.walls.iter().zip(view.wall_outlines()).zip(&cuts) {
+            let low = wall.height.min(wall.height_at_end.unwrap_or(wall.height));
+            if low <= cut || outline.len() < 3 {
+                continue;
+            }
+            let through: Vec<newera_core::WallCut> = wall_cuts
+                .iter()
+                .filter(|c| c.bottom < cut && c.top > cut)
+                .copied()
+                .collect();
+            for part in newera_core::cut_outline(&outline, wall, &through) {
+                // Just under the plane, so the near clip keeps it.
+                self.add_cap(&up_facing(&part), base + cut - 0.5, &poche);
+            }
+        }
+    }
+
     fn add_cap(&mut self, points: &[Point2], height: f64, surface: &Surface) {
         let base = self.next_index();
         for p in points {

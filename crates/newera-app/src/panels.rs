@@ -20,6 +20,7 @@ fn category_icon(category: Category) -> &'static str {
         Category::DoorsWindows => icon::DOOR,
         Category::Structure => icon::STAIRS,
         Category::Decor => icon::PLANT,
+        Category::Lighting => icon::LIGHTBULB,
         Category::Outdoor => icon::TREE,
         Category::Electrical => icon::LIGHTNING,
         Category::Plumbing => icon::DROP,

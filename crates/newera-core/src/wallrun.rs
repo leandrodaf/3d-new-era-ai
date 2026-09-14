@@ -179,13 +179,54 @@ pub fn wall_run(
             if piece.height <= 2.0 || hi <= z.0 + 0.5 || lo >= z.1 - 0.5 {
                 continue;
             }
-            obstacles.extend(clip(
-                &piece.projected_footprint(),
-                RunBlock::Piece {
-                    id: top.id,
-                    catalog: piece.catalog.clone(),
-                },
-            ));
+            let block = RunBlock::Piece {
+                id: top.id,
+                catalog: piece.catalog.clone(),
+            };
+            let Some(whole) = clip(&piece.projected_footprint(), block.clone()) else {
+                continue;
+            };
+            if piece.pitch == 0.0 && piece.roll == 0.0 {
+                obstacles.push(whole);
+                continue;
+            }
+            // A tilted piece (a roof panel, a rafter) only blocks where its
+            // underside comes down into the band, sampled at the band's middle.
+            let mid = f64::midpoint(b0, b1);
+            let lower = |a: f64| {
+                let p = Point2::new(
+                    w.start.x + a * u.0 + mid * n.0,
+                    w.start.y + a * u.1 + mid * n.1,
+                );
+                piece.underside_at(p) < z.1 - 0.5
+            };
+            // Every 2 cm along the run; a stretch is at most a few meters.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let steps = ((whole.to - whole.from) / 2.0).ceil().max(1.0) as usize;
+            let mut start: Option<f64> = None;
+            for i in 0..=steps {
+                #[allow(clippy::cast_precision_loss)]
+                let a = whole.from + (whole.to - whole.from) * i as f64 / steps as f64;
+                match (lower(a), start) {
+                    (true, None) => start = Some(a),
+                    (false, Some(s)) => {
+                        obstacles.push(RunObstacle {
+                            from: s,
+                            to: a,
+                            block: block.clone(),
+                        });
+                        start = None;
+                    }
+                    _ => {}
+                }
+            }
+            if let Some(s) = start {
+                obstacles.push(RunObstacle {
+                    from: s,
+                    to: whole.to,
+                    block,
+                });
+            }
         }
     }
     obstacles.sort_by(|a, b| a.from.total_cmp(&b.from));
@@ -281,5 +322,31 @@ mod tests {
         })
         .unwrap();
         assert!((all.gaps()[0].1 - 392.5).abs() < 0.6);
+    }
+
+    #[test]
+    fn a_sloped_panel_only_blocks_where_it_comes_down() {
+        let mut home = Home::default();
+        home.walls = vec![wall(1, (0.0, 0.0), (400.0, 0.0))];
+        // Rises along the wall: 52 cm at x=0, 252 cm at x=400.
+        let panel = Furniture {
+            id: FurnitureId(10),
+            catalog: "box".into(),
+            position: Point2::new(200.0, 40.0),
+            width: 400.0,
+            depth: 60.0,
+            height: 5.0,
+            elevation: 150.0,
+            roll: 30.0,
+            ..Furniture::default()
+        };
+        home.furniture = vec![panel];
+        let run = wall_run(&home, WallId(1), 1.0, 60.0, (0.0, 90.0), &|_| false).unwrap();
+        let gaps = run.gaps();
+        let last = gaps.last().unwrap();
+        assert!(
+            last.0 > 60.0 && last.0 < 130.0 && last.1 > 390.0,
+            "{gaps:?}"
+        );
     }
 }

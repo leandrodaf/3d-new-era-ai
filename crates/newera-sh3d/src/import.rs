@@ -961,6 +961,12 @@ impl<'g> Importer<'g> {
                 .into_iter()
                 .filter_map(|v| self.graph.string(v).map(str::to_owned))
                 .collect(),
+            lumens: None,
+            watts: None,
+            lamp: None,
+            kelvin: None,
+            beam: None,
+            area: None,
         });
         let name_style = p
             .obj("nameStyle")

@@ -580,11 +580,28 @@ impl<'a> Scene<'a> {
         !u.what.movable()
             && !self.thin(i)
             && !self.embedded(i)
+            && !self.embedded_item(i)
             && !matches!(u.what, Use::Switch | Use::Outlet)
             && u.piece.discipline.is_none()
             && hi - lo >= 20.0
             && lo < 190.0
             && hi > 5.0
+    }
+
+    /// A joinery countertop: it rests on cabinets and holds sinks and cooktops.
+    pub fn countertop(&self, i: usize) -> bool {
+        self.units[i]
+            .params
+            .as_ref()
+            .is_some_and(|p| p["kind"] == "countertop")
+    }
+
+    /// An item embedded in joinery: its host answers for it.
+    pub fn embedded_item(&self, i: usize) -> bool {
+        self.units[i]
+            .piece
+            .properties
+            .contains_key("joinery:embedded")
     }
 
     /// Panels, facings, glass and rails: parts of something else.
@@ -619,8 +636,33 @@ impl<'a> Scene<'a> {
         if a0 >= b1 - 0.5 || b0 >= a1 - 0.5 {
             return false;
         }
-        let shared = Self::shared(moved, &self.footprints[j]);
+        // A countertop on its cabinets, or next to appliances under it, is the kitchen working.
+        let kitchen = |k: usize| {
+            matches!(
+                self.units[k].what,
+                Use::Counter | Use::Sink | Use::Stove | Use::WallCabinet | Use::Fridge
+            )
+        };
+        if (self.countertop(i) && kitchen(j)) || (self.countertop(j) && kitchen(i)) {
+            return false;
+        }
+        let common = moved.intersection(&self.footprints[j]);
+        let shared = common.unsigned_area();
         if shared <= 25.0 {
+            return false;
+        }
+        // Pieces touching with a centimeter or two of drawing slack don't collide.
+        let depth = common
+            .iter()
+            .filter_map(geo::MinimumRotatedRect::minimum_rotated_rect)
+            .map(|r| {
+                let c: Vec<_> = r.exterior().coords().copied().collect();
+                let a = (c[1].x - c[0].x).hypot(c[1].y - c[0].y);
+                let b = (c[2].x - c[1].x).hypot(c[2].y - c[1].y);
+                a.min(b)
+            })
+            .fold(0.0, f64::max);
+        if depth <= 2.0 {
             return false;
         }
         // Mostly inside a cabinet or counter, and something that goes in one

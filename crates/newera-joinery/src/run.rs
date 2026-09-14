@@ -7,7 +7,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Build, CabinetParams, CountertopParams, Cutout, CutoutKind, DoorType, Output, Part, cm, num,
+    Build, CabinetParams, CountertopParams, Cutout, CutoutKind, DoorType, HandleColor, HandleStyle,
+    Output, Part, cm, num,
 };
 
 /// Which row of a kitchen or wardrobe wall.
@@ -116,6 +117,10 @@ pub struct RunParams {
     pub front: Option<String>,
     /// Carcass color `[r,g,b]`.
     pub color: Option<[u8; 3]>,
+    /// Handles: bar, profile, knob, cava or none (default bar).
+    pub handle: HandleStyle,
+    /// Handle color `[r,g,b]` or `#rrggbb` (default brushed steel).
+    pub handle_color: Option<HandleColor>,
     /// Modules made drawer units (default: 1 on a base row, next to the stove).
     pub drawers: Option<u32>,
     /// Widest module, cm (default 90).
@@ -154,6 +159,8 @@ impl Default for RunParams {
             t: 18.0,
             front: None,
             color: None,
+            handle: HandleStyle::Bar,
+            handle_color: None,
             drawers: None,
             max: 90.0,
             target: 60.0,
@@ -373,13 +380,18 @@ fn segment(
         }
         let blind = if near(u, a) { b0 } else { 0.0 } + if near(v, b) { b1 } else { 0.0 };
         let door = w - blind;
+        // A slim cabinet still needs a 15 cm bay between its two sides.
+        let slim = SLIM.max(15.0 + 2.0 * p.t / 10.0);
         if (NARROW - EPS..=p.max + EPS).contains(&door) {
             Some(((door - p.target).powi(2) / 30.0 + 3.0 - bonus, Piece::Doors))
         } else if blind > 0.0 {
-            None
-        } else if (SLIM - EPS..NARROW).contains(&w) {
+            // Too little beside the corner for a door (a sink or cooktop
+            // takes the rest): the blind corner is closed by a panel, rather
+            // than giving up on the whole run.
+            (door > -EPS && door < NARROW).then(|| (40.0 + door.max(0.0), Piece::Filler))
+        } else if (slim - EPS..NARROW).contains(&w) {
             Some((25.0 + (NARROW - w) - bonus, Piece::Slim))
-        } else if w > EPS && w < SLIM {
+        } else if w > EPS && w < slim {
             Some((60.0 + w, Piece::Filler))
         } else {
             None
@@ -450,6 +462,8 @@ pub fn plan_run(
         plinth,
         color: p.color,
         front: p.front.clone(),
+        handle: p.handle,
+        handle_color: p.handle_color.clone(),
         ..CabinetParams::default()
     };
     let mut modules: Vec<RunModule> = Vec::new();
@@ -838,6 +852,57 @@ mod tests {
             .rfind(|m| m.role != Role::Countertop)
             .unwrap();
         assert!((last.from + last.width - 245.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_sink_beside_a_blind_corner_keeps_the_run_divided() {
+        // 250 cm ending at a corner covered 60 cm deep by the other run, the
+        // sink centered 85 cm from that end: no door fits beside the corner.
+        let mut corner = gap(0.0, 250.0, EndKind::Frame, EndKind::Wall);
+        corner.blind_end = 60.0;
+        let p = RunParams {
+            sink: Some(165.0),
+            ..RunParams::default()
+        };
+        let (modules, notes) = plan_run(&[corner], &[], &[], &p).unwrap();
+        let sizes = cabinets(&modules);
+        assert!(
+            sizes.iter().any(|s| s.0 == Role::Sink),
+            "{sizes:?} {notes:?}"
+        );
+        assert!(
+            sizes
+                .iter()
+                .filter(|s| s.0 == Role::Doors || s.0 == Role::Drawers)
+                .count()
+                >= 2,
+            "{sizes:?}"
+        );
+        assert!(
+            !notes.iter().any(|n| n.contains("sem divisão")),
+            "{notes:?}"
+        );
+    }
+
+    #[test]
+    fn slim_pull_outs_leave_a_real_bay_inside() {
+        // 16.5 cm after the stove would give a 12.9 cm bay in 18 mm boards:
+        // closed with a filler instead of a cabinet that can't be built.
+        let (modules, _) = plan_run(
+            &[
+                gap(0.0, 120.0, EndKind::Free, EndKind::Heat),
+                gap(194.5, 216.0, EndKind::Heat, EndKind::Free),
+            ],
+            &[],
+            &[],
+            &RunParams::default(),
+        )
+        .unwrap();
+        let sizes = cabinets(&modules);
+        assert!(
+            !sizes.iter().any(|s| s.0 == Role::Slim && s.1 < 18.6),
+            "{sizes:?}"
+        );
     }
 
     #[test]

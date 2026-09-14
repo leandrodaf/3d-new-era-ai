@@ -22,6 +22,7 @@ mod home;
 mod ids;
 mod joins;
 mod levels;
+pub mod lighting;
 mod materials;
 pub mod ops;
 mod project;
@@ -53,6 +54,7 @@ pub use ids::{
 };
 pub use joins::{JOIN_TOLERANCE, wall_outlines};
 pub use levels::{FloorShape, floor_shapes, stair_holes};
+pub use lighting::{LampType, RoomLighting};
 pub use materials::{Material, Pattern, WALL_TYPES, WallFamily, WallType, wall_type};
 pub use project::{
     BundledFiles, PROJECT_EXTENSION, Project, ProjectError, cache_dir, from_project_json,

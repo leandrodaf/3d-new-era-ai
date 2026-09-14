@@ -5,11 +5,13 @@
 //! has to say "`bed-double` at [x, y]". Each item provides a 3D mesh
 //! ([`piece_mesh`]) and an architectural plan symbol ([`plan_symbol`]).
 
+mod fixtures;
 mod import;
 mod mesh;
 mod models;
 mod symbols;
 
+pub use fixtures::DIFFUSER;
 pub use import::{ImportError, ImportedModel, load_model};
 pub use mesh::{Axis, GLASS, Mesh, MeshMaterial, Rgb, is_glass, rgb, shade};
 use newera_core::{Furniture, Opening, OpeningKind};
@@ -27,13 +29,14 @@ pub enum Category {
     DoorsWindows,
     Structure,
     Decor,
+    Lighting,
     Outdoor,
     Electrical,
     Plumbing,
 }
 
 impl Category {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Living,
         Self::Dining,
         Self::Kitchen,
@@ -44,6 +47,7 @@ impl Category {
         Self::DoorsWindows,
         Self::Structure,
         Self::Decor,
+        Self::Lighting,
         Self::Outdoor,
         Self::Electrical,
         Self::Plumbing,
@@ -70,6 +74,7 @@ impl Category {
             Self::DoorsWindows => "doors-windows",
             Self::Structure => "structure",
             Self::Decor => "decor",
+            Self::Lighting => "lighting",
             Self::Outdoor => "outdoor",
             Self::Electrical => "electrical",
             Self::Plumbing => "plumbing",
@@ -88,6 +93,7 @@ impl Category {
             Self::DoorsWindows => "Portas e janelas",
             Self::Structure => "Estrutura",
             Self::Decor => "Decoração",
+            Self::Lighting => "Iluminação",
             Self::Outdoor => "Área externa",
             Self::Electrical => "Elétrica",
             Self::Plumbing => "Hidráulica",
@@ -248,8 +254,68 @@ pub struct CatalogItem {
     pub color: [u8; 3],
     pub model: Model,
     pub opening: Option<OpeningPreset>,
+    /// Light it gives, for fixtures.
+    pub light: Option<LightPreset>,
     /// Extra search words (synonyms, English).
     pub keywords: &'static str,
+}
+
+/// Photometric data of a fixture.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LightPreset {
+    /// Luminous flux, lm (per meter of width for strips).
+    pub lumens: f64,
+    pub watts: f64,
+    pub kelvin: f64,
+    /// Full beam angle, degrees; 0 for light in every direction.
+    pub beam: f64,
+    /// Emits from its underside as a panel (LED panels and strips).
+    pub panel: bool,
+    /// Flux scales with the width (LED strips).
+    pub per_meter: bool,
+    /// Height of the source as a fraction of the piece's height.
+    pub z: f64,
+}
+
+impl CatalogItem {
+    const fn with_light(self, light: LightPreset) -> Self {
+        lit(self, light)
+    }
+}
+
+const fn lit(mut item: CatalogItem, light: LightPreset) -> CatalogItem {
+    item.light = Some(light);
+    item
+}
+
+const fn led(lumens: f64, watts: f64, kelvin: f64, beam: f64, z: f64) -> LightPreset {
+    LightPreset {
+        lumens,
+        watts,
+        kelvin,
+        beam,
+        panel: false,
+        per_meter: false,
+        z,
+    }
+}
+
+/// The light a catalog fixture gives at the piece's current size, if any.
+pub fn light_for(piece: &Furniture) -> Option<newera_core::Light> {
+    let preset = find(&piece.catalog)?.light?;
+    let scale = if preset.per_meter {
+        piece.width / 100.0
+    } else {
+        1.0
+    };
+    let mut light =
+        newera_core::Light::led(preset.lumens * scale, preset.kelvin, (0.5, 0.5, preset.z));
+    light.watts = Some(preset.watts * scale);
+    light.beam = (preset.beam > 0.0).then_some(preset.beam);
+    light.area = preset
+        .panel
+        .then_some([piece.width * 0.96, piece.depth * 0.9]);
+    Some(light)
 }
 
 const fn item(
@@ -270,6 +336,7 @@ const fn item(
         color,
         model,
         opening: None,
+        light: None,
         keywords,
     }
 }
@@ -397,14 +464,105 @@ pub static CATALOG: &[CatalogItem] = &[
         Model::Rug,
         "rug carpet tapete",
     ),
-    item(
-        "floor-lamp",
-        "Luminária de piso",
-        C::Living,
-        [40.0, 40.0, 165.0],
-        [230, 220, 200],
-        Model::Lamp,
-        "lamp light abajur luminaria",
+    lit(
+        item(
+            "floor-lamp",
+            "Luminária de piso",
+            C::Lighting,
+            [40.0, 40.0, 165.0],
+            [230, 220, 200],
+            Model::Lamp,
+            "lamp light abajur luminaria coluna",
+        ),
+        led(1055.0, 11.0, 2700.0, 0.0, 0.84),
+    ),
+    lit(
+        item(
+            "table-lamp",
+            "Abajur de mesa",
+            C::Lighting,
+            [30.0, 30.0, 50.0],
+            [235, 225, 205],
+            Model::Lamp,
+            "abajur lamp table luminaria mesa cabeceira",
+        ),
+        led(470.0, 5.0, 2700.0, 0.0, 0.82),
+    ),
+    lit(
+        raised(
+            item(
+                "downlight",
+                "Spot embutido LED 7 W",
+                C::Lighting,
+                [10.0, 10.0, 3.0],
+                [245, 245, 242],
+                Model::Box,
+                "spot embutido downlight led teto sanca luminaria recessed",
+            ),
+            259.4,
+        ),
+        led(630.0, 7.0, 3000.0, 60.0, 0.0),
+    ),
+    lit(
+        raised(
+            item(
+                "pendant",
+                "Pendente",
+                C::Lighting,
+                [35.0, 35.0, 90.0],
+                [40, 40, 42],
+                Model::Box,
+                "pendente pendant luminaria bancada jantar lustre",
+            ),
+            170.0,
+        ),
+        led(806.0, 9.0, 2700.0, 110.0, 0.12),
+    ),
+    lit(
+        raised(
+            item(
+                "led-panel",
+                "Painel LED 60×60 36 W",
+                C::Lighting,
+                [62.0, 62.0, 2.0],
+                [240, 240, 238],
+                Model::Box,
+                "painel led plafon panel luminaria teto escritorio",
+            ),
+            258.0,
+        ),
+        LightPreset {
+            lumens: 3600.0,
+            watts: 36.0,
+            kelvin: 4000.0,
+            beam: 0.0,
+            panel: true,
+            per_meter: false,
+            z: 0.0,
+        },
+    ),
+    lit(
+        raised(
+            item(
+                "led-strip",
+                "Fita LED (perfil)",
+                C::Lighting,
+                [100.0, 2.0, 1.0],
+                [200, 202, 206],
+                Model::Box,
+                "fita led strip perfil sob armario sanca iluminacao indireta",
+            ),
+            140.0,
+        ),
+        LightPreset {
+            lumens: 900.0,
+            watts: 9.0,
+            kelvin: 3000.0,
+            beam: 0.0,
+            panel: true,
+            per_meter: true,
+            z: 0.0,
+        },
     ),
     // Dining
     item(
@@ -1157,7 +1315,8 @@ pub static CATALOG: &[CatalogItem] = &[
             "ponto luz teto lampada plafon ceiling light",
         ),
         244.0,
-    ),
+    )
+    .with_light(led(1000.0, 10.0, 3000.0, 0.0, 0.0)),
     raised(
         item(
             "light-wall",
@@ -1169,7 +1328,8 @@ pub static CATALOG: &[CatalogItem] = &[
             "arandela luz parede wall light sconce",
         ),
         180.0,
-    ),
+    )
+    .with_light(led(400.0, 4.5, 2700.0, 0.0, 0.5)),
     raised(
         item(
             "electrical-panel",
@@ -1382,7 +1542,7 @@ impl CatalogItem {
         id: newera_core::FurnitureId,
         position: newera_core::Point2,
     ) -> Furniture {
-        Furniture {
+        let mut piece = Furniture {
             id,
             catalog: self.id.to_owned(),
             name: self.name.to_owned(),
@@ -1401,7 +1561,9 @@ impl CatalogItem {
             discipline: self.category.discipline(),
             opacity: matches!(self.model, Model::GlassPanel).then_some(0.35),
             ..Default::default()
-        }
+        };
+        piece.light = light_for(&piece);
+        piece
     }
 }
 
@@ -1419,6 +1581,9 @@ pub fn piece_mesh(piece: &Furniture) -> Mesh {
         return models::solid(shape, piece, rgb(color));
     }
     let item = find(&piece.catalog);
+    if let Some(mesh) = fixtures::build(piece) {
+        return mesh;
+    }
     let model = item.map_or(Model::Box, |i| i.model);
     let color = piece
         .color

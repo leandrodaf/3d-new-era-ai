@@ -41,7 +41,8 @@ pub struct CabinetRunParams {
     /// Room the fronts face (default: the side toward the middle of the house).
     pub room: Option<String>,
     /// Flat choices, all optional: row base|wall|tall, h, d, elev, t (mm), front,
-    /// color [r,g,b], drawers (drawer units), max (widest module, 90), target (60),
+    /// color [r,g,b], handle bar|profile|knob|cava|none (bar), `handle_color` [r,g,b] or
+    /// "#hex", drawers (drawer units), max (widest module, 90), target (60),
     /// top (base countertop, true), `top_material`, sink / cooktop (center cm along
     /// the wall: cabinet under it and the countertop cutout), `sink_w` (80), `cooktop_w` (60),
     /// interior shelves|hanging|wardrobe (tall rows; wardrobe by default facing a bedroom).
@@ -439,6 +440,12 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
         }
         if !given("color") {
             params.color = old.color;
+        }
+        if !given("handle") {
+            params.handle = old.handle;
+        }
+        if !given("handle_color") {
+            params.handle_color = old.handle_color;
         }
     }
     // A sink or cooktop already set into the old countertop keeps its place:
@@ -838,7 +845,13 @@ fn commands(doc: &mut Document, planned: &Planned) -> Result<(Vec<Command>, Valu
     );
     // Replanned later, every explicit choice is already in `params`.
     let stored = serde_json::to_string(&Request {
-        given: vec!["t".into(), "front".into(), "color".into()],
+        given: vec![
+            "t".into(),
+            "front".into(),
+            "color".into(),
+            "handle".into(),
+            "handle_color".into(),
+        ],
         keep: Vec::new(),
         ..planned.request.clone()
     })
