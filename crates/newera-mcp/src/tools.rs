@@ -19,6 +19,8 @@ use crate::edit::{self, BackgroundParams, CreateParams, PlaceSpec, UpdateSpec};
 const INSTRUCTIONS: &str = "\
 Home design editor, live in the user's window. Units: cm. Plan axes: x right, y down. \
 Points are [x,y]. Id prefixes: w wall, r room, d dimension, t label, f furniture/door/window, lv storey. \
+All kinds share one id counter, and composite pieces (roofs, joinery, cabinet runs) also number their \
+parts, so ids have gaps: use the ids a reply returns, never guess the next one. \
 Reads omit defaults (wall t=15 h=250). Writes reply `ok rev=N [ids=...]`; don't re-read \
 unless needed. Every change is one undoable step. Use render_plan to check visually. \
 A project can hold several plan versions (variants tool); tools act on the active one. \
@@ -746,7 +748,7 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Place catalog items: at=[x,y] center (doors/windows near a wall snap into it; into=[x,y] picks the swing side), or wall=id (+along cm) to put doors/windows in a wall or furniture against it. Sizes w/d/h override defaults; pitch/roll tilt; angle clockwise degrees (0: front faces +y, down the plan; back/headboard toward -y); mat finish (wood, marble, img:…; 'img:facade.png fit' stretches one image: a reference board to compare with render_3d view=front) and opacity (glass 0.3); defaults {…} fills every item; px=true reads coordinates as background pixels. cat=beam with a,b=[x,y,z] (z above the floor) and w×h section makes rafters, posts and braces."
+        description = "Place catalog items: at=[x,y] center (doors/windows near a wall snap into it; into=[x,y] picks the swing side), or wall=id (+along cm) to put doors/windows in a wall or furniture against it. Sizes w/d/h override defaults; pitch/roll tilt; angle clockwise degrees (0: front faces +y, down the plan; back/headboard toward -y); mat finish (wood, marble, img:…; 'img:facade.png fit' stretches one image: a reference board to compare with render_3d view=front) and opacity (glass 0.3); defaults {…} fills every item; px=true reads coordinates as background pixels. cat=beam with a,b=[x,y,z] (z above the floor) and w×h section makes rafters, posts and braces; a beam reaching into a roof stops under it. Pools: pool or pool-oval."
     )]
     fn place(&self, Parameters(p): Parameters<PlaceParams>) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
@@ -2771,6 +2773,30 @@ mod tests {
             ))
             .is_err()
         );
+
+        // A rafter drawn past the ridge stops under the other slope instead of
+        // piercing the roof (retest finding 44).
+        let rafter: PlaceParams = serde_json::from_str(
+            r#"{"items":[{"cat":"beam","a":[20,350,30],"b":[330,350,700],"w":5,"h":18}]}"#,
+        )
+        .unwrap();
+        let id = s
+            .place(Parameters(rafter))
+            .unwrap()
+            .rsplit('=')
+            .next()
+            .unwrap()
+            .to_owned();
+        let doc = s.document.read();
+        let beam = doc
+            .home()
+            .furniture
+            .iter()
+            .find(|f| f.id.to_string() == id)
+            .unwrap();
+        let (_, top) = beam.height_range();
+        assert!(top < 690.0, "stops below the ridge: {top}");
+        assert!(beam.depth < 700.0 && beam.depth > 600.0, "{}", beam.depth);
     }
 
     #[test]

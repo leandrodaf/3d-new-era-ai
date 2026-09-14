@@ -126,7 +126,8 @@ pub(crate) fn build(model: Model, piece: &Furniture, color: Rgb) -> Mesh {
         Model::Corrugated => corrugated(&mut ctx),
         Model::GlassPanel => glass_panel(&mut ctx),
         Model::GarageDoor => garage_door(&mut ctx),
-        Model::Pool => pool(&mut ctx),
+        Model::Pool { oval: false } => pool(&mut ctx),
+        Model::Pool { oval: true } => oval_pool(&mut ctx),
         Model::Lounger => lounger(&mut ctx),
         Model::Grill => grill(&mut ctx),
         Model::SofaL => sofa_l(&mut ctx),
@@ -1383,6 +1384,51 @@ fn pool(ctx: &mut Ctx) {
         [-d / 2.0 + coping, d / 2.0 - coping],
         c,
     );
+}
+
+fn oval_pool(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let coping = 30.0_f64.min(w / 6.0).min(d / 6.0);
+    let stone = rgb([225, 220, 205]);
+    let n: u16 = 48;
+    #[allow(clippy::cast_possible_truncation)]
+    let ring = |rx: f64, rz: f64, y: f64| -> Vec<[f32; 3]> {
+        (0..n)
+            .map(|i| {
+                let a = std::f64::consts::TAU * f64::from(i) / f64::from(n);
+                [(rx * a.cos()) as f32, y as f32, (rz * a.sin()) as f32]
+            })
+            .collect()
+    };
+    let (outer_top, inner_top) = (
+        ring(w / 2.0, d / 2.0, h),
+        ring(w / 2.0 - coping, d / 2.0 - coping, h),
+    );
+    let outer_bottom = ring(w / 2.0, d / 2.0, 0.0);
+    let water = ring(w / 2.0 - coping, d / 2.0 - coping, h * 0.7);
+    let k = usize::from(n);
+    for i in 0..k {
+        let j = (i + 1) % k;
+        // Coping on top, facing up; its outer side facing out; the inner lip.
+        ctx.m.polygon(
+            &[outer_top[i], inner_top[i], inner_top[j], outer_top[j]],
+            stone,
+        );
+        ctx.m.polygon(
+            &[outer_bottom[i], outer_top[i], outer_top[j], outer_bottom[j]],
+            stone,
+        );
+        ctx.m.polygon(
+            &[inner_top[i], water[i], water[j], inner_top[j]],
+            shade(stone, -0.1),
+        );
+    }
+    #[allow(clippy::cast_possible_truncation)]
+    let center = [0.0, (h * 0.7) as f32, 0.0];
+    for i in 0..k {
+        let j = (i + 1) % k;
+        ctx.m.polygon(&[center, water[j], water[i]], c);
+    }
 }
 
 fn lounger(ctx: &mut Ctx) {

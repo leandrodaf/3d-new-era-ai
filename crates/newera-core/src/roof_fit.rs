@@ -39,7 +39,10 @@ fn slopes(home: &Home) -> Vec<&Furniture> {
     home.furniture
         .iter()
         .flat_map(Furniture::visible_leaves)
-        .filter(|f| !f.is_opening() && (f.pitch != 0.0 || f.roll != 0.0))
+        // Roof panels, not rafters or braces: a surface is wide both ways.
+        .filter(|f| {
+            !f.is_opening() && (f.pitch != 0.0 || f.roll != 0.0) && f.width.min(f.depth) >= 30.0
+        })
         .collect()
 }
 

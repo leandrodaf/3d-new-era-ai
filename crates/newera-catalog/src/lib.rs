@@ -169,8 +169,10 @@ pub enum Model {
     GlassPanel,
     /// Sectional garage door.
     GarageDoor,
-    /// Pool: coping around a water surface.
-    Pool,
+    /// Pool: coping around a water surface, rectangular or oval.
+    Pool {
+        oval: bool,
+    },
     /// Sun lounger with a raised back.
     Lounger,
     /// Masonry barbecue with a chimney.
@@ -1014,8 +1016,17 @@ pub static CATALOG: &[CatalogItem] = &[
         C::Outdoor,
         [600.0, 300.0, 20.0],
         [70, 165, 210],
-        Model::Pool,
+        Model::Pool { oval: false },
         "pool piscina",
+    ),
+    item(
+        "pool-oval",
+        "Piscina oval",
+        C::Outdoor,
+        [600.0, 300.0, 20.0],
+        [70, 165, 210],
+        Model::Pool { oval: true },
+        "pool oval piscina oval redonda feijao",
     ),
     item(
         "lounger",

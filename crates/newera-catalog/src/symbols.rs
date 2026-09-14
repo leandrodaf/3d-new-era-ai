@@ -347,6 +347,7 @@ pub fn plan_symbol(piece: &Furniture) -> Vec<SymbolShape> {
             | Model::Tree
             | Model::Lamp
             | Model::Column { round: true }
+            | Model::Pool { oval: true }
     );
     let outline = if round {
         ellipse(0.0, 0.0, hw, hd, 0.0, std::f64::consts::TAU, 40)
@@ -590,10 +591,25 @@ pub fn plan_symbol(piece: &Furniture) -> Vec<SymbolShape> {
         Model::Table { round: false } => {
             s.line(rect(-hw + 5.0, -hd + 5.0, hw - 5.0, hd - 5.0), true, false);
         }
-        Model::Pool => {
+        Model::Pool { oval: false } => {
             let coping = 30.0_f64.min(w / 6.0).min(d / 6.0);
             s.boxed(
                 rect(-hw + coping, -hd + coping, hw - coping, hd - coping),
+                true,
+            );
+        }
+        Model::Pool { oval: true } => {
+            let coping = 30.0_f64.min(w / 6.0).min(d / 6.0);
+            s.boxed(
+                ellipse(
+                    0.0,
+                    0.0,
+                    hw - coping,
+                    hd - coping,
+                    0.0,
+                    std::f64::consts::TAU,
+                    48,
+                ),
                 true,
             );
         }

@@ -1251,6 +1251,36 @@ pub(crate) struct PlaceSpec {
     pub b: Option<[f64; 3]>,
 }
 
+/// Shortens a beam from `a` toward `b` to where its top would
+/// reach the underside of a roof panel above it.
+fn under_roof(home: &newera_core::Home, a: [f64; 3], b: [f64; 3], h: f64) -> ([f64; 3], [f64; 3]) {
+    let view = home.level_view(home.current_level());
+    let at = |t: f64| {
+        [
+            a[0] + (b[0] - a[0]) * t,
+            a[1] + (b[1] - a[1]) * t,
+            a[2] + (b[2] - a[2]) * t,
+        ]
+    };
+    let length = ((b[0] - a[0]).hypot(b[1] - a[1])).hypot(b[2] - a[2]);
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let steps = (length.ceil() as usize).clamp(2, 3000);
+    let clear = |t: f64| {
+        let p = at(t);
+        newera_core::roof_height_at(&view, Point2::new(p[0], p[1]), p[2])
+            .is_none_or(|roof| roof + 2.0 >= p[2] + h / 2.0)
+    };
+    // Keep the stretch around the start that stays clear.
+    #[allow(clippy::cast_precision_loss)]
+    let t_of = |i: usize| i as f64 / steps as f64;
+    let first_blocked = (0..=steps).find(|&i| !clear(t_of(i)));
+    match first_blocked {
+        // Starting inside the roof (a tail under the eave): leave it as drawn.
+        Some(0) | None => (a, b),
+        Some(i) => (a, at(t_of(i - 1))),
+    }
+}
+
 /// A box from `a` to `b` (plan cm, height cm above the storey floor) with a
 /// `w` × `h` section: beams, rafters, posts, braces and sloping panels.
 fn beam(
@@ -1556,7 +1586,10 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
             let (Some(a), Some(b)) = (spec.a, spec.b) else {
                 return Err("a beam needs `a` and `b` as [x,y,z]".into());
             };
-            let mut piece = beam(doc, a, b, spec.w.unwrap_or(10.0), spec.h.unwrap_or(20.0))?;
+            let (w, h) = (spec.w.unwrap_or(10.0), spec.h.unwrap_or(20.0));
+            // Rafters and posts stop under the roof instead of piercing it.
+            let (a, b) = under_roof(doc.home(), a, b, h);
+            let mut piece = beam(doc, a, b, w, h)?;
             piece.name = spec.name.clone().unwrap_or(piece.name);
             piece.color = spec.color.or(Some([176, 132, 92]));
             ids.push(piece.id.to_string());
