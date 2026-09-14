@@ -174,15 +174,22 @@ impl Mesh {
             let base = home.elevation_of(level);
             let storey = level.and_then(|id| home.level(id));
             let slab = storey.map_or(0.0, |l| l.floor_thickness);
-            for shape in newera_core::floor_shapes(home, level) {
+            for (order, shape) in newera_core::floor_shapes(home, level)
+                .into_iter()
+                .enumerate()
+            {
                 let material = home
                     .rooms
                     .iter()
                     .find(|r| r.id == shape.room)
                     .and_then(|r| r.floor_material.clone());
+                // Floors listed later sit a hair higher, so overlapping rooms
+                // (a pool over a deck) show the one drawn on top, without flicker.
+                #[allow(clippy::cast_precision_loss)]
+                let lift = order as f64 * 0.05;
                 mesh.add_floor(
                     &shape,
-                    base,
+                    base + lift,
                     if base > 0.0 { slab } else { 0.0 },
                     material.as_ref(),
                 );
@@ -892,6 +899,14 @@ impl Mesh {
         };
         let piece_color = piece.color.map(srgb_to_linear);
         let piece_texture = piece.texture.as_ref().filter(|t| t.image.is_some());
+        // A pattern finish (wood, stone, marble…) laid on every face.
+        let piece_pattern = piece
+            .texture
+            .as_ref()
+            .filter(|t| t.image.is_none())
+            .and_then(|t| t.pattern.map(|p| (t, p)));
+        #[allow(clippy::cast_possible_truncation)]
+        let opacity = piece.opacity.map_or(1.0, |o| o.clamp(0.0, 1.0) as f32);
         let texture_layer = piece_texture
             .map(|t| IMAGE_BASE + self.image_layer(t.image.as_deref().unwrap_or_default()));
         // Materials whose vertices carry texture coordinates.
@@ -961,10 +976,21 @@ impl Mesh {
                 .vertex_materials
                 .get(k)
                 .and_then(|&m| looks.get(usize::from(m)));
-            let alpha = look.map_or(1.0, |l| l.2);
+            let alpha = look.map_or(1.0, |l| l.2).min(opacity);
             let (mut color, mut kind, mut uv) = (raw, 0, [0.0, 0.0]);
-            if let Some(c) = piece_color {
+            if let Some(c) = piece_color
+                && piece_pattern.is_none()
+            {
                 color = c;
+            } else if let Some((texture, pattern)) = piece_pattern {
+                uv = planar_uv(position, normal, texture.tile_size());
+                color = srgb_to_linear(
+                    texture
+                        .color
+                        .or(piece.color)
+                        .unwrap_or_else(|| pattern.default_color()),
+                );
+                kind = pattern.index();
             } else if let (Some(layer), Some(texture)) = (texture_layer, piece_texture) {
                 // Planar mapping on the face's dominant axis, at the texture's real size.
                 uv = planar_uv(position, normal, texture.tile_size());

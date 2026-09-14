@@ -141,6 +141,39 @@ pub(crate) struct CreateParams {
     /// Pitched roofs over a rectangle, built as one group of sloping panels.
     #[serde(default)]
     pub roofs: Vec<RoofSpec>,
+    /// Every point is given in pixels of the background image (converted with its
+    /// scale and offset); lengths (t, h, off) stay in cm.
+    #[serde(default)]
+    pub px: bool,
+}
+
+impl CreateParams {
+    /// Converts every point with `f` (pixels of the background → cm).
+    pub(crate) fn map_points(&mut self, f: &dyn Fn(Point2) -> Point2) {
+        let all = |pts: &mut Vec<Point2>| pts.iter_mut().for_each(|p| *p = f(*p));
+        for w in &mut self.walls {
+            all(&mut w.pts);
+        }
+        for r in &mut self.rooms {
+            if let Some(pts) = &mut r.pts {
+                all(pts);
+            }
+            r.at = r.at.map(f);
+        }
+        for d in &mut self.dims {
+            d.a = d.a.map(f);
+            d.b = d.b.map(f);
+        }
+        for l in &mut self.labels {
+            l.at = f(l.at);
+        }
+        for p in &mut self.polylines {
+            all(&mut p.pts);
+        }
+        for r in &mut self.roofs {
+            all(&mut r.pts);
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -437,6 +470,12 @@ pub(crate) struct UpdateSpec {
     /// Furniture color `[r,g,b]`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<[u8; 3]>,
+    /// Furniture finish (`wood`, `img:…`, `none` clears).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mat: Option<String>,
+    /// Furniture opacity 0..1.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub opacity: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mirror: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -543,6 +582,8 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 "roll",
                 "name",
                 "color",
+                "mat",
+                "opacity",
                 "mirror",
                 "visible",
                 "hinge_right",
@@ -690,6 +731,12 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 f.roll = spec.roll.unwrap_or(f.roll);
                 f.name = spec.name.unwrap_or(f.name);
                 f.color = spec.color.or(f.color);
+                if let Some(raw) = &spec.mat {
+                    f.texture = material(raw)?;
+                }
+                if let Some(o) = spec.opacity {
+                    f.opacity = (o < 1.0).then_some(o.clamp(0.0, 1.0));
+                }
                 f.mirrored = spec.mirror.unwrap_or(f.mirrored);
                 f.visible = spec.visible.unwrap_or(f.visible);
                 let text = |v: Option<String>, old: Option<String>| match v {
@@ -1001,7 +1048,7 @@ mod tests {
     }
 }
 
-#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[derive(Debug, Default, Clone, Deserialize, serde::Serialize, JsonSchema)]
 pub(crate) struct PlaceSpec {
     /// Catalog id, e.g. `bed-double` (see the `catalog` tool).
     #[serde(default)]
@@ -1027,6 +1074,10 @@ pub(crate) struct PlaceSpec {
     pub roll: Option<f64>,
     pub name: Option<String>,
     pub color: Option<[u8; 3]>,
+    /// Finish over the whole piece: `wood`, `marble #222 60`, `img:photo.jpg 100x80`.
+    pub mat: Option<String>,
+    /// 0..1; e.g. 0.3 for glass.
+    pub opacity: Option<f64>,
     pub mirror: Option<bool>,
     pub hinge_right: Option<bool>,
     /// Doors: a point `[x,y]` on the side the leaf swings into (e.g. inside the bathroom).
@@ -1222,6 +1273,37 @@ fn swing_into(piece: &mut newera_core::Furniture, into: Point2) {
     }
 }
 
+/// Fills what each item leaves out from `defaults` (e.g. the same `cat`,
+/// section and color for a row of rafters).
+pub(crate) fn with_defaults(
+    items: Vec<PlaceSpec>,
+    defaults: Option<&PlaceSpec>,
+) -> EditResult<Vec<PlaceSpec>> {
+    let Some(defaults) = defaults else {
+        return Ok(items);
+    };
+    let base = serde_json::to_value(defaults).map_err(|e| e.to_string())?;
+    items
+        .into_iter()
+        .map(|item| {
+            let mut value = serde_json::to_value(&item).map_err(|e| e.to_string())?;
+            if let (Some(target), Some(base)) = (value.as_object_mut(), base.as_object()) {
+                for (key, default) in base {
+                    let missing = match target.get(key) {
+                        None | Some(serde_json::Value::Null) => true,
+                        Some(serde_json::Value::String(s)) => s.is_empty(),
+                        _ => false,
+                    };
+                    if missing && !default.is_null() {
+                        target.insert(key.clone(), default.clone());
+                    }
+                }
+            }
+            serde_json::from_value(value).map_err(|e| e.to_string())
+        })
+        .collect()
+}
+
 /// Places catalog pieces in one undoable step; returns their ids.
 pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec<String>> {
     if items.is_empty() {
@@ -1279,7 +1361,13 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
         piece.pitch = spec.pitch.unwrap_or(piece.pitch);
         piece.roll = spec.roll.unwrap_or(piece.roll);
         piece.name = spec.name.unwrap_or(piece.name);
-        piece.color = spec.color;
+        piece.color = spec.color.or(piece.color);
+        if let Some(raw) = &spec.mat {
+            piece.texture = material(raw)?;
+        }
+        if let Some(o) = spec.opacity {
+            piece.opacity = (o < 1.0).then_some(o.clamp(0.0, 1.0));
+        }
         piece.mirrored = spec.mirror.unwrap_or(false);
         if let (Some(right), Some(opening)) = (spec.hinge_right, piece.opening.as_mut()) {
             opening.hinge_right = right;

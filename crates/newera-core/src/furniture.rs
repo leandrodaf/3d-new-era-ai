@@ -303,6 +303,9 @@ pub struct Furniture {
     pub texture: Option<Material>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shininess: Option<f64>,
+    /// 0 (invisible) to 1 (opaque); glass panels, water, reference boards.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity: Option<f64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub materials: Vec<ModelMaterial>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -357,6 +360,7 @@ impl Default for Furniture {
             model_transform: ModelTransform::default(),
             texture: None,
             shininess: None,
+            opacity: None,
             materials: Vec::new(),
             light: None,
             children: Vec::new(),

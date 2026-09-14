@@ -9,6 +9,7 @@
 
 mod analysis;
 mod annotations;
+pub mod arrange;
 pub mod collab;
 mod command;
 mod detect;
