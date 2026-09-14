@@ -52,6 +52,11 @@ pub struct CabinetParams {
     pub color: Option<[u8; 3]>,
     /// Door and drawer front finish, e.g. `wood` or `#5f6e4a`.
     pub front: Option<String>,
+    /// Blind corner: cm of the front on the left covered by a fixed panel
+    /// (where a cabinet run on the other wall meets this one).
+    pub blind_left: f64,
+    /// Blind corner on the right, cm.
+    pub blind_right: f64,
 }
 
 impl Default for CabinetParams {
@@ -71,6 +76,8 @@ impl Default for CabinetParams {
             cooktop: false,
             color: None,
             front: None,
+            blind_left: 0.0,
+            blind_right: 0.0,
         }
     }
 }
@@ -135,6 +142,23 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
             num(d),
             num(COOKTOP_NICHE)
         ));
+    }
+    let (blind_l, blind_r) = (p.blind_left.max(0.0), p.blind_right.max(0.0));
+    if blind_l + blind_r > 0.0 {
+        if p.door != DoorType::Hinged || p.drawers > 0 {
+            return Err(
+                "Canto cego só com portas de giro e sem gavetas: use door = hinged e drawers = 0."
+                    .into(),
+            );
+        }
+        if w - blind_l - blind_r < 30.0 {
+            return Err(format!(
+                "Com {} cm de painel cego sobram {} cm de porta (mínimo 30); use w = {}.",
+                num(blind_l + blind_r),
+                num(w - blind_l - blind_r),
+                num(blind_l + blind_r + 30.0)
+            ));
+        }
     }
     let plinth = p.plinth.max(0.0);
     let front_t = match p.door {
@@ -422,23 +446,48 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
     let door_h = hc - drawer_zone;
     match p.door {
         DoorType::Hinged if door_h > 10.0 => {
+            let open = w - blind_l - blind_r;
             let n = p
                 .doors
-                .unwrap_or_else(|| (w / MAX_DOOR).ceil() as u32)
+                .unwrap_or_else(|| (open / MAX_DOOR).ceil() as u32)
                 .max(1);
-            let leaf = (w - GAP * f64::from(n + 1)) / f64::from(n);
+            let leaf = (open - GAP * f64::from(n + 1)) / f64::from(n);
             if leaf > MAX_DOOR {
                 return Err(format!(
                     "Porta de giro com {} cm de largura empena e força as dobradiças; use doors = {} (até {} cm cada).",
                     num(leaf),
-                    (w / MAX_DOOR).ceil() as u32,
+                    (open / MAX_DOOR).ceil() as u32,
                     num(MAX_DOOR)
                 ));
             }
             let z0 = plinth + drawer_zone + GAP;
             let height = door_h - 2.0 * GAP;
+            for (name, x0, width) in [
+                ("Painel cego esquerdo", 0.0, blind_l),
+                ("Painel cego direito", w - blind_r, blind_r),
+            ] {
+                if width > 0.0 {
+                    let mut panel = Part::board(
+                        name,
+                        [x0 + GAP, dc, z0],
+                        [width - GAP, t, height],
+                        &board,
+                        front_color,
+                    )
+                    .banded(2, 2);
+                    panel.finish.clone_from(&front_finish);
+                    parts.push(panel);
+                }
+            }
+            if blind_l + blind_r > 0.0 {
+                notes.push(format!(
+                    "Canto cego: {} cm de painel fixo; acesso pela porta de {} cm.",
+                    num(blind_l + blind_r),
+                    num(open)
+                ));
+            }
             for k in 0..n {
-                let x = GAP + f64::from(k) * (leaf + GAP);
+                let x = blind_l + GAP + f64::from(k) * (leaf + GAP);
                 let mut door = Part::board(
                     &format!("Porta {}", k + 1),
                     [x, dc, z0],
@@ -631,6 +680,27 @@ mod tests {
         })
         .unwrap_err();
         assert!(shallow.contains("corrediça"), "{shallow}");
+        let corner = generate(&CabinetParams {
+            w: 100.0,
+            h: 87.0,
+            blind_left: 58.0,
+            shelves: 1,
+            ..CabinetParams::default()
+        })
+        .unwrap();
+        let panel = part(&corner, "Painel cego esquerdo");
+        let door = part(&corner, "Porta 1");
+        assert!((panel.size[0] - 57.8).abs() < 1e-9);
+        assert!((door.at[0] - 58.2).abs() < 1e-9 && (door.size[0] - 41.6).abs() < 1e-9);
+        assert!(
+            generate(&CabinetParams {
+                w: 80.0,
+                blind_left: 58.0,
+                ..CabinetParams::default()
+            })
+            .unwrap_err()
+            .contains("use w = 88")
+        );
         assert!(
             generate(&CabinetParams {
                 t: 16.0,

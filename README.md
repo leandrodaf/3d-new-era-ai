@@ -67,6 +67,7 @@ Clients that spawn a process can use stdio instead:
 | `set_background` | Scanned plan at real scale: calibrations, X/Y scale, rotation |
 | `trace_background` | Find walls in the scanned plan and list or create them |
 | `joinery` | Parametric cabinets, slatted panels, countertops with cutouts, plaster coves, shadow gaps and modular sofas; workshop rules answer with the fix to make |
+| `cabinet_run` | Fill a wall with cabinets sized for it: even modules around corners, doors, windows, fridge and stove, drawer unit by the stove, blind corners in L kitchens |
 | `cut_list` | Cut list of the joinery builds (boards merged, edge banding, hardware) as CSV, or DXF/SVG sheets |
 | `render_plan` | PNG of the plan, exactly as the user sees it (`bg` overlays the scan) |
 | `render_3d` | Software 3D: aerial, visitor, stored cameras, elevations and sections |

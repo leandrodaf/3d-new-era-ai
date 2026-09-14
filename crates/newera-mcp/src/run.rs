@@ -1,0 +1,639 @@
+//! `cabinet_run`: fills one wall with cabinets sized for it. The wall is
+//! measured in `newera-core`, the modules are planned in `newera-joinery`,
+//! and here the old cabinets make way for the new ones. Where the run meets
+//! another wall's run in an L, the cabinet under the other run's fronts
+//! becomes a blind corner; the other wall is planned again in the same undo
+//! step so the corner works from whichever side was drawn first.
+
+use newera_core::{
+    Command, Document, Furniture, FurnitureId, Home, Point2, RunBlock, RunObstacle, WallId,
+};
+use newera_joinery::{Build, EndKind, PARAMS_KEY, RunGap, RunOver, RunParams, RunRow};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+
+use crate::compact::num;
+
+/// Property marking the modules of a run: `w3:base`.
+pub(crate) const RUN_KEY: &str = "joinery:run";
+/// Property holding the run's request, to plan it again after a neighbor changes.
+const REQUEST_KEY: &str = "joinery:run_request";
+/// Filler between a blind panel's edge and the doors beside it, cm.
+const CORNER_FILLER: f64 = 3.0;
+/// How far in front of a run another run's fronts still block its doors, cm.
+const DOOR_SWING: f64 = 60.0;
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct CabinetRunParams {
+    /// Wall whose face gets the cabinets.
+    pub wall: Option<String>,
+    /// Or a piece against the wall (`f12`, the fridge): its nearest wall, on its side.
+    pub near: Option<String>,
+    /// Room the fronts face (default: the side toward the middle of the house).
+    pub room: Option<String>,
+    /// Flat choices, all optional: row base|wall|tall, h, d, elev, t (mm), front,
+    /// color [r,g,b], drawers (drawer units), max (widest module, 90), target (60),
+    /// top (base countertop, true), `top_material`.
+    pub p: Option<serde_json::Map<String, Value>>,
+    /// Stretch to fill, cm from the wall start (default: all of it).
+    pub from: Option<f64>,
+    pub to: Option<f64>,
+    /// Cabinets on that wall that stay as they are.
+    pub keep: Option<Vec<String>>,
+    /// Plan and report only.
+    #[serde(default)]
+    pub dry: bool,
+}
+
+/// A resolved run: one wall face and the choices for it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Request {
+    wall: WallId,
+    side: f64,
+    params: RunParams,
+    /// Keys the caller set explicitly (the rest may follow replaced cabinets).
+    given: Vec<String>,
+    from: Option<f64>,
+    to: Option<f64>,
+    #[serde(default)]
+    keep: Vec<String>,
+}
+
+/// A module ready to become a furniture group.
+struct Pending {
+    build: Build,
+    role: newera_joinery::Role,
+    from: f64,
+    width: f64,
+    position: Point2,
+    angle: f64,
+    elevation: f64,
+}
+
+struct Planned {
+    request: Request,
+    removed: Vec<FurnitureId>,
+    modules: Vec<Pending>,
+    notes: Vec<String>,
+    /// Runs of other walls meeting this one in a corner, by tag.
+    neighbors: Vec<String>,
+}
+
+fn joinery_kind(f: &Furniture) -> Option<String> {
+    let stored = f.properties.get(PARAMS_KEY)?;
+    let value: Value = serde_json::from_str(stored).ok()?;
+    value["kind"].as_str().map(str::to_owned)
+}
+
+fn has_cooktop(f: &Furniture) -> bool {
+    f.properties.get(PARAMS_KEY).is_some_and(|stored| {
+        serde_json::from_str::<Value>(stored).is_ok_and(|v| {
+            v["cooktop"] == true
+                || v["cutouts"]
+                    .as_array()
+                    .is_some_and(|c| c.iter().any(|c| c["kind"] == "cooktop"))
+        })
+    })
+}
+
+fn row_key(row: RunRow) -> &'static str {
+    match row {
+        RunRow::Base => "base",
+        RunRow::Wall => "wall",
+        RunRow::Tall => "tall",
+    }
+}
+
+/// Distance from a point to a wall's centerline segment, cm.
+fn distance_to(wall: &newera_core::Wall, p: Point2) -> f64 {
+    let (dx, dy) = (wall.end.x - wall.start.x, wall.end.y - wall.start.y);
+    let len2 = (dx * dx + dy * dy).max(1e-9);
+    let t = (((p.x - wall.start.x) * dx + (p.y - wall.start.y) * dy) / len2).clamp(0.0, 1.0);
+    Point2::new(wall.start.x + dx * t, wall.start.y + dy * t).distance(p)
+}
+
+fn brazilian(v: f64) -> String {
+    let rounded = (v * 10.0).round() / 10.0;
+    if rounded.fract() == 0.0 {
+        format!("{rounded:.0}")
+    } else {
+        format!("{rounded:.1}").replace('.', ",")
+    }
+}
+
+/// Which wall, which face, which choices.
+fn resolve(home: &Home, p: &CabinetRunParams) -> Result<Request, String> {
+    let near = match &p.near {
+        Some(id) => Some(
+            home.furniture
+                .iter()
+                .find(|f| f.id.to_string() == *id)
+                .ok_or_else(|| format!("{id} not found"))?
+                .position,
+        ),
+        None => None,
+    };
+    let wall_id: WallId = match (&p.wall, near) {
+        (Some(wall), _) => wall.parse().map_err(|e| format!("{e}"))?,
+        (None, Some(at)) => {
+            let view = home.level_view(home.current_level());
+            view.walls
+                .iter()
+                .filter(|w| !w.is_arc())
+                .min_by(|a, b| distance_to(a, at).total_cmp(&distance_to(b, at)))
+                .ok_or("there are no straight walls")?
+                .id
+        }
+        (None, None) => return Err("give `wall`, or `near` with a piece against it".into()),
+    };
+    let wall = home
+        .wall(wall_id)
+        .ok_or_else(|| format!("{wall_id} not found"))?;
+    if wall.is_arc() {
+        return Err(format!(
+            "{wall_id} is curved: cabinets need a straight wall"
+        ));
+    }
+    let given = p.p.clone().unwrap_or_default();
+    let params: RunParams = serde_json::from_value(Value::Object(given.clone()))
+        .map_err(|e| format!("invalid parameters: {e}"))?;
+    let length = wall.start.distance(wall.end);
+    let u = (
+        (wall.end.x - wall.start.x) / length,
+        (wall.end.y - wall.start.y) / length,
+    );
+    let mid = Point2::new(
+        wall.start.x.midpoint(wall.end.x),
+        wall.start.y.midpoint(wall.end.y),
+    );
+    let facing = match (&p.room, near) {
+        (Some(room), _) => {
+            let id: newera_core::RoomId = room.parse().map_err(|e| format!("{e}"))?;
+            let room = home
+                .rooms
+                .iter()
+                .find(|r| r.id == id)
+                .ok_or_else(|| format!("{room} not found"))?;
+            newera_core::polygon_centroid(&room.points).unwrap_or(mid)
+        }
+        (None, Some(at)) => at,
+        (None, None) => home.bounds().map_or(mid, |(a, b)| {
+            Point2::new(a.x.midpoint(b.x), a.y.midpoint(b.y))
+        }),
+    };
+    let side = if -u.1 * (facing.x - mid.x) + u.0 * (facing.y - mid.y) >= 0.0 {
+        1.0
+    } else {
+        -1.0
+    };
+    Ok(Request {
+        wall: wall_id,
+        side,
+        params,
+        given: given.keys().cloned().collect(),
+        from: p.from,
+        to: p.to,
+        keep: p.keep.clone().unwrap_or_default(),
+    })
+}
+
+/// Plans one run against `home` without changing it.
+#[allow(clippy::too_many_lines)]
+fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
+    let wall_id = request.wall;
+    let side = request.side;
+    let wall = home
+        .wall(wall_id)
+        .cloned()
+        .ok_or_else(|| format!("{wall_id} not found"))?;
+    let mut params = request.params.clone();
+    let length = wall.start.distance(wall.end);
+    let u = (
+        (wall.end.x - wall.start.x) / length,
+        (wall.end.y - wall.start.y) / length,
+    );
+    let wall_angle = u.1.atan2(u.0).to_degrees();
+    let (from, to) = (
+        request.from.unwrap_or(0.0).clamp(0.0, length),
+        request.to.unwrap_or(length).clamp(0.0, length),
+    );
+    if to - from < 1.0 {
+        return Err(format!(
+            "from/to leave nothing of {wall_id} ({} cm long)",
+            brazilian(length)
+        ));
+    }
+    let row = row_key(params.row);
+    let tag = format!("{wall_id}:{row}");
+    let other_run = |f: &Furniture| {
+        f.properties
+            .get(RUN_KEY)
+            .filter(|t| t.ends_with(&format!(":{row}")) && **t != tag)
+            .cloned()
+    };
+    let catalog_cabinet = match params.row {
+        RunRow::Base => "base-cabinet",
+        RunRow::Wall => "wall-cabinet",
+        RunRow::Tall => "wardrobe",
+    };
+    let (h, d, elev) = params.sizes();
+    let z = match params.row {
+        RunRow::Base => (0.0, h + 3.0),
+        RunRow::Wall => (elev, elev + h),
+        RunRow::Tall => (0.0, elev + h),
+    };
+    let band = if params.row == RunRow::Base {
+        d + 3.0
+    } else {
+        d
+    };
+    // Pieces this run replaces: its own modules and loose cabinets in the band.
+    let replaceable = |f: &Furniture| {
+        if request.keep.contains(&f.id.to_string()) {
+            return false;
+        }
+        // Another wall's run meeting this one stays, and so does anything
+        // not parallel to this wall.
+        if f.properties.get(RUN_KEY).is_some_and(|t| *t != tag) {
+            return false;
+        }
+        if (f.angle - wall_angle).to_radians().sin().abs() > 0.1 {
+            return false;
+        }
+        // Only pieces of this row: a tower is not a wall cabinet.
+        let (lo, hi) = f.height_range();
+        let this_row = match params.row {
+            RunRow::Base => hi <= 100.0,
+            RunRow::Wall => lo >= 100.0,
+            RunRow::Tall => lo < 50.0 && hi > 150.0,
+        };
+        this_row
+            && match joinery_kind(f).as_deref() {
+                Some("cabinet" | "filler") => true,
+                Some("countertop") => params.row == RunRow::Base,
+                _ => f.catalog == catalog_cabinet,
+            }
+    };
+    let piece = |id: FurnitureId| home.furniture.iter().find(|f| f.id == id);
+    let first = newera_core::wall_run(home, wall_id, side, band, z, &|_| false)
+        .ok_or_else(|| format!("{wall_id} can't hold a run"))?;
+    let inside = |o: &RunObstacle| {
+        let c = o.from.midpoint(o.to);
+        c >= from - 0.5 && c <= to + 0.5
+    };
+    let mut removed: Vec<FurnitureId> = Vec::new();
+    for o in first.obstacles.iter().filter(|o| inside(o)) {
+        if let RunBlock::Piece { id, .. } = &o.block
+            && !removed.contains(id)
+            && piece(*id).is_some_and(&replaceable)
+        {
+            removed.push(*id);
+        }
+    }
+    // Keep the finish of the cabinets being replaced unless told otherwise.
+    if let Some(Build::Cabinet(old)) = removed
+        .iter()
+        .filter_map(|id| piece(*id))
+        .filter_map(|f| serde_json::from_str::<Build>(f.properties.get(PARAMS_KEY)?).ok())
+        .find(|b| matches!(b, Build::Cabinet(_)))
+    {
+        let given = |key: &str| request.given.iter().any(|g| g == key);
+        if !given("t") {
+            params.t = old.t;
+        }
+        if !given("front") {
+            params.front = old.front;
+        }
+        if !given("color") {
+            params.color = old.color;
+        }
+    }
+    let skip_top = params.row == RunRow::Base && !params.top;
+    let skip = |f: &Furniture| {
+        removed.contains(&f.id) || (skip_top && joinery_kind(f).as_deref() == Some("countertop"))
+    };
+    let mut run = newera_core::wall_run(home, wall_id, side, band, z, &skip)
+        .ok_or_else(|| format!("{wall_id} can't hold a run"))?;
+    let heat = |id: FurnitureId, catalog: &str| {
+        catalog == "stove" || catalog == "cooktop" || piece(id).is_some_and(has_cooktop)
+    };
+    let mut notes = Vec::new();
+    let mut neighbors: Vec<String> = Vec::new();
+    let mut over = Vec::new();
+    if params.row == RunRow::Wall {
+        // Leave the hood's width free over a stove or cooktop.
+        let below = newera_core::wall_run(home, wall_id, side, 60.0, (0.0, 95.0), &skip);
+        for o in below.iter().flat_map(|b| b.obstacles.iter()) {
+            if let RunBlock::Piece { id, catalog } = &o.block
+                && heat(*id, catalog)
+                && !run.obstacles.iter().any(|r| r.block == o.block)
+            {
+                run.obstacles.push(o.clone());
+                notes.push(format!(
+                    "Vão de {} cm deixado para a coifa sobre o fogão.",
+                    brazilian(o.to - o.from)
+                ));
+            }
+        }
+        run.obstacles.sort_by(|a, b| a.from.total_cmp(&b.from));
+        for o in &run.obstacles {
+            if let RunBlock::Piece { id, catalog } = &o.block
+                && catalog == "fridge"
+                && let Some(f) = piece(*id)
+            {
+                over.push(RunOver {
+                    from: o.from,
+                    to: o.to,
+                    bottom: f.height_range().1,
+                });
+            }
+        }
+    }
+    let end_kind = |o: Option<&RunObstacle>| match o.map(|o| &o.block) {
+        None => EndKind::Free,
+        Some(RunBlock::Wall(_)) => EndKind::Wall,
+        Some(RunBlock::Opening { .. }) => EndKind::Frame,
+        Some(RunBlock::Piece { id, catalog }) => {
+            if catalog == "fridge" {
+                EndKind::Fridge
+            } else if heat(*id, catalog) {
+                EndKind::Heat
+            } else if let Some(f) = piece(*id).filter(|f| f.properties.contains_key(PARAMS_KEY)) {
+                // Another wall's run owns the corner: fronts need a filler.
+                if other_run(f).is_some() {
+                    EndKind::Wall
+                } else {
+                    EndKind::Kept
+                }
+            } else {
+                EndKind::Piece
+            }
+        }
+    };
+    for o in &run.obstacles {
+        if let RunBlock::Piece { id, .. } = &o.block
+            && let Some(t) = piece(*id).and_then(other_run)
+            && !neighbors.contains(&t)
+        {
+            neighbors.push(t);
+        }
+    }
+    // Other runs' cabinets just in front of this one: their fronts cover ours.
+    let front = newera_core::wall_run(home, wall_id, side, d + DOOR_SWING, z, &skip);
+    let covering: Vec<(f64, f64)> = front
+        .iter()
+        .flat_map(|r| r.obstacles.iter())
+        .filter_map(|o| {
+            let RunBlock::Piece { id, .. } = &o.block else {
+                return None;
+            };
+            let f = piece(*id)?;
+            let t = other_run(f)?;
+            if !matches!(joinery_kind(f).as_deref(), Some("cabinet" | "filler")) {
+                return None;
+            }
+            if !neighbors.contains(&t) {
+                neighbors.push(t);
+            }
+            Some((o.from, o.to))
+        })
+        .collect();
+    let gaps: Vec<RunGap> = run
+        .gaps()
+        .into_iter()
+        .filter_map(|(a, b, before, after)| {
+            let (a2, b2) = (a.max(from), b.min(to));
+            if b2 - a2 <= 0.5 {
+                return None;
+            }
+            let start = if a2 > a {
+                EndKind::Kept
+            } else {
+                end_kind(before)
+            };
+            let end = if b2 < b {
+                EndKind::Kept
+            } else {
+                end_kind(after)
+            };
+            let blind_start = if start == EndKind::Wall {
+                covering
+                    .iter()
+                    .filter(|(f, t)| *f <= a2 + 1.0 && *t > a2 + 1.0)
+                    .map(|(_, t)| t - a2 + CORNER_FILLER)
+                    .fold(0.0, f64::max)
+            } else {
+                0.0
+            };
+            let blind_end = if end == EndKind::Wall {
+                covering
+                    .iter()
+                    .filter(|(f, t)| *t >= b2 - 1.0 && *f < b2 - 1.0)
+                    .map(|(f, _)| b2 - f + CORNER_FILLER)
+                    .fold(0.0, f64::max)
+            } else {
+                0.0
+            };
+            Some(RunGap {
+                from: a2,
+                to: b2,
+                start,
+                end,
+                blind_start,
+                blind_end,
+            })
+        })
+        .collect();
+    let over: Vec<RunOver> = over
+        .into_iter()
+        .filter(|o| o.from >= from - 0.5 && o.to <= to + 0.5)
+        .collect();
+    let (modules, plan_notes) = newera_joinery::plan_run(&gaps, &over, &params)?;
+    notes.extend(plan_notes);
+    let mut seen = std::collections::HashSet::new();
+    notes.retain(|n| seen.insert(n.clone()));
+
+    let angle = wall_angle + if side < 0.0 { 180.0 } else { 0.0 };
+    let normal = (-u.1 * side, u.0 * side);
+    let pending = modules
+        .into_iter()
+        .map(|m| {
+            let mut build = m.build;
+            // Turned around, the cabinet's left is the run's end.
+            if side < 0.0
+                && let Build::Cabinet(c) = &mut build
+            {
+                std::mem::swap(&mut c.blind_left, &mut c.blind_right);
+            }
+            let along = m.from + m.width / 2.0;
+            let out = wall.thickness / 2.0 + m.depth / 2.0;
+            Pending {
+                build,
+                role: m.role,
+                from: m.from,
+                width: m.width,
+                position: Point2::new(
+                    wall.start.x + u.0 * along + normal.0 * out,
+                    wall.start.y + u.1 * along + normal.1 * out,
+                ),
+                angle,
+                elevation: m.elevation,
+            }
+        })
+        .collect();
+    let request = Request {
+        params,
+        given: request.given.clone(),
+        ..request.clone()
+    };
+    Ok(Planned {
+        request,
+        removed,
+        modules: pending,
+        notes,
+        neighbors,
+    })
+}
+
+/// Turns a plan into commands, taking furniture ids from `doc`.
+fn commands(doc: &mut Document, planned: &Planned) -> Result<(Vec<Command>, Value), String> {
+    let tag = format!(
+        "{}:{}",
+        planned.request.wall,
+        row_key(planned.request.params.row)
+    );
+    // Replanned later, every explicit choice is already in `params`.
+    let stored = serde_json::to_string(&Request {
+        given: vec!["t".into(), "front".into(), "color".into()],
+        keep: Vec::new(),
+        ..planned.request.clone()
+    })
+    .map_err(|e| e.to_string())?;
+    let mut list: Vec<Command> = planned
+        .removed
+        .iter()
+        .map(|id| Command::remove(*id))
+        .collect();
+    let mut rows = Vec::new();
+    for m in &planned.modules {
+        let output = newera_joinery::generate(&m.build)?;
+        let group_id = doc.new_furniture_id();
+        let mut next = || doc.new_furniture_id();
+        let mut group = newera_joinery::assemble(
+            &m.build,
+            &output,
+            group_id,
+            m.position,
+            m.angle,
+            m.elevation,
+            &mut next,
+        );
+        group.properties.insert(RUN_KEY.into(), tag.clone());
+        group.properties.insert(REQUEST_KEY.into(), stored.clone());
+        list.push(Command::insert(group));
+        rows.push(json!([
+            group_id.to_string(),
+            m.role,
+            num(m.from),
+            num(m.width)
+        ]));
+    }
+    Ok((list, Value::Array(rows)))
+}
+
+/// Whether a new plan for a run builds exactly what is already there.
+fn unchanged(home: &Home, tag: &str, planned: &Planned) -> bool {
+    let key = |build: &str, p: Point2, elevation: f64| {
+        format!("{build}@{:.1},{:.1},{:.1}", p.x, p.y, elevation)
+    };
+    let mut before: Vec<String> = home
+        .furniture
+        .iter()
+        .filter(|f| f.properties.get(RUN_KEY).is_some_and(|t| t == tag))
+        .filter_map(|f| Some(key(f.properties.get(PARAMS_KEY)?, f.position, f.elevation)))
+        .collect();
+    let mut after: Vec<String> = planned
+        .modules
+        .iter()
+        .filter_map(|m| {
+            Some(key(
+                &serde_json::to_string(&m.build).ok()?,
+                m.position,
+                m.elevation,
+            ))
+        })
+        .collect();
+    before.sort();
+    after.sort();
+    before == after
+}
+
+#[allow(clippy::needless_pass_by_value)] // built for the reply
+fn summary(planned: &Planned, modules: Value) -> Value {
+    json!({
+        "wall": planned.request.wall.to_string(),
+        "row": row_key(planned.request.params.row),
+        "modules": modules,
+        "removed": planned.removed.iter().map(ToString::to_string).collect::<Vec<_>>(),
+        "notes": planned.notes,
+    })
+}
+
+/// Plans (and unless `dry`, builds) the cabinets for one wall, and plans
+/// again the runs it meets in a corner.
+pub(crate) fn cabinet_run(doc: &mut Document, p: &CabinetRunParams) -> Result<Value, String> {
+    let request = resolve(doc.home(), p)?;
+    let planned = plan(doc.home(), &request)?;
+    if p.dry {
+        let rows: Vec<Value> = planned
+            .modules
+            .iter()
+            .map(|m| json!(["", m.role, num(m.from), num(m.width)]))
+            .collect();
+        return Ok(summary(&planned, Value::Array(rows)));
+    }
+    // Work on a copy first: neighbors are planned against the new run.
+    let mut scratch = Document::new(doc.home().clone());
+    let (mut all, rows) = commands(&mut scratch, &planned)?;
+    scratch
+        .execute(Command::Batch {
+            commands: all.clone(),
+        })
+        .map_err(|e| e.to_string())?;
+    let mut reply = summary(&planned, rows);
+    let mut adjusted = Vec::new();
+    for tag in &planned.neighbors {
+        let Some(stored) = scratch
+            .home()
+            .furniture
+            .iter()
+            .find(|f| f.properties.get(RUN_KEY) == Some(tag))
+            .and_then(|f| f.properties.get(REQUEST_KEY))
+            .and_then(|s| serde_json::from_str::<Request>(s).ok())
+        else {
+            continue;
+        };
+        let again = plan(scratch.home(), &stored)?;
+        if unchanged(scratch.home(), tag, &again) {
+            continue;
+        }
+        let (list, rows) = commands(&mut scratch, &again)?;
+        scratch
+            .execute(Command::Batch {
+                commands: list.clone(),
+            })
+            .map_err(|e| e.to_string())?;
+        all.extend(list);
+        adjusted.push(summary(&again, rows));
+    }
+    // Same ids on the real document, then one undoable step.
+    let last = scratch.new_furniture_id();
+    while doc.new_furniture_id().0 + 1 < last.0 {}
+    doc.execute(Command::Batch { commands: all })
+        .map_err(|e| e.to_string())?;
+    if !adjusted.is_empty() {
+        reply["adjusted"] = Value::Array(adjusted);
+    }
+    Ok(reply)
+}

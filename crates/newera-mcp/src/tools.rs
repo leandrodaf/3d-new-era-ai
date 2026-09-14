@@ -992,6 +992,19 @@ impl NewEraMcp {
     }
 
     #[tool(
+        description = "Fill a wall with cabinets sized for it: measures the free stretches between corners, doors, windows, fridge and stove, splits each into even modules (30-90 cm, no useless leftovers; 15-30 cm pull-outs, fillers under 15), drawer unit beside the stove, countertop on base rows, cabinet over the fridge and hood gap on wall rows. Replaces the cabinets already there (keep ids stay). Reply {modules:[[id,role,from,w]],removed,notes}; dry plans only. Change one module afterwards with joinery id."
+    )]
+    fn cabinet_run(
+        &self,
+        Parameters(p): Parameters<crate::run::CabinetRunParams>,
+    ) -> Result<String, ErrorData> {
+        let mut doc = self.document.write();
+        crate::run::cabinet_run(&mut doc, &p)
+            .map(|v| v.to_string())
+            .map_err(invalid)
+    }
+
+    #[tool(
         description = "Cut list of joinery builds: rows [part,board,qty,length,width,thickness mm,edge long+short] merged by size, hardware, sheets per board. path .csv, or .dxf/.svg (boards laid out on sheets), writes a file."
     )]
     fn cut_list(&self, Parameters(p): Parameters<CutListParams>) -> Result<String, ErrorData> {
@@ -3057,5 +3070,162 @@ mod tests {
         .unwrap();
         assert!(std::fs::read_to_string(&svg).unwrap().starts_with("<svg"));
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn cabinet_runs_fill_a_kitchen_wall_around_its_appliances() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}],"rooms":[{"name":"Cozinha","at":[200,150]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let place: PlaceParams = serde_json::from_str(
+            r#"{"items":[{"cat":"fridge","wall":"w1","along":355},{"cat":"stove","wall":"w1","along":180},{"cat":"window","wall":"w1","along":80,"elev":110}]}"#,
+        )
+        .unwrap();
+        s.place(Parameters(place)).unwrap();
+        let run = |json: &str| -> serde_json::Value {
+            let p: crate::run::CabinetRunParams = serde_json::from_str(json).unwrap();
+            serde_json::from_str(&s.cabinet_run(Parameters(p)).unwrap()).unwrap()
+        };
+        let base = run(r#"{"wall":"w1"}"#);
+        let modules = base["modules"].as_array().unwrap();
+        let spans: Vec<(String, f64, f64)> = modules
+            .iter()
+            .map(|m| {
+                (
+                    m[1].as_str().unwrap().to_owned(),
+                    m[2].as_f64().unwrap(),
+                    m[3].as_f64().unwrap(),
+                )
+            })
+            .collect();
+        // Stove 150..210, fridge 320..390: cabinets stay clear of both with their gaps.
+        for (role, from, w) in &spans {
+            let to = from + w;
+            assert!(
+                to <= 148.1 || *from >= 211.9,
+                "{role} {from}+{w} hits the stove: {spans:?}"
+            );
+            assert!(
+                to <= 315.1,
+                "{role} {from}+{w} takes the fridge air: {spans:?}"
+            );
+        }
+        // The corner filler, then modules; the drawer unit touches the stove.
+        assert_eq!(spans[0].0, "filler", "{spans:?}");
+        let drawers = spans.iter().find(|m| m.0 == "drawers").unwrap();
+        assert!(
+            (drawers.1 + drawers.2 - 148.0).abs() < 0.2 || (drawers.1 - 212.0).abs() < 0.2,
+            "{spans:?}"
+        );
+        assert!(base["notes"].to_string().contains("ventilação"), "{base}");
+        // Nothing left over: every stretch is modules, pull-outs or fillers.
+        let covered: f64 = spans
+            .iter()
+            .filter(|m| m.0 != "countertop")
+            .map(|m| m.2)
+            .sum();
+        assert!(
+            (covered - (148.0 - 7.5) - (315.0 - 212.0)).abs() < 0.3,
+            "{covered} {spans:?}"
+        );
+        let issues = s.check_layout(Parameters(CheckParams::default()));
+        assert!(!issues.contains("overlap"), "{issues}");
+
+        // Wall cabinets: split by the window, a gap for the hood, one over the fridge.
+        // The wall named by a piece against it: the fridge (f6).
+        let upper = run(r#"{"near":"f6","p":{"row":"wall"}}"#);
+        assert_eq!(upper["wall"], "w1");
+        let roles: Vec<&str> = upper["modules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m[1].as_str().unwrap())
+            .collect();
+        assert!(roles.contains(&"over"), "{upper}");
+        assert!(upper["notes"].to_string().contains("coifa"), "{upper}");
+        for m in upper["modules"].as_array().unwrap() {
+            let (from, w) = (m[2].as_f64().unwrap(), m[3].as_f64().unwrap());
+            assert!(from + w <= 30.1 || from >= 129.9, "window 30..130: {upper}");
+            assert!(
+                m[1] == "over" || from + w <= 150.1 || from >= 209.9,
+                "hood: {upper}"
+            );
+        }
+
+        // Again with two drawer units: the old base modules are replaced, not piled up.
+        let before = s.document.read().home().furniture.len();
+        let again = run(r#"{"wall":"w1","p":{"drawers":2,"front":"wood"}}"#);
+        assert_eq!(
+            again["removed"].as_array().unwrap().len(),
+            modules.len(),
+            "{again}"
+        );
+        assert_eq!(s.document.read().home().furniture.len(), before);
+        assert_eq!(again["modules"].to_string().matches("drawers").count(), 2);
+        // An L: the side wall's run stops at this one's countertop with a corner filler.
+        let side = run(r#"{"wall":"w4"}"#);
+        assert!(side["removed"].as_array().unwrap().is_empty(), "{side}");
+        let last = side["modules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .rfind(|m| m[1] != "countertop")
+            .unwrap()
+            .clone();
+        assert_eq!(last[1], "filler", "{side}");
+        // w4 runs from y=300 up to y=0: w1's countertop front is at y = 7.5 + 58.
+        assert!(
+            (last[2].as_f64().unwrap() + last[3].as_f64().unwrap() - (300.0 - 65.5)).abs() < 0.6,
+            "{side}"
+        );
+        // …and w1, planned again in the same step, turns its corner module blind.
+        let adjusted = &side["adjusted"][0];
+        assert_eq!(adjusted["wall"], "w1", "{side}");
+        let corner = &adjusted["modules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m[1] != "countertop")
+            .unwrap()
+            .clone();
+        assert_eq!(corner[1], "corner", "{adjusted}");
+        assert!(
+            (corner[2].as_f64().unwrap() - 7.5).abs() < 0.1,
+            "{adjusted}"
+        );
+        let issues = s.check_layout(Parameters(CheckParams::default()));
+        assert!(!issues.contains("overlap"), "{issues}");
+        s.document.write().undo().unwrap();
+        // Planning w4 again with nothing new leaves w1 alone.
+        run(r#"{"wall":"w4"}"#);
+        let quiet = run(r#"{"wall":"w4"}"#);
+        assert!(quiet.get("adjusted").is_none(), "{quiet}");
+        assert!(!quiet["removed"].as_array().unwrap().is_empty(), "{quiet}");
+        s.document.write().undo().unwrap();
+        s.document.write().undo().unwrap();
+        // Dry runs change nothing; one undo brings the previous run back.
+        run(r#"{"wall":"w1","p":{"drawers":0},"dry":true}"#);
+        assert_eq!(s.document.read().home().furniture.len(), before);
+        s.document.write().undo().unwrap();
+        let ids: Vec<String> = s
+            .document
+            .read()
+            .home()
+            .furniture
+            .iter()
+            .map(|f| f.id.to_string())
+            .collect();
+        assert!(ids.contains(&modules[1][0].as_str().unwrap().to_owned()));
+        let p: crate::run::CabinetRunParams =
+            serde_json::from_str(r#"{"wall":"w1","p":{"max":10}}"#).unwrap();
+        assert!(
+            s.cabinet_run(Parameters(p))
+                .unwrap_err()
+                .message
+                .contains("max entre")
+        );
     }
 }

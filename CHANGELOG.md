@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- MCP `cabinet_run` fills a wall with cabinets sized for it: the free stretches between
+  corners, doors (and their swing), windows, fridge and stove become even modules with no
+  useless leftovers — pull-outs for 15–30 cm, fillers below — a drawer unit by the stove,
+  countertops, a cabinet over the fridge, a gap for the hood, and blind corner modules where
+  two runs meet in an L (the other wall is planned again in the same undo step).
+
 - Joinery for AI-driven design: MCP `joinery` builds modular cabinets, slatted panels,
   countertops with sink/cooktop cutouts, plaster coves with LED, shadow gaps and modular
   sofas from flat parameters, edits them incrementally by id and explains broken workshop

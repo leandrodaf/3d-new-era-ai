@@ -23,6 +23,7 @@ mod cabinet;
 mod ceiling;
 mod countertop;
 mod cutlist;
+mod run;
 mod slats;
 mod sofa;
 
@@ -30,6 +31,9 @@ pub use cabinet::{CabinetParams, DoorType};
 pub use ceiling::{CoveParams, CoveType, ShadowGapParams};
 pub use countertop::{CountertopParams, Cutout, CutoutKind, Support};
 pub use cutlist::{CutRow, cut_list, cut_list_csv, cut_list_dxf, cut_list_svg};
+pub use run::{
+    EndKind, FillerParams, Role, RunGap, RunModule, RunOver, RunParams, RunRow, plan_run,
+};
 pub use slats::{Orientation, SlatsParams};
 pub use sofa::{ArmType, SofaParams};
 
@@ -55,6 +59,7 @@ pub enum Build {
     Cove(CoveParams),
     ShadowGap(ShadowGapParams),
     Sofa(SofaParams),
+    Filler(FillerParams),
 }
 
 impl Build {
@@ -66,6 +71,7 @@ impl Build {
             Self::Cove(_) => "cove",
             Self::ShadowGap(_) => "shadow_gap",
             Self::Sofa(_) => "sofa",
+            Self::Filler(_) => "filler",
         }
     }
 }
@@ -159,6 +165,7 @@ pub fn generate(build: &Build) -> Result<Output, String> {
         Build::Cove(p) => ceiling::cove(p),
         Build::ShadowGap(p) => ceiling::shadow_gap(p),
         Build::Sofa(p) => sofa::generate(p),
+        Build::Filler(p) => run::filler(p),
     }
 }
 

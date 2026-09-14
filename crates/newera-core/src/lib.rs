@@ -28,6 +28,7 @@ mod project;
 mod style;
 mod units;
 pub mod vfs;
+mod wallrun;
 
 pub use analysis::{Issue, check_layout, door_swing};
 pub use annotations::{
@@ -63,3 +64,4 @@ pub use style::{
     TextStyle, VideoSettings,
 };
 pub use units::LengthUnit;
+pub use wallrun::{RunBlock, RunObstacle, WallRun, wall_run};
