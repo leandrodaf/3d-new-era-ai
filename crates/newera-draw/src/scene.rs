@@ -905,13 +905,20 @@ fn reference_items(scene: &mut Scene, home: &Home, options: &SceneOptions) {
             },
         );
     };
-    // Tags.
+    // Tags, in a corner of the piece so they don't cover the room name and
+    // area written at the middle of the room.
     for item in groups.iter().flat_map(|g| &g.items) {
         let r = 11.0;
+        let at = home
+            .piece(item.piece)
+            .filter(|p| p.width > 4.0 * r && p.depth > 4.0 * r)
+            .map_or(item.position, |p| {
+                p.to_plan((-p.width / 2.0 + 1.6 * r, -p.depth / 2.0 + 1.6 * r))
+            });
         let circle: Vec<Point2> = (0..20)
             .map(|i| {
                 let a = f64::from(i) / 20.0 * std::f64::consts::TAU;
-                Point2::new(item.position.x + r * a.cos(), item.position.y + r * a.sin())
+                Point2::new(at.x + r * a.cos(), at.y + r * a.sin())
             })
             .collect();
         scene.fill(Some(item.piece.into()), &circle, paper);
@@ -927,7 +934,7 @@ fn reference_items(scene: &mut Scene, home: &Home, options: &SceneOptions) {
         text(
             scene,
             item.tag.to_string(),
-            item.position,
+            at,
             11.0,
             accent,
             true,
@@ -962,9 +969,17 @@ fn reference_items(scene: &mut Scene, home: &Home, options: &SceneOptions) {
     );
     y += 34.0;
     for group in &groups {
+        let title = match group.area {
+            Some(area) => format!(
+                "{} — {}",
+                group.name.to_uppercase(),
+                options.unit.format_area(area)
+            ),
+            None => group.name.to_uppercase(),
+        };
         text(
             scene,
-            group.name.to_uppercase(),
+            title,
             Point2::new(x, y),
             16.0,
             ink,
@@ -1463,5 +1478,124 @@ mod furniture_tests {
             .filter(|i| i.owner == Some(door_id.into()))
             .count();
         assert!(door_lines >= 3, "leaf, arc and jambs");
+    }
+}
+
+#[cfg(test)]
+mod reference_tests {
+    use newera_core::{
+        Command, Document, Furniture, PlanAnnotations, Point2, Room, Wall, detect_room, ops,
+    };
+
+    use super::*;
+
+    fn texts(doc: &Document) -> Vec<String> {
+        plan_scene(doc.home(), &SceneOptions::default())
+            .items
+            .iter()
+            .filter_map(|i| match &i.primitive {
+                Primitive::Text { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn reference_tags_and_schedule_follow_every_edit() {
+        let mut doc = Document::default();
+        // Two rooms side by side: 0..300 and 300..600.
+        let pts = [(0.0, 0.0), (600.0, 0.0), (600.0, 300.0), (0.0, 300.0)];
+        let mut commands: Vec<Command> = (0..4)
+            .map(|i| {
+                let (a, b) = (pts[i], pts[(i + 1) % 4]);
+                Command::insert(Wall::new(
+                    doc.new_wall_id(),
+                    Point2::new(a.0, a.1),
+                    Point2::new(b.0, b.1),
+                ))
+            })
+            .collect();
+        commands.push(Command::insert(Wall::new(
+            doc.new_wall_id(),
+            Point2::new(300.0, 0.0),
+            Point2::new(300.0, 300.0),
+        )));
+        doc.execute(Command::Batch { commands }).unwrap();
+        for (name, x) in [("Sala", 150.0), ("Quarto", 450.0)] {
+            let points = detect_room(&doc.home().walls, Point2::new(x, 150.0)).unwrap();
+            let mut room = Room::new(doc.new_room_id(), name, points);
+            room.auto = true;
+            doc.execute(Command::insert(room)).unwrap();
+        }
+        let sofa = Furniture {
+            id: doc.new_furniture_id(),
+            catalog: "sofa-3".into(),
+            name: "Sofá".into(),
+            position: Point2::new(150.0, 150.0),
+            ..Furniture::default()
+        };
+        let sofa_id = sofa.id;
+        doc.execute(Command::insert(sofa)).unwrap();
+        assert!(
+            !texts(&doc).iter().any(|t| t.contains("REFERÊNCIAS")),
+            "off by default"
+        );
+
+        doc.execute(Command::SetAnnotations {
+            annotations: PlanAnnotations {
+                references: true,
+                ..PlanAnnotations::default()
+            },
+        })
+        .unwrap();
+        let t = texts(&doc);
+        assert!(t.iter().any(|t| t == "REFERÊNCIAS"));
+        assert!(t.iter().any(|t| t.starts_with("SALA — ")), "{t:?}");
+        assert!(t.iter().any(|t| t.contains("1  Sofá")), "{t:?}");
+
+        // Moving the sofa into the bedroom moves it in the schedule.
+        ops::translate(&mut doc, &[sofa_id.into()], 300.0, 0.0, true).unwrap();
+        let t = texts(&doc);
+        assert!(t.iter().any(|t| t.starts_with("QUARTO — ")), "{t:?}");
+        assert!(!t.iter().any(|t| t.starts_with("SALA — ")), "{t:?}");
+
+        // A new piece in the living room takes number 1 (reading order).
+        let lamp = Furniture {
+            id: doc.new_furniture_id(),
+            catalog: "floor-lamp".into(),
+            name: "Luminária".into(),
+            position: Point2::new(100.0, 100.0),
+            ..Furniture::default()
+        };
+        doc.execute(Command::insert(lamp)).unwrap();
+        let t = texts(&doc);
+        assert!(t.iter().any(|t| t.contains("1  Luminária")), "{t:?}");
+        assert!(t.iter().any(|t| t.contains("2  Sofá")), "{t:?}");
+
+        // Renaming a room renames its schedule title.
+        let mut room = doc.home().rooms[1].clone();
+        room.name = "Suíte".into();
+        doc.execute(Command::update(room)).unwrap();
+        assert!(texts(&doc).iter().any(|t| t.starts_with("SUÍTE — ")));
+
+        // Moving the partition wall resizes the rooms: the area follows.
+        let before: Vec<String> = texts(&doc)
+            .into_iter()
+            .filter(|t| t.contains(" — "))
+            .collect();
+        let partition = doc.home().walls[4].id;
+        ops::translate(&mut doc, &[partition.into()], 50.0, 0.0, true).unwrap();
+        let after: Vec<String> = texts(&doc)
+            .into_iter()
+            .filter(|t| t.contains(" — "))
+            .collect();
+        assert_ne!(before, after);
+
+        // Turning references off removes tags and schedule.
+        doc.execute(Command::SetAnnotations {
+            annotations: PlanAnnotations::default(),
+        })
+        .unwrap();
+        assert!(!texts(&doc).iter().any(|t| t == "REFERÊNCIAS"));
     }
 }

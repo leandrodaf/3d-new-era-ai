@@ -245,3 +245,56 @@ fn collaborators() {
     }
     render("collaborators", SharedDocument::new(doc), |_| {});
 }
+
+#[test]
+#[ignore = "visual review; needs a GPU"]
+fn references() {
+    use newera_core::{PlanAnnotations, Polyline};
+    let mut doc = Document::default();
+    house(&mut doc, 800.0);
+    doc.execute(Command::remove(doc.home().rooms[0].id))
+        .unwrap();
+    let mut line = Polyline::new(
+        doc.new_polyline_id(),
+        vec![Point2::new(450.0, 0.0), Point2::new(450.0, 500.0)],
+    );
+    line.room_divider = true;
+    line.dash = newera_core::DashStyle::Dash;
+    line.color = [120, 120, 120];
+    doc.execute(Command::insert(line)).unwrap();
+    for (name, x) in [("Estar", 200.0), ("Jantar", 620.0)] {
+        let home = doc.home();
+        let dividers: Vec<&Polyline> = home.polylines.iter().collect();
+        let points =
+            newera_core::detect_room_with_dividers(&home.walls, &dividers, Point2::new(x, 250.0))
+                .unwrap();
+        let mut room = newera_core::Room::new(doc.new_room_id(), name, points);
+        room.auto = true;
+        doc.execute(Command::insert(room)).unwrap();
+    }
+    for (cat, x, y) in [
+        ("sofa-3", 200.0, 380.0),
+        ("coffee-table", 200.0, 250.0),
+        ("armchair", 80.0, 120.0),
+        ("dining-table-4", 620.0, 250.0),
+        ("plant", 760.0, 60.0),
+    ] {
+        let piece = newera_catalog::find(cat)
+            .unwrap()
+            .instantiate(doc.new_furniture_id(), Point2::new(x, y));
+        doc.execute(Command::insert(piece)).unwrap();
+    }
+    doc.execute(Command::SetAnnotations {
+        annotations: PlanAnnotations {
+            references: true,
+            ..PlanAnnotations::default()
+        },
+    })
+    .unwrap();
+    let shared = SharedDocument::new(doc);
+    render("references", shared.clone(), |app| app.plan.request_fit());
+    // Move the divider: rooms, tags and schedule follow.
+    let id = shared.read().home().polylines[0].id;
+    newera_core::ops::translate(&mut shared.write(), &[id.into()], 120.0, 0.0, true).unwrap();
+    render("references-moved", shared, |app| app.plan.request_fit());
+}

@@ -420,6 +420,12 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                         ui.checkbox(&mut room.ceiling_visible, crate::i18n::tr("Teto"));
                     });
                     ui.end_row();
+                    ui.label(crate::i18n::tr("Contorno"));
+                    ui.checkbox(&mut room.auto, crate::i18n::tr("Acompanha as paredes"))
+                        .on_hover_text(crate::i18n::tr(
+                            "O contorno é detectado pelas paredes e divisores e se ajusta quando eles mudam",
+                        ));
+                    ui.end_row();
                     ui.label(crate::i18n::tr("Piso"));
                     material_editor(ui, "room_floor", &mut room.floor_material);
                     ui.end_row();
@@ -428,6 +434,17 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                     ui.end_row();
                 });
             });
+            if room.auto {
+                let home = app.document.read().home().clone();
+                let view = home.level_view(room.level);
+                let dividers: Vec<&newera_core::Polyline> =
+                    view.polylines.iter().filter(|l| l.room_divider).collect();
+                if let Some(points) = newera_core::interior_point(&room.points)
+                    .and_then(|p| newera_core::detect_room_with_dividers(&view.walls, &dividers, p))
+                {
+                    room.points = points;
+                }
+            }
             finish(app, answer, Dialog::ModifyRoom(room.clone()), || {
                 Command::update(room)
             })
@@ -993,6 +1010,15 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                                 ui.selectable_value(&mut line.dash, dash, name);
                             }
                         });
+                    ui.end_row();
+                    ui.label(crate::i18n::tr("Ambientes"));
+                    ui.checkbox(
+                        &mut line.room_divider,
+                        crate::i18n::tr("Divisor de ambiente"),
+                    )
+                    .on_hover_text(crate::i18n::tr(
+                        "Separa ambientes sem parede (ex.: sala e jantar integrados)",
+                    ));
                     ui.end_row();
                     for (label, arrow, salt) in [
                         (

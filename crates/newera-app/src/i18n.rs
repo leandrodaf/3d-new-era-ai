@@ -135,6 +135,15 @@ fn english(pt: &str) -> Option<&'static str> {
         "Pastas" => "Folders",
         "Rodando" => "Running",
         "concluído" => "done",
+        "Acompanha as paredes" => "Follows the walls",
+        "O contorno é detectado pelas paredes e divisores e se ajusta quando eles mudam" => {
+            "The outline is detected from walls and dividers and adjusts when they change"
+        }
+        "Ambientes" => "Rooms",
+        "Divisor de ambiente" => "Room divider",
+        "Separa ambientes sem parede (ex.: sala e jantar integrados)" => {
+            "Separates rooms without a wall (e.g. open living and dining)"
+        }
         "Criar paredes" => "Create walls",
         "Curva suave" => "Smooth curve",
         "Cômodos" => "Rooms",

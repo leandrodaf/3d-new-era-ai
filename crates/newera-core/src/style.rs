@@ -182,6 +182,10 @@ pub struct Polyline {
     /// Technical project it belongs to; `None` is the architectural plan.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub discipline: Option<Discipline>,
+    /// Separates rooms without a wall (e.g. living and dining in one open
+    /// space): room detection treats it as a wall.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub room_divider: bool,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub properties: Properties,
 }
@@ -204,6 +208,7 @@ impl Polyline {
             elevation: None,
             level: None,
             discipline: None,
+            room_divider: false,
             properties: Properties::new(),
         }
     }

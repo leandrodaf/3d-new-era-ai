@@ -248,6 +248,10 @@ pub struct Room {
     pub name_angle: f64,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub area_angle: f64,
+    /// Detected from the walls around it: its outline follows them when
+    /// they move, are added or removed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub auto: bool,
     #[serde(default, skip_serializing_if = "Properties::is_empty")]
     pub properties: Properties,
 }
@@ -271,6 +275,7 @@ impl Room {
             area_offset: [0.0, 0.0],
             name_angle: 0.0,
             area_angle: 0.0,
+            auto: false,
             properties: Properties::new(),
         }
     }

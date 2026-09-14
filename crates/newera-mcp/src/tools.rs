@@ -1943,4 +1943,38 @@ mod tests {
             .is_err()
         );
     }
+
+    #[test]
+    fn dividers_and_rooms_that_follow_walls() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[800,0],[800,400],[0,400]],"closed":true}],
+                "polylines":[{"pts":[[450,0],[450,400]],"divider":true}],
+                "rooms":[{"name":"Sala","at":[200,200]},{"name":"Jantar","at":[600,200]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let (sala, jantar, line) = {
+            let doc = s.document.read();
+            let h = doc.home();
+            assert!(h.polylines[0].room_divider && h.rooms.iter().all(|r| r.auto));
+            (
+                h.rooms[0].area(),
+                h.rooms[1].area(),
+                h.polylines[0].id.to_string(),
+            )
+        };
+        assert!(sala > jantar + 90.0 * 300.0, "{sala} {jantar}");
+        let spec: UpdateSpec =
+            serde_json::from_str(&format!(r#"{{"id":"{line}","pts":[[350,0],[350,400]]}}"#))
+                .unwrap();
+        s.update(Parameters(UpdateParams { items: vec![spec] }))
+            .unwrap();
+        let doc = s.document.read();
+        let h = doc.home();
+        assert!(
+            h.rooms[1].area() > h.rooms[0].area(),
+            "rooms followed the divider"
+        );
+    }
 }

@@ -16,7 +16,7 @@ use std::sync::Arc;
 use eframe::egui::{self, Color32, CursorIcon, Key, PointerButton, Pos2, Rect, Stroke, Vec2};
 use newera_core::{
     Command, CoreResult, Dimension, Document, Element, ElementId, Furniture, FurnitureId, Home,
-    LengthUnit, Point2, Room, SharedDocument, Wall, WallId, detect_room, ops, polygon_area,
+    LengthUnit, Point2, Room, SharedDocument, Wall, WallId, ops, polygon_area,
 };
 use newera_draw::{Align, Palette, Scene, SceneOptions, plan_scene};
 
@@ -347,9 +347,13 @@ impl PlanView {
                             });
                         } else {
                             self.room_points.clear();
-                            match detect_room(&home.walls, p) {
+                            let dividers: Vec<&newera_core::Polyline> =
+                                home.polylines.iter().filter(|l| l.room_divider).collect();
+                            match newera_core::detect_room_with_dividers(&home.walls, &dividers, p)
+                            {
                                 Some(points) => commit(&mut events, &mut |doc| {
-                                    let room = Room::new(doc.new_room_id(), "", points.clone());
+                                    let mut room = Room::new(doc.new_room_id(), "", points.clone());
+                                    room.auto = true;
                                     doc.execute(Command::insert(room))
                                 }),
                                 None => events.push(PlanEvent::Status(
@@ -671,6 +675,21 @@ impl PlanView {
                 .as_ref()
                 .map(newera_core::BackgroundImage::bounds)
         });
+        // Schedules, legends and dimension chains drawn beside the plan count too.
+        let annotations = home.annotations;
+        let bounds = if annotations.references || annotations.auto_dimensions || annotations.legend
+        {
+            let drawn = plan_scene(home, &SceneOptions::default()).bounds();
+            match (bounds, drawn) {
+                (Some((a, b)), Some((c, d))) => Some((
+                    Point2::new(a.x.min(c.x), a.y.min(c.y)),
+                    Point2::new(b.x.max(d.x), b.y.max(d.y)),
+                )),
+                (bounds, drawn) => bounds.or(drawn),
+            }
+        } else {
+            bounds
+        };
         if let Some((min, max)) = bounds {
             self.camera.fit(rect, min, max);
         }

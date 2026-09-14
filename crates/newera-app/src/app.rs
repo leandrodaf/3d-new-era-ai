@@ -63,7 +63,7 @@ pub(crate) struct NewEraApp {
     mcp_url: Option<String>,
     pub(crate) tool: Tool,
     pub(crate) selection: Selection,
-    plan: PlanView,
+    pub(crate) plan: PlanView,
     pub(crate) scene: SceneView,
     palette: Palette,
     settings: Settings,

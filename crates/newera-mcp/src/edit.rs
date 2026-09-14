@@ -3,7 +3,7 @@
 
 use newera_core::{
     BackgroundImage, Command, CoreError, Dimension, Document, Element, ElementId, Label, Material,
-    Point2, Room, Wall, detect_room, ops,
+    Point2, Room, Wall, ops,
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -120,6 +120,9 @@ pub(crate) struct PolylineSpec {
     pub curved: bool,
     /// `[start, end]` arrows: `none`, `delta`, `open`, `disc`.
     pub arrows: Option<[newera_core::ArrowStyle; 2]>,
+    /// Room divider: splits an open space into rooms without a wall (dashed).
+    #[serde(default)]
+    pub divider: bool,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -217,19 +220,38 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
         }
     }
 
+    // Dividers already on this storey plus the ones created now.
+    let mut dividers: Vec<newera_core::Polyline> = {
+        let home = doc.home();
+        home.level_view(home.current_level())
+            .polylines
+            .into_iter()
+            .filter(|p| p.room_divider)
+            .collect()
+    };
+    for spec in params.polylines.iter().filter(|p| p.divider) {
+        let mut line = newera_core::Polyline::new(newera_core::PolylineId(0), spec.pts.clone());
+        line.closed = spec.closed;
+        dividers.push(line);
+    }
     for spec in params.rooms {
-        let points = match (spec.pts, spec.at) {
-            (Some(pts), _) => pts,
+        let (points, auto) = match (spec.pts, spec.at) {
+            (Some(pts), _) => (pts, false),
             (None, Some(at)) => {
-                let mut walls = doc.home().walls.clone();
+                let home = doc.home();
+                let mut walls = home.level_view(home.current_level()).walls;
                 walls.extend(new_walls.iter().cloned());
-                detect_room(&walls, at).ok_or_else(|| {
-                    format!("no space enclosed by walls around [{}, {}]", at.x, at.y)
-                })?
+                let dividers: Vec<&newera_core::Polyline> = dividers.iter().collect();
+                let points = newera_core::detect_room_with_dividers(&walls, &dividers, at)
+                    .ok_or_else(|| {
+                        format!("no space enclosed by walls around [{}, {}]", at.x, at.y)
+                    })?;
+                (points, true)
             }
             (None, None) => return Err(format!("room `{}` needs `pts` or `at`", spec.name)),
         };
         let mut room = Room::new(doc.new_room_id(), spec.name, points);
+        room.auto = auto;
         room.floor_material = spec
             .floor_mat
             .as_deref()
@@ -327,6 +349,11 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
             line.start_arrow = start;
             line.end_arrow = end;
         }
+        if spec.divider {
+            line.room_divider = true;
+            line.dash = spec.dash.unwrap_or(newera_core::DashStyle::Dash);
+            line.color = spec.color.unwrap_or([120, 120, 120]);
+        }
         ids.push(line.id.to_string());
         commands.push(Command::insert(line));
     }
@@ -395,6 +422,12 @@ pub(crate) struct UpdateSpec {
     /// Elevation cm (furniture, level, 3D label/dimension).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub elev: Option<f64>,
+    /// Room follows its walls (re-detected when they change); `pts` turns it off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto: Option<bool>,
+    /// Polyline is a room divider.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub divider: Option<bool>,
     /// Wall height at its end cm (sloping wall).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub h_end: Option<f64>,
@@ -479,7 +512,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
             .element(id)
             .ok_or_else(|| format!("{id} not found"))?;
         let allowed: &[&str] = match element {
-            Element::Polyline(_) => &["pts", "t", "color", "level"],
+            Element::Polyline(_) => &["pts", "t", "color", "level", "divider"],
             Element::Wall(_) => &[
                 "a", "b", "t", "h", "h_end", "arc", "level", "type", "left", "right", "sides",
             ],
@@ -491,6 +524,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 "level",
                 "floor_mat",
                 "ceil_mat",
+                "auto",
             ],
             Element::Dimension(_) => &["a", "b", "off", "level", "in3d", "elev", "pitch"],
             Element::Label(_) => &[
@@ -545,6 +579,9 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 if let Some([r, g, b]) = spec.color {
                     p.color = [r, g, b];
                 }
+                if let Some(divider) = spec.divider {
+                    p.room_divider = divider;
+                }
                 Element::Polyline(p)
             }
             Element::Level(mut l) => {
@@ -585,6 +622,21 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
             }
             Element::Room(mut r) => {
                 r.name = spec.name.unwrap_or(r.name);
+                if spec.pts.is_some() {
+                    r.auto = false;
+                }
+                if spec.auto == Some(true) {
+                    let home = doc.home();
+                    let view = home.level_view(r.level);
+                    let dividers: Vec<&newera_core::Polyline> =
+                        view.polylines.iter().filter(|l| l.room_divider).collect();
+                    let inside = newera_core::interior_point(&r.points)
+                        .ok_or("room outline has too few points")?;
+                    r.points =
+                        newera_core::detect_room_with_dividers(&view.walls, &dividers, inside)
+                            .ok_or("no space enclosed by walls around this room")?;
+                }
+                r.auto = spec.auto.unwrap_or(r.auto);
                 r.points = spec.pts.unwrap_or(r.points);
                 r.floor_visible = spec.floor.unwrap_or(r.floor_visible);
                 r.ceiling_visible = spec.ceiling.unwrap_or(r.ceiling_visible);

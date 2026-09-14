@@ -191,7 +191,35 @@ impl Document {
     /// Executes a command on the active variant, recording it in its history.
     pub fn execute(&mut self, command: Command) -> CoreResult<()> {
         let variant = self.current_mut();
-        let inverse = command.apply(&mut variant.home)?;
+        let shape = |home: &Home| {
+            (
+                home.walls.clone(),
+                home.polylines
+                    .iter()
+                    .filter(|p| p.room_divider)
+                    .cloned()
+                    .collect::<Vec<_>>(),
+                home.rooms.iter().filter(|r| r.auto).count(),
+            )
+        };
+        let before = shape(&variant.home);
+        let mut inverse = command.apply(&mut variant.home)?;
+        // Rooms detected from walls follow them, in the same undo step.
+        if variant.home.rooms.iter().any(|r| r.auto) && shape(&variant.home) != before {
+            let mut undo_rooms = Vec::new();
+            for room in crate::detect::rooms_following_walls(&variant.home) {
+                if let Ok(previous) = Command::update(room).apply(&mut variant.home) {
+                    undo_rooms.push(previous);
+                }
+            }
+            if !undo_rooms.is_empty() {
+                undo_rooms.reverse();
+                undo_rooms.push(inverse);
+                inverse = Command::Batch {
+                    commands: undo_rooms,
+                };
+            }
+        }
         variant.undo_stack.push(inverse);
         variant.redo_stack.clear();
         self.revision += 1;

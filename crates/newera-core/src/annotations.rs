@@ -206,6 +206,9 @@ pub struct RoomReference {
     /// `None` gathers pieces outside every room.
     pub room: Option<RoomId>,
     pub name: String,
+    /// Floor area, cm² (`None` for the pieces outside every room).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub area: Option<f64>,
     pub items: Vec<ReferenceItem>,
 }
 
@@ -222,12 +225,14 @@ pub fn room_references(home: &Home) -> Vec<RoomReference> {
             } else {
                 r.name.clone()
             },
+            area: Some(r.area()),
             items: Vec::new(),
         })
         .collect();
     let mut others = RoomReference {
         room: None,
         name: "Outros".to_owned(),
+        area: None,
         items: Vec::new(),
     };
     let listed = |f: &&Furniture| f.visible && !f.is_opening() && f.discipline.is_none();
