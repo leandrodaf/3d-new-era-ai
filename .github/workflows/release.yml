@@ -65,6 +65,15 @@ jobs:
             Linux)
               mkdir "$stage/newera"
               cp "$bin/newera" README.md LICENSE-MIT LICENSE-APACHE "$stage/newera/"
+              # Desktop integration: menu entry, hicolor icons, the .newera
+              # type and its document icon, installed by ./install-desktop.sh.
+              cp scripts/install-desktop.sh "$stage/newera/"
+              mkdir -p "$stage/newera/share/applications" "$stage/newera/share/mime/packages" \
+                       "$stage/newera/share/metainfo" "$stage/newera/share/icons"
+              cp assets/linux/newera.desktop "$stage/newera/share/applications/"
+              cp assets/linux/newera.xml "$stage/newera/share/mime/packages/"
+              cp assets/linux/io.github.leandrodaf.newera.metainfo.xml "$stage/newera/share/metainfo/"
+              cp -r assets/linux/hicolor "$stage/newera/share/icons/"
               tar czf "${{ matrix.asset }}" -C "$stage" newera
               ;;
           esac

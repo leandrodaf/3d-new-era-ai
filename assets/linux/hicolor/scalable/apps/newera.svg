@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>3D New Era AI</title>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#161513"/>
+  <path d="M535.5 535.5a211.5 211.5 0 0 1 211.5-211.5" fill="none" stroke="#7d93ff" stroke-width="47"/>
+  <g fill="none" stroke="#f4f1ea" stroke-width="47">
+    <path d="M277 277h470v470H277z"/>
+    <path d="M277 535.5h258.5v211.5"/>
+  </g>
+</svg>

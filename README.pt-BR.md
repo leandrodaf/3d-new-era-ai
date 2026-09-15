@@ -45,7 +45,9 @@ sistema pergunta uma vez:
   direito → *Abrir* → *Abrir*. No macOS 15 ou mais novo, tente abrir uma vez e depois vá em
   *Ajustes do Sistema* → *Privacidade e Segurança* → *Abrir Mesmo Assim*. Ou rode
   `xattr -dr com.apple.quarantine "/Applications/3D New Era AI.app"`.
-- **Linux:** `tar xzf newera-linux-x64.tar.gz && ./newera/newera`.
+- **Linux:** `tar xzf newera-linux-x64.tar.gz && ./newera/newera`. Rode
+  `./newera/install-desktop.sh` para pôr o app no menu com ícone e dar aos
+  arquivos `.newera` ícone e duplo clique (`--uninstall` desfaz).
 
 Os instaladores de uma linha acima já evitam esses avisos.
 </details>

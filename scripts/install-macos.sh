@@ -84,6 +84,11 @@ place_app() { # place_app <built .app>: swap in the new app only once it is comp
     mkdir -p "$NEWERA_APPS"
     rm -rf "$APP"
     mv "$1" "$APP"
+    # Tell Launch Services about the new bundle right away, so the Dock, Finder
+    # and the .newera file icon update without a logout.
+    local lsregister="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+    [ -x "$lsregister" ] && "$lsregister" -f "$APP" >/dev/null 2>&1 || true
+    touch "$APP" 2>/dev/null || true
 }
 
 local_source() {

@@ -45,7 +45,9 @@ once:
   *Open*. On macOS 15 and later, open it once, then go to *System Settings* →
   *Privacy & Security* → *Open Anyway*. Or run
   `xattr -dr com.apple.quarantine "/Applications/3D New Era AI.app"`.
-- **Linux:** `tar xzf newera-linux-x64.tar.gz && ./newera/newera`.
+- **Linux:** `tar xzf newera-linux-x64.tar.gz && ./newera/newera`. Run
+  `./newera/install-desktop.sh` to add it to the menu with its icon and to give
+  `.newera` files their own icon and double click (`--uninstall` undoes it).
 
 The one-line installers above skip these prompts.
 </details>

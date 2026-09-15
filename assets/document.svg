@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>3D New Era AI project</title>
+  <path d="M198 52h464l190 190v704a26 26 0 0 1-26 26H198a26 26 0 0 1-26-26V78a26 26 0 0 1 26-26z" fill="#faf9f5"/>
+  <path d="M662 52l190 190H662z" fill="#d6d1c5"/>
+  <g transform="translate(86.16 126.16) scale(0.83172)">
+    <path d="M535.5 535.5a211.5 211.5 0 0 1 211.5-211.5" fill="none" stroke="#7d93ff" stroke-width="47"/>
+    <g fill="none" stroke="#161513" stroke-width="47">
+      <path d="M277 277h470v470H277z"/>
+      <path d="M277 535.5h258.5v211.5"/>
+    </g>
+  </g>
+</svg>

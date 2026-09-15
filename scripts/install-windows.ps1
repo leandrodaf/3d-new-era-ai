@@ -27,9 +27,20 @@ function Install-NewEra {
     $startMenu = Join-Path ([Environment]::GetFolderPath('Programs')) "$name.lnk"
     $desktop = Join-Path ([Environment]::GetFolderPath('Desktop')) "$name.lnk"
     $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\NewEraAI'
+    $progId = 'NewEraAI.Project'
 
     function Step($text) { Write-Host "`n==> $text" -ForegroundColor Cyan }
     function Info($text) { Write-Host "    $text" }
+
+    function Refresh-Shell {
+        # Explorer caches icons and associations; this makes it re-read them.
+        if (-not ('Win32.Shell' -as [type])) {
+            Add-Type -Namespace Win32 -Name Shell -MemberDefinition @'
+[DllImport("shell32.dll")] public static extern void SHChangeNotify(int eventId, uint flags, IntPtr item1, IntPtr item2);
+'@
+        }
+        [Win32.Shell]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)
+    }
 
     function Remove-FromUserPath($folder) {
         $path = [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -48,6 +59,13 @@ function Install-NewEra {
         Step 'Desinstalando'
         Remove-Item -Recurse -Force $dir, $startMenu, $desktop -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force $uninstallKey -ErrorAction SilentlyContinue
+        $classes = 'HKCU:\Software\Classes'
+        if ((Get-ItemProperty -Path "$classes\.newera" -Name '(default)' -ErrorAction SilentlyContinue).'(default)' -eq $progId) {
+            Remove-Item -Recurse -Force "$classes\.newera" -ErrorAction SilentlyContinue
+        }
+        Remove-ItemProperty -Path "$classes\.sh3d\OpenWithProgids" -Name $progId -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force "$classes\$progId", "$classes\Applications\newera-gui.exe" -ErrorAction SilentlyContinue
+        Refresh-Shell
         Remove-FromUserPath $dir
         if (Get-Command claude -ErrorAction SilentlyContinue) {
             claude mcp remove --scope user newera 2>$null | Out-Null
@@ -112,9 +130,31 @@ function Install-NewEra {
         $shortcut.TargetPath = $gui
         $shortcut.WorkingDirectory = [Environment]::GetFolderPath('MyDocuments')
         $shortcut.Description = 'Home design with a built-in MCP server'
+        $shortcut.IconLocation = "$gui,0"
         $shortcut.Save()
     }
     Info 'Menu Iniciar e Área de Trabalho'
+
+    Step 'Arquivos .newera'
+    # Per-user association: the projects get the document icon (the second icon
+    # group inside newera-gui.exe) and open in the editor on a double click.
+    $classes = 'HKCU:\Software\Classes'
+    New-Item -Path "$classes\$progId\DefaultIcon" -Force | Out-Null
+    New-Item -Path "$classes\$progId\shell\open\command" -Force | Out-Null
+    Set-ItemProperty -Path "$classes\$progId" -Name '(default)' -Value '3D New Era AI project'
+    Set-ItemProperty -Path "$classes\$progId\DefaultIcon" -Name '(default)' -Value "$gui,1"
+    Set-ItemProperty -Path "$classes\$progId\shell\open\command" -Name '(default)' -Value "`"$gui`" `"%1`""
+    New-Item -Path "$classes\.newera" -Force | Out-Null
+    Set-ItemProperty -Path "$classes\.newera" -Name '(default)' -Value $progId
+    Set-ItemProperty -Path "$classes\.newera" -Name 'Content Type' -Value 'application/x-newera'
+    # Sweet Home 3D files: offered under "Open with", without taking the default.
+    New-Item -Path "$classes\.sh3d\OpenWithProgids" -Force | Out-Null
+    New-ItemProperty -Path "$classes\.sh3d\OpenWithProgids" -Name $progId -Value '' -PropertyType String -Force | Out-Null
+    New-Item -Path "$classes\Applications\newera-gui.exe\shell\open\command" -Force | Out-Null
+    Set-ItemProperty -Path "$classes\Applications\newera-gui.exe" -Name 'FriendlyAppName' -Value $name
+    Set-ItemProperty -Path "$classes\Applications\newera-gui.exe\shell\open\command" -Name '(default)' -Value "`"$gui`" `"%1`""
+    Refresh-Shell
+    Info 'ícone e duplo clique para .newera'
 
     Step 'Comando newera no PATH do usuário'
     $path = [Environment]::GetEnvironmentVariable('Path', 'User')

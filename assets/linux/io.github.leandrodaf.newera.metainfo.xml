@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.leandrodaf.newera</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>3D New Era AI</name>
+  <summary>Home design editor with a built-in MCP server</summary>
+  <summary xml:lang="pt_BR">Editor de projetos de casa com servidor MCP embutido</summary>
+  <description>
+    <p>
+      A home design editor — walls, doors, windows, joinery, lighting, camera —
+      with an MCP server inside, so an AI agent works the same tools you do and
+      every change shows up on screen, with undo.
+    </p>
+    <p xml:lang="pt_BR">
+      Um editor de projetos de casa — paredes, portas, janelas, marcenaria,
+      iluminação, câmera — com um servidor MCP dentro: a IA usa as mesmas
+      ferramentas que você e cada mudança aparece na tela, com desfazer.
+    </p>
+  </description>
+  <launchable type="desktop-id">newera.desktop</launchable>
+  <provides>
+    <binary>newera</binary>
+    <mediatype>application/x-newera</mediatype>
+  </provides>
+  <url type="homepage">https://leandrodaf.github.io/3d-new-era-ai/</url>
+  <url type="bugtracker">https://github.com/leandrodaf/3d-new-era-ai/issues</url>
+  <developer id="io.github.leandrodaf"><name>Leandro Ferreira</name></developer>
+  <content_rating type="oars-1.1"/>
+</component>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- shared-mime-info package: gives .newera projects their own type, so file
+     managers show the document icon and open them with the editor. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-newera">
+    <comment>3D New Era AI project</comment>
+    <comment xml:lang="pt_BR">Projeto do 3D New Era AI</comment>
+    <glob pattern="*.newera"/>
+    <icon name="application-x-newera"/>
+    <generic-icon name="application-x-newera"/>
+  </mime-type>
+</mime-info>

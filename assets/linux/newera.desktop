@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=3D New Era AI
+GenericName=Home design editor
+Comment=Home design editor with a built-in MCP server for AI agents
+Comment[pt_BR]=Editor de projetos de casa com servidor MCP embutido para agentes de IA
+Exec=newera %f
+TryExec=newera
+Icon=newera
+Terminal=false
+Categories=Graphics;3DGraphics;Engineering;
+Keywords=floorplan;interior;architecture;3d;home;design;mcp;ai;planta;marcenaria;
+MimeType=application/x-newera;
+StartupNotify=true
+# eframe names the X11 class / Wayland app_id after the window title, so the
+# running window picks up this entry's icon too.
+StartupWMClass=3D New Era AI

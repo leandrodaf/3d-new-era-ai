@@ -45,6 +45,10 @@ serve: ## Só o servidor HTTP + MCP, sem janela (headless)
 mcp-stdio: ## MCP via stdin/stdout (para clientes que iniciam o processo)
 	$(CARGO) run -q -p newera -- mcp --demo
 
+.PHONY: icons
+icons: ## Regera os ícones (app, documento, macOS, Windows e Linux) a partir da marca
+	python3 scripts/make-icons.py
+
 .PHONY: web
 web: ## Compila o visualizador web (WebAssembly) em web/
 	@rustup target list --installed | grep -q wasm32-unknown-unknown || rustup target add wasm32-unknown-unknown

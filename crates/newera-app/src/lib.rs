@@ -34,11 +34,15 @@ pub struct AppOptions {
 /// Opens the editor window and blocks until it is closed.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run(document: SharedDocument, options: AppOptions) -> eframe::Result {
+    let mut viewport = eframe::egui::ViewportBuilder::default()
+        .with_title("3D New Era AI")
+        .with_inner_size([1440.0, 920.0])
+        .with_min_inner_size([960.0, 620.0]);
+    if let Some(icon) = app_icon() {
+        viewport = viewport.with_icon(icon);
+    }
     let native = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("3D New Era AI")
-            .with_inner_size([1440.0, 920.0])
-            .with_min_inner_size([960.0, 620.0]),
+        viewport,
         ..Default::default()
     };
     eframe::run_native(
@@ -52,6 +56,19 @@ pub fn run(document: SharedDocument, options: AppOptions) -> eframe::Result {
             Ok(Box::new(app))
         }),
     )
+}
+
+/// The app mark (`assets/icon.svg`), for the window, dock and taskbar.
+#[cfg(not(target_arch = "wasm32"))]
+fn app_icon() -> Option<std::sync::Arc<eframe::egui::IconData>> {
+    let png = include_bytes!("../assets/icon-256.png");
+    let image = image::load_from_memory(png).ok()?.into_rgba8();
+    let (width, height) = image.dimensions();
+    Some(std::sync::Arc::new(eframe::egui::IconData {
+        rgba: image.into_raw(),
+        width,
+        height,
+    }))
 }
 
 /// Starts the editor in a browser canvas, optionally with a project
