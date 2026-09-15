@@ -81,6 +81,15 @@ pub enum Issue {
     BlocksDoor { door: FurnitureId, by: FurnitureId },
     /// A piece is outside every room (only reported when rooms exist).
     OutsideRooms(FurnitureId),
+    /// An appliance built into joinery that its host no longer holds: the
+    /// niche was resized around it and nobody said anything, because a piece
+    /// that is built in is excluded from every overlap check by design.
+    OutgrewNiche {
+        piece: FurnitureId,
+        host: FurnitureId,
+        /// How far it sticks out, `[x, y, z]` cm.
+        over: [f64; 3],
+    },
     /// A door or a window that is in no wall: a hole drawn as a panel, or a
     /// leaf left leaning where a passage was meant to be. It reads as an
     /// opening everywhere — schedules, quantities, the 3D — and opens
@@ -108,6 +117,7 @@ impl Issue {
             Self::InWall(f, w) => vec![(*f).into(), (*w).into()],
             Self::BlocksDoor { door, by } => vec![(*door).into(), (*by).into()],
             Self::OutsideRooms(f) | Self::LooseOpening(f) => vec![(*f).into()],
+            Self::OutgrewNiche { piece, host, .. } => vec![(*piece).into(), (*host).into()],
             Self::Turned { piece, .. } => vec![(*piece).into()],
         }
     }
@@ -383,6 +393,45 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
         }
     }
 
+    // An appliance whose niche was resized under it. Built-in pieces are
+    // left out of the overlap check on purpose — an oven in its niche is
+    // meant to touch it — and that is exactly why nothing noticed when the
+    // niche stopped fitting the oven.
+    for top in home.furniture.iter().filter(|f| wanted(f.level)) {
+        let (host_min, host_max) = crate::measure::plan_bounds(top);
+        let (host_low, host_high) = top.height_range();
+        for built_in in top.flatten().into_iter().skip(1) {
+            if !built_in.properties.contains_key("joinery:embedded") {
+                continue;
+            }
+            let (min, max) = crate::measure::plan_bounds(built_in);
+            let (low, high) = built_in.height_range();
+            // The front of a built-in stands proud of its host by design, so
+            // only what sticks out on both sides of an axis is a misfit.
+            let over = |lo: f64, hi: f64, host_lo: f64, host_hi: f64| {
+                let out = (host_lo - lo).max(0.0) + (hi - host_hi).max(0.0);
+                let one_side = (host_lo - lo).max(hi - host_hi).max(0.0);
+                if out - one_side > WALL_TOLERANCE {
+                    (out * 10.0).round() / 10.0
+                } else {
+                    0.0
+                }
+            };
+            let sticks = [
+                over(min.x, max.x, host_min.x, host_max.x),
+                over(min.y, max.y, host_min.y, host_max.y),
+                over(low, high, host_low, host_high),
+            ];
+            if sticks.iter().any(|v| *v > 0.0) {
+                issues.push(Issue::OutgrewNiche {
+                    piece: built_in.id,
+                    host: top.id,
+                    over: sticks,
+                });
+            }
+        }
+    }
+
     // A door or window standing in no wall at all.
     for (i, piece) in pieces.iter().enumerate() {
         if !piece.is_opening() {
@@ -633,6 +682,42 @@ mod tests {
             }],
             "{issues:?}"
         );
+    }
+
+    /// The oven that stopped fitting: the tower was made 8 cm shallower and
+    /// nothing said a word, because an appliance built into joinery is left
+    /// out of every overlap check on purpose.
+    #[test]
+    fn an_appliance_its_niche_no_longer_holds_is_reported() {
+        let mut home = room_home();
+        let mut tower = piece(60, (200.0, 150.0), (80.0, 64.0, 220.0));
+        let mut oven = piece(61, (200.0, 150.0), (60.0, 56.0, 60.0));
+        oven.elevation = 90.0;
+        oven.properties
+            .insert("joinery:embedded".into(), "oven".into());
+        tower.children = vec![oven];
+        home.furniture.push(tower);
+        assert!(
+            !check_layout(&home)
+                .iter()
+                .any(|i| matches!(i, Issue::OutgrewNiche { .. })),
+            "it fits"
+        );
+
+        // The tower is made shallower around it.
+        if let Some(tower) = home.furniture.last_mut() {
+            tower.depth = 40.0;
+        }
+        let issues = check_layout(&home);
+        let found = issues
+            .iter()
+            .find(|i| matches!(i, Issue::OutgrewNiche { .. }))
+            .unwrap_or_else(|| panic!("{issues:?}"));
+        let Issue::OutgrewNiche { piece, host, over } = found else {
+            unreachable!()
+        };
+        assert_eq!((*piece, *host), (FurnitureId(61), FurnitureId(60)));
+        assert!((over[1] - 16.0).abs() < 0.1, "{over:?}");
     }
 
     /// The trap the score itself set: a group whose fronts were built toward

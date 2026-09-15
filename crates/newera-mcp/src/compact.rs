@@ -499,6 +499,14 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
             ),
             Issue::OutsideRooms(f) => push("outside_rooms", issue_ref(home, f.into())),
             Issue::LooseOpening(f) => push("loose_opening", issue_ref(home, f.into())),
+            Issue::OutgrewNiche { piece, host, over } => push(
+                "outgrew_niche",
+                obj([
+                    ("piece", issue_ref(home, piece.into())),
+                    ("host", issue_ref(home, host.into())),
+                    ("over", json!(over.map(num))),
+                ]),
+            ),
             Issue::Turned {
                 piece,
                 built,
