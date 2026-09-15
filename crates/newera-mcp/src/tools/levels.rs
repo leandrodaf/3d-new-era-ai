@@ -102,7 +102,8 @@ mod tests {
     use super::*;
     use crate::edit::CreateParams;
     use crate::tools::check::CheckParams;
-    use crate::tools::{GetHomeParams, server};
+    use crate::tools::read::GetHomeParams;
+    use crate::tools::server;
 
     #[test]
     fn a_reference_storey_is_drawing_and_checks_leave_it_alone() {
