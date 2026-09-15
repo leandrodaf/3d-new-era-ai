@@ -223,7 +223,7 @@ impl NewEraMcp {
         Ok(summary(&group_id.to_string()).to_string())
     }
     #[tool(
-        description = "Cut list of joinery builds: rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. path .csv, or .dxf/.svg (boards laid out on sheets), writes a file."
+        description = "Cut list of joinery builds: rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. path .csv, or .dxf/.svg (boards laid out on sheets), writes a file. sources names the panel standards behind the boards: MDF is a dry-process fibreboard (NBR 15316), MDP a particleboard of 551 to 750 kg/m³ that holds screws better (NBR 14810)."
     )]
     pub(crate) fn cut_list(
         &self,
@@ -311,7 +311,11 @@ impl NewEraMcp {
                 row
             })
             .collect();
-        let mut reply = serde_json::json!({ "rows": rows, "hardware": hardware });
+        let mut reply = serde_json::json!({
+            "rows": rows,
+            "hardware": hardware,
+            "sources": super::sources(&["nbr14810", "nbr15316"]),
+        });
         if !sheets.is_empty() {
             reply["sheets"] = serde_json::json!(sheets);
         }
@@ -415,6 +419,15 @@ mod tests {
             std::fs::read_to_string(&csv)
                 .unwrap()
                 .starts_with("peca;material")
+        );
+        // The boards say which standard defines them, resolved once.
+        assert_eq!(list["sources"]["nbr15316"][1], "A", "{list}");
+        assert!(
+            list["sources"]["nbr14810"][0]
+                .as_str()
+                .unwrap()
+                .contains("14810"),
+            "{list}"
         );
         let dxf = dir.join("corte.dxf");
         let with_sheets: serde_json::Value = serde_json::from_str(

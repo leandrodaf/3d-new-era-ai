@@ -122,6 +122,22 @@ impl NewEraMcp {
         let second = ops::split_wall(&mut doc, id, p.t.unwrap_or(0.5)).map_err(core)?;
         Ok(ok(&doc, &[second.to_string()]))
     }
+    #[tool(
+        description = "Join walls that run along the same line into a single wall: the wall a partition interrupted, a stretch imported as many segments, the same wall drawn twice. The longest one keeps its id and its build (thickness, height, type, finishes) and spans them all; the others are deleted, doors and windows stay where they are, and a gap between them is closed. Straight walls on one storey whose centerlines run inside one another; the reply names the id that remains."
+    )]
+    pub(crate) fn merge_walls(
+        &self,
+        Parameters(p): Parameters<IdsParams>,
+    ) -> Result<String, ErrorData> {
+        let ids: Vec<newera_core::WallId> = p
+            .ids
+            .iter()
+            .map(|raw| raw.parse().map_err(|e| invalid(format!("{e}"))))
+            .collect::<Result<_, _>>()?;
+        let mut doc = self.document.write();
+        let kept = ops::merge_walls(&mut doc, &ids).map_err(core)?;
+        Ok(ok(&doc, &[kept.to_string()]))
+    }
 }
 
 #[cfg(test)]
@@ -516,5 +532,119 @@ mod tests {
         let bad: CreateParams =
             serde_json::from_str(r#"{"solids":[{"profile":[[0,0],[1,0],[0,1]]}]}"#).unwrap();
         assert!(s.create(Parameters(bad)).is_err());
+    }
+
+    #[test]
+    fn walls_written_a_few_centimetres_off_still_join() {
+        let s = server();
+        // Outer walls 20 cm thick, then a partition written to the inner face
+        // of one wall and 3 cm short of the other — how a description reads,
+        // not how the walls have to meet.
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[600,0],[600,400],[0,400]],"closed":true,"t":20}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.create(Parameters(
+            serde_json::from_str(r#"{"walls":[{"pts":[[300,10],[300,397]],"t":10}]}"#).unwrap(),
+        ))
+        .unwrap();
+        let home = s.document.read().home().clone();
+        let partition = home.walls.last().unwrap();
+        assert_eq!(
+            (partition.start, partition.end),
+            (
+                newera_core::Point2::new(300.0, 0.0),
+                newera_core::Point2::new(300.0, 400.0)
+            ),
+            "the ends land on the walls they meet"
+        );
+        // And the drawing has no wall over another: the outlines cover the
+        // footprint exactly once.
+        let covered: f64 = home
+            .wall_outlines()
+            .iter()
+            .map(|o| newera_core::polygon_area(o))
+            .sum();
+        let ring = 620.0 * 420.0 - 580.0 * 380.0;
+        assert!((covered - (ring + 10.0 * 380.0)).abs() < 1e-6, "{covered}");
+    }
+
+    #[test]
+    fn moving_an_end_into_a_wall_joins_it_there() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[600,0]],"t":20},{"pts":[[300,200],[300,80]],"t":10}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let id = s.document.read().home().walls[1].id.to_string();
+        s.update(Parameters(UpdateParams {
+            items: serde_json::from_str(&format!(r#"[{{"id":"{id}","b":[300,-4]}}]"#)).unwrap(),
+            v: None,
+            dry: None,
+        }))
+        .unwrap();
+        assert_eq!(
+            s.document.read().home().walls[1].end,
+            newera_core::Point2::new(300.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn walls_on_one_line_join_into_a_single_one() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[300,0]],"t":20},{"pts":[[300,0],[800,0]],"t":20}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let ids: Vec<String> = s
+            .document
+            .read()
+            .home()
+            .walls
+            .iter()
+            .map(|w| w.id.to_string())
+            .collect();
+        let reply = s
+            .merge_walls(Parameters(IdsParams { ids: ids.clone() }))
+            .unwrap();
+        let home = s.document.read().home().clone();
+        assert_eq!(home.walls.len(), 1, "{reply}");
+        let wall = &home.walls[0];
+        assert_eq!(wall.id.to_string(), ids[1], "the longest one stays");
+        assert_eq!(
+            (wall.start, wall.end),
+            (
+                newera_core::Point2::new(0.0, 0.0),
+                newera_core::Point2::new(800.0, 0.0)
+            )
+        );
+        // An L cannot become one wall, and says so without changing anything.
+        s.create(Parameters(
+            serde_json::from_str(r#"{"walls":[{"pts":[[800,0],[800,400]],"t":20}]}"#).unwrap(),
+        ))
+        .unwrap();
+        let both: Vec<String> = s
+            .document
+            .read()
+            .home()
+            .walls
+            .iter()
+            .map(|w| w.id.to_string())
+            .collect();
+        let err = s
+            .merge_walls(Parameters(IdsParams { ids: both }))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("same line"), "{err}");
+        assert_eq!(s.document.read().home().walls.len(), 2);
     }
 }

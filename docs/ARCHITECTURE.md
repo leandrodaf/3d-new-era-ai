@@ -37,7 +37,7 @@ That is what makes these properties hold everywhere, for free:
 
 | Crate | Depends on | Responsibility |
 |-------|-----------|----------------|
-| `newera-core` | serde, schemars, geo | Model (`Home`, `Element`: walls, rooms, dimensions, labels), geometry (joins, triangulation, room detection), `Command`, `Document`, project format. No UI, no async, no I/O. |
+| `newera-core` | serde, schemars, geo | Model (`Home`, `Element`: walls, rooms, dimensions, labels), geometry (joins, triangulation, room detection), `Command`, `Document`, project format, the standards registry. No UI, no async, no I/O. |
 | `newera-catalog` | core, tobj, gltf | Parametric furniture: procedural 3D meshes and plan symbols at any size; model import. |
 | `newera-draw` | core, catalog, tiny-skia | Plan scene (styled primitives in cm) and its PNG/SVG backends. |
 | `newera-mcp` | core, draw, rmcp | MCP tools and their token-efficient wire format. One module per domain under `src/tools/`, each with its own router; `src/tools/mod.rs` maps them. |
@@ -50,6 +50,18 @@ That is what makes these properties hold everywhere, for free:
 
 Dependencies only point downwards. `newera-core` must stay free of heavy
 dependencies so it can later compile to WebAssembly and power a web client.
+
+## Standards are data, not prose
+
+A rule that cites its source inside a sentence cannot be clicked, cannot say
+which edition it followed, and cannot tell how much it matters. So every
+reference lives once in `newera_core::standards` — code, title, edition,
+reliability tier (A obliges … E only describes) and link — and a rule carries
+only the short code. The tier is the ceiling on what a finding may claim, and
+figures we could not confirm at the source may warn but never accuse. The
+`ergonomics` reply resolves the codes it used once in `sources`, so an agent pays
+for a title once instead of once per sentence, and the editor shows the same
+citation as a clickable chip. See [NORMAS.md](NORMAS.md).
 
 ## Units and coordinates
 

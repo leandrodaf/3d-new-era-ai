@@ -29,6 +29,12 @@ pub enum Use {
     Sink,
     /// Low cabinets and worktops.
     Counter,
+    /// Built into a niche under or beside the worktop — a dishwasher, an
+    /// oven, a microwave. EN 1116 calls these appliances, not work surface,
+    /// and their top is the appliance's own height, never the counter's.
+    Appliance,
+    /// Extraction over the cooktop.
+    Hood,
     WallCabinet,
     Island,
     Toilet,
@@ -117,8 +123,10 @@ fn classify(piece: &Furniture, params: Option<&serde_json::Value>) -> Use {
         "fridge" => Use::Fridge,
         "stove" => Use::Stove,
         "sink-counter" => Use::Sink,
-        "base-cabinet" | "dishwasher" => Use::Counter,
-        "wall-cabinet" | "microwave" => Use::WallCabinet,
+        "base-cabinet" => Use::Counter,
+        "dishwasher" | "microwave" | "oven" => Use::Appliance,
+        "wall-cabinet" => Use::WallCabinet,
+        "hood" => Use::Hood,
         "kitchen-island" => Use::Island,
         "toilet" => Use::Toilet,
         "basin-cabinet" => Use::Basin,
@@ -237,10 +245,22 @@ fn by_name(piece: &Furniture) -> Use {
         Use::Washer
     } else if starts(&["tanque"]) {
         Use::LaundrySink
+    } else if has(&["coifa", "depurador", "exaustor"]) {
+        Use::Hood
     } else if (lo >= 100.0 && cabinet) || has(&["aereo"]) {
         Use::WallCabinet
-    } else if has(&["lava-louca", "lava louca", "lava-loucas"])
-        || (cabinet && h >= 60.0 && lo < 20.0 && h <= 100.0)
+    } else if has(&[
+        "lava-louca",
+        "lava louca",
+        "lava-loucas",
+        "forno",
+        "micro-ondas",
+        "microondas",
+    ]) {
+        // An appliance in a niche, not work surface: its top is its own
+        // height and says nothing about the countertop (EN 1116).
+        Use::Appliance
+    } else if (cabinet && h >= 60.0 && lo < 20.0 && h <= 100.0)
         || (has(&["bancada", "tampo", "peninsula"]) && lo >= 60.0)
     {
         Use::Counter

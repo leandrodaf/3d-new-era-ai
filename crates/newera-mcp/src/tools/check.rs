@@ -25,7 +25,7 @@ fn round2(v: f64) -> f64 {
 #[tool_router(router = check_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Ergonomics and habitability review for the people living there (occupants, children, elderly, wheelchair, stature cm): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen triangle and heights, doors, ceiling heights, windows, minimum furniture, wheelchair turning. Brazilian references (NBR 9050, NBR 15575-1, IBGE; building codes vary by city). Reply {score, capacity, findings:[[erro|alerta|dica, place, message, fix?]]}; fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap)."
+        description = "Ergonomics and habitability review for the people living there (occupants, children, elderly, wheelchair, stature cm, city): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen (work triangle, counter heights, Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. Reply {score, capacity, findings:[[erro|alerta|dica, place, message, src, fix?]], sources:{src:[title, tier, url]}}. src is the source the finding stands on, empty when it is common practice; resolve it in sources instead of asking. tier is the reliability ladder A obliges (Brazilian standard, municipal code) · B references (foreign standard) · C doctrine · D measured · E survey — and it is why a finding is an error or only a tip. fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap). city, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against a standard the more restrictive one wins."
     )]
     pub(crate) fn ergonomics(
         &self,
@@ -36,15 +36,21 @@ impl NewEraMcp {
         let findings: Vec<serde_json::Value> = report
             .findings
             .iter()
-            .map(|f| match &f.fix {
-                Some(fix) => serde_json::json!([f.severity, f.place, f.message, fix]),
-                None => serde_json::json!([f.severity, f.place, f.message]),
+            .map(|f| {
+                let code = f.reference.unwrap_or_default();
+                match &f.fix {
+                    Some(fix) => serde_json::json!([f.severity, f.place, f.message, code, fix]),
+                    None => serde_json::json!([f.severity, f.place, f.message, code]),
+                }
             })
             .collect();
+        // Each source spelled out once, not once per sentence.
+        let codes: Vec<&str> = report.refs.iter().map(|r| r.code).collect();
         serde_json::json!({
             "score": report.score,
             "capacity": report.capacity,
             "findings": findings,
+            "sources": super::sources(&codes),
         })
         .to_string()
     }
@@ -201,7 +207,14 @@ mod tests {
         let text = report["findings"].to_string();
         assert_eq!(report["capacity"]["beds"], 2, "{report}");
         assert!(text.contains("falta 1"), "{text}");
-        assert!(text.contains("NBR 9050 pede 80 cm"), "{text}");
+        assert!(
+            text.contains("80 cm livres") && text.contains("nbr9050"),
+            "{text}"
+        );
+        assert_eq!(
+            report["sources"]["nbr9050"][1], "A",
+            "the ladder travels with the citation: {report}"
+        );
         // The bed is 90 cm from the left wall's axis: 7,5 cm wall, 79 cm half bed → 3,5 cm.
         assert!(text.contains("transferência da cadeira"), "{text}");
         assert!(report["score"].as_u64().unwrap() < 80, "{report}");

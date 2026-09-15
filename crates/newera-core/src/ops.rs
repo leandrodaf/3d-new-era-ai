@@ -43,6 +43,122 @@ pub fn split_wall(doc: &mut Document, id: WallId, t: f64) -> CoreResult<WallId> 
     Ok(new_id)
 }
 
+/// Joins walls that run along the same line into a single one.
+///
+/// The undo of [`split_wall`], and the fix for a wall that was drawn in
+/// pieces: an outer wall interrupted where a partition meets it, a stretch
+/// imported as a dozen segments, the same wall drawn twice. The longest wall
+/// keeps its id and its build — thickness, height, type, finishes — and grows
+/// to span everything given; the others are deleted in the same step. Doors
+/// and windows stay where they are: they sit in whatever wall is under them.
+///
+/// The walls must be straight, on the same storey, and their centerlines must
+/// run inside one another. A gap between them is closed, so two stretches
+/// with a doorway between them become one wall with no doorway.
+pub fn merge_walls(doc: &mut Document, ids: &[WallId]) -> CoreResult<WallId> {
+    let mut walls: Vec<Wall> = Vec::new();
+    for id in ids {
+        let wall = doc
+            .home()
+            .wall(*id)
+            .cloned()
+            .ok_or(CoreError::NotFound((*id).into()))?;
+        if walls.iter().any(|w| w.id == wall.id) {
+            continue;
+        }
+        if wall.is_arc() {
+            return Err(CoreError::InvalidGeometry(format!(
+                "{id} is curved: only straight walls can be joined"
+            )));
+        }
+        walls.push(wall);
+    }
+    if walls.len() < 2 {
+        return Err(CoreError::InvalidGeometry(
+            "joining walls needs at least two of them".into(),
+        ));
+    }
+    if walls.iter().any(|w| w.level != walls[0].level) {
+        return Err(CoreError::InvalidGeometry(
+            "those walls are on different storeys".into(),
+        ));
+    }
+
+    // The line they all have to be on: the two ends furthest apart.
+    let ends: Vec<Point2> = walls.iter().flat_map(|w| [w.start, w.end]).collect();
+    let (from, to) = ends
+        .iter()
+        .flat_map(|a| ends.iter().map(move |b| (*a, *b)))
+        .max_by(|(a1, b1), (a2, b2)| a1.distance(*b1).total_cmp(&a2.distance(*b2)))
+        .ok_or_else(|| CoreError::InvalidGeometry("walls with no length".into()))?;
+    let span = from.distance(to);
+    if span < 1.0 {
+        return Err(CoreError::InvalidGeometry("walls with no length".into()));
+    }
+    let dir = ((to.x - from.x) / span, (to.y - from.y) / span);
+    let across = |p: Point2| {
+        let (dx, dy) = (p.x - from.x, p.y - from.y);
+        (-dx * dir.1 + dy * dir.0).abs()
+    };
+    // Every centerline has to run inside the thinnest of them.
+    let reach = walls
+        .iter()
+        .map(|w| w.thickness / 2.0)
+        .fold(f64::MAX, f64::min)
+        .max(JOIN_TOLERANCE);
+    if let Some(off) = ends.iter().find(|p| across(**p) > reach) {
+        return Err(CoreError::InvalidGeometry(format!(
+            "those walls are not on the same line: one end is {:.0} cm off it",
+            across(*off)
+        )));
+    }
+
+    // The longest one keeps its id and everything else about it.
+    let keep = walls
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.length().total_cmp(&b.length()))
+        .map(|(i, _)| i)
+        .unwrap_or_default();
+    // …including which way it faces, so its two finishes stay on their sides.
+    let forward = {
+        let w = &walls[keep];
+        (w.end.x - w.start.x) * dir.0 + (w.end.y - w.start.y) * dir.1 >= 0.0
+    };
+    let (start, end) = if forward { (from, to) } else { (to, from) };
+    // A sloping wall keeps the heights of the ends that survive.
+    let height_at = |p: Point2| {
+        walls
+            .iter()
+            .flat_map(|w| {
+                [
+                    (w.start, w.height),
+                    (w.end, w.height_at_end.unwrap_or(w.height)),
+                ]
+            })
+            .min_by(|(a, _), (b, _)| a.distance(p).total_cmp(&b.distance(p)))
+            .map_or(walls[keep].height, |(_, h)| h)
+    };
+    let (height, at_end) = (height_at(start), height_at(end));
+    let merged = Wall {
+        start,
+        end,
+        height,
+        height_at_end: ((at_end - height).abs() > 1e-6).then_some(at_end),
+        ..walls[keep].clone()
+    };
+    let id = merged.id;
+    let mut commands = vec![Command::update(merged)];
+    commands.extend(
+        walls
+            .iter()
+            .filter(|w| w.id != id)
+            .map(|w| Command::remove(ElementId::from(w.id))),
+    );
+    doc.execute(Command::Batch { commands })?;
+    Ok(id)
+}
+
 /// Moves elements by `(dx, dy)` cm as one undoable step.
 ///
 /// With `drag_joined`, endpoints of other walls that were joined to a moved
@@ -559,6 +675,62 @@ mod tests {
             Point2::new(400.0, 300.0),
             "far end stayed"
         );
+    }
+
+    #[test]
+    fn merge_puts_split_walls_back_together() {
+        let (mut doc, a, _) = doc_with_l();
+        let second = split_wall(&mut doc, a, 0.25).unwrap();
+        let kept = merge_walls(&mut doc, &[second, a]).unwrap();
+        // The longest piece keeps its id, and the wall spans the whole line.
+        assert_eq!(kept, second);
+        let wall = doc.home().wall(kept).unwrap();
+        assert_eq!(
+            (wall.start, wall.end),
+            (Point2::new(0.0, 0.0), Point2::new(400.0, 0.0))
+        );
+        assert!(doc.home().wall(a).is_none(), "the other piece is gone");
+        // And it undoes as one step.
+        doc.undo().unwrap();
+        assert_eq!(doc.home().walls.len(), 3);
+    }
+
+    #[test]
+    fn merge_closes_the_gap_and_keeps_the_build_of_the_longest() {
+        let mut doc = Document::default();
+        let mut a = Wall::new(
+            doc.new_wall_id(),
+            Point2::new(0.0, 0.0),
+            Point2::new(300.0, 0.0),
+        );
+        a.thickness = 25.0;
+        let mut b = Wall::new(
+            doc.new_wall_id(),
+            Point2::new(380.0, 0.0),
+            Point2::new(500.0, 0.0),
+        );
+        b.thickness = 10.0;
+        let (ia, ib) = (a.id, b.id);
+        doc.execute(Command::Batch {
+            commands: vec![Command::insert(a), Command::insert(b)],
+        })
+        .unwrap();
+        let kept = merge_walls(&mut doc, &[ib, ia]).unwrap();
+        assert_eq!(kept, ia);
+        let wall = doc.home().wall(kept).unwrap();
+        assert_eq!(
+            (wall.start, wall.end),
+            (Point2::new(0.0, 0.0), Point2::new(500.0, 0.0))
+        );
+        assert!((wall.thickness - 25.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn merge_refuses_walls_that_are_not_on_the_same_line() {
+        let (mut doc, a, b) = doc_with_l();
+        let err = merge_walls(&mut doc, &[a, b]).unwrap_err().to_string();
+        assert!(err.contains("same line"), "{err}");
+        assert_eq!(doc.home().walls.len(), 2, "nothing was touched");
     }
 
     #[test]

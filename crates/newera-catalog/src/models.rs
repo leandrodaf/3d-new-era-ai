@@ -145,6 +145,7 @@ pub(crate) fn build(model: Model, piece: &Furniture, color: Rgb) -> Mesh {
         Model::WallCabinet => cabinet(&mut ctx, 1, 0),
         Model::Appliance { round_door } => appliance(&mut ctx, round_door),
         Model::Microwave => microwave(&mut ctx),
+        Model::Hood => hood(&mut ctx),
         Model::Cooktop => cooktop(&mut ctx),
         Model::SinkBowl => sink_bowl(&mut ctx),
         Model::Oven => oven(&mut ctx),
@@ -905,6 +906,27 @@ fn microwave(ctx: &mut Ctx) {
         [d / 2.0 - 1.0, d / 2.0],
         rgb(METAL),
     );
+}
+
+/// A canopy over the cooktop, narrowing into the duct that carries the air
+/// out. The canopy is what catches: it is drawn the full width of the piece,
+/// because a hood narrower than the burners loses most of the front ones.
+fn hood(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let canopy = (h * 0.35).clamp(6.0, 18.0);
+    // The rim, wide and shallow, with a dark filter underneath.
+    ctx.cube([-w / 2.0, w / 2.0], [0.0, canopy], [-d / 2.0, d / 2.0], c);
+    ctx.cube(
+        [-w / 2.0 + 2.0, w / 2.0 - 2.0],
+        [0.0, 0.8],
+        [-d / 2.0 + 2.0, d / 2.0 - 2.0],
+        rgb([38, 40, 44]),
+    );
+    // The duct, centred, running to the top of the piece.
+    let (dw, dd) = ((w * 0.3).min(30.0), (d * 0.45).min(26.0));
+    if h > canopy {
+        ctx.cube([-dw / 2.0, dw / 2.0], [canopy, h], [-dd / 2.0, dd / 2.0], c);
+    }
 }
 
 fn cooktop(ctx: &mut Ctx) {

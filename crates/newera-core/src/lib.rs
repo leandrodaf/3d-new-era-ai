@@ -28,6 +28,7 @@ pub mod measure;
 pub mod ops;
 mod project;
 mod roof_fit;
+pub mod standards;
 mod style;
 mod units;
 pub mod vfs;
@@ -53,7 +54,7 @@ pub use home::Home;
 pub use ids::{
     DimensionId, ElementId, FurnitureId, LabelId, LevelId, ParseIdError, PolylineId, RoomId, WallId,
 };
-pub use joins::{JOIN_TOLERANCE, wall_outlines};
+pub use joins::{JOIN_TOLERANCE, TOUCH_TOLERANCE, wall_outlines, weld_ends};
 pub use levels::{FloorShape, floor_shapes, stair_holes};
 pub use lighting::{LampType, RoomLighting};
 pub use materials::{Material, Pattern, WALL_TYPES, WallFamily, WallType, wall_type};
@@ -67,6 +68,7 @@ pub use project::{
     to_project_bytes, to_project_json,
 };
 pub use roof_fit::{ROOF_FIT_ABOVE, ROOF_FIT_KEY, fit_commands, fit_to_roof, roof_height_at};
+pub use standards::{Confidence, MunicipalCode, Standard, Tier, municipal, standard};
 pub use style::{
     ArrowStyle, Camera, Cameras, DashStyle, Discipline, DrawingMode, Environment, LineCap,
     LineJoin, PaperOrientation, PhotoSettings, Polyline, PrintSettings, Properties, TextAlign,

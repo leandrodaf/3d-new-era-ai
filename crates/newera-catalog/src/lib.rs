@@ -134,6 +134,8 @@ pub enum Model {
         round_door: bool,
     },
     Microwave,
+    /// Extraction over the cooktop: a canopy narrowing into a duct.
+    Hood,
     /// Glass cooktop set into a countertop (its height is the part above it).
     Cooktop,
     /// Steel bowl set into a countertop: the rim at the top, the bowl below.
@@ -677,6 +679,18 @@ pub static CATALOG: &[CatalogItem] = &[
             WHITE,
             Model::WallCabinet,
             "wall cabinet aereo armario",
+        ),
+        150.0,
+    ),
+    raised(
+        item(
+            "hood",
+            "Coifa",
+            C::Kitchen,
+            [60.0, 50.0, 60.0],
+            STEEL,
+            Model::Hood,
+            "hood coifa exaustor depurador extractor",
         ),
         150.0,
     ),

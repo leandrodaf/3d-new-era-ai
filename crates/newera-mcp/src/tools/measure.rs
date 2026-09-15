@@ -248,4 +248,85 @@ mod tests {
             "{straight}"
         );
     }
+    /// A partition written from centerline to centerline reaches 10 cm into
+    /// the walls at its ends. That bit is wall, not floor, and nothing that
+    /// measures, counts or fills may treat it as usable: not the room areas,
+    /// not the tape measure, not the run a wall of cabinets is sized from,
+    /// not the dimension of the wall's own face. Only the wall's own length
+    /// stays as drawn — that is its axis, the way plans have always read it.
+    #[test]
+    fn nothing_counts_the_bit_inside_another_wall() {
+        let s = server();
+        // Room 600 x 400 in centerlines, walls 20 cm thick; a 10 cm partition
+        // across it, written the way a description reads.
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[600,0],[600,400],[0,400]],"closed":true,"t":20},
+                             {"pts":[[300,0],[300,400]],"t":10}],
+                    "rooms":[{"name":"Esquerda","at":[150,200]},
+                             {"name":"Direita","at":[450,200]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let home = s.document.read().home().clone();
+
+        // Free floor of each room: 285 x 380 cm, face to face.
+        for room in &home.rooms {
+            let area = newera_core::polygon_area(&room.points) / 10_000.0;
+            assert!((area - 10.83).abs() < 0.01, "{}: {area} m²", room.name);
+        }
+
+        // A tape measure across both rooms: floor, wall, floor, wall, floor.
+        let measured: serde_json::Value = serde_json::from_str(
+            &s.measure(Parameters(
+                serde_json::from_str(r#"{"axis":"x","at":200,"range":[0,600]}"#).unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let spans: Vec<(f64, f64, bool)> = measured["spans"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| {
+                (
+                    s[0].as_f64().unwrap(),
+                    s[1].as_f64().unwrap(),
+                    s[2].is_null(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            spans,
+            vec![
+                (0.0, 10.0, false),
+                (10.0, 295.0, true),
+                (295.0, 305.0, false),
+                (305.0, 590.0, true),
+                (590.0, 600.0, false),
+            ],
+            "{measured}"
+        );
+
+        // The run a wall of cabinets is sized from: the wall is 400 cm along
+        // its axis, and 380 cm of it is free between the walls at its ends.
+        let partition = home.walls.last().unwrap();
+        let run =
+            newera_core::wall_run(&home, partition.id, 1.0, 60.0, (0.0, 90.0), &|_| false).unwrap();
+        assert!((run.length - 400.0).abs() < 1e-9);
+        let gaps: Vec<(f64, f64)> = run.gaps().iter().map(|g| (g.0, g.1)).collect();
+        assert_eq!(gaps, vec![(10.0, 390.0)], "{:?}", run.obstacles);
+
+        // And its face measures what it shows: 380 cm.
+        let mut doc = s.document.write();
+        let face = newera_core::ops::wall_side_dimension(
+            &mut doc,
+            partition.id,
+            newera_core::ops::WallSide::Outer,
+            40.0,
+        )
+        .unwrap();
+        assert!((face.start.distance(face.end) - 380.0).abs() < 1e-9);
+    }
 }

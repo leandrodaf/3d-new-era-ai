@@ -7,12 +7,14 @@
 //! work, can a wheelchair turn in the bathroom. Each finding says what is
 //! wrong with its numbers, what to change, and which reference it follows.
 //!
-//! References are Brazilian where one exists: ABNT NBR 9050 (accessibility),
-//! ABNT NBR 15575-1 (residential performance: ceiling heights and the
-//! informative annex of minimum furniture and circulation), IBGE's crowding
-//! criterion, and municipal building codes for areas and windows — which
-//! vary by city, so those come as advice to confirm. Ergonomic ranges for
-//! kitchens follow common practice (work triangle, counter heights).
+//! References are Brazilian where one exists and they travel as data, not as
+//! prose: a finding carries the short code of a [`newera_core::Standard`], and
+//! the report resolves the codes it used once. That is what lets the reply say
+//! which edition it followed, lets the interface link it, and lets the
+//! reliability tier decide how much a finding may accuse — a survey never
+//! accuses, and a figure we could not confirm at the source may warn but never
+//! errs. Municipal codes vary by city: give [`Profile::city`] and they judge,
+//! omit it and they only advise.
 
 // Counts of people and pieces are tiny; cm fit in any float.
 #![allow(
@@ -23,6 +25,7 @@
 
 mod scene;
 
+use newera_core::standards::{self, Confidence, Standard, Tier};
 use newera_core::{Home, OpeningKind, Point2};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -43,6 +46,10 @@ pub struct Profile {
     pub wheelchair: bool,
     /// Height of the main cook, cm, to size the countertop (default 165).
     pub stature: Option<f64>,
+    /// City whose building code applies, e.g. `sao-paulo`. Without it,
+    /// municipal rules only advise, because their numbers vary by city and,
+    /// against a standard, the more restrictive one wins.
+    pub city: Option<String>,
 }
 
 impl Default for Profile {
@@ -53,6 +60,7 @@ impl Default for Profile {
             elderly: 0,
             wheelchair: false,
             stature: None,
+            city: None,
         }
     }
 }
@@ -69,6 +77,18 @@ pub enum Severity {
     Dica,
 }
 
+impl Severity {
+    /// The most a source of this tier may claim on its own: what obliges can
+    /// accuse, what merely describes cannot.
+    const fn for_tier(tier: Tier) -> Self {
+        match tier {
+            Tier::A => Self::Erro,
+            Tier::B | Tier::D => Self::Alerta,
+            Tier::C | Tier::E => Self::Dica,
+        }
+    }
+}
+
 /// One thing to look at.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Finding {
@@ -77,6 +97,10 @@ pub struct Finding {
     pub place: String,
     /// What is wrong, with the numbers and what to do.
     pub message: String,
+    /// Code of the [`newera_core::Standard`] behind it, resolved once in
+    /// [`Report::refs`]. The citation lives here, not inside the sentence.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reference: Option<&'static str>,
     /// A checked change that solves it, as MCP tool arguments:
     /// `{"tool":"move","ids":["f12"],"dx":-20,"dy":0}` or
     /// `{"tool":"update","items":[{"id":"f3","hinge_right":true}]}`.
@@ -103,10 +127,21 @@ pub struct Report {
     pub capacity: Capacity,
     /// Worst first.
     pub findings: Vec<Finding>,
+    /// The sources the findings stand on, each one once.
+    pub refs: Vec<&'static Standard>,
 }
 
 /// Wardrobe front per adult, cm (common practice; children count half).
 const WARDROBE_PER_ADULT: f64 = 60.0;
+
+/// Alexander's pattern 184, in centimeters: 12 ft of counter in total, no
+/// stretch under 4 ft, and no pair of the four elements over 10 ft apart.
+const ALEXANDER_TOTAL: f64 = 366.0;
+const ALEXANDER_RUN: f64 = 122.0;
+const ALEXANDER_PAIR: f64 = 305.0;
+
+/// Narrowest kitchen a financed unit is delivered with, cm.
+const MCMV_KITCHEN_WIDTH: f64 = 180.0;
 
 fn cm(v: f64) -> String {
     let r = (v * 10.0).round() / 10.0;
@@ -121,6 +156,24 @@ fn m2(v: f64) -> String {
     format!("{:.2}", v / 10_000.0).replace('.', ",")
 }
 
+/// Why a clearance is required, and the source behind it. A plain string
+/// still works for the clearances that are common practice rather than a
+/// published rule.
+#[derive(Debug, Clone, Copy)]
+struct Why(&'static str, Option<&'static str>);
+
+impl From<&'static str> for Why {
+    fn from(text: &'static str) -> Self {
+        Self(text, None)
+    }
+}
+
+impl From<(&'static str, &'static str)> for Why {
+    fn from((text, code): (&'static str, &'static str)) -> Self {
+        Self(text, Some(code))
+    }
+}
+
 struct Review<'s, 'a> {
     scene: &'s Scene<'a>,
     profile: &'s Profile,
@@ -133,6 +186,40 @@ impl Review<'_, '_> {
             severity,
             place: place.into(),
             message: message.into(),
+            reference: None,
+            fix: None,
+        });
+    }
+
+    /// The same, standing on a published source. A tier E survey says what
+    /// people do, never what they should do, so it raises nothing; a figure
+    /// marked to confirm at the source may warn, never accuse.
+    fn push_ref(
+        &mut self,
+        severity: Severity,
+        place: impl Into<String>,
+        message: impl Into<String>,
+        code: &'static str,
+    ) {
+        let Some(source) = standards::standard(code) else {
+            debug_assert!(false, "unknown standard `{code}`");
+            self.push(severity, place, message);
+            return;
+        };
+        if source.tier == Tier::E {
+            return;
+        }
+        // A finding never claims more than its source can: the tier sets the
+        // ceiling, and a figure we could not confirm may warn, never accuse.
+        let mut severity = severity.max(Severity::for_tier(source.tier));
+        if source.confidence == Confidence::ConfirmBeforeUse {
+            severity = severity.max(Severity::Alerta);
+        }
+        self.findings.push(Finding {
+            severity,
+            place: place.into(),
+            message: message.into(),
+            reference: Some(source.code),
             fix: None,
         });
     }
@@ -195,14 +282,15 @@ impl Review<'_, '_> {
         if c.bedrooms > 0 {
             let per = f64::from(people) / f64::from(c.bedrooms);
             if per > 3.0 {
-                self.push(
+                self.push_ref(
                     Severity::Alerta,
                     home,
                     format!(
-                        "{} moradores por dormitório: acima de 3 o IBGE considera adensamento excessivo; são necessários {} dormitórios.",
+                        "{} moradores por dormitório: acima de 3 é adensamento excessivo; são necessários {} dormitórios.",
                         cm(per),
                         people.div_ceil(3)
                     ),
+                    "ibge-adensamento",
                 );
             } else if per > 2.0 {
                 self.push(
@@ -273,7 +361,7 @@ impl Review<'_, '_> {
         }
     }
 
-    /// Circulation around pieces: NBR 15575-1 informative annex (50 cm
+    /// Circulation around pieces: the informative annex of NBR 15575-1 (50 cm
     /// between furniture and walls, 85 cm in front of kitchen equipment) and
     /// common practice for the rest.
     #[allow(clippy::too_many_lines)]
@@ -282,7 +370,7 @@ impl Review<'_, '_> {
         let wheel = self.profile.wheelchair;
         for (i, u) in scene.units.iter().enumerate() {
             let label = u.label();
-            let need = |side: Side, min: f64, span: (f64, f64), severity: Severity, what: &str| {
+            let need = |side: Side, min: f64, span: (f64, f64), severity: Severity, what: Why| {
                 let (free, blocker) = scene.free_and_blocker(i, side, min + 1.0, span);
                 if free + 0.5 < min {
                     let where_ = match side {
@@ -334,14 +422,16 @@ impl Review<'_, '_> {
                     } else {
                         "não há espaço do outro lado: use peça menor ou reorganize".to_owned()
                     };
+                    let Why(reason, reference) = what;
                     Some(Finding {
                         severity,
                         place: label.clone(),
                         message: format!(
-                            "{} cm livres {where_} ({what}: mínimo {} cm); {advice}.",
+                            "{} cm livres {where_} ({reason}: mínimo {} cm); {advice}.",
                             cm(free),
                             cm(min)
                         ),
+                        reference,
                         fix,
                     })
                 } else {
@@ -353,18 +443,18 @@ impl Review<'_, '_> {
             let beside = (0.25, 1.0);
             let whole = (0.0, 1.0);
             let kitchen_front = if wheel { 150.0 } else { 85.0 };
-            let kitchen_source = if wheel {
-                "giro de cadeira de rodas, NBR 9050"
+            let kitchen_source: Why = if wheel {
+                ("giro de cadeira de rodas", "nbr9050").into()
             } else {
-                "circulação diante de bancada e equipamentos, NBR 15575-1"
+                ("circulação diante de bancada e equipamentos", "nbr15575g").into()
             };
             match u.what {
                 Use::Bed(n) => {
                     let side_min = if wheel { 90.0 } else { 50.0 };
-                    let why = if wheel {
-                        "transferência da cadeira, NBR 9050"
+                    let why: Why = if wheel {
+                        ("transferência da cadeira", "nbr9050").into()
                     } else {
-                        "circulação ao lado da cama, NBR 15575-1"
+                        ("circulação ao lado da cama", "nbr15575g").into()
                     };
                     let left = need(Side::Left, side_min, beside, Severity::Alerta, why);
                     let right = need(Side::Right, side_min, beside, Severity::Alerta, why);
@@ -381,7 +471,7 @@ impl Review<'_, '_> {
                         50.0,
                         whole,
                         Severity::Dica,
-                        "passagem aos pés da cama",
+                        "passagem aos pés da cama".into(),
                     ));
                 }
                 Use::Crib => found.extend(need(
@@ -389,7 +479,7 @@ impl Review<'_, '_> {
                     50.0,
                     whole,
                     Severity::Dica,
-                    "acesso ao berço",
+                    "acesso ao berço".into(),
                 )),
                 Use::Wardrobe => {
                     // Hinged doors of a joinery build swing their own width.
@@ -412,9 +502,9 @@ impl Review<'_, '_> {
                         whole,
                         Severity::Alerta,
                         if leaf > 0.0 {
-                            "abrir as portas e circular diante do guarda-roupa; portas de correr pedem menos"
+                            "abrir as portas e circular diante do guarda-roupa; portas de correr pedem menos".into()
                         } else {
-                            "abrir as portas e circular diante do guarda-roupa"
+                            "abrir as portas e circular diante do guarda-roupa".into()
                         },
                     ));
                 }
@@ -423,10 +513,10 @@ impl Review<'_, '_> {
                     70.0,
                     whole,
                     Severity::Dica,
-                    "abrir gavetas e ficar diante delas",
+                    "abrir gavetas e ficar diante delas".into(),
                 )),
                 // The cabinets under a countertop answer for it and for what is set in it.
-                Use::Fridge | Use::Stove | Use::Sink | Use::Counter
+                Use::Fridge | Use::Stove | Use::Sink | Use::Counter | Use::Appliance
                     if !scene.countertop(i) && !scene.embedded_item(i) =>
                 {
                     // A blind corner's panel sits behind the other run: only its door counts.
@@ -458,7 +548,7 @@ impl Review<'_, '_> {
                         90.0,
                         whole,
                         Severity::Alerta,
-                        "circulação em volta da ilha",
+                        "circulação em volta da ilha".into(),
                     ));
                 }
                 Use::Toilet => found.extend(need(
@@ -467,9 +557,9 @@ impl Review<'_, '_> {
                     whole,
                     Severity::Alerta,
                     if wheel {
-                        "área de transferência, NBR 9050"
+                        Why("área de transferência", Some("nbr9050"))
                     } else {
-                        "uso do vaso"
+                        Why("uso do vaso", None)
                     },
                 )),
                 Use::Basin => found.extend(need(
@@ -477,28 +567,28 @@ impl Review<'_, '_> {
                     if wheel { 120.0 } else { 60.0 },
                     whole,
                     Severity::Alerta,
-                    "uso do lavatório",
+                    "uso do lavatório".into(),
                 )),
                 Use::Shower | Use::Bathtub => found.extend(need(
                     Side::Front,
                     60.0,
                     (0.2, 0.8),
                     Severity::Dica,
-                    "entrar e sair do box",
+                    "entrar e sair do box".into(),
                 )),
                 Use::Washer | Use::LaundrySink => found.extend(need(
                     Side::Front,
                     60.0,
                     whole,
                     Severity::Alerta,
-                    "uso da área de serviço",
+                    "uso da área de serviço".into(),
                 )),
                 Use::Desk => found.extend(need(
                     Side::Front,
                     75.0,
                     (0.2, 0.8),
                     Severity::Dica,
-                    "cadeira e levantar-se da mesa",
+                    "cadeira e levantar-se da mesa".into(),
                 )),
                 Use::DiningTable(_) => {
                     // The sides people sit on: where chairs are, or the front
@@ -527,7 +617,7 @@ impl Review<'_, '_> {
                                 75.0,
                                 (0.2, 0.8),
                                 Severity::Alerta,
-                                "puxar a cadeira e sentar",
+                                "puxar a cadeira e sentar".into(),
                             ));
                         }
                     }
@@ -539,7 +629,7 @@ impl Review<'_, '_> {
                             40.0,
                             (0.2, 0.8),
                             Severity::Alerta,
-                            "passar atrás das cadeiras",
+                            "passar atrás das cadeiras".into(),
                         ));
                     }
                 }
@@ -549,7 +639,7 @@ impl Review<'_, '_> {
                         35.0,
                         (0.2, 0.8),
                         Severity::Dica,
-                        "pernas e passagem diante do sofá",
+                        "pernas e passagem diante do sofá".into(),
                     ));
                 }
                 _ => {}
@@ -581,13 +671,14 @@ impl Review<'_, '_> {
                     ),
                 );
             } else if wheel && clear < 80.0 {
-                self.push(
+                self.push_ref(
                     Severity::Alerta,
                     label,
                     format!(
-                        "Vão livre de cerca de {} cm: a NBR 9050 pede 80 cm livres para cadeira de rodas e andador; use porta de 90 cm.",
+                        "Vão livre de cerca de {} cm: cadeira de rodas e andador pedem 80 cm livres; use porta de 90 cm.",
                         cm(clear)
                     ),
+                    "nbr9050",
                 );
             }
         }
@@ -614,6 +705,7 @@ impl Review<'_, '_> {
                     message: format!(
                         "A folha da porta bate em {by}: invertendo o lado da dobradiça ela abre livre."
                     ),
+                    reference: None,
                     fix: Some(serde_json::json!({
                         "tool": "update",
                         "items": [{"id": door.id.to_string(), "hinge_right": right}],
@@ -634,6 +726,7 @@ impl Review<'_, '_> {
                         "A folha da porta bate em {by}: mova a peça ou use porta de correr."
                     ),
                 },
+                reference: None,
                 fix: moved.map(without_distance),
             });
         }
@@ -654,6 +747,7 @@ impl Review<'_, '_> {
                         scene.units[b].label()
                     ),
                 },
+                reference: None,
                 fix: fix.map(without_distance),
             });
         }
@@ -729,7 +823,7 @@ impl Review<'_, '_> {
             };
             if let Some((min_area, min_side)) = minimum {
                 if area + 1.0 < min_area {
-                    self.push(
+                    self.push_ref(
                         Severity::Dica,
                         &label,
                         format!(
@@ -738,6 +832,7 @@ impl Review<'_, '_> {
                             what.name(),
                             m2(min_area)
                         ),
+                        "coe-municipal",
                     );
                 }
                 if short + 0.5 < min_side {
@@ -746,7 +841,7 @@ impl Review<'_, '_> {
                     } else {
                         Severity::Dica
                     };
-                    self.push(
+                    self.push_ref(
                         severity,
                         &label,
                         format!(
@@ -755,6 +850,7 @@ impl Review<'_, '_> {
                             what.name(),
                             cm(min_side)
                         ),
+                        "coe-municipal",
                     );
                 }
             }
@@ -762,15 +858,16 @@ impl Review<'_, '_> {
             // kitchens, laundries and corridors.
             let min_ceiling = if what.long_stay() { 250.0 } else { 230.0 };
             if what != RoomUse::Other && ceiling + 0.5 < min_ceiling {
-                self.push(
+                self.push_ref(
                     Severity::Alerta,
                     &label,
                     format!(
-                        "Pé-direito de {} cm; a NBR 15575-1 pede no mínimo {} cm em {}.",
+                        "Pé-direito de {} cm; o mínimo é {} cm em {}.",
                         cm(ceiling),
                         cm(min_ceiling),
                         what.name()
                     ),
+                    "nbr15575",
                 );
             }
             // Daylight: 1/6 of the floor for rooms to stay, 1/8 elsewhere (codes vary).
@@ -789,7 +886,7 @@ impl Review<'_, '_> {
                     };
                     self.push(severity, &label, format!("Sem janela: {what_to_do}."));
                 } else if glass * ratio + 1.0 < area {
-                    self.push(
+                    self.push_ref(
                         Severity::Dica,
                         &label,
                         format!(
@@ -798,6 +895,7 @@ impl Review<'_, '_> {
                             m2(area),
                             m2(area / ratio)
                         ),
+                        "coe-municipal",
                     );
                 }
             }
@@ -836,7 +934,7 @@ impl Review<'_, '_> {
                 _ => Vec::new(),
             };
             if !missing.is_empty() {
-                self.push(
+                self.push_ref(
                     Severity::Dica,
                     &label,
                     format!(
@@ -844,35 +942,49 @@ impl Review<'_, '_> {
                         missing.join(", "),
                         what.name()
                     ),
+                    "nbr15575g",
                 );
             }
             if wheel && matches!(what, RoomUse::Bathroom | RoomUse::Kitchen) {
                 let space = &scene.spaces[k];
                 let turn = scene.turning_diameter(space);
                 if turn + 1.0 < 150.0 {
-                    self.push(
+                    self.push_ref(
                         Severity::Alerta,
                         &label,
                         format!(
-                            "Cabe um giro de {} cm; a NBR 9050 pede círculo livre de 150 cm para girar a cadeira de rodas.",
+                            "Cabe um giro de {} cm; são necessários 150 cm livres para girar a cadeira de rodas.",
                             cm(turn)
                         ),
+                        "nbr9050",
                     );
                 }
             }
             if self.profile.elderly > 0 && what == RoomUse::Bathroom {
-                self.push(
+                self.push_ref(
                     Severity::Dica,
                     &label,
-                    "Morador idoso: barras de apoio junto ao vaso e no box, piso antiderrapante e box sem degrau (NBR 9050).",
+                    "Morador idoso: barras de apoio junto ao vaso e no box, piso antiderrapante e box sem degrau.",
+                    "nbr9050",
                 );
             }
         }
     }
 
+    /// The kitchen, read against the sources that founded the subject: the
+    /// work triangle, Alexander's counter lengths, Blum's five zones, the
+    /// electrical and gas standards that make it legal, and what the
+    /// laboratory knows about pulling cooking pollutants out of the air.
+    #[allow(clippy::too_many_lines)]
     fn kitchen(&mut self) {
         let scene = self.scene;
         let stature = self.profile.stature.unwrap_or(165.0);
+        let city = self.profile.city.as_deref().and_then(standards::municipal);
+        // Only judge the electrical layout of a plan that has one.
+        let has_electrical = scene
+            .units
+            .iter()
+            .any(|u| matches!(u.what, Use::Outlet | Use::Switch));
         // Kitchens, and living rooms with a kitchen in them.
         let cooks = |s: &&Space<'_>| {
             s.what == RoomUse::Kitchen
@@ -884,7 +996,15 @@ impl Review<'_, '_> {
                     .count()
                     >= 2
         };
-        for space in scene.spaces.iter().filter(cooks) {
+        let cooking: Vec<usize> = scene
+            .spaces
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| cooks(s))
+            .map(|(k, _)| k)
+            .collect();
+        for k in cooking {
+            let space = &scene.spaces[k];
             let label = space.label();
             let find = |w: fn(&Use) -> bool| {
                 space
@@ -893,6 +1013,7 @@ impl Review<'_, '_> {
                     .map(|&i| &scene.units[i])
                     .find(|u| w(&u.what))
             };
+            let any = |w: fn(&Use) -> bool| find(w).is_some();
             let points: Vec<Option<Point2>> = [
                 find(|u| matches!(u, Use::Fridge)),
                 find(|u| matches!(u, Use::Sink)),
@@ -909,29 +1030,32 @@ impl Review<'_, '_> {
                 ];
                 let total: f64 = legs.iter().sum();
                 if total > 700.0 {
-                    self.push(
+                    self.push_ref(
                         Severity::Dica,
                         &label,
                         format!(
                             "Triângulo geladeira–pia–fogão de {} cm; acima de ~660 cm cozinhar vira caminhada: aproxime os três.",
                             cm(total)
                         ),
+                        "gilbreth-triangulo",
                     );
                 } else if total < 330.0 {
-                    self.push(
+                    self.push_ref(
                         Severity::Dica,
                         &label,
                         format!(
                             "Triângulo geladeira–pia–fogão de só {} cm: falta bancada entre eles para apoiar e preparar.",
                             cm(total)
                         ),
+                        "gilbreth-triangulo",
                     );
                 }
                 if sink.distance(stove) < 60.0 {
-                    self.push(
+                    self.push_ref(
                         Severity::Alerta,
                         &label,
                         "Pia e fogão colados: deixe ao menos 60 cm de bancada entre eles para preparo e segurança.",
+                        "nkba",
                     );
                 }
             }
@@ -948,7 +1072,7 @@ impl Review<'_, '_> {
                     continue;
                 }
                 if (top - ideal).abs() > 6.0 {
-                    self.push(
+                    self.push_ref(
                         Severity::Dica,
                         u.label(),
                         format!(
@@ -957,6 +1081,7 @@ impl Review<'_, '_> {
                             cm(stature),
                             cm(ideal.round())
                         ),
+                        "blum-zonas",
                     );
                     break;
                 }
@@ -974,17 +1099,18 @@ impl Review<'_, '_> {
                 }
                 let (lo, hi) = u.piece.height_range();
                 if lo < 135.0 {
-                    self.push(
+                    self.push_ref(
                         Severity::Alerta,
                         u.label(),
                         format!(
                             "Aéreo a {} cm do chão: abaixo de ~135 cm (45 cm sobre a bancada) a cabeça bate ao trabalhar.",
                             cm(lo)
                         ),
+                        "nkba",
                     );
                 }
                 if hi > reach + 30.0 {
-                    self.push(
+                    self.push_ref(
                         Severity::Dica,
                         u.label(),
                         format!(
@@ -992,9 +1118,232 @@ impl Review<'_, '_> {
                             cm(hi),
                             cm(reach.round())
                         ),
+                        if self.profile.wheelchair {
+                            "nbr9050"
+                        } else {
+                            "panero-zelnik"
+                        },
                     );
                 }
                 break;
+            }
+            // --- Alexander, pattern 184: is there counter, and is it whole? ---
+            let runs = counter_runs(scene, space);
+            let total: f64 = runs.iter().sum();
+            if !runs.is_empty() {
+                if total + 1.0 < ALEXANDER_TOTAL {
+                    self.push_ref(
+                        Severity::Dica,
+                        &label,
+                        format!(
+                            "{} cm de bancada livre fora de pia, fogão e geladeira; abaixo de {} cm falta onde pousar as coisas do preparo (mesa solta também conta).",
+                            cm(total),
+                            cm(ALEXANDER_TOTAL)
+                        ),
+                        "alexander184",
+                    );
+                }
+                if let Some(shortest) = runs
+                    .iter()
+                    .copied()
+                    .filter(|r| *r + 1.0 < ALEXANDER_RUN)
+                    .reduce(f64::min)
+                    && runs.len() > 1
+                {
+                    self.push_ref(
+                        Severity::Dica,
+                        &label,
+                        format!(
+                            "Um trecho de bancada de só {} cm: abaixo de {} cm o pedaço não serve para preparar nada; junte-o a outro trecho.",
+                            cm(shortest),
+                            cm(ALEXANDER_RUN)
+                        ),
+                        "alexander184",
+                    );
+                }
+            }
+            // The four things you walk between, none of them far from another.
+            let corners: Vec<(&str, Point2)> = [
+                ("fogão", find(|u| matches!(u, Use::Stove))),
+                ("pia", find(|u| matches!(u, Use::Sink))),
+                (
+                    "armazenagem",
+                    find(|u| matches!(u, Use::Fridge | Use::Storage | Use::WallCabinet)),
+                ),
+                ("bancada", find(|u| matches!(u, Use::Counter | Use::Island))),
+            ]
+            .into_iter()
+            .filter_map(|(name, u)| u.map(|u| (name, u.piece.position)))
+            .collect();
+            let farthest = corners
+                .iter()
+                .enumerate()
+                .flat_map(|(i, a)| corners[i + 1..].iter().map(move |b| (a, b)))
+                .map(|(a, b)| (a.1.distance(b.1), a.0, b.0))
+                .max_by(|x, y| x.0.total_cmp(&y.0));
+            if let Some((far, a, b)) = farthest
+                && far > ALEXANDER_PAIR
+            {
+                self.push_ref(
+                    Severity::Dica,
+                    &label,
+                    format!(
+                        "{} cm entre {a} e {b}: acima de {} cm cada par vira travessia, e o preparo se desfaz em idas e vindas.",
+                        cm(far),
+                        cm(ALEXANDER_PAIR)
+                    ),
+                    "alexander184",
+                );
+            }
+            // --- Blum: the five zones, in the order of the work ---
+            let zones = [
+                ("mantimentos", any(|u| matches!(u, Use::Fridge))),
+                (
+                    "armazenagem",
+                    any(|u| matches!(u, Use::WallCabinet | Use::Storage)),
+                ),
+                ("lavagem", any(|u| matches!(u, Use::Sink))),
+                ("preparo", any(|u| matches!(u, Use::Counter | Use::Island))),
+                ("cocção", any(|u| matches!(u, Use::Stove))),
+            ];
+            let missing: Vec<&str> = zones
+                .iter()
+                .filter(|(_, there)| !there)
+                .map(|(name, _)| *name)
+                .collect();
+            if !missing.is_empty() && missing.len() < zones.len() {
+                self.push_ref(
+                    Severity::Dica,
+                    &label,
+                    format!(
+                        "Das cinco zonas de trabalho falta {}: sem ela o fluxo mantimentos → armazenagem → lavagem → preparo → cocção se quebra.",
+                        missing.join(" e ")
+                    ),
+                    "blum-zonas",
+                );
+            }
+            // --- NBR 5410: sockets by perimeter, and two above the counter ---
+            if has_electrical {
+                let perimeter = outline_length(&space.room.points);
+                let sockets = space
+                    .units
+                    .iter()
+                    .filter(|&&i| scene.units[i].what == Use::Outlet)
+                    .count();
+                let needed = (perimeter / 350.0).ceil().max(1.0) as usize;
+                if sockets < needed {
+                    self.push_ref(
+                        Severity::Erro,
+                        &label,
+                        format!(
+                            "{sockets} ponto(s) de tomada para {} m de perímetro: são necessários {needed} (um a cada 3,5 m ou fração).",
+                            m2(perimeter * 100.0)
+                        ),
+                        "nbr5410",
+                    );
+                }
+                let above = space
+                    .units
+                    .iter()
+                    .filter(|&&i| {
+                        let u = &scene.units[i];
+                        u.what == Use::Outlet && u.piece.elevation >= 90.0
+                    })
+                    .count();
+                if above < 2 {
+                    self.push_ref(
+                        Severity::Erro,
+                        &label,
+                        format!(
+                            "{above} tomada(s) acima da bancada: são exigidas pelo menos 2, e forno, cooktop elétrico e lava-louças pedem circuito próprio."
+                        ),
+                        "nbr5410",
+                    );
+                }
+            }
+            // --- NBR 13103: a gas appliance needs permanent ventilation ---
+            if let Some(stove) = find(|u| matches!(u, Use::Stove)) {
+                let gas = !electric(&stove.piece.name);
+                if gas {
+                    let glass = window_area(scene, &space.room.points);
+                    if glass <= 0.0 {
+                        self.push_ref(
+                            Severity::Erro,
+                            &label,
+                            "Aparelho a gás em ambiente sem janela nem abertura permanente: a ventilação é obrigatória, e aqui é segurança, não conforto.",
+                            "nbr13103",
+                        );
+                    } else {
+                        self.push_ref(
+                            Severity::Dica,
+                            &label,
+                            "Aparelho a gás: confira a área de ventilação útil e as aberturas inferior e superior na edição vigente da norma — os valores mudaram entre edições.",
+                            "nbr13103",
+                        );
+                    }
+                }
+                // --- LBNL: pulling the pollutants out before they spread ---
+                match find(|u| matches!(u, Use::Hood)) {
+                    None => self.push_ref(
+                        Severity::Alerta,
+                        &label,
+                        "Cocção sem coifa: o cozimento gera material particulado e NO₂ dentro de casa, e sem captura eles ficam no ar da sala junto.",
+                        "lbnl-coifa",
+                    ),
+                    Some(hood) if hood.piece.width + 1.0 < stove.piece.width => self.push_ref(
+                        Severity::Dica,
+                        &label,
+                        format!(
+                            "Coifa de {} cm sobre cocção de {} cm: a captura já cai à metade nas bocas da frente, e vazão alta não compensa coifa estreita.",
+                            cm(hood.piece.width),
+                            cm(stove.piece.width)
+                        ),
+                        "lbnl-coifa",
+                    ),
+                    Some(_) => {}
+                }
+            }
+            // --- What is built at scale: the floor of the Brazilian market ---
+            if space.what == RoomUse::Kitchen {
+                let short = short_side(&space.room.points);
+                if short + 0.5 < MCMV_KITCHEN_WIDTH {
+                    self.push_ref(
+                        Severity::Erro,
+                        &label,
+                        format!(
+                            "Cozinha de {} cm de largura; a unidade financiada mais modesta entrega {} cm, com previsão de pia 120×50, fogão 55×60 e geladeira 70×70 cm.",
+                            cm(short),
+                            cm(MCMV_KITCHEN_WIDTH)
+                        ),
+                        "caixa-mcmv",
+                    );
+                }
+                // --- The city has the last word, and only where we hold it ---
+                match city.and_then(|c| c.kitchen_circle_cm.map(|d| (c, d))) {
+                    Some((code, diameter)) => {
+                        let turn = scene.turning_diameter(space);
+                        if turn + 1.0 < diameter {
+                            self.push_ref(
+                                Severity::Erro,
+                                &label,
+                                format!(
+                                    "Cabe um círculo de {} cm no piso; {} pede {} cm ({}). Entre norma e lei local prevalece o mais restritivo.",
+                                    cm(turn),
+                                    code.label,
+                                    cm(diameter),
+                                    code.source
+                                ),
+                                "coe-municipal",
+                            );
+                        }
+                    }
+                    None => self.push_ref(
+                        Severity::Dica,
+                        &label,
+                        "Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.",
+                        "coe-municipal",
+                    ),
+                }
             }
         }
     }
@@ -1058,12 +1407,13 @@ impl Review<'_, '_> {
             }
         }
         if wrong > 0 {
-            self.push(
+            self.push_ref(
                 Severity::Alerta,
                 "Casa",
                 format!(
-                    "{wrong} interruptor(es)/tomada(s) fora da faixa de 40 a 120 cm de alcance de quem usa cadeira de rodas (NBR 9050)."
+                    "{wrong} interruptor(es)/tomada(s) fora da faixa de 40 a 120 cm de alcance de quem usa cadeira de rodas."
                 ),
+                "nbr9050",
             );
         }
     }
@@ -1159,6 +1509,92 @@ fn without_distance(mut fix: serde_json::Value) -> serde_json::Value {
 }
 
 /// Whether `p` lies on the outline of a polygon, within `tolerance` cm.
+/// Does the name say the cooktop burns nothing?
+fn electric(name: &str) -> bool {
+    let n = name.to_lowercase();
+    [
+        "induç",
+        "induc",
+        "induction",
+        "elétric",
+        "eletric",
+        "electric",
+    ]
+    .iter()
+    .any(|w| n.contains(w))
+}
+
+/// Perimeter of a room outline, cm.
+fn outline_length(points: &[Point2]) -> f64 {
+    points
+        .iter()
+        .zip(points.iter().cycle().skip(1))
+        .take(points.len())
+        .map(|(a, b)| a.distance(*b))
+        .sum()
+}
+
+/// Glazed area on a room's outline, cm².
+fn window_area(scene: &Scene<'_>, points: &[Point2]) -> f64 {
+    scene
+        .home
+        .furniture
+        .iter()
+        .filter(|f| {
+            f.visible
+                && f.opening
+                    .as_ref()
+                    .is_some_and(|o| o.kind == OpeningKind::Window || f.catalog == "french-window")
+                && near_outline(points, f.position, f.depth.max(15.0))
+        })
+        .map(|f| f.width * f.height)
+        .sum()
+}
+
+/// Lengths of the continuous worktop runs in a space, cm. Cabinets that
+/// touch are one run, because what matters is the stretch you can work on,
+/// not how many boxes it was built from.
+fn counter_runs(scene: &Scene<'_>, space: &Space<'_>) -> Vec<f64> {
+    let tops: Vec<(Point2, f64)> = space
+        .units
+        .iter()
+        .map(|&i| &scene.units[i])
+        .filter(|u| matches!(u.what, Use::Counter | Use::Island))
+        .map(|u| (u.piece.position, u.piece.width))
+        .collect();
+    let mut group: Vec<usize> = (0..tops.len()).collect();
+    // Union-find, flattened by a few passes: the sets are tiny.
+    for _ in 0..tops.len() {
+        for i in 0..tops.len() {
+            for j in i + 1..tops.len() {
+                let apart = tops[i].0.distance(tops[j].0);
+                if apart < f64::midpoint(tops[i].1, tops[j].1) + 15.0 {
+                    let root = group[i].min(group[j]);
+                    let (a, b) = (group[i], group[j]);
+                    for g in &mut group {
+                        if *g == a || *g == b {
+                            *g = root;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut runs: Vec<f64> = Vec::new();
+    for root in 0..tops.len() {
+        let length: f64 = group
+            .iter()
+            .enumerate()
+            .filter(|(_, g)| **g == root)
+            .map(|(i, _)| tops[i].1)
+            .sum();
+        if length > 0.0 {
+            runs.push(length);
+        }
+    }
+    runs
+}
+
 fn near_outline(points: &[Point2], p: Point2, tolerance: f64) -> bool {
     (0..points.len())
         .any(|k| p.distance_to_segment(points[k], points[(k + 1) % points.len()]) <= tolerance)
@@ -1200,7 +1636,11 @@ pub fn review(home: &Home, profile: &Profile) -> Report {
     let mut findings: Vec<Finding> = Vec::new();
     for f in review.findings {
         match findings.iter_mut().find(|g| {
-            g.severity == f.severity && g.message == f.message && g.fix.is_none() && f.fix.is_none()
+            g.severity == f.severity
+                && g.message == f.message
+                && g.reference == f.reference
+                && g.fix.is_none()
+                && f.fix.is_none()
         }) {
             Some(same) => {
                 same.place.push_str(", ");
@@ -1218,10 +1658,20 @@ pub fn review(home: &Home, profile: &Profile) -> Report {
         count(Severity::Dica),
     );
     let penalty = errors * 12 + alerts.min(6) * 5 + alerts.saturating_sub(6) + tips.min(10);
+    // Each source once, in the order the findings first lean on it.
+    let mut refs: Vec<&'static Standard> = Vec::new();
+    for code in findings.iter().filter_map(|f| f.reference) {
+        if let Some(source) = standards::standard(code)
+            && !refs.iter().any(|s| s.code == code)
+        {
+            refs.push(source);
+        }
+    }
     Report {
         score: 100u32.saturating_sub(penalty),
         capacity,
         findings,
+        refs,
     }
 }
 
@@ -1282,6 +1732,14 @@ mod tests {
             .findings
             .iter()
             .any(|f| f.severity == severity && f.message.contains(text))
+    }
+
+    /// Is there a finding of this severity standing on this source?
+    fn cites(report: &Report, severity: Severity, code: &str) -> bool {
+        report
+            .findings
+            .iter()
+            .any(|f| f.severity == severity && f.reference == Some(code))
     }
 
     #[test]
@@ -1444,6 +1902,375 @@ mod tests {
         assert!(!says(&report, Severity::Dica, "da TV"), "{report:#?}");
     }
 
+    /// The false positive with a standard at its root: a dishwasher is an
+    /// appliance in a niche (EN 1116), so its lid is never read as the height
+    /// of the worktop it hides under.
+    #[test]
+    fn a_dishwasher_is_an_appliance_not_a_worktop() {
+        let mut home = Home::default();
+        square(&mut home, "Cozinha", 400.0, 300.0);
+        home.furniture.push(piece(
+            20,
+            "sink-counter",
+            (100.0, 7.5 + 30.0),
+            (120.0, 60.0, 92.0),
+            0.0,
+        ));
+        // A 84,5 cm dishwasher beside a 92 cm counter, for a 146 cm cook whose
+        // comfortable height is exactly 84 cm: if the dishwasher counted as
+        // worktop, the counter would be the one reported as wrong.
+        home.furniture.push(piece(
+            21,
+            "dishwasher",
+            (220.0, 7.5 + 30.0),
+            (60.0, 60.0, 84.5),
+            0.0,
+        ));
+        home.furniture.push(piece(
+            22,
+            "stove",
+            (300.0, 7.5 + 31.0),
+            (60.0, 62.0, 90.0),
+            0.0,
+        ));
+        let tall = Profile {
+            stature: 165.0.into(),
+            ..Profile::default()
+        };
+        let report = review(&home, &tall);
+        assert!(
+            !says(&report, Severity::Dica, "84,5 cm"),
+            "the dishwasher's lid is not a countertop: {report:#?}"
+        );
+
+        // The reported false positive came the other way: a designer's
+        // module, numbered and named, with no catalog id to go by.
+        let mut named = home.clone();
+        named.furniture.retain(|f| f.id != FurnitureId(21));
+        let mut module = piece(24, "", (220.0, 7.5 + 30.0), (60.0, 60.0, 84.5), 0.0);
+        module.name = "10 — Lava-louças de embutir".to_owned();
+        named.furniture.push(module);
+        let report = review(&named, &tall);
+        assert!(
+            !says(&report, Severity::Dica, "84,5 cm"),
+            "read by name, it is still an appliance: {report:#?}"
+        );
+    }
+
+    #[test]
+    fn the_kitchen_is_read_against_alexander_the_gas_standard_and_the_city() {
+        let mut home = Home::default();
+        // 170 cm wide: narrower than the most modest financed unit.
+        square(&mut home, "Cozinha", 380.0, 185.0);
+        home.furniture.push(piece(
+            20,
+            "sink-counter",
+            (80.0, 7.5 + 30.0),
+            (120.0, 60.0, 90.0),
+            0.0,
+        ));
+        home.furniture.push(piece(
+            21,
+            "stove",
+            (200.0, 7.5 + 31.0),
+            (60.0, 62.0, 90.0),
+            0.0,
+        ));
+        home.furniture.push(piece(
+            22,
+            "fridge",
+            (330.0, 7.5 + 35.0),
+            (70.0, 70.0, 180.0),
+            0.0,
+        ));
+        // One short stretch of worktop, and nothing else.
+        home.furniture.push(piece(
+            23,
+            "base-cabinet",
+            (280.0, 7.5 + 30.0),
+            (60.0, 60.0, 90.0),
+            0.0,
+        ));
+        let report = review(&home, &Profile::default());
+        // Alexander 184: 60 cm of free counter is not 366.
+        assert!(
+            cites(&report, Severity::Dica, "alexander184"),
+            "{report:#?}"
+        );
+        // A gas appliance with no window at all is a safety problem.
+        assert!(cites(&report, Severity::Erro, "nbr13103"), "{report:#?}");
+        // Cooking with nothing to capture what it releases.
+        assert!(
+            cites(&report, Severity::Alerta, "lbnl-coifa"),
+            "{report:#?}"
+        );
+        // The narrow kitchen: the figure comes from secondary material, so it
+        // warns instead of accusing, even though the rule asked for an error.
+        assert!(
+            cites(&report, Severity::Alerta, "caixa-mcmv"),
+            "{report:#?}"
+        );
+        // No city: the municipal circle is advice, not a verdict.
+        assert!(
+            cites(&report, Severity::Dica, "coe-municipal"),
+            "{report:#?}"
+        );
+
+        let paulista = Profile {
+            city: Some("sao-paulo".to_owned()),
+            ..Profile::default()
+        };
+        let judged = review(&home, &paulista);
+        assert!(
+            cites(&judged, Severity::Erro, "coe-municipal"),
+            "a kitchen 170 cm wide holds no 120 cm circle: {judged:#?}"
+        );
+        assert!(
+            judged.refs.iter().any(|r| r.code == "coe-municipal"),
+            "{:?}",
+            judged.refs
+        );
+
+        // Induction burns nothing: the gas standard stops applying.
+        let mut electric = home.clone();
+        electric
+            .furniture
+            .iter_mut()
+            .find(|f| f.id == FurnitureId(21))
+            .unwrap()
+            .name = "Cooktop de indução".to_owned();
+        let clean = review(&electric, &Profile::default());
+        assert!(
+            !clean
+                .findings
+                .iter()
+                .any(|f| f.reference == Some("nbr13103")),
+            "{clean:#?}"
+        );
+    }
+
+    /// Sockets are only judged where someone drew an electrical project: a
+    /// plan without one is unfinished, not wrong.
+    #[test]
+    fn sockets_are_counted_only_against_an_electrical_project() {
+        let mut home = Home::default();
+        square(&mut home, "Cozinha", 400.0, 300.0);
+        home.furniture.push(piece(
+            20,
+            "sink-counter",
+            (100.0, 7.5 + 30.0),
+            (120.0, 60.0, 90.0),
+            0.0,
+        ));
+        home.furniture.push(piece(
+            21,
+            "stove",
+            (250.0, 7.5 + 31.0),
+            (60.0, 62.0, 90.0),
+            0.0,
+        ));
+        let quiet = review(&home, &Profile::default());
+        assert!(
+            !quiet
+                .findings
+                .iter()
+                .any(|f| f.reference == Some("nbr5410")),
+            "{quiet:#?}"
+        );
+
+        let mut wired = home.clone();
+        let mut socket = piece(22, "outlet-low", (40.0, 7.5), (10.0, 5.0, 10.0), 0.0);
+        socket.elevation = 30.0;
+        wired.furniture.push(socket);
+        let report = review(&wired, &Profile::default());
+        // Perimeter of 13,7 m needs four points; one is drawn, none of them
+        // above the counter.
+        assert!(cites(&report, Severity::Erro, "nbr5410"), "{report:#?}");
+        assert!(
+            says(&report, Severity::Erro, "0 tomada(s) acima da bancada"),
+            "{report:#?}"
+        );
+    }
+
+    /// The severity policy is the whole point of the ladder, so it is tested
+    /// on its own rather than only through the rules that lean on it.
+    #[test]
+    fn a_source_never_claims_more_than_its_tier_allows() {
+        let mut home = Home::default();
+        square(&mut home, "Sala", 300.0, 300.0);
+        let view = home.level_view(home.current_level());
+        let scene = Scene::new(&view);
+        let profile = Profile::default();
+        let mut review = Review {
+            scene: &scene,
+            profile: &profile,
+            findings: Vec::new(),
+        };
+        // Tier A, checked at the source: an error stays an error.
+        review.push_ref(Severity::Erro, "Casa", "gás sem abertura", "nbr13103");
+        // Tier A, figure not confirmed at the source: it may warn, never accuse.
+        review.push_ref(Severity::Erro, "Casa", "cozinha estreita", "caixa-mcmv");
+        // Tier C doctrine cannot raise an alert, however the rule asked.
+        review.push_ref(Severity::Erro, "Casa", "bancada curta", "alexander184");
+        // Tier E describes what people do: it raises nothing at all.
+        review.push_ref(Severity::Erro, "Casa", "tendência", "houzz2026");
+        let got: Vec<(Severity, Option<&str>)> = review
+            .findings
+            .iter()
+            .map(|f| (f.severity, f.reference))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                (Severity::Erro, Some("nbr13103")),
+                (Severity::Alerta, Some("caixa-mcmv")),
+                (Severity::Dica, Some("alexander184")),
+            ],
+            "the survey was dropped and the rest was capped"
+        );
+    }
+
+    /// Alexander counts the stretch you can work on, not the boxes it was
+    /// built from: cabinets that touch are one run.
+    #[test]
+    fn touching_cabinets_are_one_worktop_run() {
+        let mut home = Home::default();
+        square(&mut home, "Cozinha", 600.0, 300.0);
+        // Three 60 cm cabinets side by side: one run of 180 cm.
+        for (n, x) in [(30_u64, 40.0), (31, 100.0), (32, 160.0)] {
+            home.furniture.push(piece(
+                n,
+                "base-cabinet",
+                (x, 7.5 + 30.0),
+                (60.0, 60.0, 90.0),
+                0.0,
+            ));
+        }
+        // One on its own at the far end: a 60 cm stretch nobody can use.
+        home.furniture.push(piece(
+            33,
+            "base-cabinet",
+            (540.0, 7.5 + 30.0),
+            (60.0, 60.0, 90.0),
+            0.0,
+        ));
+        home.furniture.push(piece(
+            34,
+            "sink-counter",
+            (300.0, 7.5 + 30.0),
+            (120.0, 60.0, 90.0),
+            0.0,
+        ));
+        home.furniture.push(piece(
+            35,
+            "stove",
+            (400.0, 7.5 + 31.0),
+            (60.0, 62.0, 90.0),
+            0.0,
+        ));
+        let report = review(&home, &Profile::default());
+        assert!(
+            says(&report, Severity::Dica, "trecho de bancada de só 60 cm"),
+            "the lone cabinet is reported, the row of three is not: {report:#?}"
+        );
+        assert!(
+            !says(&report, Severity::Dica, "trecho de bancada de só 180 cm"),
+            "{report:#?}"
+        );
+        // 180 + 60 = 240 cm of free counter, still short of Alexander's 366.
+        assert!(
+            says(&report, Severity::Dica, "240 cm de bancada livre"),
+            "{report:#?}"
+        );
+    }
+
+    #[test]
+    fn a_kitchen_spread_too_wide_and_missing_a_zone_is_reported() {
+        let mut home = Home::default();
+        square(&mut home, "Cozinha", 600.0, 300.0);
+        home.furniture.push(piece(
+            40,
+            "sink-counter",
+            (60.0, 7.5 + 30.0),
+            (120.0, 60.0, 90.0),
+            0.0,
+        ));
+        // The stove 4,4 m away from the sink: every trip is a crossing.
+        home.furniture.push(piece(
+            41,
+            "stove",
+            (500.0, 7.5 + 31.0),
+            (60.0, 62.0, 90.0),
+            0.0,
+        ));
+        home.furniture.push(piece(
+            42,
+            "fridge",
+            (300.0, 7.5 + 35.0),
+            (70.0, 70.0, 180.0),
+            0.0,
+        ));
+        let report = review(&home, &Profile::default());
+        assert!(
+            says(&report, Severity::Dica, "entre fogão e pia")
+                && cites(&report, Severity::Dica, "alexander184"),
+            "{report:#?}"
+        );
+        // Nowhere to put the plates and nothing to prepare on.
+        assert!(
+            says(&report, Severity::Dica, "falta armazenagem e preparo")
+                && cites(&report, Severity::Dica, "blum-zonas"),
+            "{report:#?}"
+        );
+    }
+
+    /// What the laboratory knows: capture is the canopy's job, and a hood
+    /// narrower than the burners loses the front ones whatever its airflow.
+    #[test]
+    fn a_hood_narrower_than_the_cooktop_is_reported_and_a_window_softens_the_gas_rule() {
+        let mut home = Home::default();
+        square(&mut home, "Cozinha", 400.0, 300.0);
+        home.furniture.push(piece(
+            50,
+            "sink-counter",
+            (100.0, 7.5 + 30.0),
+            (120.0, 60.0, 90.0),
+            0.0,
+        ));
+        let mut stove = piece(51, "stove", (250.0, 7.5 + 31.0), (75.0, 62.0, 90.0), 0.0);
+        stove.name = "Fogão 5 bocas".to_owned();
+        home.furniture.push(stove);
+        let mut hood = piece(52, "hood", (250.0, 7.5 + 25.0), (60.0, 50.0, 60.0), 0.0);
+        hood.elevation = 150.0;
+        home.furniture.push(hood);
+        let mut window = piece(53, "window", (200.0, 0.0), (120.0, 15.0, 120.0), 0.0);
+        window.opening = Some(newera_core::Opening {
+            kind: OpeningKind::Window,
+            ..newera_core::Opening::default()
+        });
+        window.elevation = 100.0;
+        home.furniture.push(window);
+        let report = review(&home, &Profile::default());
+        assert!(
+            says(
+                &report,
+                Severity::Dica,
+                "Coifa de 60 cm sobre cocção de 75 cm"
+            ) && cites(&report, Severity::Dica, "lbnl-coifa"),
+            "{report:#?}"
+        );
+        assert!(
+            !says(&report, Severity::Alerta, "Cocção sem coifa"),
+            "{report:#?}"
+        );
+        // With an opening, the gas standard advises instead of accusing.
+        assert!(
+            cites(&report, Severity::Dica, "nbr13103")
+                && !cites(&report, Severity::Erro, "nbr13103"),
+            "{report:#?}"
+        );
+    }
+
     #[test]
     fn kitchens_bathrooms_and_doors_follow_the_references() {
         let mut home = Home::default();
@@ -1478,7 +2305,17 @@ mod tests {
             says(&report, Severity::Alerta, "60 cm livres à frente"),
             "{report:#?}"
         );
-        assert!(says(&report, Severity::Alerta, "NBR 15575-1"));
+        assert!(cites(&report, Severity::Alerta, "nbr15575g"), "{report:#?}");
+        // The citation travels in the field, not inside the sentence.
+        assert!(
+            report.findings.iter().all(|f| !f.message.contains("NBR ")),
+            "{report:#?}"
+        );
+        assert!(
+            report.refs.iter().any(|r| r.code == "nbr15575g"),
+            "the report resolves what it leaned on: {:?}",
+            report.refs
+        );
         assert!(
             says(&report, Severity::Dica, "Falta geladeira"),
             "{report:#?}"
@@ -1549,7 +2386,8 @@ mod tests {
             },
         );
         assert!(
-            says(&wheel, Severity::Alerta, "NBR 9050 pede 80 cm"),
+            says(&wheel, Severity::Alerta, "80 cm livres")
+                && cites(&wheel, Severity::Alerta, "nbr9050"),
             "{wheel:#?}"
         );
         assert!(

@@ -1277,6 +1277,16 @@ impl NewEraApp {
                     .collect();
                 if menu_item(
                     ui,
+                    icon::ARROWS_IN_LINE_HORIZONTAL,
+                    crate::i18n::tr("Unir paredes selecionadas"),
+                    "",
+                    walls.len() > 1,
+                ) {
+                    let ids = walls.clone();
+                    self.run(|doc| ops::merge_walls(doc, &ids).map(|_| ()));
+                }
+                if menu_item(
+                    ui,
                     icon::RULER,
                     crate::i18n::tr("Cotar paredes selecionadas"),
                     "",

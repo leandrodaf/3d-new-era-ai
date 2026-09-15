@@ -325,6 +325,39 @@ pub(crate) struct RoofSpec {
     pub name: Option<String>,
 }
 
+/// Pulls the ends of `walls` onto the walls of the storey they nearly touch.
+///
+/// Coordinates written from a description land a few centimetres short of a
+/// wall, past it, or beside a corner, and the junction then shows as a stub
+/// crossing the hatch. Drawing by hand has magnetism for that; this is the
+/// same thing for everything written through the tools, so a T or a corner
+/// holds together without the caller having to work out the face it should
+/// stop at. Ends further than [`newera_core::TOUCH_TOLERANCE`] from anything
+/// are left exactly where they were.
+fn weld(doc: &Document, walls: &mut [Wall]) {
+    if walls.is_empty() {
+        return;
+    }
+    let home = doc.home();
+    let mut all: Vec<Wall> = home
+        .level_view(home.current_level())
+        .walls
+        .into_iter()
+        .filter(|w| !walls.iter().any(|edited| edited.id == w.id))
+        .collect();
+    all.extend(walls.iter().cloned());
+    let ids: Vec<newera_core::WallId> = walls.iter().map(|w| w.id).collect();
+    for (id, at_start, to) in newera_core::weld_ends(&all, &ids) {
+        if let Some(wall) = walls.iter_mut().find(|w| w.id == id) {
+            if at_start {
+                wall.start = to;
+            } else {
+                wall.end = to;
+            }
+        }
+    }
+}
+
 /// Creates everything in one undoable step and returns the new ids in order.
 pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec<String>> {
     let mut commands = Vec::new();
@@ -373,10 +406,11 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
                 wall.thickness = t;
             }
             ids.push(wall.id.to_string());
-            new_walls.push(wall.clone());
-            commands.push(Command::insert(wall));
+            new_walls.push(wall);
         }
     }
+    weld(doc, &mut new_walls);
+    commands.extend(new_walls.iter().cloned().map(Command::insert));
 
     // Dividers already on this storey plus the ones created now.
     let mut dividers: Vec<newera_core::Polyline> = {
@@ -685,6 +719,7 @@ impl UpdateSpec {
 
 pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<()> {
     let mut commands = Vec::with_capacity(items.len());
+    let mut reshaped: Vec<Wall> = Vec::new();
     for spec in items {
         let id: ElementId = spec.id.parse().map_err(|e| format!("{e}"))?;
         let element = doc
@@ -802,6 +837,10 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 if let Some(arc) = spec.arc {
                     w.arc_extent = (arc != 0.0).then_some(arc);
                 }
+                // An end that was moved is welded like a new one.
+                if spec.a.is_some() || spec.b.is_some() {
+                    reshaped.push(w.clone());
+                }
                 Element::Wall(w)
             }
             Element::Room(mut r) => {
@@ -907,6 +946,17 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
             updated.set_level(level);
         }
         commands.push(Command::Update { element: updated });
+    }
+    weld(doc, &mut reshaped);
+    for wall in reshaped {
+        if let Some(command) = commands
+            .iter_mut()
+            .find(|c| matches!(c, Command::Update { element: Element::Wall(w) } if w.id == wall.id))
+        {
+            *command = Command::Update {
+                element: Element::Wall(wall),
+            };
+        }
     }
     doc.execute(Command::Batch { commands }).map_err(core)
 }

@@ -216,7 +216,7 @@ bedroom with a door and a window, furnish it and render a photo."*
 | `create` | Walls (polylines, arcs, sloping `hs`), rooms (polygon or detected from walls, dividers), dimensions, labels, roofs with skylights and solids from outlines or profiles — one atomic call |
 | `update` / `move` / `delete` | Edit any element by id |
 | `arrange` | Copies in a row, rotate, mirror, group/ungroup, drawing order |
-| `split_wall` | Split a wall into two joined walls |
+| `split_wall` / `merge_walls` | Split a wall in two, or join walls on one line into a single wall |
 | `set_home` | Project name and compass (north) |
 | `set_background` | Scanned plan at real scale: calibrations, X/Y scale, rotation |
 | `trace_background` | Find walls in the scanned plan and list or create them |
@@ -278,7 +278,9 @@ crates/
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it fits together,
-[docs/SHOWCASE.md](docs/SHOWCASE.md) for a full project built by an agent and
+[docs/SHOWCASE.md](docs/SHOWCASE.md) for a full project built by an agent,
+[docs/NORMAS.md](docs/NORMAS.md) for the standards the review leans on — with
+edition, tier and link, in Portuguese because the sources are Brazilian — and
 [docs/ROADMAP.md](docs/ROADMAP.md) for what comes next.
 
 ## Contributing

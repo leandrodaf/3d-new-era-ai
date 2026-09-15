@@ -27,15 +27,25 @@ fn english(pt: &str) -> Option<&'static str> {
     Some(match pt {
         " · arco" => " · arc",
         "Ajustar ao telhado" => "Fit to the roof",
+        "Código de obras" => "Building code",
         "Embutir peça no móvel selecionado" => "Embed the piece in the selected joinery",
         "Embutido:" => "Embedded:",
         "Armários na parede" => "Cabinets on the wall",
         "Armários na parede…" => "Cabinets on the wall…",
         "Balcões" => "Base cabinets",
         "Aéreos" => "Wall cabinets",
+        "Entre a norma e a lei do município, prevalece o mais restritivo." => {
+            "Between the standard and the city's law, the more restrictive one wins."
+        }
+        "Fontes desta revisão:" => "Sources of this review:",
+        "Não informado" => "Not set",
+        "Referências brasileiras onde existe norma; áreas e janelas variam com o código de obras do município." => {
+            "Brazilian standards where one exists; areas and windows vary with the city's building code."
+        }
         "Torres / guarda-roupa" => "Tall / wardrobe",
         "Pia centrada em" => "Sink centered at",
         "Cooktop centrado em" => "Cooktop centered at",
+        "descreve" => "describes",
         "do início da parede" => "from the wall start",
         "Bancada de pedra por cima" => "Stone countertop on top",
         "Frentes" => "Fronts",
@@ -48,11 +58,15 @@ fn english(pt: &str) -> Option<&'static str> {
         "Criar armários" => "Build cabinets",
         "Criado (Ctrl+Z desfaz):" => "Built (Ctrl+Z undoes it):",
         "Prévia:" => "Preview:",
+        "doutrina" => "doctrine",
+        "mede" => "measures",
+        "obriga" => "obliges",
         "portas" => "doors",
         "gaveteiro" => "drawers",
         "porta-temperos" => "pull-out",
         "canto cego" => "blind corner",
         "cabideiro" => "hanging",
+        "referencia" => "references",
         "sobre a geladeira" => "over the fridge",
         "pia" => "sink",
         "tamponamento" => "filler",
@@ -396,6 +410,7 @@ fn english(pt: &str) -> Option<&'static str> {
         "Traço e ponto" => "Dash dot",
         "Térreo" => "Ground floor",
         "Unidade" => "Unit",
+        "Unir paredes selecionadas" => "Join selected walls",
         "Usa o ponto de vista atual da vista 3D (aérea ou visitante)." => {
             "Uses the current 3D point of view (aerial or visitor)."
         }
@@ -441,6 +456,45 @@ fn english(pt: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every literal handed to `tr` has an English side, or the window
+    /// silently falls back to Portuguese for whoever picked English — which
+    /// is exactly how a new panel ships half translated.
+    #[test]
+    fn every_string_on_screen_has_an_english_side() {
+        fn sources(dir: &std::path::Path, into: &mut String) {
+            for entry in std::fs::read_dir(dir).expect("src is readable") {
+                let path = entry.expect("entry").path();
+                if path.is_dir() {
+                    sources(&path, into);
+                } else if path.extension().is_some_and(|e| e == "rs") {
+                    into.push_str(&std::fs::read_to_string(&path).expect("source"));
+                }
+            }
+        }
+        let mut code = String::new();
+        sources(std::path::Path::new("src"), &mut code);
+        // A literal handed to tr, whatever the wrapping and the trailing comma.
+        let mut missing: Vec<String> = Vec::new();
+        let mut rest = code.as_str();
+        while let Some(at) = rest.find("tr(") {
+            rest = &rest[at + 3..];
+            let Some(open) = rest.find('"') else { break };
+            if rest[..open].contains(|c: char| !c.is_whitespace()) {
+                continue;
+            }
+            let body = &rest[open + 1..];
+            let Some(close) = body.find('"') else { break };
+            let (text, after) = (&body[..close], body[close + 1..].trim_start());
+            if after.starts_with(',') || after.starts_with(')') {
+                // The test's own probe, and words spelled the same in English.
+                if english(text).is_none() && !["Algo novo", "Plugins", "cooktop"].contains(&text) {
+                    missing.push(text.to_owned());
+                }
+            }
+        }
+        assert!(missing.is_empty(), "no English for: {missing:#?}");
+    }
 
     #[test]
     fn translates_only_when_english() {

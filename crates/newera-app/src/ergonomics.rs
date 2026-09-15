@@ -4,6 +4,7 @@
 
 use eframe::egui::{self, Color32, RichText};
 use egui_phosphor::regular as icon;
+use newera_core::standards::{self, Tier};
 use newera_core::{Command, Element, ElementId, FurnitureId, ops};
 use newera_ergonomics::{Profile, Report, Severity};
 
@@ -66,6 +67,16 @@ fn apply(doc: &mut newera_core::Document, fix: &serde_json::Value) -> Result<(),
     }
 }
 
+/// The colour of a reliability tier: what obliges reads like an error, what
+/// only measures or advises reads quieter.
+fn tier_look(tier: Tier) -> Color32 {
+    match tier {
+        Tier::A => Color32::from_rgb(200, 60, 50),
+        Tier::B | Tier::C => Color32::from_rgb(130, 120, 100),
+        Tier::D | Tier::E => Color32::from_rgb(70, 130, 180),
+    }
+}
+
 fn severity_look(severity: Severity) -> (&'static str, Color32) {
     match severity {
         Severity::Erro => (icon::X_CIRCLE, Color32::from_rgb(200, 60, 50)),
@@ -123,6 +134,34 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                 &mut p.wheelchair,
                 crate::i18n::tr("Alguém usa cadeira de rodas (NBR 9050)"),
             );
+            ui.horizontal(|ui| {
+                ui.label(crate::i18n::tr("Código de obras"));
+                let chosen = p.city.as_deref().and_then(standards::municipal).map_or_else(
+                    || crate::i18n::tr("Não informado"),
+                    |c| c.label,
+                );
+                egui::ComboBox::from_id_salt("ergonomics-city")
+                    .selected_text(chosen)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut p.city,
+                            None,
+                            crate::i18n::tr("Não informado"),
+                        );
+                        for code in standards::cities() {
+                            ui.selectable_value(
+                                &mut p.city,
+                                Some(code.city.to_owned()),
+                                code.label,
+                            )
+                            .on_hover_text(code.source);
+                        }
+                    })
+                    .response
+                    .on_hover_text(crate::i18n::tr(
+                        "Entre a norma e a lei do município, prevalece o mais restritivo.",
+                    ));
+            });
             ui.separator();
             let Some((_, _, report)) = &window.report else {
                 return;
@@ -152,9 +191,29 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                     ));
                 });
             });
-            ui.weak(crate::i18n::tr(
-                "Referências: NBR 9050, NBR 15575-1 e IBGE; áreas e janelas variam com o código de obras do município.",
-            ));
+            if report.refs.is_empty() {
+                ui.weak(crate::i18n::tr(
+                    "Referências brasileiras onde existe norma; áreas e janelas variam com o código de obras do município.",
+                ));
+            } else {
+                ui.horizontal_wrapped(|ui| {
+                    ui.weak(crate::i18n::tr("Fontes desta revisão:"));
+                    for (n, source) in report.refs.iter().enumerate() {
+                        if n > 0 {
+                            ui.weak("·");
+                        }
+                        let text = RichText::new(source.title).weak().size(11.5);
+                        match source.url {
+                            Some(url) => {
+                                ui.hyperlink_to(text, url).on_hover_text(source.scope);
+                            }
+                            None => {
+                                ui.label(text).on_hover_text(source.scope);
+                            }
+                        }
+                    }
+                });
+            }
             ui.separator();
             if report.findings.is_empty() {
                 ui.label(
@@ -185,6 +244,35 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                                     select = Some(ids);
                                 }
                                 ui.label(&finding.message);
+                                if let Some(source) =
+                                    finding.reference.and_then(standards::standard)
+                                {
+                                    // The chip carries the code; the whole
+                                    // title and what it governs are a hover away.
+                                    let name = source
+                                        .title
+                                        .split_once(" — ")
+                                        .map_or(source.title, |(head, _)| head);
+                                    let chip =
+                                        RichText::new(format!("{} · {name}", source.tier.letter()))
+                                            .color(tier_look(source.tier))
+                                            .size(11.0);
+                                    let hint = format!(
+                                        "{} ({}) · {}\n{}",
+                                        source.title,
+                                        source.edition,
+                                        crate::i18n::tr(source.tier.what()),
+                                        source.scope
+                                    );
+                                    match source.url {
+                                        Some(url) => {
+                                            ui.hyperlink_to(chip, url).on_hover_text(hint);
+                                        }
+                                        None => {
+                                            ui.label(chip).on_hover_text(hint);
+                                        }
+                                    }
+                                }
                                 if let Some(f) = &finding.fix
                                     && ui
                                         .button(format!(
@@ -306,6 +394,26 @@ mod tests {
                 .any(|f| f.message.contains("A folha da porta bate")),
             "{report:#?}"
         );
+        // The source of a finding is on screen, with its tier, and the
+        // window lists the standards this very review leaned on.
+        let cited = report
+            .findings
+            .iter()
+            .find_map(|f| f.reference.and_then(standards::standard))
+            .expect("some finding stands on a published source");
+        let chip = format!(
+            "{} · {}",
+            cited.tier.letter(),
+            cited
+                .title
+                .split_once(" — ")
+                .map_or(cited.title, |(head, _)| head)
+        );
+        assert!(
+            h.query_all_by_label_contains(&chip).next().is_some(),
+            "the chip `{chip}` is on screen"
+        );
+        h.get_by_label_contains("Fontes desta revisão:");
         let before = report.score;
         h.get_by_label_contains("Aplicar correção").click();
         h.run_steps(3);

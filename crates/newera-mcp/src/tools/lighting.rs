@@ -94,6 +94,7 @@ impl NewEraMcp {
                 "fixtures": lights.len(),
                 "lm": lumens.round(),
                 "W": watts.round(),
+                "sources": super::sources(&["nbr8995"]),
             })
             .to_string());
         };
@@ -219,6 +220,8 @@ mod tests {
         };
         let dark = rate("{}");
         assert_eq!(dark["rooms"][0][6], 300.0, "{dark}");
+        // The reference lux carries the standard it comes from.
+        assert_eq!(dark["sources"]["nbr8995"][1], "A", "{dark}");
         assert!(
             dark["rooms"][0][9].as_str().unwrap().starts_with("abaixo"),
             "{dark}"

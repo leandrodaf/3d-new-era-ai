@@ -7,7 +7,7 @@
 //! | module | tools |
 //! |---|---|
 //! | [`read`] | `get_home`, `materials`, `catalog` |
-//! | [`elements`] | `create`, `update`, `delete`, `move`, `split_wall` |
+//! | [`elements`] | `create`, `update`, `delete`, `move`, `split_wall`, `merge_walls` |
 //! | [`furniture`] | `place`, `arrange` |
 //! | [`joinery`] | `joinery`, `cut_list` |
 //! | [`cabinets`] | `cabinet_run`, `embed` |
@@ -131,6 +131,25 @@ impl ServerHandler for NewEraMcp {
     }
 }
 
+/// The sources behind a reply, resolved once: `{code: [title, tier, url]}`.
+/// A reply cites a standard by its short code and pays for the title here,
+/// not inside every sentence. Named `sources`, not `refs`: the annotations
+/// tool already calls its room reference tags `refs`, and one word with two
+/// meanings on the same surface costs an agent a wrong guess.
+pub(crate) fn sources(codes: &[&str]) -> serde_json::Value {
+    let map: serde_json::Map<String, serde_json::Value> = codes
+        .iter()
+        .filter_map(|c| newera_core::standards::standard(c))
+        .map(|r| {
+            (
+                r.code.to_owned(),
+                serde_json::json!([r.title, r.tier.letter(), r.url]),
+            )
+        })
+        .collect();
+    serde_json::Value::Object(map)
+}
+
 #[cfg(test)]
 fn server() -> NewEraMcp {
     NewEraMcp::new(SharedDocument::new(newera_core::Document::default()))
@@ -151,7 +170,8 @@ mod tests {
     fn tool_surface_is_unchanged() {
         const NAMES: &str = "annotations,arrange,cabinet_run,cameras,catalog,check_layout,\
 create,cut_list,delete,disciplines,embed,ergonomics,export_plan,fit_roof,get_home,joinery,\
-levels,lighting,materials,measure,move,new_home,open_home,place,plugins,redo,render_3d,\
+levels,lighting,materials,measure,merge_walls,move,new_home,open_home,place,plugins,redo,\
+render_3d,\
 render_photo,render_plan,save_home,sessions,set_background,set_home,split_wall,\
 trace_background,undo,update,variants,video";
 
@@ -160,7 +180,7 @@ trace_background,undo,update,variants,video";
         assert_eq!(names.join(","), NAMES, "the set of tools changed");
         let bytes = serde_json::to_string(&tools).unwrap().len();
         assert_eq!(
-            bytes, 49408,
+            bytes, 51162,
             "a description or schema changed; this test guards a pure move"
         );
     }

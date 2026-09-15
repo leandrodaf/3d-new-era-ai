@@ -147,5 +147,8 @@ um quarto de 4 × 5 m com porta e janela, mobilie e gere uma foto."*
 
 ---
 
+De onde vêm os números quando o editor diz que uma cozinha está errada — as normas, a
+doutrina e a pesquisa por trás de cada regra, com edição e link: [docs/NORMAS.md](docs/NORMAS.md).
+
 Documentação técnica completa (ferramentas MCP, modos, compilação e arquitetura) no
 [README em inglês](README.md). Licença MIT ou Apache 2.0.

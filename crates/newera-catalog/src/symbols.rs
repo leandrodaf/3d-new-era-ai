@@ -580,6 +580,12 @@ pub fn plan_symbol(piece: &Furniture) -> Vec<SymbolShape> {
             let drawer = (w * 0.35).min(45.0);
             s.line(vec![(hw - drawer, -hd), (hw - drawer, hd)], false, false);
         }
+        Model::Hood => {
+            // Above the cut line, like a wall cabinet, plus the duct.
+            let duct = (w * 0.3).min(30.0) / 2.0;
+            s.line(vec![(-hw, hd - 3.0), (hw, hd - 3.0)], false, false);
+            s.line(vec![(-duct, -hd + 3.0), (duct, -hd + 3.0)], false, false);
+        }
         Model::TvStand
         | Model::Tv
         | Model::Counter
