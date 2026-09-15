@@ -198,8 +198,9 @@ impl NewEraMcp {
 mod tests {
     use super::*;
     use crate::edit::CreateParams;
+    use crate::tools::elements::UpdateParams;
     use crate::tools::furniture::PlaceParams;
-    use crate::tools::{UpdateParams, server};
+    use crate::tools::server;
 
     #[test]
     fn lighting_rates_rooms_and_fills_them_to_the_reference() {
