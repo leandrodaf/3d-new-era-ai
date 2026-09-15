@@ -491,7 +491,10 @@ impl NewEraMcp {
     #[tool(
         description = "Home state. detail=summary is cheapest. Ask for less instead of reading everything: ids=[…] resolves ids (group parts included), room=<id|name> and rect=[[x0,y0],[x1,y1]] read one place, kinds=[walls|rooms|dims|labels|furniture|polylines] and fields=[…] trim each row, parts=true opens groups, ndjson=true prints one element per line so a long answer can be read a slice at a time. Every piece carries bounds (plan box with angle applied) and faces (the side it opens toward). Ids share one counter per version (w1, r2, f3…) and are never reused, so a new version may start at any number."
     )]
-    fn get_home(&self, Parameters(p): Parameters<GetHomeParams>) -> Result<String, ErrorData> {
+    pub(crate) fn get_home(
+        &self,
+        Parameters(p): Parameters<GetHomeParams>,
+    ) -> Result<String, ErrorData> {
         let doc = self.document.read();
         let full = doc.home();
         let view = match p.level.as_deref() {
@@ -532,7 +535,10 @@ impl NewEraMcp {
     #[tool(
         description = "Create walls (polylines; hs = height per point for gables), rooms (pts, or at=[x,y] to detect from walls), dims (a+b or wall id), labels, roofs (rectangle pts, gable|shed, pitch or ridge_h, eave h, overhang, gables=true closes the ends, skylights [{at,w,d}] cut glazed openings) and solids (pts outline raised by h at elev: slabs/mezzanines of any shape; or profile [[u,z]] swept from a to b: gables, ramps) in one atomic step."
     )]
-    fn create(&self, Parameters(mut p): Parameters<CreateParams>) -> Result<String, ErrorData> {
+    pub(crate) fn create(
+        &self,
+        Parameters(mut p): Parameters<CreateParams>,
+    ) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
         on_variant(&mut doc, p.v)?;
         if p.px {
@@ -546,7 +552,10 @@ impl NewEraMcp {
     #[tool(
         description = "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto, polyline divider). anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. dry=true answers what it would do — changed fields, clearances around each piece it touches, findings resolved and created — without writing anything, so a size can be tried before it is applied. Otherwise the reply names what changed."
     )]
-    fn update(&self, Parameters(p): Parameters<UpdateParams>) -> Result<String, ErrorData> {
+    pub(crate) fn update(
+        &self,
+        Parameters(p): Parameters<UpdateParams>,
+    ) -> Result<String, ErrorData> {
         if p.dry.unwrap_or(false) {
             let doc = self.document.read();
             let items = p.items;
@@ -562,7 +571,7 @@ impl NewEraMcp {
     }
 
     #[tool(description = "Delete elements by id, atomically.")]
-    fn delete(&self, Parameters(p): Parameters<IdsParams>) -> Result<String, ErrorData> {
+    pub(crate) fn delete(&self, Parameters(p): Parameters<IdsParams>) -> Result<String, ErrorData> {
         let ids = edit::parse_ids(&p.ids).map_err(invalid)?;
         let mut doc = self.document.write();
         let commands = ids.into_iter().map(Command::remove).collect();
@@ -574,7 +583,10 @@ impl NewEraMcp {
         name = "move",
         description = "Move elements by dx,dy cm. dry=true answers what it would do without writing anything; see `update`."
     )]
-    fn move_elements(&self, Parameters(p): Parameters<MoveParams>) -> Result<String, ErrorData> {
+    pub(crate) fn move_elements(
+        &self,
+        Parameters(p): Parameters<MoveParams>,
+    ) -> Result<String, ErrorData> {
         let ids = edit::parse_ids(&p.ids).map_err(invalid)?;
         let joined = p.joined.unwrap_or(true);
         if p.dry.unwrap_or(false) {
@@ -590,7 +602,10 @@ impl NewEraMcp {
     }
 
     #[tool(description = "Split a wall into two joined walls at t (0..1).")]
-    fn split_wall(&self, Parameters(p): Parameters<SplitParams>) -> Result<String, ErrorData> {
+    pub(crate) fn split_wall(
+        &self,
+        Parameters(p): Parameters<SplitParams>,
+    ) -> Result<String, ErrorData> {
         let id = p.id.parse().map_err(|e| invalid(format!("{e}")))?;
         let mut doc = self.document.write();
         let second = ops::split_wall(&mut doc, id, p.t.unwrap_or(0.5)).map_err(core)?;
@@ -598,7 +613,10 @@ impl NewEraMcp {
     }
 
     #[tool(description = "Rename the project and/or set the compass (north).")]
-    fn set_home(&self, Parameters(p): Parameters<SetHomeParams>) -> Result<String, ErrorData> {
+    pub(crate) fn set_home(
+        &self,
+        Parameters(p): Parameters<SetHomeParams>,
+    ) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
         let mut commands = Vec::new();
         if let Some(name) = p.name {
@@ -630,7 +648,7 @@ impl NewEraMcp {
     #[tool(
         description = "Set a scanned plan as background at real scale: path, then cm_per_px (+cm_per_px_y), calibrate {a,b px, cm} or calibrations [{a,b,cm}…] (fits X/Y scales), angle (clockwise °); offset/opacity/visible; clear=true removes."
     )]
-    fn set_background(
+    pub(crate) fn set_background(
         &self,
         Parameters(p): Parameters<BackgroundParams>,
     ) -> Result<String, ErrorData> {
@@ -649,7 +667,7 @@ impl NewEraMcp {
     #[tool(
         description = "PNG of the floor plan, exactly as the user sees it. bg=0..1 overlays the background image to compare with the reference. Keep w/h small to save tokens."
     )]
-    fn render_plan(
+    pub(crate) fn render_plan(
         &self,
         Parameters(p): Parameters<RenderParams>,
     ) -> Result<CallToolResult, ErrorData> {
@@ -670,7 +688,7 @@ impl NewEraMcp {
     #[tool(
         description = "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations — front looks from the plan's bottom edge (large y) toward y=0, back from y=0 toward large y, left from x=0, right from large x; cut=cm makes a section keeping only what is beyond that plane from the viewer (front cut=200 keeps y<200, so the wall at y=0 stays as the backdrop; to remove it look from back), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). Keep w/h small."
     )]
-    fn render_3d(
+    pub(crate) fn render_3d(
         &self,
         Parameters(p): Parameters<Render3dParams>,
     ) -> Result<CallToolResult, ErrorData> {
@@ -730,7 +748,7 @@ impl NewEraMcp {
     #[tool(
         description = "Realistic photo (path traced: sun from compass location and time, lamps, glass). cam=i stored view, or view=visitor/aerial (yaw,pitch). quality draft (~10 s) | good | best; hour = local solar time (e.g. 9, 15.5, 20); w/h small. Returns PNG."
     )]
-    fn render_photo(
+    pub(crate) fn render_photo(
         &self,
         Parameters(p): Parameters<PhotoParams>,
     ) -> Result<CallToolResult, ErrorData> {
@@ -790,7 +808,10 @@ impl NewEraMcp {
     #[tool(
         description = "Export to a file by extension: plan .pdf (A3; scale=50/100 or fit), .svg (true scale) or .png; 3D model .glb or .obj."
     )]
-    fn export_plan(&self, Parameters(p): Parameters<ExportParams>) -> Result<String, ErrorData> {
+    pub(crate) fn export_plan(
+        &self,
+        Parameters(p): Parameters<ExportParams>,
+    ) -> Result<String, ErrorData> {
         let path = PathBuf::from(&p.path);
         let bytes = match path.extension().and_then(|e| e.to_str()) {
             Some("glb" | "obj") => {
@@ -830,7 +851,10 @@ impl NewEraMcp {
     }
 
     #[tool(description = "Save the project (.newera). path optional after the first save.")]
-    fn save_home(&self, Parameters(p): Parameters<PathParams>) -> Result<String, ErrorData> {
+    pub(crate) fn save_home(
+        &self,
+        Parameters(p): Parameters<PathParams>,
+    ) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
         let path = match (p.path, doc.path()) {
             (Some(path), _) => with_extension(PathBuf::from(path)),
@@ -846,7 +870,10 @@ impl NewEraMcp {
     #[tool(
         description = "Open a project (.newera) or import a Sweet Home 3D file (.sh3d), replacing the current one."
     )]
-    fn open_home(&self, Parameters(p): Parameters<PathParams>) -> Result<String, ErrorData> {
+    pub(crate) fn open_home(
+        &self,
+        Parameters(p): Parameters<PathParams>,
+    ) -> Result<String, ErrorData> {
         let path = PathBuf::from(p.path.ok_or_else(|| invalid("`path` is required"))?);
         let mut doc = self.document.write();
         let opened = newera_sh3d::open_file(&mut doc, &path).map_err(invalid)?;
@@ -862,7 +889,7 @@ impl NewEraMcp {
     }
 
     #[tool(description = "Start a new empty project.")]
-    fn new_home(&self) -> String {
+    pub(crate) fn new_home(&self) -> String {
         let mut doc = self.document.write();
         doc.load(Home::default());
         doc.set_path(None);
@@ -874,20 +901,23 @@ impl NewEraMcp {
     #[tool(
         description = "Wall types [id,name,t] (drywall, masonry, concrete…) and finish patterns [key,label,color,tile]."
     )]
-    fn materials(&self) -> String {
+    pub(crate) fn materials(&self) -> String {
         compact::materials().to_string()
     }
 
     #[allow(clippy::unused_self)] // tool methods need the receiver
     #[tool(description = "Find catalog items: rows [id,name,w,d,h] in cm.")]
-    fn catalog(&self, Parameters(p): Parameters<CatalogParams>) -> String {
+    pub(crate) fn catalog(&self, Parameters(p): Parameters<CatalogParams>) -> String {
         compact::catalog(p.q.as_deref(), p.cat.as_deref(), p.limit.unwrap_or(40)).to_string()
     }
 
     #[tool(
         description = "Place catalog items: at=[x,y] center (doors/windows near a wall snap into it; into=[x,y] picks the swing side), or wall=id (+along cm) to put doors/windows in a wall or furniture against it. Sizes w/d/h override defaults; pitch/roll tilt; angle clockwise degrees (0: front faces +y, down the plan; back/headboard toward -y); mat finish (wood, marble, img:…; 'img:facade.png fit' stretches one image: a reference board to compare with render_3d view=front) and opacity (glass 0.3); defaults {…} fills every item; px=true reads coordinates as background pixels. cat=beam with a,b=[x,y,z] (z above the floor) and w×h section makes rafters, posts and braces; a beam reaching into a roof stops under it. Pools: pool or pool-oval."
     )]
-    fn place(&self, Parameters(p): Parameters<PlaceParams>) -> Result<String, ErrorData> {
+    pub(crate) fn place(
+        &self,
+        Parameters(p): Parameters<PlaceParams>,
+    ) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
         on_variant(&mut doc, p.v)?;
         let mut items = edit::with_defaults(p.items, p.defaults.as_ref()).map_err(invalid)?;
@@ -912,7 +942,10 @@ impl NewEraMcp {
     #[tool(
         description = "Arrange elements in one undo step. array {ids,n,dx,dy,dz} adds n copies stepping by dx/dy/dz cm (rafters, columns); rotate {ids,angle clockwise,about?,copy?}; mirror {ids,a,b,copy?} across the line a-b; group {ids,name?} joins pieces into one box that moves/hides together, ungroup {ids:[group]}; front/back {ids} draws rooms or pieces on top/underneath (pool over deck, rug under sofa). Returns new ids."
     )]
-    fn arrange(&self, Parameters(p): Parameters<ArrangeParams>) -> Result<String, ErrorData> {
+    pub(crate) fn arrange(
+        &self,
+        Parameters(p): Parameters<ArrangeParams>,
+    ) -> Result<String, ErrorData> {
         use newera_core::arrange::{self, Transform};
         let ids = edit::parse_ids(&p.ids).map_err(invalid)?;
         let mut doc = self.document.write();
@@ -1002,7 +1035,10 @@ impl NewEraMcp {
     #[tool(
         description = "Parametric joinery and interiors; the server computes every board, clearance and rule and replies {id,name,size,parts,hardware,notes}, or an error saying what to change. kind + p: cabinet {w,h,d cm; t 15|18|25 mm; back mm; door hinged|sliding|drawers|none; doors; shelves; drawers; dividers; plinth; cooktop; color; front finish} · slats {w,h cm; slat, thickness, gap mm; orientation vertical|horizontal; backing; finish} · countertop {length,depth,height,thickness cm; material; support none|legs|brackets; cutouts [{kind sink|cooktop|grommet, x, w?, d?}]} · cove {room or pts; type open|closed|inverted; ceiling, width, drop, slot cm; led} · shadow_gap {room or pts; ceiling, gap, depth cm; led} · sofa {length,depth,seat,back cm; arms straight|rounded|none; modules; color}. Place with at|wall(+along), angle, elev. Change a build: id + p with only new values (e.g. {\"shelves\":3}). dry=true validates only."
     )]
-    fn joinery(&self, Parameters(p): Parameters<JoineryParams>) -> Result<String, ErrorData> {
+    pub(crate) fn joinery(
+        &self,
+        Parameters(p): Parameters<JoineryParams>,
+    ) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
         let patch = serde_json::Value::Object(p.p.clone().unwrap_or_default());
         // What to build: a new kind, or an existing group's parameters with changes.
@@ -1178,7 +1214,10 @@ impl NewEraMcp {
     #[tool(
         description = "Fit walls, glass and panels to the roof above them: under an A-frame or shed roof a wall gets a sloping top and is split at the ridge, a panel becomes a triangle or trapezoid (a glass gable with no math); a joinery slatted panel gets its slats cut to the roof line. They keep following the roof when it changes, in the same undo step; off stops that. Reply ok with the count."
     )]
-    fn fit_roof(&self, Parameters(p): Parameters<FitRoofParams>) -> Result<String, ErrorData> {
+    pub(crate) fn fit_roof(
+        &self,
+        Parameters(p): Parameters<FitRoofParams>,
+    ) -> Result<String, ErrorData> {
         let ids = edit::parse_ids(&p.ids).map_err(invalid)?;
         let mut doc = self.document.write();
         if p.off {
@@ -1243,7 +1282,10 @@ impl NewEraMcp {
     #[tool(
         description = "Embed an item into joinery with an exact fit: a sink bowl or cooktop into a countertop (cutout from the item's size, generic fixture not drawn), an oven, microwave or other appliance into a cabinet niche (doors above and below, boards around it), a TV onto a slatted panel at seated eye level (z = screen center). The item becomes part of the host and moves with it. item: id in the plan, or cat (+w/d/h) for a new one. Errors say what to change (e.g. use w = 61 no armário). Reply {host, item, kind, cutout|niche, x|bottom, notes}."
     )]
-    fn embed(&self, Parameters(p): Parameters<EmbedParams>) -> Result<String, ErrorData> {
+    pub(crate) fn embed(
+        &self,
+        Parameters(p): Parameters<EmbedParams>,
+    ) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
         let host: newera_core::FurnitureId = p.host.parse().map_err(|e| invalid(format!("{e}")))?;
         let (item, existing) = match (&p.item, &p.cat) {
@@ -1287,7 +1329,10 @@ impl NewEraMcp {
     #[tool(
         description = "Ergonomics and habitability review for the people living there (occupants, children, elderly, wheelchair, stature cm): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen triangle and heights, doors, ceiling heights, windows, minimum furniture, wheelchair turning. Brazilian references (NBR 9050, NBR 15575-1, IBGE; building codes vary by city). Reply {score, capacity, findings:[[erro|alerta|dica, place, message, fix?]]}; fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap)."
     )]
-    fn ergonomics(&self, Parameters(p): Parameters<newera_ergonomics::Profile>) -> String {
+    pub(crate) fn ergonomics(
+        &self,
+        Parameters(p): Parameters<newera_ergonomics::Profile>,
+    ) -> String {
         let doc = self.document.read();
         let report = newera_ergonomics::review(doc.home(), &p);
         let findings: Vec<serde_json::Value> = report
@@ -1309,7 +1354,10 @@ impl NewEraMcp {
     #[tool(
         description = "Lighting design by photometry: every fixture's flux (lm, or W × lamp efficacy), color temperature and distribution (bulb, spot beam, LED panel/strip) lights the work plane by the inverse-square cosine law, walls casting shadows, plus interreflection (split flux). Reply rooms [[id,name,m²,avg lx,min lx,uniformity,reference lx,fixtures,W/m²,verdict]] against ABNT NBR ISO/CIE 8995-1 residential references. fill=<fixture> with room places a verified grid reaching the reference (or lux). Set a piece's light with place/update light {lm|w,lamp,k,beam,area}."
     )]
-    fn lighting(&self, Parameters(p): Parameters<LightingParams>) -> Result<String, ErrorData> {
+    pub(crate) fn lighting(
+        &self,
+        Parameters(p): Parameters<LightingParams>,
+    ) -> Result<String, ErrorData> {
         use newera_core::lighting::{
             Reflectance, emitters, fixtures_needed, grid_positions, room_lighting,
         };
@@ -1474,7 +1522,7 @@ impl NewEraMcp {
     #[tool(
         description = "Fill a wall with cabinets sized for it: measures the free stretches between corners, doors, windows, fridge and stove, splits each into even modules (30-90 cm, no useless leftovers; 15-30 cm pull-outs, fillers under 15), drawer unit beside the stove, countertop on base rows, cabinet over the fridge and hood gap on wall rows, wardrobes (hanging rails, shelves, drawers) on tall rows facing bedrooms; p.sink/p.cooktop place those cabinets and cutouts. Replaces the cabinets already there (keep ids stay). Reply {modules:[[id,role,from,w]],removed,notes}; dry plans only. Change one module afterwards with joinery id."
     )]
-    fn cabinet_run(
+    pub(crate) fn cabinet_run(
         &self,
         Parameters(p): Parameters<newera_joinery::CabinetRunParams>,
     ) -> Result<String, ErrorData> {
@@ -1487,7 +1535,10 @@ impl NewEraMcp {
     #[tool(
         description = "Cut list of joinery builds: rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. path .csv, or .dxf/.svg (boards laid out on sheets), writes a file."
     )]
-    fn cut_list(&self, Parameters(p): Parameters<CutListParams>) -> Result<String, ErrorData> {
+    pub(crate) fn cut_list(
+        &self,
+        Parameters(p): Parameters<CutListParams>,
+    ) -> Result<String, ErrorData> {
         let doc = self.document.read();
         let home = doc.home();
         let view = home.level_view(home.current_level());
@@ -1580,7 +1631,7 @@ impl NewEraMcp {
     #[tool(
         description = "Trace walls from the background image (set_background first): thick dark or gray bands across or down the image become walls (colored areas — lawn, plants, furniture — are ignored; collinear pieces split by doors/windows up to max_gap join; region limits the search). Returns rows [[x1,y1],[x2,y2],t] in plan cm; create=true adds them as walls. Check with render_plan bg=0.5."
     )]
-    fn trace_background(
+    pub(crate) fn trace_background(
         &self,
         Parameters(p): Parameters<TraceParams>,
     ) -> Result<String, ErrorData> {
@@ -1660,7 +1711,10 @@ impl NewEraMcp {
     #[tool(
         description = "Layout problems: overlap, blocked, in_wall, blocks_door, outside_rooms; {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing."
     )]
-    fn check_layout(&self, Parameters(p): Parameters<CheckParams>) -> Result<String, ErrorData> {
+    pub(crate) fn check_layout(
+        &self,
+        Parameters(p): Parameters<CheckParams>,
+    ) -> Result<String, ErrorData> {
         let doc = self.document.read();
         let (view, scope) = match p.level.as_deref() {
             Some("all") => (doc.home().clone(), newera_core::Storeys::All),
@@ -1717,7 +1771,10 @@ impl NewEraMcp {
     #[tool(
         description = "Tape measure over the plan, in cm. from=<id> alone: free floor on all four sides, {clear:{\"+y\":[cm,id,name]}} — dirs picks sides (+x -x +y -y, or front/back/left/right of the piece). from+to (ids or [x,y]): the distance between them, {cm}, or the gap along axis. axis+at: what a straight probe runs into, {spans:[[from,to,id,name]]} with id null for free floor — the answer to \"how wide is the corridor here, and between what\". z limits the height band that counts (default 0-200)."
     )]
-    fn measure(&self, Parameters(p): Parameters<MeasureParams>) -> Result<String, ErrorData> {
+    pub(crate) fn measure(
+        &self,
+        Parameters(p): Parameters<MeasureParams>,
+    ) -> Result<String, ErrorData> {
         use newera_core::measure::{self, Axis, Dir};
         let doc = self.document.read();
         // Measurements are of one storey: a wall one floor up is not in the way.
@@ -1843,7 +1900,7 @@ impl NewEraMcp {
     #[tool(
         description = "Electrical and plumbing projects over the plan. active (default) reports {active, hidden}. select {d: electrical|plumbing|architecture}: new symbols (catalog cat electrical/plumbing) and lines go there and the rest is dimmed. show/hide {d}. quantities: {electrical:[[name,count]], plumbing:[...], lines_cm:{...}}."
     )]
-    fn disciplines(
+    pub(crate) fn disciplines(
         &self,
         Parameters(p): Parameters<DisciplineParams>,
     ) -> Result<String, ErrorData> {
@@ -1918,7 +1975,7 @@ impl NewEraMcp {
     #[tool(
         description = "Plan annotations. stale=true lists dimensions and notes that no longer match the drawing: rows [id, written, measured, against, text] — run it after moving geometry, before handing the plan over. q=<text> searches label text. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs), legend (symbol legend with counts); bake=true turns the automatic chains into editable dimensions (ids returned). Otherwise returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
     )]
-    fn annotations(
+    pub(crate) fn annotations(
         &self,
         Parameters(p): Parameters<AnnotationParams>,
     ) -> Result<String, ErrorData> {
@@ -2020,7 +2077,10 @@ impl NewEraMcp {
     #[tool(
         description = "Plugins (external programs editing through the HTTP API). list (default): rows [name,title,description]. run {name,args?}: {ok,code,stdout,stderr,edits,revision}."
     )]
-    fn plugins(&self, Parameters(p): Parameters<PluginsParams>) -> Result<String, ErrorData> {
+    pub(crate) fn plugins(
+        &self,
+        Parameters(p): Parameters<PluginsParams>,
+    ) -> Result<String, ErrorData> {
         let dirs = newera_plugins::plugin_dirs();
         match p.action.as_deref().unwrap_or("list") {
             "list" => {
@@ -2047,7 +2107,7 @@ impl NewEraMcp {
     #[tool(
         description = "People and agents on this project now: rows [id,name,cursor,selection,edits]."
     )]
-    fn sessions(&self) -> String {
+    pub(crate) fn sessions(&self) -> String {
         let mut doc = self.document.write();
         doc.sessions_mut().expire(newera_core::collab::now_ms());
         let rows: Vec<serde_json::Value> = doc
@@ -2073,7 +2133,10 @@ impl NewEraMcp {
     #[tool(
         description = "Points of view. list (default): {active, rows [i,name,x,y,z,yaw,pitch,fov]}. view {i} shows stored view i in the 3D window; aerial returns to the orbit view; store {name?,x?,y?,z?,yaw?,pitch?,fov?,look_at?:[x,y,z]} saves one (missing values from the visitor; yaw 0 looks toward +y/plan bottom, 90 toward -x; pitch positive looks down); delete {i}. cm and degrees."
     )]
-    fn cameras(&self, Parameters(p): Parameters<CamerasParams>) -> Result<String, ErrorData> {
+    pub(crate) fn cameras(
+        &self,
+        Parameters(p): Parameters<CamerasParams>,
+    ) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
         let mut cameras = doc.home().cameras.clone();
         let index = |len: usize| -> Result<usize, ErrorData> {
@@ -2144,7 +2207,10 @@ impl NewEraMcp {
     #[tool(
         description = "Video camera path. list (default): {fps,speed,secs,rows [i,x,y,z,yaw,pitch,fov]}. add {cam? | x?,y?,z?,yaw?,pitch?,fov?, i?} appends a keyframe (missing values from the visitor); delete {i}; clear; orbit {z?,n?} replaces the path with an aerial tour; set {fps?,speed?}; render {path .avi, w?,h?} writes a Motion-JPEG video. cm, degrees, m/s."
     )]
-    fn video(&self, Parameters(p): Parameters<VideoParams>) -> Result<String, ErrorData> {
+    pub(crate) fn video(
+        &self,
+        Parameters(p): Parameters<VideoParams>,
+    ) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
         let mut environment = doc.home().environment.clone();
         let path = &mut environment.camera_path;
@@ -2264,7 +2330,10 @@ impl NewEraMcp {
     #[tool(
         description = "Storeys. list (default): rows [id,name,elev,h,selected,layout_index,viewable,reference]. add {name?,h?,elev?} adds one on top (or at elev cm) and selects it; select {id}; delete {id} removes it and its content. update {id, elev?|h?|name?|reference?}: elev raises a storey with its walls, floors and openings (houses on stilts); reference=true marks it a tracing layer (imported plan, older version) that checks and ergonomics skip, which is what you want when two storeys share an elevation. Other tools act on the selected storey."
     )]
-    fn levels(&self, Parameters(p): Parameters<LevelsParams>) -> Result<String, ErrorData> {
+    pub(crate) fn levels(
+        &self,
+        Parameters(p): Parameters<LevelsParams>,
+    ) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
         let id = || -> Result<newera_core::LevelId, ErrorData> {
             p.id.as_deref()
@@ -2325,7 +2394,10 @@ impl NewEraMcp {
     #[tool(
         description = "Plan versions (tabs). list: rows [i,name,active,walls,rooms,m2,furniture,issues]. duplicate/new switch to the new one; edits apply to the active version."
     )]
-    fn variants(&self, Parameters(p): Parameters<VariantsParams>) -> Result<String, ErrorData> {
+    pub(crate) fn variants(
+        &self,
+        Parameters(p): Parameters<VariantsParams>,
+    ) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
         let need = |i: Option<usize>| i.ok_or_else(|| invalid("`i` is required"));
         match p.action.as_deref().unwrap_or("list") {
@@ -2352,14 +2424,14 @@ impl NewEraMcp {
     }
 
     #[tool(description = "Undo the last change, whoever made it.")]
-    fn undo(&self) -> Result<String, ErrorData> {
+    pub(crate) fn undo(&self) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
         doc.undo().map_err(core)?;
         Ok(ok(&doc, &[]))
     }
 
     #[tool(description = "Redo the last undone change.")]
-    fn redo(&self) -> Result<String, ErrorData> {
+    pub(crate) fn redo(&self) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
         doc.redo().map_err(core)?;
         Ok(ok(&doc, &[]))
