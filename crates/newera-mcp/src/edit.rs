@@ -609,6 +609,13 @@ pub(crate) struct UpdateSpec {
     pub opacity: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mirror: Option<bool>,
+    /// Which face of the piece stays put when `w`, `d` or `h` change:
+    /// `back`, `front`, `left`, `right` (relative to the way it faces),
+    /// `bottom`, `top`, or a plan side `+x`, `-x`, `+y`, `-y`. Without it a
+    /// resize grows around the center and both faces move, which is almost
+    /// never what a run of joinery wants.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visible: Option<bool>,
     /// Furniture light {lm|w, lamp, k, beam, area, z, on}.
@@ -719,6 +726,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 "mat",
                 "opacity",
                 "mirror",
+                "anchor",
                 "visible",
                 "hinge_right",
                 "level",
@@ -856,12 +864,16 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 Element::Label(l)
             }
             Element::Furniture(mut f) => {
+                let was = (f.width, f.depth, f.height, f.elevation);
                 f.position = spec.at.unwrap_or(f.position);
                 f.angle = spec.angle.unwrap_or(f.angle);
                 f.width = spec.w.unwrap_or(f.width);
                 f.depth = spec.d.unwrap_or(f.depth);
                 f.height = spec.h.unwrap_or(f.height);
                 f.elevation = spec.elev.unwrap_or(f.elevation);
+                if let Some(anchor) = &spec.anchor {
+                    hold_face(&mut f, anchor, was)?;
+                }
                 f.pitch = spec.pitch.unwrap_or(f.pitch);
                 f.roll = spec.roll.unwrap_or(f.roll);
                 f.name = spec.name.unwrap_or(f.name);
@@ -897,6 +909,93 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
         commands.push(Command::Update { element: updated });
     }
     doc.execute(Command::Batch { commands }).map_err(core)
+}
+
+/// Moves a resized piece so that one of its faces stays where it was.
+///
+/// `update(d=…)` alone keeps the center, so every change of depth means
+/// recalculating `at` — the commonest source of a run of cabinets drifting
+/// off the wall it was aligned to.
+fn hold_face(
+    piece: &mut newera_core::Furniture,
+    anchor: &str,
+    was: (f64, f64, f64, f64),
+) -> EditResult<()> {
+    let (old_w, old_d, old_h, old_elev) = was;
+    let raw = anchor.trim().to_ascii_lowercase();
+    // Height is its own axis: `elev` already holds the bottom, so only the
+    // top needs the elevation moved by what the piece grew.
+    if let "bottom" | "top" = raw.as_str() {
+        if raw == "top" {
+            piece.elevation = old_elev + old_h - piece.height;
+        }
+        return Ok(());
+    }
+
+    // The held face, in the piece's own frame: along its width or its depth,
+    // toward the positive local direction or the negative one.
+    let front = newera_core::facing(piece);
+    let mut side = turn_left(front);
+    if piece.mirrored {
+        side = opposite(side);
+    }
+    let (along_width, sign) = match raw.as_str() {
+        "front" => (false, 1.0),
+        "back" => (false, -1.0),
+        "right" => (true, 1.0),
+        "left" => (true, -1.0),
+        d @ ("+x" | "-x" | "+y" | "-y") => {
+            if d == front {
+                (false, 1.0)
+            } else if d == opposite(front) {
+                (false, -1.0)
+            } else if d == side {
+                (true, 1.0)
+            } else {
+                (true, -1.0)
+            }
+        }
+        _ => {
+            return Err(format!(
+                "anchor `{anchor}`: back, front, left, right, bottom, top, +x, -x, +y or -y"
+            ));
+        }
+    };
+    let grew = if along_width {
+        piece.width - old_w
+    } else {
+        piece.depth - old_d
+    };
+    // Holding a face moves the center away from it by half the growth.
+    let shift = -sign * grew / 2.0;
+    let local = if along_width {
+        (shift, 0.0)
+    } else {
+        (0.0, shift)
+    };
+    piece.position = piece.to_plan(local);
+    Ok(())
+}
+
+/// The plan direction opposite this one.
+fn opposite(dir: &str) -> &'static str {
+    match dir {
+        "+x" => "-x",
+        "-x" => "+x",
+        "+y" => "-y",
+        _ => "+y",
+    }
+}
+
+/// A quarter turn counterclockwise in plan (x right, y down): given where a
+/// piece's front looks, this is where its local `+x` points.
+fn turn_left(dir: &str) -> &'static str {
+    match dir {
+        "+x" => "-y",
+        "-y" => "-x",
+        "-x" => "+y",
+        _ => "+x",
+    }
 }
 
 pub(crate) fn parse_ids(raw: &[String]) -> EditResult<Vec<ElementId>> {

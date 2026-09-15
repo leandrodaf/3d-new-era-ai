@@ -83,6 +83,24 @@ pub(crate) struct EmbedParams {
 pub(crate) struct GetHomeParams {
     /// `summary` (counts, bounds, room areas) or `full` (default).
     detail: Option<String>,
+    /// Only these ids, group parts included, e.g. `["f833","w24"]`.
+    ids: Option<Vec<String>>,
+    /// Only these kinds: `walls`, `rooms`, `dims`, `labels`, `furniture`,
+    /// `polylines`.
+    kinds: Option<Vec<String>>,
+    /// Only what stands inside this room, by id or name.
+    room: Option<String>,
+    /// Only what meets this rectangle, `[[x0,y0],[x1,y1]]` cm.
+    rect: Option<[[f64; 2]; 2]>,
+    /// Storey to read: an id like `lv3`, or `all`. Default: the one shown.
+    level: Option<String>,
+    /// Keep only these fields of each element; `id` is always kept.
+    fields: Option<Vec<String>>,
+    /// List what is inside groups instead of only counting the parts.
+    parts: Option<bool>,
+    /// One element per line (NDJSON) instead of one JSON object, each line
+    /// tagged with its kind. Long answers stay readable a slice at a time.
+    ndjson: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -90,6 +108,11 @@ pub(crate) struct UpdateParams {
     items: Vec<UpdateSpec>,
     /// Plan version (tab) to write to; switches to it first.
     v: Option<usize>,
+    /// Try it without applying: reports what would change, the clearances
+    /// around every piece it touches, and which layout and ergonomics
+    /// findings it would resolve or create. Nothing is written and the
+    /// user's window does not move.
+    dry: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -104,6 +127,8 @@ pub(crate) struct MoveParams {
     dy: f64,
     /// Drag endpoints of walls joined to moved walls (default true).
     joined: Option<bool>,
+    /// Try it without applying; see `update`.
+    dry: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -194,6 +219,42 @@ pub(crate) struct CheckParams {
     /// Expected room areas in m² by room name or id, e.g. {"Sala": 10.91};
     /// adds rows [room, expected, actual, diff %].
     areas: Option<std::collections::BTreeMap<String, f64>>,
+    /// Storey to check: an id like `lv3`, or `all` for every storey that is
+    /// not a reference layer. Default: the storey being shown.
+    level: Option<String>,
+}
+
+/// A point in the plan, or the id of something already drawn.
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub(crate) enum Spot {
+    /// `[x, y]` in cm.
+    At([f64; 2]),
+    /// An element id, e.g. `f828` or `w24`.
+    Id(String),
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct MeasureParams {
+    /// What to measure from: an id or `[x,y]`. Alone, reports the free floor
+    /// on all four sides of that piece.
+    from: Option<Spot>,
+    /// What to measure to: an id or `[x,y]`.
+    to: Option<Spot>,
+    /// Restrict to one axis, `x` or `y`. Between two boxes this is the gap
+    /// along that axis (negative when they overlap).
+    axis: Option<String>,
+    /// Sides to measure free floor on: `+x`, `-x`, `+y`, `-y`, or, relative
+    /// to the piece, `front`, `back`, `left`, `right`.
+    dirs: Option<Vec<String>>,
+    /// Probe line: with `axis`, the other axis' coordinate. Reports every
+    /// stretch a straight line crosses, free floor and solids alike.
+    at: Option<f64>,
+    /// Limits of the probe along `axis`, `[from, to]` cm. Default: the plan.
+    range: Option<[f64; 2]>,
+    /// Height band that counts, `[z0, z1]` cm above this storey's floor.
+    /// Default `[0, 200]`: what a person walking through meets.
+    z: Option<[f64; 2]>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -254,6 +315,13 @@ pub(crate) struct Render3dParams {
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct AnnotationParams {
+    /// Dimensions and notes that no longer match the drawing: rows
+    /// [id, written, measured, against, text]. A plan of joinery is read
+    /// off its notes, so one that still says 66,5 over a corridor of 86 is
+    /// worse than no note at all.
+    stale: Option<bool>,
+    /// Search label text, accent- and case-insensitive, e.g. `porta`.
+    q: Option<String>,
     /// Show engineering dimension chains.
     dims: Option<bool>,
     /// Show the room reference schedule and tags.
@@ -330,15 +398,20 @@ pub(crate) struct PluginsParams {
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct LevelsParams {
-    /// `list` (default), `add`, `select`, `delete`.
+    /// `list` (default), `add`, `select`, `update`, `delete`.
     action: Option<String>,
     /// Level id, e.g. `lv3`.
     id: Option<String>,
     name: Option<String>,
-    /// Storey height cm for `add`.
+    /// Storey height cm for `add` and `update`.
     h: Option<f64>,
-    /// Floor elevation cm for `add` (e.g. a house on stilts).
+    /// Floor elevation cm for `add` and `update` (e.g. a house on stilts).
     elev: Option<f64>,
+    /// Mark the storey as a reference layer: a traced plan, a scan, an
+    /// earlier version. Its content is drawing, not building, so layout
+    /// checks and ergonomics leave it alone even when it sits at the same
+    /// elevation as the storey being designed.
+    reference: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -412,20 +485,42 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Home state. detail=summary is cheapest. Ids share one counter per version (w1, r2, f3…) and are never reused, so a new version may start at any number."
+        description = "Home state. detail=summary is cheapest. Ask for less instead of reading everything: ids=[…] resolves ids (group parts included), room=<id|name> and rect=[[x0,y0],[x1,y1]] read one place, kinds=[walls|rooms|dims|labels|furniture|polylines] and fields=[…] trim each row, parts=true opens groups, ndjson=true prints one element per line so a long answer can be read a slice at a time. Every piece carries bounds (plan box with angle applied) and faces (the side it opens toward). Ids share one counter per version (w1, r2, f3…) and are never reused, so a new version may start at any number."
     )]
-    fn get_home(&self, Parameters(p): Parameters<GetHomeParams>) -> String {
+    fn get_home(&self, Parameters(p): Parameters<GetHomeParams>) -> Result<String, ErrorData> {
         let doc = self.document.read();
         let full = doc.home();
-        let view = full.level_view(full.current_level());
+        let view = match p.level.as_deref() {
+            Some("all") => full.clone(),
+            Some(raw) => {
+                let id = raw.parse().map_err(|_| invalid("level: id like lv3, or all"))?;
+                if full.level(id).is_none() {
+                    return Err(invalid(format!("no storey {raw}")));
+                }
+                full.level_view(Some(id))
+            }
+            None => full.level_view(full.current_level()),
+        };
         let mut out = match p.detail.as_deref() {
             Some("summary") => compact::summary(&view, doc.revision()),
+            _ if p.ids.is_some() => picked(&view, p.ids.as_deref().unwrap_or_default())?,
             _ => compact::home(&view, doc.revision()),
         };
-        if !full.levels.is_empty() {
+        if p.parts.unwrap_or(false) {
+            expand_parts(&view, &mut out);
+        }
+        narrow(&view, &mut out, &p)?;
+        if !full.levels.is_empty() && p.kinds.is_none() && p.ids.is_none() {
             out["levels"] = compact::levels(full);
         }
-        out.to_string()
+        let warnings = compact::warnings(full);
+        if !warnings.is_empty() {
+            out["warnings"] = serde_json::json!(warnings);
+        }
+        if p.ndjson.unwrap_or(false) {
+            return Ok(ndjson(&out));
+        }
+        Ok(out.to_string())
     }
 
     #[tool(
@@ -443,13 +538,21 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto, polyline divider)."
+        description = "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto, polyline divider). anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. dry=true answers what it would do — changed fields, clearances around each piece it touches, findings resolved and created — without writing anything, so a size can be tried before it is applied. Otherwise the reply names what changed."
     )]
     fn update(&self, Parameters(p): Parameters<UpdateParams>) -> Result<String, ErrorData> {
+        if p.dry.unwrap_or(false) {
+            let doc = self.document.read();
+            let items = p.items;
+            return preview(&doc, move |scratch| {
+                edit::update(scratch, items).map_err(invalid)
+            });
+        }
         let mut doc = self.document.write();
         on_variant(&mut doc, p.v)?;
+        let before = doc.home().clone();
         edit::update(&mut doc, p.items).map_err(invalid)?;
-        Ok(ok(&doc, &[]))
+        Ok(applied(&doc, &before))
     }
 
     #[tool(description = "Delete elements by id, atomically.")]
@@ -461,12 +564,23 @@ impl NewEraMcp {
         Ok(ok(&doc, &[]))
     }
 
-    #[tool(name = "move", description = "Move elements by dx,dy cm.")]
+    #[tool(
+        name = "move",
+        description = "Move elements by dx,dy cm. dry=true answers what it would do without writing anything; see `update`."
+    )]
     fn move_elements(&self, Parameters(p): Parameters<MoveParams>) -> Result<String, ErrorData> {
         let ids = edit::parse_ids(&p.ids).map_err(invalid)?;
+        let joined = p.joined.unwrap_or(true);
+        if p.dry.unwrap_or(false) {
+            let doc = self.document.read();
+            return preview(&doc, move |scratch| {
+                ops::translate(scratch, &ids, p.dx, p.dy, joined).map_err(core)
+            });
+        }
         let mut doc = self.document.write();
-        ops::translate(&mut doc, &ids, p.dx, p.dy, p.joined.unwrap_or(true)).map_err(core)?;
-        Ok(ok(&doc, &[]))
+        let before = doc.home().clone();
+        ops::translate(&mut doc, &ids, p.dx, p.dy, joined).map_err(core)?;
+        Ok(applied(&doc, &before))
     }
 
     #[tool(description = "Split a wall into two joined walls at t (0..1).")]
@@ -897,10 +1011,16 @@ impl NewEraMcp {
                     .find(|f| f.id == id)
                     .cloned()
                     .ok_or_else(|| invalid(format!("{id} not found")))?;
-                let stored = group
-                    .properties
-                    .get(newera_joinery::PARAMS_KEY)
-                    .ok_or_else(|| invalid(format!("{id} was not made by joinery")))?;
+                let stored = group.properties.get(newera_joinery::PARAMS_KEY).ok_or_else(
+                    // Saying what the piece IS turns a dead end into the
+                    // next call: the tool that owns it is named.
+                    || {
+                        invalid(format!(
+                            "{id} was not made by joinery; it was made by {}",
+                            compact::made_by(&group)
+                        ))
+                    },
+                )?;
                 (
                     newera_joinery::merged(stored, &patch).map_err(invalid)?,
                     Some(group),
@@ -1529,12 +1649,28 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Layout problems: overlap, in_wall, blocks_door, outside_rooms. {} means none. areas {name|id: m²} compares room areas with the reference drawing."
+        description = "Layout problems: overlap, blocked, in_wall, blocks_door, outside_rooms; {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing."
     )]
-    fn check_layout(&self, Parameters(p): Parameters<CheckParams>) -> String {
+    fn check_layout(&self, Parameters(p): Parameters<CheckParams>) -> Result<String, ErrorData> {
         let doc = self.document.read();
-        let view = doc.home().level_view(doc.home().current_level());
-        let mut report = compact::issues(&view);
+        let (view, scope) = match p.level.as_deref() {
+            Some("all") => (doc.home().clone(), newera_core::Storeys::All),
+            Some(raw) => {
+                let id = raw.parse().map_err(|_| invalid("level: id like lv3, or all"))?;
+                if doc.home().level(id).is_none() {
+                    return Err(invalid(format!("no storey {raw}")));
+                }
+                (
+                    doc.home().level_view(Some(id)),
+                    newera_core::Storeys::One(id),
+                )
+            }
+            None => (
+                doc.home().level_view(doc.home().current_level()),
+                newera_core::Storeys::Active,
+            ),
+        };
+        let mut report = compact::issues(&view, scope);
         if let Some(expected) = p.areas {
             let rows: Vec<serde_json::Value> = expected
                 .iter()
@@ -1564,7 +1700,140 @@ impl NewEraMcp {
                 .collect();
             report["areas"] = serde_json::Value::Array(rows);
         }
-        report.to_string()
+        Ok(report.to_string())
+    }
+
+    #[tool(
+        description = "Tape measure over the plan, in cm. from=<id> alone: free floor on all four sides, {clear:{\"+y\":[cm,id,name]}} — dirs picks sides (+x -x +y -y, or front/back/left/right of the piece). from+to (ids or [x,y]): the distance between them, {cm}, or the gap along axis. axis+at: what a straight probe runs into, {spans:[[from,to,id,name]]} with id null for free floor — the answer to \"how wide is the corridor here, and between what\". z limits the height band that counts (default 0-200)."
+    )]
+    fn measure(&self, Parameters(p): Parameters<MeasureParams>) -> Result<String, ErrorData> {
+        use newera_core::measure::{self, Axis, Dir};
+        let doc = self.document.read();
+        // Measurements are of one storey: a wall one floor up is not in the way.
+        let home = doc.home().level_view(doc.home().current_level());
+        let axis = match p.axis.as_deref() {
+            Some(raw) => Some(Axis::parse(raw).ok_or_else(|| invalid("axis: x or y"))?),
+            None => None,
+        };
+        let spot = |s: &Spot| -> Result<(Point2, Option<newera_core::ElementId>), ErrorData> {
+            match s {
+                Spot::At([x, y]) => Ok((Point2::new(*x, *y), None)),
+                Spot::Id(raw) => {
+                    let id: newera_core::ElementId =
+                        raw.parse().map_err(|e| invalid(format!("{e}")))?;
+                    let (min, max) = measure::element_bounds(&home, id)
+                        .ok_or_else(|| invalid(format!("no {raw} on this storey")))?;
+                    Ok((
+                        Point2::new(f64::midpoint(min.x, max.x), f64::midpoint(min.y, max.y)),
+                        Some(id),
+                    ))
+                }
+            }
+        };
+
+        // Probe: what a straight line at `at` runs into, in order.
+        if let Some(at) = p.at {
+            let axis = axis.ok_or_else(|| invalid("at needs axis: x or y"))?;
+            let z = p.z.map_or((0.0, 200.0), |[a, b]| (a, b));
+            let spans: Vec<serde_json::Value> = measure::free_span(
+                &home,
+                axis,
+                at,
+                p.range.map(|[a, b]| (a, b)),
+                z,
+            )
+            .into_iter()
+            .map(|s| {
+                serde_json::json!([
+                    compact::num(s.from),
+                    compact::num(s.to),
+                    s.what.map(|w| w.id().to_string()),
+                    s.name,
+                ])
+            })
+            .collect();
+            return Ok(serde_json::json!({ "spans": spans }).to_string());
+        }
+
+        let from = p
+            .from
+            .as_ref()
+            .ok_or_else(|| invalid("from: an id, or [x,y]"))?;
+
+        // Distance between two things.
+        if let Some(to) = &p.to {
+            let (a, a_id) = spot(from)?;
+            let (b, b_id) = spot(to)?;
+            let boxes = a_id
+                .and_then(|id| measure::element_bounds(&home, id))
+                .zip(b_id.and_then(|id| measure::element_bounds(&home, id)));
+            let mut out = serde_json::Map::new();
+            match (boxes, axis) {
+                // Between two boxes the useful number is the gap, not the
+                // distance between centers: it is what fits in between.
+                (Some((ba, bb)), Some(axis)) => {
+                    out.insert("cm".to_owned(), compact::num(measure::gap(ba, bb, axis)));
+                    out.insert("axis".to_owned(), serde_json::json!(axis.name()));
+                }
+                (Some((ba, bb)), None) => {
+                    out.insert("x".to_owned(), compact::num(measure::gap(ba, bb, Axis::X)));
+                    out.insert("y".to_owned(), compact::num(measure::gap(ba, bb, Axis::Y)));
+                }
+                (None, Some(Axis::X)) => {
+                    out.insert("cm".to_owned(), compact::num((b.x - a.x).abs()));
+                }
+                (None, Some(Axis::Y)) => {
+                    out.insert("cm".to_owned(), compact::num((b.y - a.y).abs()));
+                }
+                (None, None) => {
+                    out.insert(
+                        "cm".to_owned(),
+                        compact::num((b.x - a.x).hypot(b.y - a.y)),
+                    );
+                }
+            }
+            return Ok(serde_json::Value::Object(out).to_string());
+        }
+
+        // Free floor around a piece.
+        let Spot::Id(raw) = from else {
+            return Err(invalid("free floor is measured around a piece: from=<id>"));
+        };
+        let id: newera_core::FurnitureId = raw.parse().map_err(|e| invalid(format!("{e}")))?;
+        let piece = home
+            .find_piece(id)
+            .ok_or_else(|| invalid(format!("no {raw} on this storey")))?;
+        let dirs: Vec<Dir> = match &p.dirs {
+            Some(raw) => raw
+                .iter()
+                .map(|d| {
+                    Dir::parse(d, Some(piece))
+                        .ok_or_else(|| invalid(format!("dir {d}: +x -x +y -y, front/back/left/right")))
+                })
+                .collect::<Result<_, _>>()?,
+            None => Dir::PLAN.to_vec(),
+        };
+        let solids = measure::obstacles(&home, &|_| false);
+        let mut clear = serde_json::Map::new();
+        for dir in dirs {
+            let c = measure::clearance_against(&solids, piece, dir, measure::MAX_REACH);
+            clear.insert(
+                dir.name().to_owned(),
+                serde_json::json!([
+                    compact::num(c.cm),
+                    c.against.map(|s| s.id().to_string()),
+                    c.name,
+                ]),
+            );
+        }
+        let (min, max) = measure::plan_bounds(piece);
+        Ok(serde_json::json!({
+            "id": raw,
+            "bounds": [compact::point(min), compact::point(max)],
+            "faces": measure::facing(piece),
+            "clear": clear,
+        })
+        .to_string())
     }
 
     #[tool(
@@ -1643,12 +1912,43 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Plan annotations. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs), legend (symbol legend with counts); bake=true turns the automatic chains into editable dimensions (ids returned). Otherwise returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
+        description = "Plan annotations. stale=true lists dimensions and notes that no longer match the drawing: rows [id, written, measured, against, text] — run it after moving geometry, before handing the plan over. q=<text> searches label text. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs), legend (symbol legend with counts); bake=true turns the automatic chains into editable dimensions (ids returned). Otherwise returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
     )]
     fn annotations(
         &self,
         Parameters(p): Parameters<AnnotationParams>,
     ) -> Result<String, ErrorData> {
+        if p.stale.unwrap_or(false) || p.q.is_some() {
+            let doc = self.document.read();
+            let view = doc.home().level_view(doc.home().current_level());
+            let mut out = serde_json::Map::new();
+            if p.stale.unwrap_or(false) {
+                let rows: Vec<serde_json::Value> = newera_core::stale_annotations(&view)
+                    .into_iter()
+                    .map(|s| {
+                        serde_json::json!([
+                            s.id.to_string(),
+                            compact::num(s.drawn),
+                            compact::num(s.measured),
+                            s.against.map(|a| a.to_string()),
+                            s.text,
+                        ])
+                    })
+                    .collect();
+                out.insert("stale".to_owned(), serde_json::json!(rows));
+            }
+            if let Some(query) = &p.q {
+                let needle = fold(query);
+                let rows: Vec<serde_json::Value> = view
+                    .labels
+                    .iter()
+                    .filter(|l| fold(&l.text).contains(&needle))
+                    .map(compact::label)
+                    .collect();
+                out.insert("labels".to_owned(), serde_json::json!(rows));
+            }
+            return Ok(serde_json::Value::Object(out).to_string());
+        }
         let mut doc = self.document.write();
         if p.bake.unwrap_or(false) {
             let view = doc.home().level_view(doc.home().current_level());
@@ -1958,7 +2258,7 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Storeys. list (default): rows [id,name,elev,h,selected,layout_index,viewable]. add {name?,h?,elev?} adds one on top (or at elev cm) and selects it; select {id}; delete {id} removes it and its content. update {id,elev} raises a storey with its walls, floors and openings (houses on stilts). Other tools act on the selected storey."
+        description = "Storeys. list (default): rows [id,name,elev,h,selected,layout_index,viewable,reference]. add {name?,h?,elev?} adds one on top (or at elev cm) and selects it; select {id}; delete {id} removes it and its content. update {id, elev?|h?|name?|reference?}: elev raises a storey with its walls, floors and openings (houses on stilts); reference=true marks it a tracing layer (imported plan, older version) that checks and ergonomics skip, which is what you want when two storeys share an elevation. Other tools act on the selected storey."
     )]
     fn levels(&self, Parameters(p): Parameters<LevelsParams>) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
@@ -1986,6 +2286,28 @@ impl NewEraMcp {
                     return Err(invalid(format!("{level} not found")));
                 }
                 doc.select_level(Some(level));
+                Ok(ok(&doc, &[]))
+            }
+            "update" => {
+                let level = id()?;
+                let mut updated = doc
+                    .home()
+                    .level(level)
+                    .cloned()
+                    .ok_or_else(|| invalid(format!("{level} not found")))?;
+                if let Some(elev) = p.elev {
+                    updated.elevation = elev;
+                }
+                if let Some(h) = p.h {
+                    updated.height = h;
+                }
+                if let Some(name) = p.name.clone() {
+                    updated.name = name;
+                }
+                if let Some(reference) = p.reference {
+                    updated.set_reference(reference);
+                }
+                doc.execute(Command::update(updated)).map_err(core)?;
                 Ok(ok(&doc, &[]))
             }
             "delete" => {
@@ -2182,6 +2504,334 @@ fn on_variant(doc: &mut Document, v: Option<usize>) -> Result<(), ErrorData> {
     }
 }
 
+/// The elements with these ids, grouped by kind like a full read.
+///
+/// Resolving an id was the commonest thing an agent wanted and the one thing
+/// a read could not do: the answer was to dump the whole home and search it.
+fn picked(home: &Home, ids: &[String]) -> Result<serde_json::Value, ErrorData> {
+    let mut out = serde_json::Map::new();
+    for raw in ids {
+        let id: newera_core::ElementId = raw.parse().map_err(|e| invalid(format!("{e}")))?;
+        let Some(value) = compact::element(home, id) else {
+            return Err(invalid(format!("no {raw} on this storey")));
+        };
+        out.entry(compact::kind_of(id).to_owned())
+            .or_insert_with(|| serde_json::Value::Array(Vec::new()))
+            .as_array_mut()
+            .expect("array")
+            .push(value);
+    }
+    Ok(serde_json::Value::Object(out))
+}
+
+/// Lists what is inside every group, next to the group that holds it.
+///
+/// A group is otherwise a black box: `parts: 23` and nothing else, so there
+/// is no way to see whether an edit rebuilt its insides.
+fn expand_parts(home: &Home, out: &mut serde_json::Value) {
+    let Some(list) = out.get_mut("furniture").and_then(|v| v.as_array_mut()) else {
+        return;
+    };
+    let cuts = home.wall_cuts();
+    let mut expanded = Vec::with_capacity(list.len());
+    for value in list.drain(..) {
+        let group = value["id"]
+            .as_str()
+            .and_then(|raw| raw.parse().ok())
+            .and_then(|id| home.find_piece(id))
+            .filter(|f| f.is_group());
+        let parts: Vec<serde_json::Value> = group
+            .map(|g| {
+                g.flatten()
+                    .into_iter()
+                    .skip(1)
+                    .map(|f| compact::piece(home, &cuts, f))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut value = value;
+        if !parts.is_empty() {
+            value["inside"] = serde_json::Value::Array(parts);
+        }
+        expanded.push(value);
+    }
+    *list = expanded;
+}
+
+/// Applies `kinds`, `room`, `rect` and `fields` to a read.
+fn narrow(
+    home: &Home,
+    out: &mut serde_json::Value,
+    p: &GetHomeParams,
+) -> Result<(), ErrorData> {
+    if let Some(kinds) = &p.kinds {
+        for kind in kinds {
+            if !compact::KINDS.contains(&kind.as_str()) {
+                return Err(invalid(format!(
+                    "kind `{kind}`: one of {}",
+                    compact::KINDS.join(", ")
+                )));
+            }
+        }
+        for kind in compact::KINDS {
+            if !kinds.iter().any(|k| k == kind) {
+                out.as_object_mut().expect("object").remove(kind);
+            }
+        }
+    }
+
+    // A room and a rectangle are the same filter: a box everything is
+    // tested against, so asking for both keeps only what meets both.
+    let mut boxes: Vec<(Point2, Point2)> = Vec::new();
+    if let Some(raw) = &p.room {
+        let room = home
+            .rooms
+            .iter()
+            .find(|r| r.id.to_string() == *raw || r.name.eq_ignore_ascii_case(raw))
+            .ok_or_else(|| invalid(format!("no room `{raw}` on this storey")))?;
+        let (min, max) = newera_core::element_bounds(home, room.id.into())
+            .ok_or_else(|| invalid("that room has no outline"))?;
+        boxes.push((min, max));
+    }
+    if let Some([[x0, y0], [x1, y1]]) = p.rect {
+        boxes.push((
+            Point2::new(x0.min(x1), y0.min(y1)),
+            Point2::new(x0.max(x1), y0.max(y1)),
+        ));
+    }
+    if !boxes.is_empty() {
+        let meets = |id: newera_core::ElementId| {
+            newera_core::element_bounds(home, id).is_some_and(|(min, max)| {
+                boxes
+                    .iter()
+                    .all(|(lo, hi)| min.x <= hi.x && lo.x <= max.x && min.y <= hi.y && lo.y <= max.y)
+            })
+        };
+        for kind in compact::KINDS {
+            if let Some(list) = out.get_mut(kind).and_then(|v| v.as_array_mut()) {
+                list.retain(|e| {
+                    e["id"]
+                        .as_str()
+                        .and_then(|raw| raw.parse().ok())
+                        .is_some_and(meets)
+                });
+            }
+        }
+    }
+
+    if let Some(fields) = &p.fields {
+        for kind in compact::KINDS {
+            let Some(list) = out.get_mut(kind).and_then(|v| v.as_array_mut()) else {
+                continue;
+            };
+            for element in list {
+                if let Some(map) = element.as_object_mut() {
+                    map.retain(|k, _| k == "id" || fields.iter().any(|f| f == k));
+                }
+            }
+        }
+    }
+    // Empty arrays say nothing; dropping them keeps "not here" unambiguous.
+    for kind in compact::KINDS {
+        if out.get(kind).and_then(|v| v.as_array()).is_some_and(Vec::is_empty) {
+            out.as_object_mut().expect("object").remove(kind);
+        }
+    }
+    Ok(())
+}
+
+/// One element per line, each tagged with its kind, headers last.
+///
+/// A single 50 KB line cannot be read in slices by any normal tool, which
+/// forces a script; one line per element can.
+fn ndjson(out: &serde_json::Value) -> String {
+    let mut lines = Vec::new();
+    let mut head = out.clone();
+    for kind in compact::KINDS {
+        let Some(list) = head.as_object_mut().and_then(|m| m.remove(kind)) else {
+            continue;
+        };
+        for element in list.as_array().into_iter().flatten() {
+            let mut row = serde_json::json!({ "k": kind });
+            if let Some(map) = element.as_object() {
+                for (k, v) in map {
+                    row[k] = v.clone();
+                }
+            }
+            lines.push(row.to_string());
+        }
+    }
+    lines.insert(0, head.to_string());
+    lines.join("\n")
+}
+
+/// Runs an edit against a copy of the plan and reports what it would do.
+///
+/// Trying a size used to mean applying it, reviewing, and undoing — a round
+/// trip that showed in the user's window and burned a revision each time.
+/// The copy has no history and is thrown away, so nothing of that happens.
+fn preview(
+    doc: &Document,
+    apply: impl FnOnce(&mut Document) -> Result<(), ErrorData>,
+) -> Result<String, ErrorData> {
+    let before = doc.home().clone();
+    let mut scratch = Document::new(before.clone());
+    apply(&mut scratch)?;
+    let after = scratch.home().clone();
+    let mut out = compact::diff(&before, &after);
+    let object = out.as_object_mut().expect("object");
+    object.insert("dry".to_owned(), serde_json::json!(true));
+
+    // Free floor around every piece the change touched: the number the
+    // change was made for, without a second call.
+    let touched: Vec<newera_core::FurnitureId> = out["changed"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .chain(out["added"].as_array().into_iter().flatten())
+        .filter_map(|c| {
+            let raw = if c.is_string() { c.as_str()? } else { c["id"].as_str()? };
+            raw.parse().ok()
+        })
+        .collect();
+    let mut clearances = serde_json::Map::new();
+    let view = after.level_view(after.current_level());
+    // Gathered once for the storey, not once per piece per side.
+    let solids = newera_core::obstacles(&view, &|_| false);
+    for id in touched.iter().take(12) {
+        let Some(piece) = view.find_piece(*id) else {
+            continue;
+        };
+        let sides: serde_json::Map<String, serde_json::Value> = newera_core::Dir::PLAN
+            .iter()
+            .map(|dir| {
+                let c = newera_core::measure::clearance_against(
+                    &solids,
+                    piece,
+                    *dir,
+                    newera_core::measure::MAX_REACH,
+                );
+                (
+                    dir.name().to_owned(),
+                    serde_json::json!([
+                        compact::num(c.cm),
+                        c.against.map(|s| s.id().to_string()),
+                        c.name
+                    ]),
+                )
+            })
+            .collect();
+        clearances.insert(id.to_string(), serde_json::Value::Object(sides));
+    }
+    if !clearances.is_empty() {
+        out.as_object_mut()
+            .expect("object")
+            .insert("clearances".to_owned(), serde_json::Value::Object(clearances));
+    }
+
+    // Which findings it would settle, and which it would create.
+    let defects = |home: &newera_core::Home| -> std::collections::BTreeSet<String> {
+        newera_core::check_layout(&home.level_view(home.current_level()))
+            .into_iter()
+            .filter(newera_core::Issue::is_defect)
+            .map(|i| {
+                i.ids()
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("+")
+            })
+            .collect()
+    };
+    let (was, now) = (defects(&before), defects(&after));
+    for (key, list) in [
+        ("issues_resolved", was.difference(&now).collect::<Vec<_>>()),
+        ("issues_new", now.difference(&was).collect()),
+    ] {
+        if !list.is_empty() {
+            out.as_object_mut()
+                .expect("object")
+                .insert(key.to_owned(), serde_json::json!(list));
+        }
+    }
+
+    let profile = newera_ergonomics::Profile::default();
+    let (was, now) = (
+        newera_ergonomics::review(&before, &profile),
+        newera_ergonomics::review(&after, &profile),
+    );
+    // Findings are matched without their numbers, so one that merely got
+    // better reads as improved rather than as one gone and one new.
+    let key = |f: &newera_ergonomics::Finding| {
+        let text: String = f.message.chars().filter(|c| !c.is_ascii_digit()).collect();
+        format!("{} {text}", f.place)
+    };
+    let old_keys: std::collections::BTreeSet<String> = was.findings.iter().map(&key).collect();
+    let new_keys: std::collections::BTreeSet<String> = now.findings.iter().map(&key).collect();
+    let object = out.as_object_mut().expect("object");
+    if was.score != now.score {
+        object.insert("score".to_owned(), serde_json::json!([was.score, now.score]));
+    }
+    for (label, findings, other) in [
+        ("resolved", &was.findings, &new_keys),
+        ("new_findings", &now.findings, &old_keys),
+    ] {
+        let list: Vec<serde_json::Value> = findings
+            .iter()
+            .filter(|f| !other.contains(&key(f)))
+            .map(|f| serde_json::json!([f.severity, f.place, f.message]))
+            .collect();
+        if !list.is_empty() {
+            object.insert(label.to_owned(), serde_json::json!(list));
+        }
+    }
+    Ok(serde_json::Value::Object(object.clone()).to_string())
+}
+
+/// How many changed elements a write names before it just counts them.
+const DIFF_LIMIT: usize = 20;
+
+/// `ok rev=N` with what the write actually did appended.
+///
+/// A write that says only `ok` forces a full read to learn its effect —
+/// which is how a plan ends up edited blind. A batch touching hundreds of
+/// pieces is counted instead of listed: past a point the list is the read
+/// it was meant to save.
+fn applied(doc: &Document, before: &Home) -> String {
+    let mut diff = compact::diff(before, doc.home());
+    let object = diff.as_object_mut().expect("object");
+    if object.is_empty() {
+        return ok(doc, &[]);
+    }
+    for key in ["changed", "added", "gone"] {
+        let Some(list) = object.get_mut(key).and_then(|v| v.as_array_mut()) else {
+            continue;
+        };
+        if list.len() > DIFF_LIMIT {
+            let n = list.len();
+            *object.get_mut(key).expect("present") = serde_json::json!(n);
+        }
+    }
+    format!("{} {diff}", ok(doc, &[]))
+}
+
+/// Lowercased and stripped of accents, so `porta` finds `Portão` and a
+/// query typed without accents still matches a plan written with them.
+fn fold(text: &str) -> String {
+    text.chars()
+        .flat_map(char::to_lowercase)
+        .map(|c| match c {
+            'á' | 'à' | 'â' | 'ã' | 'ä' => 'a',
+            'é' | 'ê' | 'ë' => 'e',
+            'í' | 'î' | 'ï' => 'i',
+            'ó' | 'ô' | 'õ' | 'ö' => 'o',
+            'ú' | 'û' | 'ü' => 'u',
+            'ç' => 'c',
+            other => other,
+        })
+        .collect()
+}
+
 fn round2(v: f64) -> f64 {
     (v * 100.0).round() / 100.0
 }
@@ -2297,6 +2947,435 @@ mod tests {
     }
 
     #[test]
+    fn reads_answer_by_id_room_and_rectangle_instead_of_dumping_everything() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[500,0],[500,400],[0,400]],"closed":true}],
+                    "rooms":[{"name":"Sala","at":[250,200]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"sofa-3","at":[100,100]},
+                             {"cat":"dining-table-4","at":[400,300],"angle":90,"w":140,"d":80}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let read = |json: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.get_home(Parameters(serde_json::from_str(json).unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+
+        // One id, resolved, instead of the whole home.
+        let one = read(r#"{"ids":["f6"]}"#);
+        assert_eq!(one["furniture"].as_array().unwrap().len(), 1, "{one}");
+        assert_eq!(one["furniture"][0]["id"], "f6");
+        assert!(one.get("walls").is_none(), "{one}");
+        assert!(
+            s.get_home(Parameters(
+                serde_json::from_str(r#"{"ids":["f999"]}"#).unwrap()
+            ))
+            .is_err(),
+            "an id that is not there is an error, not silence"
+        );
+
+        // A quarter turn swaps width and depth: `bounds` is already resolved
+        // and `faces` says which way the piece opens.
+        let turned = read(r#"{"ids":["f7"],"fields":["bounds","faces","wdh"]}"#);
+        let piece = &turned["furniture"][0];
+        let (w, d) = (piece["wdh"][0].as_f64().unwrap(), piece["wdh"][1].as_f64().unwrap());
+        let bounds = &piece["bounds"];
+        let span_x = bounds[1][0].as_f64().unwrap() - bounds[0][0].as_f64().unwrap();
+        let span_y = bounds[1][1].as_f64().unwrap() - bounds[0][1].as_f64().unwrap();
+        assert!((span_x - d).abs() < 0.1 && (span_y - w).abs() < 0.1, "{piece}");
+        assert_eq!(piece["faces"], "-x", "{piece}");
+        assert!(piece.get("at").is_none(), "fields trims the rest: {piece}");
+
+        // A rectangle around the sofa leaves the table out.
+        let corner = read(r#"{"rect":[[0,0],[200,200]],"kinds":["furniture"]}"#);
+        let ids: Vec<&str> = corner["furniture"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids, ["f6"], "{corner}");
+        assert!(corner.get("walls").is_none(), "kinds drops the rest");
+        assert!(corner.get("rooms").is_none(), "{corner}");
+
+        // The room by name reaches everything standing in it.
+        let sala = read(r#"{"room":"Sala","kinds":["furniture"]}"#);
+        assert_eq!(sala["furniture"].as_array().unwrap().len(), 2, "{sala}");
+
+        // NDJSON: one element per line, so a long answer can be read in slices.
+        let lines = s
+            .get_home(Parameters(
+                serde_json::from_str(r#"{"ndjson":true,"kinds":["furniture"]}"#).unwrap(),
+            ))
+            .unwrap();
+        let rows: Vec<&str> = lines.lines().collect();
+        assert_eq!(rows.len(), 3, "a header and two pieces: {lines}");
+        for row in &rows[1..] {
+            let value: serde_json::Value = serde_json::from_str(row).unwrap();
+            assert_eq!(value["k"], "furniture", "{row}");
+        }
+    }
+
+    #[test]
+    fn measure_answers_clearances_gaps_and_corridors() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[500,0],[500,400],[0,400]],"closed":true}],
+                    "rooms":[{"name":"Cozinha","at":[250,200]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        // Two counters facing each other across the room.
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"base-cabinet","at":[250,40],"w":300,"d":60,"h":90},
+                             {"cat":"base-cabinet","at":[250,340],"w":300,"d":60,"h":90}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let measure = |json: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.measure(Parameters(serde_json::from_str(json).unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+
+        // Free floor in front of the first counter: 70 → 310 is 240 cm.
+        let clear = measure(r#"{"from":"f6"}"#);
+        assert!(
+            (clear["clear"]["+y"][0].as_f64().unwrap() - 240.0).abs() < 0.5,
+            "{clear}"
+        );
+        assert_eq!(clear["clear"]["+y"][1], "f7", "{clear}");
+        // And behind it, 2.5 cm to the inner face of a 15 cm wall.
+        assert!(
+            (clear["clear"]["-y"][0].as_f64().unwrap() - 2.5).abs() < 0.5,
+            "{clear}"
+        );
+        assert_eq!(clear["clear"]["-y"][1], "w1", "{clear}");
+
+        // The same number as the gap between the two boxes.
+        let gap = measure(r#"{"from":"f6","to":"f7","axis":"y"}"#);
+        assert!((gap["cm"].as_f64().unwrap() - 240.0).abs() < 0.5, "{gap}");
+
+        // A probe down the middle: wall, counter, corridor, counter, wall.
+        let spans = measure(r#"{"axis":"y","at":250}"#);
+        let rows = spans["spans"].as_array().unwrap();
+        let free: Vec<f64> = rows
+            .iter()
+            .filter(|r| r[2].is_null())
+            .map(|r| r[1].as_f64().unwrap() - r[0].as_f64().unwrap())
+            .collect();
+        assert!(
+            free.iter().any(|cm| (cm - 240.0).abs() < 0.5),
+            "the corridor is one free stretch: {spans}"
+        );
+
+        // Two points, plainly.
+        let straight = measure(r#"{"from":[0,0],"to":[30,40]}"#);
+        assert!((straight["cm"].as_f64().unwrap() - 50.0).abs() < 0.01, "{straight}");
+    }
+
+    #[test]
+    fn a_reference_storey_is_drawing_and_checks_leave_it_alone() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[500,0],[500,400],[0,400]],"closed":true}],
+                    "rooms":[{"name":"Sala","at":[250,200]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(r#"{"items":[{"cat":"sofa-3","at":[250,200]}]}"#).unwrap(),
+        ))
+        .unwrap();
+        // A second storey at the same elevation, holding a copy of the plan.
+        s.levels(Parameters(LevelsParams {
+            action: Some("add".into()),
+            name: Some("Novo layout".into()),
+            elev: Some(0.0),
+            ..LevelsParams::default()
+        }))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(r#"{"items":[{"cat":"sofa-3","at":[250,200]}]}"#).unwrap(),
+        ))
+        .unwrap();
+        let list: serde_json::Value =
+            serde_json::from_str(&s.levels(Parameters(LevelsParams::default())).unwrap()).unwrap();
+        let ground = list[0][0].as_str().unwrap().to_owned();
+
+        // Reading either storey warns that they are stacked.
+        let home: serde_json::Value = serde_json::from_str(
+            &s.get_home(Parameters(
+                serde_json::from_str(r#"{"detail":"summary"}"#).unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(
+            home["warnings"][0]
+                .as_str()
+                .unwrap()
+                .contains("share an elevation"),
+            "{home}"
+        );
+
+        // Checked together, the two copies read as an artefact of the layers,
+        // not as a clash.
+        let all: serde_json::Value = serde_json::from_str(
+            &s.check_layout(Parameters(CheckParams {
+                level: Some("all".into()),
+                areas: None,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let overlap = &all["overlap"][0];
+        assert_eq!(overlap["kind"], "cross_level", "{all}");
+        assert!(overlap["a"]["name"].is_string(), "names come with it: {all}");
+        assert!(overlap["a"]["bounds"].is_array(), "{all}");
+        assert_eq!(all["overlap_kinds"]["cross_level"], 1, "{all}");
+
+        // Marking the old plan as a reference layer takes it out of the check.
+        s.levels(Parameters(LevelsParams {
+            action: Some("update".into()),
+            id: Some(ground),
+            reference: Some(true),
+            ..LevelsParams::default()
+        }))
+        .unwrap();
+        let all: serde_json::Value = serde_json::from_str(
+            &s.check_layout(Parameters(CheckParams {
+                level: Some("all".into()),
+                areas: None,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(all.get("overlap").is_none(), "{all}");
+        assert!(all.get("warnings").is_none(), "and the warning goes: {all}");
+    }
+
+    #[test]
+    fn a_dry_write_answers_the_question_without_touching_the_plan() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[500,0],[500,400],[0,400]],"closed":true}],
+                    "rooms":[{"name":"Cozinha","at":[250,200]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"base-cabinet","at":[250,40],"w":300,"d":60,"h":90},
+                             {"cat":"base-cabinet","at":[250,340],"w":300,"d":60,"h":90}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let rev = s.document.read().revision();
+        let depth = s.document.read().home().furniture[0].depth;
+
+        // "And if the counter were 100 cm deep?" — asked, not applied.
+        let dry: serde_json::Value = serde_json::from_str(
+            &s.update(Parameters(UpdateParams {
+                items: serde_json::from_str(r#"[{"id":"f6","d":100}]"#).unwrap(),
+                v: None,
+                dry: Some(true),
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(dry["dry"], true, "{dry}");
+        assert_eq!(dry["changed"][0]["id"], "f6", "{dry}");
+        assert_eq!(dry["changed"][0]["to"]["wdh"][1], 100.0, "{dry}");
+        // The corridor it would leave, measured on the copy. Depth grows
+        // around the center, so the front only advances 20 cm — and the back
+        // ends up inside the wall, which the dry run says before it happens.
+        assert!(
+            (dry["clearances"]["f6"]["+y"][0].as_f64().unwrap() - 220.0).abs() < 0.5,
+            "{dry}"
+        );
+        assert_eq!(dry["issues_new"][0], "f6+w1", "{dry}");
+        assert_eq!(
+            s.document.read().revision(),
+            rev,
+            "a dry run writes nothing"
+        );
+        assert!(
+            (s.document.read().home().furniture[0].depth - depth).abs() < 1e-9,
+            "and changes nothing"
+        );
+
+        // Applied for real, the reply says what moved instead of only `ok`.
+        let reply = s
+            .update(Parameters(UpdateParams {
+                items: serde_json::from_str(r#"[{"id":"f6","d":100}]"#).unwrap(),
+                v: None,
+                dry: None,
+            }))
+            .unwrap();
+        assert!(reply.starts_with("ok rev="), "{reply}");
+        let diff: serde_json::Value =
+            serde_json::from_str(&reply[reply.find('{').expect("a diff")..]).unwrap();
+        assert_eq!(diff["changed"][0]["id"], "f6", "{reply}");
+        assert_eq!(diff["changed"][0]["from"]["wdh"][1], 60.0, "{reply}");
+    }
+
+    #[test]
+    fn a_resize_can_hold_one_face_instead_of_growing_around_the_center() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[500,0],[500,400],[0,400]],"closed":true}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        // A counter with its back on the top wall, and one turned a quarter
+        // turn with its back on the left wall.
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"base-cabinet","at":[250,37.5],"w":300,"d":60,"h":90},
+                             {"cat":"base-cabinet","at":[37.5,250],"w":200,"d":60,"h":90,"angle":270}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let deepen = |id: &str, anchor: &str| {
+            s.update(Parameters(UpdateParams {
+                items: serde_json::from_str(&format!(
+                    r#"[{{"id":"{id}","d":80,"anchor":"{anchor}"}}]"#
+                ))
+                .unwrap(),
+                v: None,
+                dry: None,
+            }))
+            .unwrap();
+        };
+
+        deepen("f5", "back");
+        let home = s.document.read();
+        let counter = home.home().find_piece("f5".parse().unwrap()).unwrap();
+        let (min, max) = newera_core::plan_bounds(counter);
+        assert!(
+            (min.y - 7.5).abs() < 0.01,
+            "the back stays on the wall: {min:?}"
+        );
+        assert!((max.y - 87.5).abs() < 0.01, "the front advances: {max:?}");
+        drop(home);
+
+        // Turned 270°, the piece's back looks at -x: the same word holds the
+        // face against the left wall, not a plan side worked out by hand.
+        deepen("f6", "back");
+        let home = s.document.read();
+        let turned = home.home().find_piece("f6".parse().unwrap()).unwrap();
+        let (min, max) = newera_core::plan_bounds(turned);
+        assert_eq!(newera_core::facing(turned), "+x", "{turned:?}");
+        assert!((min.x - 7.5).abs() < 0.01, "{min:?}");
+        assert!((max.x - 87.5).abs() < 0.01, "{max:?}");
+        drop(home);
+
+        // Without an anchor the center is what stays, which is the old trap.
+        s.update(Parameters(UpdateParams {
+            items: serde_json::from_str(r#"[{"id":"f5","d":100}]"#).unwrap(),
+            v: None,
+            dry: None,
+        }))
+        .unwrap();
+        let home = s.document.read();
+        let counter = home.home().find_piece("f5".parse().unwrap()).unwrap();
+        let (min, _) = newera_core::plan_bounds(counter);
+        assert!((min.y - (-2.5)).abs() < 0.01, "{min:?}");
+    }
+
+    #[test]
+    fn annotations_report_the_notes_that_stopped_being_true() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[500,0],[500,400],[0,400]],"closed":true}],
+                    "dims":[{"a":[250,70],"b":[250,310]}],
+                    "labels":[{"text":"TORRE 300 × 60 × 90","at":[250,40]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"base-cabinet","at":[250,40],"w":300,"d":60,"h":90},
+                             {"cat":"base-cabinet","at":[250,340],"w":300,"d":60,"h":90}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let annotations = |json: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.annotations(Parameters(serde_json::from_str(json).unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        // The dimension marks the corridor and still agrees with it.
+        assert!(
+            annotations(r#"{"stale":true}"#)["stale"]
+                .as_array()
+                .unwrap()
+                .is_empty(),
+            "{:?}",
+            annotations(r#"{"stale":true}"#)
+        );
+
+        // Deepen the counter and both the dimension and the note go stale.
+        s.update(Parameters(UpdateParams {
+            items: serde_json::from_str(r#"[{"id":"f7","d":100,"anchor":"back"}]"#).unwrap(),
+            v: None,
+            dry: None,
+        }))
+        .unwrap();
+        let stale = annotations(r#"{"stale":true}"#);
+        let rows = stale["stale"].as_array().unwrap();
+        let dim = rows.iter().find(|r| r[0] == "d5").unwrap_or_else(|| panic!("{stale}"));
+        assert!((dim[1].as_f64().unwrap() - 240.0).abs() < 0.5, "{stale}");
+        assert!((dim[2].as_f64().unwrap() - 200.0).abs() < 0.5, "{stale}");
+        let note = rows.iter().find(|r| r[0] == "t6").unwrap_or_else(|| panic!("{stale}"));
+        assert_eq!(note[3], "f7", "the piece the note sits on: {stale}");
+        assert!((note[1].as_f64().unwrap() - 60.0).abs() < 0.01, "written: {stale}");
+        assert!((note[2].as_f64().unwrap() - 100.0).abs() < 0.01, "measured: {stale}");
+
+        // And notes can be found by their text, which no read could do.
+        let found = annotations(r#"{"q":"torre"}"#);
+        assert_eq!(found["labels"].as_array().unwrap().len(), 1, "{found}");
+        assert!(
+            annotations(r#"{"q":"varanda"}"#)["labels"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn levels_scope_edits_and_reads_to_the_selected_storey() {
         let s = server();
         let walls = r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}]}"#;
@@ -2319,7 +3398,7 @@ mod tests {
 
         // The upper storey starts empty; new walls go on it.
         let home: serde_json::Value =
-            serde_json::from_str(&s.get_home(Parameters(GetHomeParams::default()))).unwrap();
+            serde_json::from_str(&s.get_home(Parameters(GetHomeParams::default())).unwrap()).unwrap();
         assert!(
             home.get("walls")
                 .is_none_or(|w| w.as_array().unwrap().is_empty()),
@@ -2340,7 +3419,7 @@ mod tests {
         }))
         .unwrap();
         let home: serde_json::Value =
-            serde_json::from_str(&s.get_home(Parameters(GetHomeParams::default()))).unwrap();
+            serde_json::from_str(&s.get_home(Parameters(GetHomeParams::default())).unwrap()).unwrap();
         assert_eq!(home["walls"].as_array().unwrap().len(), 4, "{home}");
 
         let upper = rows[1][0].as_str().unwrap().to_owned();
@@ -2399,6 +3478,7 @@ mod tests {
         s.update(Parameters(UpdateParams {
             items: specs,
             v: None,
+            dry: None,
         }))
         .unwrap();
         let doc = s.document.read();
@@ -2423,9 +3503,10 @@ mod tests {
         s.update(Parameters(UpdateParams {
             items: vec![spec],
             v: None,
+            dry: None,
         }))
         .unwrap();
-        let home = s.get_home(Parameters(GetHomeParams::default()));
+        let home = s.get_home(Parameters(GetHomeParams::default())).unwrap();
         assert!(
             home.contains(r#""bold":true"#) && home.contains(r#""align":"left""#),
             "{home}"
@@ -2485,7 +3566,7 @@ mod tests {
         let lines: CreateParams =
             serde_json::from_str(r#"{"polylines":[{"pts":[[10,10],[110,10]]}]}"#).unwrap();
         s.create(Parameters(lines)).unwrap();
-        let home = s.get_home(Parameters(GetHomeParams::default()));
+        let home = s.get_home(Parameters(GetHomeParams::default())).unwrap();
         assert!(home.contains(r#""layer":"electrical""#), "{home}");
         let q = s
             .disciplines(Parameters(DisciplineParams {
@@ -2524,10 +3605,13 @@ mod tests {
         s.update(Parameters(UpdateParams {
             items: vec![spec],
             v: None,
+            dry: None,
         }))
         .unwrap();
         let reply = s
             .annotations(Parameters(AnnotationParams {
+                stale: None,
+                q: None,
                 dims: Some(true),
                 refs: Some(true),
                 details: Some(true),
@@ -2880,6 +3964,7 @@ mod tests {
         s.update(Parameters(UpdateParams {
             items: vec![spec],
             v: None,
+            dry: None,
         }))
         .unwrap();
         assert_eq!(s.document.read().home().walls[0].height_at_end, Some(300.0));
@@ -3121,6 +4206,7 @@ mod tests {
         s.update(Parameters(UpdateParams {
             items: vec![spec],
             v: None,
+            dry: None,
         }))
         .unwrap();
         let doc = s.document.read();
@@ -3307,9 +4393,13 @@ mod tests {
         .unwrap();
         s.create(Parameters(params)).unwrap();
         let report: serde_json::Value =
-            serde_json::from_str(&s.check_layout(Parameters(CheckParams {
-                areas: Some([("sala".to_owned(), 10.0), ("Cozinha".to_owned(), 8.0)].into()),
-            })))
+            serde_json::from_str(
+                &s.check_layout(Parameters(CheckParams {
+                    areas: Some([("sala".to_owned(), 10.0), ("Cozinha".to_owned(), 8.0)].into()),
+                    level: None,
+                }))
+                .unwrap(),
+            )
             .unwrap();
         let rows = report["areas"].as_array().unwrap();
         let cozinha = rows.iter().find(|r| r[0] == "Cozinha").unwrap();
@@ -3322,7 +4412,8 @@ mod tests {
         assert!((sala[2].as_f64().unwrap() - 10.97).abs() < 0.01, "{sala}");
         assert!((sala[3].as_f64().unwrap() - 9.7).abs() < 0.1, "{sala}");
         let plain: serde_json::Value =
-            serde_json::from_str(&s.check_layout(Parameters(CheckParams::default()))).unwrap();
+            serde_json::from_str(&s.check_layout(Parameters(CheckParams::default())).unwrap())
+                .unwrap();
         assert!(plain.get("areas").is_none());
 
         // Overlaying a background renders without touching the project.
@@ -3627,7 +4718,7 @@ mod tests {
             (covered - (148.0 - 7.5) - (315.0 - 212.0)).abs() < 0.3,
             "{covered} {spans:?}"
         );
-        let issues = s.check_layout(Parameters(CheckParams::default()));
+        let issues = s.check_layout(Parameters(CheckParams::default())).unwrap();
         assert!(!issues.contains("overlap"), "{issues}");
 
         // Wall cabinets: split by the window, a gap for the hood, one over the fridge.
@@ -3692,7 +4783,7 @@ mod tests {
             (corner[2].as_f64().unwrap() - 7.5).abs() < 0.1,
             "{adjusted}"
         );
-        let issues = s.check_layout(Parameters(CheckParams::default()));
+        let issues = s.check_layout(Parameters(CheckParams::default())).unwrap();
         assert!(!issues.contains("overlap"), "{issues}");
         s.document.write().undo().unwrap();
         // Planning w4 again with nothing new leaves w1 alone.

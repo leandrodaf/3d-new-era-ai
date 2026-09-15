@@ -24,6 +24,7 @@ mod joins;
 mod levels;
 pub mod lighting;
 mod materials;
+pub mod measure;
 pub mod ops;
 mod project;
 mod roof_fit;
@@ -32,7 +33,7 @@ mod units;
 pub mod vfs;
 mod wallrun;
 
-pub use analysis::{Issue, check_layout, door_swing};
+pub use analysis::{Issue, Overlap, Storeys, check_layout, check_layout_in, door_swing};
 pub use annotations::{
     PlanAnnotations, ReferenceItem, RoomReference, auto_dimensions, room_references,
 };
@@ -47,7 +48,7 @@ pub use furniture::{
     Furniture, Light, LightSource, ModelMaterial, ModelTransform, Opening, OpeningKind, PieceInfo,
     PieceLocks, Sash, SolidShape, WallCut, WallCutOut, align_to_wall, cut_outline, wall_cuts,
 };
-pub use geometry::{Point2, polygon_area, polygon_centroid, signed_area, triangulate};
+pub use geometry::{Point2, polygon_area, polygon_centroid, signed_area, to_polygon, triangulate};
 pub use home::Home;
 pub use ids::{
     DimensionId, ElementId, FurnitureId, LabelId, LevelId, ParseIdError, PolylineId, RoomId, WallId,
@@ -56,6 +57,10 @@ pub use joins::{JOIN_TOLERANCE, wall_outlines};
 pub use levels::{FloorShape, floor_shapes, stair_holes};
 pub use lighting::{LampType, RoomLighting};
 pub use materials::{Material, Pattern, WALL_TYPES, WallFamily, WallType, wall_type};
+pub use measure::{
+    Axis, Clearance, Dir, Obstacle, Solid, Span, Stale, clearance, element_bounds, facing,
+    free_span, obstacles, plan_bounds, stale_annotations, wall_bounds,
+};
 pub use project::{
     BundledFiles, PROJECT_EXTENSION, Project, ProjectError, cache_dir, from_project_json,
     open_project, project_from_bytes, resolve_asset, resolve_project_path, save_project,

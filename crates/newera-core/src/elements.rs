@@ -715,6 +715,27 @@ impl Default for Level {
 impl Level {
     pub const DEFAULT_HEIGHT: f64 = 250.0;
     pub const DEFAULT_FLOOR_THICKNESS: f64 = 12.0;
+    /// Property marking a storey as a tracing layer rather than a build.
+    pub const REFERENCE_KEY: &'static str = "reference";
+
+    /// Whether this storey is a reference layer: a scanned plan, an earlier
+    /// version, a tracing of the original. Its content is drawing, not
+    /// building, so layout checks, ergonomics and lint leave it alone even
+    /// when it shares an elevation with the storey being designed.
+    pub fn is_reference(&self) -> bool {
+        self.properties
+            .get(Self::REFERENCE_KEY)
+            .is_some_and(|v| v == "true")
+    }
+
+    pub fn set_reference(&mut self, reference: bool) {
+        if reference {
+            self.properties
+                .insert(Self::REFERENCE_KEY.to_owned(), "true".to_owned());
+        } else {
+            self.properties.remove(Self::REFERENCE_KEY);
+        }
+    }
 
     fn default_floor_thickness() -> f64 {
         Self::DEFAULT_FLOOR_THICKNESS

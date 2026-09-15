@@ -256,6 +256,63 @@ impl Home {
         self.resolve_level(element_level) == self.resolve_level(level)
     }
 
+    /// The piece with this id, looking inside groups.
+    ///
+    /// [`Home::piece`] only sees the tops of the furniture tree, but layout
+    /// checks, measurements and joinery all report the leaf that is actually
+    /// in the way — so anything resolving an id from a report needs this.
+    pub fn find_piece(&self, id: FurnitureId) -> Option<&Furniture> {
+        self.furniture
+            .iter()
+            .find_map(|top| top.flatten().into_iter().find(|f| f.id == id))
+    }
+
+    /// The storey a piece belongs to, found through its group.
+    pub fn piece_level(&self, id: FurnitureId) -> Option<LevelId> {
+        let top = self
+            .furniture
+            .iter()
+            .find(|top| top.flatten().iter().any(|f| f.id == id))?;
+        self.resolve_level(top.level)
+    }
+
+    /// Whether a level is a reference layer (a tracing, an earlier version).
+    pub fn is_reference_level(&self, level: Option<LevelId>) -> bool {
+        self.resolve_level(level)
+            .and_then(|id| self.level(id))
+            .is_some_and(crate::Level::is_reference)
+    }
+
+    /// Storeys that are being designed: everything but the reference layers.
+    pub fn design_levels(&self) -> Vec<LevelId> {
+        self.levels
+            .iter()
+            .filter(|l| !l.is_reference())
+            .map(|l| l.id)
+            .collect()
+    }
+
+    /// Pairs of non-reference storeys whose floor-to-ceiling ranges overlap.
+    ///
+    /// Two storeys at the same elevation are almost always layers — an
+    /// imported plan, a previous layout — and every check that mixes them
+    /// reports pieces "colliding" with their own older copies. Reads warn
+    /// about this so nobody spends a session chasing it.
+    pub fn stacked_levels(&self) -> Vec<(LevelId, LevelId)> {
+        let mut out = Vec::new();
+        let levels: Vec<&Level> = self.levels.iter().filter(|l| !l.is_reference()).collect();
+        for (i, a) in levels.iter().enumerate() {
+            for b in levels.iter().skip(i + 1) {
+                let (a0, a1) = (a.elevation, a.elevation + a.height);
+                let (b0, b1) = (b.elevation, b.elevation + b.height);
+                if a0 < b1 - 1.0 && b0 < a1 - 1.0 {
+                    out.push((a.id, b.id));
+                }
+            }
+        }
+        out
+    }
+
     /// A copy of the home keeping only the elements of one level (and the
     /// home-wide settings). Geometry that must not mix storeys — wall joins,
     /// room detection, plan drawing, layout checks — works on such views.

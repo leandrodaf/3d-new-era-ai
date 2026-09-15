@@ -599,6 +599,36 @@ impl Furniture {
         self.catalog.starts_with("stairs")
     }
 
+    /// Something people sit on, which belongs pushed under its table.
+    ///
+    /// A seat overlapping the table it serves is how a plan is drawn, not a
+    /// clash — and the two are impossible to tell apart from boxes alone,
+    /// so this is the one place a layout check reads a name.
+    pub fn is_seat(&self) -> bool {
+        const CATALOGS: [&str; 6] = [
+            "chair",
+            "stool",
+            "office-chair",
+            "armchair",
+            "bench",
+            "dining-set",
+        ];
+        if CATALOGS.iter().any(|c| self.catalog.starts_with(c)) {
+            return true;
+        }
+        let name = self.name.to_lowercase();
+        ["cadeira", "banqueta", "poltrona", "banco ", "chair", "stool"]
+            .iter()
+            .any(|w| name.contains(w))
+    }
+
+    /// A worktop or table someone sits or works at: its top is at that
+    /// height and it stands on the floor.
+    pub fn is_table_height(&self) -> bool {
+        let (lo, hi) = self.height_range();
+        lo <= 5.0 && (65.0..=115.0).contains(&hi)
+    }
+
     pub fn is_opening(&self) -> bool {
         self.opening.is_some()
     }

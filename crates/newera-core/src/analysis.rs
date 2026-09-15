@@ -1,24 +1,107 @@
 //! Layout checks that make a plan usable, not just drawable: pieces that
 //! overlap, pieces stuck in walls and doors that cannot open.
+//!
+//! An overlap on its own says almost nothing — a cooktop set into its
+//! countertop and a sink eating into the dishwasher next to it look the same
+//! from a pair of ids. So every overlap comes classified ([`Overlap`]) and
+//! measured ([`Issue::extent`]), and pairs that only "collide" because they
+//! live on two storeys drawn at the same elevation are named for what they
+//! are instead of being reported as real problems.
 
-use geo::{Area, BooleanOps, Coord, LineString, Polygon};
+use geo::{Area, BooleanOps, BoundingRect, Polygon};
 
 use crate::furniture::Furniture;
-use crate::geometry::Point2;
+use crate::geometry::{Point2, to_polygon};
 use crate::home::Home;
-use crate::ids::{FurnitureId, WallId};
+use crate::ids::{FurnitureId, LevelId, WallId};
+
+/// What an overlap between two pieces really is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Overlap {
+    /// Two pieces fight for the same space: a real defect.
+    Collision,
+    /// One is built into, resting on or tucked under the other — a cooktop in
+    /// its countertop, a chair under a table, a face panel on a drawer front.
+    Nesting,
+    /// The pieces are on different storeys; they never meet in the building.
+    CrossLevel,
+}
+
+impl Overlap {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Collision => "collision",
+            Self::Nesting => "nesting",
+            Self::CrossLevel => "cross_level",
+        }
+    }
+
+    /// Only a collision needs fixing.
+    pub fn is_defect(self) -> bool {
+        self == Self::Collision
+    }
+}
+
+/// Which storeys a check looks at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Storeys {
+    /// The storey shown in the editor.
+    #[default]
+    Active,
+    /// One named storey.
+    One(LevelId),
+    /// Every storey that is not a reference layer, with cross-storey pairs
+    /// marked [`Overlap::CrossLevel`].
+    All,
+}
 
 /// Something worth fixing in a layout.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Issue {
-    /// Two pieces occupy the same space (same floor area and height range).
-    Overlap(FurnitureId, FurnitureId),
+    /// Two pieces occupy the same space, classified and measured.
+    Overlap {
+        a: FurnitureId,
+        b: FurnitureId,
+        kind: Overlap,
+        /// Size of the shared space, `[x, y, z]` cm.
+        extent: [f64; 3],
+    },
+    /// A cabinet, a fridge or a wardrobe whose front is against a solid:
+    /// it cannot be opened, and no other check notices.
+    Blocked {
+        piece: FurnitureId,
+        /// What the front runs into.
+        against: crate::ids::ElementId,
+        /// Free centimeters in front of it.
+        cm: f64,
+    },
     /// A piece that is not a door or window goes through a wall.
     InWall(FurnitureId, WallId),
     /// A piece sits where a door leaf swings.
     BlocksDoor { door: FurnitureId, by: FurnitureId },
     /// A piece is outside every room (only reported when rooms exist).
     OutsideRooms(FurnitureId),
+}
+
+impl Issue {
+    /// Ids the issue is about, in report order.
+    pub fn ids(&self) -> Vec<crate::ids::ElementId> {
+        match self {
+            Self::Overlap { a, b, .. } => vec![(*a).into(), (*b).into()],
+            Self::Blocked { piece, against, .. } => vec![(*piece).into(), *against],
+            Self::InWall(f, w) => vec![(*f).into(), (*w).into()],
+            Self::BlocksDoor { door, by } => vec![(*door).into(), (*by).into()],
+            Self::OutsideRooms(f) => vec![(*f).into()],
+        }
+    }
+
+    /// Whether this is a real defect rather than a classified non-problem.
+    pub fn is_defect(&self) -> bool {
+        match self {
+            Self::Overlap { kind, .. } => kind.is_defect(),
+            _ => true,
+        }
+    }
 }
 
 /// Area below which a contact is ignored (touching pieces are fine), cm².
@@ -29,11 +112,7 @@ const WALL_TOLERANCE: f64 = 2.0;
 const FLAT: f64 = 2.0;
 
 fn polygon(points: &[Point2]) -> Polygon<f64> {
-    let mut coords: Vec<Coord<f64>> = points.iter().map(|p| Coord { x: p.x, y: p.y }).collect();
-    if let Some(first) = coords.first().copied() {
-        coords.push(first);
-    }
-    Polygon::new(LineString::new(coords), vec![])
+    to_polygon(points)
 }
 
 fn heights_overlap(a: &Furniture, b: &Furniture) -> bool {
@@ -88,13 +167,32 @@ pub fn door_swing(door: &Furniture) -> Option<Vec<Point2>> {
     Some(local.into_iter().map(|p| door.to_plan(p)).collect())
 }
 
+/// Layout problems on the storey the editor is showing.
+///
+/// For a plan drawn as stacked layers, or to see every storey at once, use
+/// [`check_layout_in`].
 pub fn check_layout(home: &Home) -> Vec<Issue> {
+    check_layout_in(home, Storeys::Active)
+}
+
+/// Layout problems on the storeys `scope` selects.
+pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
     let mut issues = Vec::new();
     // Pieces inside groups are checked one by one; pieces of the same group
     // (roof slopes, a table and its chairs) are meant to touch.
     let mut pieces: Vec<&Furniture> = Vec::new();
     let mut groups: Vec<usize> = Vec::new();
+    let mut levels: Vec<Option<LevelId>> = Vec::new();
+    let wanted = |level: Option<LevelId>| match scope {
+        Storeys::Active => home.on_level(level, home.current_level()),
+        Storeys::One(id) => home.on_level(level, Some(id)),
+        // Reference layers are drawing, not building: never checked.
+        Storeys::All => !home.is_reference_level(level),
+    };
     for (g, top) in home.furniture.iter().enumerate() {
+        if !wanted(top.level) {
+            continue;
+        }
         for leaf in top.visible_leaves() {
             // Items embedded in joinery (a cooktop in its countertop) sit in
             // their host's cutout or niche by design.
@@ -103,6 +201,7 @@ pub fn check_layout(home: &Home) -> Vec<Issue> {
             }
             pieces.push(leaf);
             groups.push(g);
+            levels.push(home.resolve_level(top.level));
         }
     }
     let footprints: Vec<Polygon<f64>> = pieces
@@ -115,10 +214,13 @@ pub fn check_layout(home: &Home) -> Vec<Issue> {
             continue;
         }
         for (j, b) in pieces.iter().enumerate().skip(i + 1) {
+            let cross_level = levels[i] != levels[j];
             if b.is_opening()
                 || b.height <= FLAT
                 || groups[i] == groups[j]
-                || !heights_overlap(a, b)
+                // Two storeys are checked against each other only for their
+                // heights in the building, not for their drawn elevations.
+                || (!cross_level && !heights_overlap(a, b))
             {
                 continue;
             }
@@ -129,26 +231,41 @@ pub fn check_layout(home: &Home) -> Vec<Issue> {
                 continue;
             }
             let shared = footprints[i].intersection(&footprints[j]);
-            if shared.unsigned_area() <= MIN_OVERLAP {
+            let area = shared.unsigned_area();
+            if area <= MIN_OVERLAP {
                 continue;
             }
             // Tilted pieces only collide if they are at the same height there.
-            let meet = shared.iter().next().and_then(centroid).is_none_or(|at| {
-                a.underside_at(at) < b.top_at(at) && b.underside_at(at) < a.top_at(at)
-            });
-            if meet {
-                issues.push(Issue::Overlap(a.id, b.id));
+            let meet = cross_level
+                || shared.iter().next().and_then(centroid).is_none_or(|at| {
+                    a.underside_at(at) < b.top_at(at) && b.underside_at(at) < a.top_at(at)
+                });
+            if !meet {
+                continue;
             }
+            let extent = extent_of(&shared, a, b);
+            let kind = if cross_level {
+                Overlap::CrossLevel
+            } else {
+                classify(a, b, area, extent, &footprints[i], &footprints[j])
+            };
+            issues.push(Issue::Overlap {
+                a: a.id,
+                b: b.id,
+                kind,
+                extent,
+            });
         }
     }
 
-    let outlines = home.wall_outlines();
+    let outlines = outlines_by_level(home);
     for (i, piece) in pieces.iter().enumerate() {
         if piece.is_opening() {
             continue;
         }
         for (wall, outline) in home.walls.iter().zip(&outlines) {
-            if outline.len() < 3 {
+            // Only walls of the piece's own storey can have it inside them.
+            if outline.len() < 3 || home.resolve_level(wall.level) != levels[i] {
                 continue;
             }
             let shared = footprints[i].intersection(&polygon(outline));
@@ -181,14 +298,19 @@ pub fn check_layout(home: &Home) -> Vec<Issue> {
         }
     }
 
-    for door in pieces.iter().filter(|f| f.is_opening()) {
+    for (d, door) in pieces.iter().enumerate() {
+        if !door.is_opening() {
+            continue;
+        }
         let Some(swing) = door_swing(door) else {
             continue;
         };
         let swing = polygon(&swing);
         for (i, piece) in pieces.iter().enumerate() {
             // Below the door's sill (footings under a raised floor) is out of its way.
+            // A leaf only ever swings into its own storey.
             if piece.is_opening()
+                || levels[i] != levels[d]
                 || piece.height <= FLAT
                 || piece.height_range().1 <= door.elevation + 1.0
             {
@@ -209,16 +331,182 @@ pub fn check_layout(home: &Home) -> Vec<Issue> {
         }
     }
 
+    // A cabinet turned the wrong way is a modelling slip that survives every
+    // other check: the boxes do not overlap, nothing is in a wall, and the
+    // piece is simply impossible to open. `angle` alone does not show it.
+    // The solids of a storey are gathered once and measured against many
+    // times: rebuilding them per cabinet would walk the whole plan again for
+    // each one, and this runs on every read of the issue count.
+    let mut solids: Vec<(Option<LevelId>, Vec<crate::measure::Obstacle>)> = Vec::new();
+    for (i, piece) in pieces.iter().enumerate() {
+        if !opens_at_the_front(piece) {
+            continue;
+        }
+        let Some(front) = crate::measure::Dir::parse("front", Some(piece)) else {
+            continue;
+        };
+        if !solids.iter().any(|(level, _)| *level == levels[i]) {
+            let view = home.level_view(levels[i]);
+            solids.push((levels[i], crate::measure::obstacles(&view, &|_| false)));
+        }
+        let here = solids
+            .iter()
+            .find(|(level, _)| *level == levels[i])
+            .map(|(_, list)| list.as_slice())
+            .unwrap_or_default();
+        let clear = crate::measure::clearance_against(here, piece, front, OPENING_ROOM);
+        if clear.cm < OPENING_ROOM
+            && let Some(against) = clear.against
+        {
+            issues.push(Issue::Blocked {
+                piece: piece.id,
+                against: against.id(),
+                cm: (clear.cm * 10.0).round() / 10.0,
+            });
+        }
+    }
+
     if !home.rooms.is_empty() {
-        let rooms: Vec<Polygon<f64>> = home.rooms.iter().map(|r| polygon(&r.points)).collect();
-        for piece in pieces.iter().filter(|f| !f.is_opening()) {
+        let rooms: Vec<(Option<LevelId>, Polygon<f64>)> = home
+            .rooms
+            .iter()
+            .map(|r| (home.resolve_level(r.level), polygon(&r.points)))
+            .collect();
+        for (i, piece) in pieces.iter().enumerate() {
+            if piece.is_opening() {
+                continue;
+            }
             let center = geo::Point::new(piece.position.x, piece.position.y);
-            if !rooms.iter().any(|r| geo::Contains::contains(r, &center)) {
+            let covered = rooms
+                .iter()
+                .any(|(level, r)| *level == levels[i] && geo::Contains::contains(r, &center));
+            // A storey with no rooms drawn yet has nothing to be outside of.
+            let has_rooms = rooms.iter().any(|(level, _)| *level == levels[i]);
+            if has_rooms && !covered {
                 issues.push(Issue::OutsideRooms(piece.id));
             }
         }
     }
     issues
+}
+
+/// Room a door or a drawer needs in front of it before it is unusable, cm.
+const OPENING_ROOM: f64 = 5.0;
+
+/// Whether this piece is opened from the front — a cabinet, a fridge, a
+/// wardrobe, an oven — so that a solid against its face makes it useless.
+///
+/// Pieces that are simply approached from the front (a bed, a sofa, a table)
+/// are left out: they lose comfort, not function, and ergonomics already
+/// says so.
+fn opens_at_the_front(piece: &Furniture) -> bool {
+    const CATALOGS: [&str; 9] = [
+        "base-cabinet",
+        "wall-cabinet",
+        "tall-cabinet",
+        "wardrobe",
+        "fridge",
+        "dishwasher",
+        "washer",
+        "oven",
+        "cabinet",
+    ];
+    if piece.is_opening() || piece.height <= FLAT {
+        return false;
+    }
+    CATALOGS.iter().any(|c| piece.catalog.contains(c))
+}
+
+/// Wall outlines with corners joined **within each storey**.
+///
+/// [`Home::wall_outlines`] knows nothing about levels, so in a plan drawn as
+/// stacked layers it joins a new wall to the traced copy underneath it and
+/// the resulting outline covers ground neither wall does. Joining one storey
+/// at a time keeps every outline honest; the result stays in `home.walls`
+/// order so callers can zip it.
+fn outlines_by_level(home: &Home) -> Vec<Vec<Point2>> {
+    let mut levels: Vec<Option<LevelId>> = Vec::new();
+    for wall in &home.walls {
+        let level = home.resolve_level(wall.level);
+        if !levels.contains(&level) {
+            levels.push(level);
+        }
+    }
+    if levels.len() < 2 {
+        return home.wall_outlines();
+    }
+    let mut out = vec![Vec::new(); home.walls.len()];
+    for level in levels {
+        let view = home.level_view(level);
+        for (wall, outline) in view.walls.iter().zip(view.wall_outlines()) {
+            if let Some(at) = home.walls.iter().position(|w| w.id == wall.id) {
+                out[at] = outline;
+            }
+        }
+    }
+    out
+}
+
+/// Size of what two pieces share, `[x, y, z]` cm.
+fn extent_of(shared: &geo::MultiPolygon<f64>, a: &Furniture, b: &Furniture) -> [f64; 3] {
+    let plan = shared.bounding_rect().map_or([0.0, 0.0], |r| {
+        [r.max().x - r.min().x, r.max().y - r.min().y]
+    });
+    let ((a0, a1), (b0, b1)) = (a.height_range(), b.height_range());
+    let z = (a1.min(b1) - a0.max(b0)).max(0.0);
+    [plan[0], plan[1], z].map(|v| (v * 10.0).round() / 10.0)
+}
+
+/// Is this overlap a defect, or is one piece simply built into the other?
+///
+/// The rules are about shape and size only — no catalog names, no guessing
+/// what a piece is called — so they hold for imported models and joinery
+/// alike:
+///
+/// * a face panel, a back or a glass pane (3 cm or thinner) is part of what
+///   it is stuck to;
+/// * a lid over a box — a countertop on its cabinets — rests on it;
+/// * a piece mostly inside a bigger one is built into it (an oven in its
+///   tower, a cooktop in its worktop, a dishwasher under the counter);
+/// * a couple of centimeters of drawing slack (a chair pushed under a table)
+///   is how plans are drawn, not a clash.
+fn classify(
+    a: &Furniture,
+    b: &Furniture,
+    shared_area: f64,
+    extent: [f64; 3],
+    fa: &Polygon<f64>,
+    fb: &Polygon<f64>,
+) -> Overlap {
+    let thin = |f: &Furniture| f.width.min(f.depth) <= 3.0;
+    if thin(a) || thin(b) {
+        return Overlap::Nesting;
+    }
+    let (area_a, area_b) = (fa.unsigned_area(), fb.unsigned_area());
+    // A lid resting on a box: flat, and sitting at the other's top.
+    let lid_on = |lid: &Furniture, box_: &Furniture, lid_area: f64, box_area: f64| {
+        let (lo, _) = lid.height_range();
+        lid.height <= 8.0
+            && (lo - box_.height_range().1).abs() <= 6.0
+            && lid_area >= 0.5 * box_area
+    };
+    if lid_on(a, b, area_a, area_b) || lid_on(b, a, area_b, area_a) {
+        return Overlap::Nesting;
+    }
+    // Mostly inside the other: built in.
+    if shared_area >= 0.6 * area_a.min(area_b) {
+        return Overlap::Nesting;
+    }
+    // A seat pushed under the table it serves.
+    let tucked = |seat: &Furniture, table: &Furniture| seat.is_seat() && table.is_table_height();
+    if tucked(a, b) || tucked(b, a) {
+        return Overlap::Nesting;
+    }
+    // Touching with drawing slack, or tucked under.
+    if extent[0].min(extent[1]) <= 2.0 || extent[2] <= 1.0 {
+        return Overlap::Nesting;
+    }
+    Overlap::Collision
 }
 
 #[cfg(test)]
@@ -284,9 +572,136 @@ mod tests {
         let issues = check_layout(&home);
         assert_eq!(
             issues,
-            vec![Issue::Overlap(FurnitureId(10), FurnitureId(11))],
+            vec![Issue::Overlap {
+                a: FurnitureId(10),
+                b: FurnitureId(11),
+                kind: Overlap::Collision,
+                extent: [50.0, 100.0, 75.0],
+            }],
             "{issues:?}"
         );
+    }
+
+    #[test]
+    fn a_cabinet_turned_against_a_wall_is_reported_as_unusable() {
+        let mut home = room_home();
+        // A base cabinet against the top wall, opening into the room.
+        let mut right_way = piece(60, (200.0, 40.0), (80.0, 60.0, 90.0));
+        right_way.catalog = "base-cabinet".into();
+        right_way.name = "Gabinete".into();
+        // The same cabinet turned a half turn: its doors face the wall.
+        let mut wrong_way = piece(61, (350.0, 40.0), (80.0, 60.0, 90.0));
+        wrong_way.catalog = "base-cabinet".into();
+        wrong_way.name = "Gabinete virado".into();
+        wrong_way.angle = 180.0;
+        home.furniture.extend([right_way, wrong_way]);
+
+        let blocked: Vec<FurnitureId> = check_layout(&home)
+            .into_iter()
+            .filter_map(|i| match i {
+                Issue::Blocked { piece, .. } => Some(piece),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(blocked, vec![FurnitureId(61)], "{blocked:?}");
+    }
+
+    #[test]
+    fn built_in_pieces_and_layers_are_named_instead_of_reported_as_clashes() {
+        use crate::elements::Level;
+        use crate::ids::LevelId;
+
+        let mut home = room_home();
+        // A worktop resting on its cabinet.
+        let mut cabinet = piece(40, (100.0, 200.0), (120.0, 60.0, 84.0));
+        cabinet.name = "Gabinete".into();
+        let mut top = piece(41, (100.0, 200.0), (124.0, 62.0, 4.0));
+        top.elevation = 84.0;
+        // A cooktop set into it.
+        let mut cooktop = piece(42, (100.0, 200.0), (58.0, 50.0, 10.0));
+        cooktop.elevation = 82.0;
+        // A chair pushed 1 cm under a table.
+        let mut table = piece(43, (300.0, 200.0), (140.0, 80.0, 75.0));
+        table.elevation = 0.0;
+        let mut chair = piece(44, (300.0, 240.5), (45.0, 45.0, 90.0));
+        chair.catalog = "chair".into();
+        chair.name = "Cadeira".into();
+        home.furniture
+            .extend([cabinet, top, cooktop, table.clone(), chair]);
+        let kinds: Vec<Overlap> = check_layout(&home)
+            .into_iter()
+            .filter_map(|i| match i {
+                Issue::Overlap { kind, .. } => Some(kind),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            !kinds.is_empty() && kinds.iter().all(|k| *k == Overlap::Nesting),
+            "{kinds:?} — built-in pieces are not clashes"
+        );
+
+        // But a worktop eating 5 cm into the dishwasher beside it is one.
+        let mut sink = piece(45, (410.0, 60.0), (70.0, 65.0, 35.7));
+        sink.name = "Pia centralizada".into();
+        sink.elevation = 72.0;
+        let mut dishwasher = piece(46, (469.5, 60.0), (59.8, 63.5, 84.5));
+        dishwasher.name = "Lava-louças".into();
+        home.furniture.extend([sink, dishwasher]);
+        let clash = check_layout(&home)
+            .into_iter()
+            .find(|i| matches!(i, Issue::Overlap { a, b, .. }
+                if *a == FurnitureId(45) && *b == FurnitureId(46)))
+            .expect("the sink invading the dishwasher is reported");
+        let Issue::Overlap { kind, extent, .. } = clash else {
+            unreachable!()
+        };
+        assert_eq!(kind, Overlap::Collision);
+        assert!((extent[0] - 5.4).abs() < 0.2, "{extent:?}");
+
+        // The same plan drawn twice, as two storeys at the same elevation.
+        let mut layered = Home::default();
+        layered.levels = vec![
+            Level {
+                id: LevelId(1),
+                name: "Planta reproduzida".into(),
+                elevation: 0.0,
+                height: 280.0,
+                ..Level::default()
+            },
+            Level {
+                id: LevelId(2),
+                name: "Novo layout".into(),
+                elevation: 0.0,
+                height: 280.0,
+                elevation_index: 1,
+                ..Level::default()
+            },
+        ];
+        let mut old_table = table.clone();
+        old_table.id = FurnitureId(50);
+        old_table.level = Some(LevelId(1));
+        let mut new_table = table;
+        new_table.id = FurnitureId(51);
+        new_table.level = Some(LevelId(2));
+        layered.furniture = vec![old_table, new_table];
+        let all = check_layout_in(&layered, Storeys::All);
+        assert_eq!(
+            all,
+            vec![Issue::Overlap {
+                a: FurnitureId(50),
+                b: FurnitureId(51),
+                kind: Overlap::CrossLevel,
+                extent: [140.0, 80.0, 75.0],
+            }],
+            "{all:?}"
+        );
+        assert!(all.iter().all(|i| !i.is_defect()));
+        // Only one storey at a time: nothing to report.
+        assert!(check_layout_in(&layered, Storeys::One(LevelId(2))).is_empty());
+        // Marking the traced plan as a reference drops it from `All` too.
+        layered.levels[0].set_reference(true);
+        assert!(check_layout_in(&layered, Storeys::All).is_empty());
+        assert_eq!(layered.stacked_levels(), Vec::new());
     }
 
     #[test]

@@ -80,6 +80,21 @@ pub fn signed_area(points: &[Point2]) -> f64 {
     twice_area / 2.0
 }
 
+/// A closed `geo` polygon from an open ring of plan points.
+///
+/// Every geometric check in the crate starts here, so the closing vertex is
+/// added in exactly one place.
+pub fn to_polygon(points: &[Point2]) -> geo::Polygon<f64> {
+    let mut coords: Vec<geo::Coord<f64>> = points
+        .iter()
+        .map(|p| geo::Coord { x: p.x, y: p.y })
+        .collect();
+    if let Some(first) = coords.first().copied() {
+        coords.push(first);
+    }
+    geo::Polygon::new(geo::LineString::new(coords), vec![])
+}
+
 /// Area of a simple polygon (always positive).
 pub fn polygon_area(points: &[Point2]) -> f64 {
     signed_area(points).abs()
