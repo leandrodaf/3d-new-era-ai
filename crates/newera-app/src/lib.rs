@@ -9,6 +9,7 @@ mod dialogs;
 mod ergonomics;
 mod files;
 mod i18n;
+mod jobs;
 mod panels;
 mod photo;
 #[cfg(test)]

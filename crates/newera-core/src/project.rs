@@ -31,6 +31,8 @@ pub enum ProjectError {
     Io(#[from] std::io::Error),
     #[error("invalid project bundle: {0}")]
     Zip(#[from] zip::result::ZipError),
+    #[error("{}", crate::progress::CANCELLED)]
+    Cancelled,
 }
 
 const BUNDLE_JSON: &str = "project.json";
@@ -343,6 +345,9 @@ fn deflated() -> zip::write::SimpleFileOptions {
 /// renamed where needed.
 pub fn save_project(doc: &Document, path: &Path) -> Result<(), ProjectError> {
     let files = bundle_files(doc);
+    // The bundle's own JSON counts as one part, then a part per file.
+    let parts = files.len() as u64 + 1;
+    crate::progress::step("Gravando o projeto", 0, parts);
     // Rewrite escaping paths to their bundle names in a copy.
     let mut copy = Document::default();
     let variants: Vec<(String, Home)> = doc
@@ -361,7 +366,15 @@ pub fn save_project(doc: &Document, path: &Path) -> Result<(), ProjectError> {
         let mut zip = zip::ZipWriter::new(std::io::BufWriter::new(file));
         zip.start_file(BUNDLE_JSON, deflated())?;
         std::io::Write::write_all(&mut zip, to_project_json(&copy).as_bytes())?;
-        for (source, name) in files {
+        for (done, (source, name)) in files.into_iter().enumerate() {
+            crate::progress::step("Guardando imagens e modelos", done as u64 + 1, parts);
+            if crate::progress::cancelled() {
+                // Nothing is renamed into place, so the saved file is
+                // whatever it was before this started.
+                drop(zip);
+                let _ = std::fs::remove_file(&tmp);
+                return Err(ProjectError::Cancelled);
+            }
             match crate::vfs::read(&source) {
                 Ok(bytes) => {
                     let options = if already_compressed(&name) {
@@ -420,6 +433,7 @@ pub fn project_from_bytes(bytes: &[u8]) -> Result<(Project, BundledFiles), Proje
 /// `cache`; the returned directory is where their assets live.
 pub fn open_project(path: &Path, cache: &Path) -> Result<(Project, Option<PathBuf>), ProjectError> {
     use std::hash::{Hash, Hasher};
+    crate::progress::step("Lendo o arquivo", 0, 0);
     let bytes = std::fs::read(path)?;
     if !bytes.starts_with(b"PK\x03\x04") {
         let json = String::from_utf8_lossy(&bytes);
@@ -439,7 +453,12 @@ pub fn open_project(path: &Path, cache: &Path) -> Result<(Project, Option<PathBu
     let mut json = String::new();
     std::io::Read::read_to_string(&mut archive.by_name(BUNDLE_JSON)?, &mut json)?;
     let project = from_project_json(&json)?;
+    let parts = archive.len() as u64;
     for i in 0..archive.len() {
+        crate::progress::step("Abrindo imagens e modelos", i as u64, parts);
+        if crate::progress::cancelled() {
+            return Err(ProjectError::Cancelled);
+        }
         let mut file = archive.by_index(i)?;
         let Some(name) = file.enclosed_name() else {
             continue;

@@ -43,6 +43,8 @@ pub enum ImportError {
     Stream(#[from] javaser::Error),
     #[error("the home entry does not hold a home")]
     NotAHome,
+    #[error("{}", newera_core::progress::CANCELLED)]
+    Cancelled,
 }
 
 /// Files extracted in memory, by name relative to the assets directory.
@@ -85,6 +87,7 @@ fn import(
     assets: &Path,
     in_memory: bool,
 ) -> Result<(Imported, BundledFiles), ImportError> {
+    newera_core::progress::step("Lendo o arquivo", 0, 0);
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec()))?;
     let mut data = Vec::new();
     archive
@@ -95,6 +98,7 @@ fn import(
             path: PathBuf::from("Home"),
             source,
         })?;
+    newera_core::progress::step("Lendo o projeto", 0, 0);
     let graph = Graph::parse(&data)?;
     let root = graph
         .roots
@@ -112,6 +116,9 @@ fn import(
         home: Home::default(),
     };
     importer.home(root);
+    if newera_core::progress::cancelled() {
+        return Err(ImportError::Cancelled);
+    }
     let mut home = importer.home;
     if let Some(name) = name {
         home.name = name;
@@ -433,6 +440,13 @@ impl<'g> Importer<'g> {
         if let Some(done) = self.extracted.get(&entry) {
             return done.clone();
         }
+        // Where the time of an import goes: one image or model at a time, and
+        // how many there are in total is only known once they are all out.
+        newera_core::progress::step(
+            "Extraindo imagens e modelos",
+            self.extracted.len() as u64 + 1,
+            0,
+        );
         let result = self.extract(&entry, kind);
         if let Err(err) = &result {
             self.warn(format!("cannot extract `{entry}`: {err}"));

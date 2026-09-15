@@ -15,6 +15,15 @@ pub(crate) fn is_english() -> bool {
 }
 
 /// The text in the current language.
+/// Translates a line that only exists at run time: what a background job says
+/// it is doing comes from the work itself, not from a literal in this crate.
+pub(crate) fn dynamic(pt: &str) -> String {
+    if !is_english() {
+        return pt.to_owned();
+    }
+    english(pt).map_or_else(|| pt.to_owned(), str::to_owned)
+}
+
 pub(crate) fn tr(pt: &'static str) -> &'static str {
     if !is_english() {
         return pt;
@@ -26,6 +35,27 @@ pub(crate) fn tr(pt: &'static str) -> &'static str {
 fn english(pt: &str) -> Option<&'static str> {
     Some(match pt {
         " · arco" => " · arc",
+        "A tarefa termina sozinha em segundo plano; o resultado é descartado." => {
+            "The task finishes on its own in the background; its result is thrown away."
+        }
+        "Abrindo imagens e modelos" => "Opening images and models",
+        "Abrindo projeto" => "Opening project",
+        "Desenhando a planta" => "Drawing the plan",
+        "Exportando" => "Exporting",
+        "Extraindo imagens e modelos" => "Extracting images and models",
+        "Forçar e encerrar a espera" => "Force it and stop waiting",
+        "Gravando o projeto" => "Writing the project",
+        "Guardando imagens e modelos" => "Storing images and models",
+        "Importando modelo" => "Importing model",
+        "Lendo o arquivo" => "Reading the file",
+        "Lendo o projeto" => "Reading the project",
+        "Montando o modelo 3D" => "Building the 3D model",
+        "Parando…" => "Stopping…",
+        "Salvando projeto" => "Saving project",
+        "Trabalhando…" => "Working…",
+        "⚠ Espera encerrada — a tarefa termina em segundo plano." => {
+            "⚠ Stopped waiting — the task finishes in the background."
+        }
         "Ajustar ao telhado" => "Fit to the roof",
         "Código de obras" => "Building code",
         "Embutir peça no móvel selecionado" => "Embed the piece in the selected joinery",

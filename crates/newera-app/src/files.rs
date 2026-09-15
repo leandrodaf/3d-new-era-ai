@@ -18,6 +18,16 @@ pub(crate) struct Picked {
     pub(crate) bytes: Vec<u8>,
 }
 
+/// Asks where to save `name`. The bytes come later, from work that can take
+/// its time: the dialog belongs to the window's thread, the writing does not.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn pick_save(filter: &str, ext: &str, name: &str) -> Option<std::path::PathBuf> {
+    rfd::FileDialog::new()
+        .add_filter(filter, &[ext])
+        .set_file_name(name)
+        .save_file()
+}
+
 /// Asks where to save `name` (desktop) or downloads it (web), then writes the
 /// bytes made by `make`. Returns where it went, `None` when cancelled.
 ///

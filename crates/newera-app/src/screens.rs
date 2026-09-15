@@ -298,3 +298,30 @@ fn references() {
     newera_core::ops::translate(&mut shared.write(), &[id.into()], 120.0, 0.0, true).unwrap();
     render("references-moved", shared, |app| app.plan.request_fit());
 }
+
+#[test]
+#[ignore = "visual review; needs a GPU"]
+fn progress_window() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let mut doc = Document::default();
+    house(&mut doc, 700.0);
+    let hold = Arc::new(AtomicBool::new(true));
+    let waiting = Arc::clone(&hold);
+    render("progress", SharedDocument::new(doc), move |app| {
+        crate::jobs::start(
+            app,
+            "Abrindo projeto",
+            "apartamento-eleva.newera".to_owned(),
+            move || {
+                newera_core::progress::step("Extraindo imagens e modelos", 34, 120);
+                while waiting.load(Ordering::Relaxed) {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                Box::new(|_: &mut NewEraApp| {})
+            },
+        );
+    });
+    hold.store(false, Ordering::Relaxed);
+}

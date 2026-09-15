@@ -26,6 +26,7 @@ pub mod lighting;
 mod materials;
 pub mod measure;
 pub mod ops;
+pub mod progress;
 mod project;
 mod roof_fit;
 pub mod standards;

@@ -99,6 +99,10 @@ pub(crate) struct NewEraApp {
     /// A plugin running in the background: `(title, outcome slot)`.
     #[cfg(not(target_arch = "wasm32"))]
     plugin_job: Option<(String, PluginSlot)>,
+    /// Long work in the background, with its progress window.
+    pub(crate) job: Option<crate::jobs::Job>,
+    /// What to do once the save that is running finishes.
+    after_save: Option<Pending>,
     /// A browser file picker to open on the next frame.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pick_request: Option<crate::files::PickKind>,
@@ -156,6 +160,8 @@ impl NewEraApp {
             top_view_generation: 0,
             #[cfg(not(target_arch = "wasm32"))]
             plugin_job: None,
+            job: None,
+            after_save: None,
             pick_request: None,
             waited_frames: 0,
             catalog_query: String::new(),
@@ -202,6 +208,11 @@ impl NewEraApp {
 
     #[cfg_attr(target_arch = "wasm32", allow(clippy::needless_pass_by_value))]
     pub(crate) fn perform(&mut self, action: Pending) {
+        // Nothing starts on top of work already running: the document it would
+        // replace is the one being read or written.
+        if crate::jobs::busy(self) {
+            return;
+        }
         match action {
             Pending::New => {
                 let mut doc = self.document.write();
@@ -236,34 +247,46 @@ impl NewEraApp {
         }
     }
 
+    /// Opens a project or imports a home, reading it in the background: a home
+    /// with a hundred textures takes seconds, and the window has to answer.
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) fn open_path(&mut self, path: &Path) {
-        let loaded = newera_sh3d::open_file(&mut self.document.write(), path);
-        match loaded {
-            Ok(opened) => {
-                self.remember(path);
-                self.after_load();
-                let mut status = if opened.imported {
-                    format!(
-                        "Importado de {} — salve como projeto para manter tudo num arquivo",
-                        path.display()
-                    )
-                } else {
-                    format!("Aberto: {}", path.display())
-                };
-                if !opened.warnings.is_empty() {
-                    let _ = write!(status, " · {} aviso(s)", opened.warnings.len());
-                    for warning in &opened.warnings {
-                        tracing::warn!("import: {warning}");
-                    }
-                }
-                self.set_status(status);
-            }
-            Err(err) => self.set_status(format!(
-                "⚠ Não foi possível abrir {}: {err}",
-                path.display()
-            )),
+        if crate::jobs::busy(self) {
+            return;
         }
+        let path = path.to_path_buf();
+        let name = path
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        crate::jobs::start(self, crate::i18n::tr("Abrindo projeto"), name, move || {
+            let read = newera_sh3d::read_file(&path);
+            Box::new(move |app: &mut Self| match read {
+                Ok(loaded) => {
+                    let opened = loaded.into_document(&mut app.document.write());
+                    app.remember(&path);
+                    app.after_load();
+                    let mut status = if opened.imported {
+                        format!(
+                            "Importado de {} — salve como projeto para manter tudo num arquivo",
+                            path.display()
+                        )
+                    } else {
+                        format!("Aberto: {}", path.display())
+                    };
+                    if !opened.warnings.is_empty() {
+                        let _ = write!(status, " · {} aviso(s)", opened.warnings.len());
+                        for warning in &opened.warnings {
+                            tracing::warn!("import: {warning}");
+                        }
+                    }
+                    app.set_status(status);
+                }
+                Err(err) => app.set_status(format!(
+                    "⚠ Não foi possível abrir {}: {err}",
+                    path.display()
+                )),
+            })
+        });
     }
 
     /// The plan's top-view provider for the current look and project.
@@ -467,15 +490,29 @@ impl NewEraApp {
         self.scene.request_frame();
     }
 
-    /// Saves to the current path, or asks for one. Returns true when saved.
-    pub(crate) fn save(&mut self, save_as: bool) -> bool {
+    /// Saves to the current path, or asks for one. Returns whether saving
+    /// started — it finishes in the background, and `then` runs after it.
+    pub(crate) fn save_then(&mut self, save_as: bool, then: Option<Pending>) -> bool {
+        if crate::jobs::busy(self) {
+            return false;
+        }
+        self.after_save = then;
         #[cfg(target_arch = "wasm32")]
         {
             let _ = save_as;
-            self.save_web()
+            let saved = self.save_web();
+            if saved && let Some(action) = self.after_save.take() {
+                self.perform(action);
+            }
+            saved
         }
         #[cfg(not(target_arch = "wasm32"))]
         self.save_native(save_as)
+    }
+
+    /// Saves with nothing to do afterwards.
+    pub(crate) fn save(&mut self, save_as: bool) -> bool {
+        self.save_then(save_as, None)
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -515,23 +552,38 @@ impl NewEraApp {
                     .save_file()
             }
         };
-        let Some(mut path) = path else { return false };
+        let Some(mut path) = path else {
+            self.after_save = None;
+            return false;
+        };
         if path.extension().is_none() {
             path.set_extension(newera_core::PROJECT_EXTENSION);
         }
-        let saved = newera_core::save_project(&self.document.read(), &path);
-        match saved {
-            Ok(()) => {
-                self.document.write().mark_saved(&path);
-                self.remember(&path);
-                self.set_status(format!("Salvo em {}", path.display()));
-                true
-            }
-            Err(err) => {
-                self.set_status(format!("⚠ Não foi possível salvar: {err}"));
-                false
-            }
-        }
+        // The document is only read while it is written out, so the window
+        // keeps drawing from it; the progress window keeps it from being
+        // edited half way through the save.
+        let document = self.document.clone();
+        let name = path
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        crate::jobs::start(self, crate::i18n::tr("Salvando projeto"), name, move || {
+            let saved = newera_core::save_project(&document.read(), &path);
+            Box::new(move |app: &mut Self| match saved {
+                Ok(()) => {
+                    app.document.write().mark_saved(&path);
+                    app.remember(&path);
+                    app.set_status(format!("Salvo em {}", path.display()));
+                    if let Some(action) = app.after_save.take() {
+                        app.perform(action);
+                    }
+                }
+                Err(err) => {
+                    app.after_save = None;
+                    app.set_status(format!("⚠ Não foi possível salvar: {err}"));
+                }
+            })
+        });
+        true
     }
 
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
@@ -543,6 +595,9 @@ impl NewEraApp {
 
     /// Exports the 3D model of the storeys shown in the 3D view.
     fn export_3d(&mut self, ext: &str) {
+        if crate::jobs::busy(self) {
+            return;
+        }
         let name = self.document.read().home().name.clone();
         let (home, assets) = {
             let doc = self.document.read();
@@ -550,17 +605,24 @@ impl NewEraApp {
         };
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let Some(path) = rfd::FileDialog::new()
-                .add_filter(ext.to_uppercase(), &[ext])
-                .set_file_name(format!("{name}.{ext}"))
-                .save_file()
+            let Some(path) =
+                crate::files::pick_save(&ext.to_uppercase(), ext, &format!("{name}.{ext}"))
             else {
                 return;
             };
-            match newera_render::export_home(&home, &path, assets.as_deref()) {
-                Ok(()) => self.set_status(format!("Modelo 3D exportado para {}", path.display())),
-                Err(err) => self.set_status(format!("⚠ Falha ao exportar: {err}")),
-            }
+            let file = path
+                .file_name()
+                .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+            crate::jobs::start(self, crate::i18n::tr("Exportando"), file, move || {
+                newera_core::progress::step("Montando o modelo 3D", 0, 0);
+                let done = newera_render::export_home(&home, &path, assets.as_deref());
+                Box::new(move |app: &mut Self| match done {
+                    Ok(()) => {
+                        app.set_status(format!("Modelo 3D exportado para {}", path.display()));
+                    }
+                    Err(err) => app.set_status(format!("⚠ Falha ao exportar: {err}")),
+                })
+            });
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -579,6 +641,9 @@ impl NewEraApp {
     }
 
     fn export(&mut self, format: &str) {
+        if crate::jobs::busy(self) {
+            return;
+        }
         let name = self.document.read().home().name.clone();
         let svg = format == "svg";
         let pdf_scale = match format {
@@ -599,13 +664,14 @@ impl NewEraApp {
         );
         let assets = doc.asset_dir();
         drop(doc);
-        let make = || {
+        let title = name.clone();
+        let make = move || {
             if let Some(scale) = pdf_scale {
                 Ok(newera_draw::to_pdf(
                     &scene,
                     &newera_draw::PdfOptions {
                         scale,
-                        title: name.clone(),
+                        title: title.clone(),
                         ..newera_draw::PdfOptions::default()
                     },
                 ))
@@ -627,6 +693,27 @@ impl NewEraApp {
                 render_png(&scene, &options, &load).map_err(|e| e.to_string())
             }
         };
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(path) =
+                crate::files::pick_save(&ext.to_uppercase(), ext, &format!("{name}.{ext}"))
+            else {
+                return;
+            };
+            let file = path
+                .file_name()
+                .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+            crate::jobs::start(self, crate::i18n::tr("Exportando"), file, move || {
+                newera_core::progress::step("Desenhando a planta", 0, 0);
+                let done = make()
+                    .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+                Box::new(move |app: &mut Self| match done {
+                    Ok(()) => app.set_status(format!("Planta exportada para {}", path.display())),
+                    Err(err) => app.set_status(format!("⚠ Falha ao exportar: {err}")),
+                })
+            });
+        }
+        #[cfg(target_arch = "wasm32")]
         match crate::files::save_bytes(&ext.to_uppercase(), ext, &format!("{name}.{ext}"), make) {
             Ok(Some(path)) => self.set_status(format!("Planta exportada para {path}")),
             Ok(None) => {}
@@ -643,15 +730,41 @@ impl NewEraApp {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn import_model(&mut self) {
+        if crate::jobs::busy(self) {
+            return;
+        }
         let Some(path) = rfd::FileDialog::new()
             .add_filter(crate::i18n::tr("Modelos 3D"), &["obj", "gltf", "glb"])
             .pick_file()
         else {
             return;
         };
-        match newera_catalog::load_model(&path) {
+        let at = self.plan.view_center();
+        let file = path
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        crate::jobs::start(
+            self,
+            crate::i18n::tr("Importando modelo"),
+            file,
+            move || {
+                newera_core::progress::step("Lendo o arquivo", 0, 0);
+                let loaded = newera_catalog::load_model(&path);
+                Box::new(move |app: &mut Self| app.place_model(&path, at, loaded))
+            },
+        );
+    }
+
+    /// Puts an imported model in the plan, at its natural size.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn place_model(
+        &mut self,
+        path: &Path,
+        at: newera_core::Point2,
+        loaded: Result<newera_catalog::ImportedModel, newera_catalog::ImportError>,
+    ) {
+        match loaded {
             Ok(model) => {
-                let at = self.plan.view_center();
                 let name = path.file_stem().map_or_else(
                     || crate::i18n::tr("Modelo").to_owned(),
                     |s| s.to_string_lossy().into_owned(),
@@ -1932,6 +2045,9 @@ impl eframe::App for NewEraApp {
         {
             ctx.request_repaint_after(Duration::from_millis(250));
         }
+        // Long work runs behind a window that says so; while it does, the
+        // rest of the interface is there to read but not to touch.
+        crate::jobs::show(self, &ctx);
         crate::photo::show(self, &ctx);
         crate::video::show(self, &ctx);
         crate::ergonomics::show(self, &ctx);
@@ -2118,6 +2234,162 @@ mod tests {
             .unwrap_or_default();
         assert!(status.starts_with("⚠ P:"), "{status}");
         std::fs::remove_dir_all(root).ok();
+    }
+
+    /// Work that takes seconds has to keep the window alive, say what it is
+    /// doing and land its result back here when it ends.
+    #[test]
+    fn long_work_reports_itself_instead_of_freezing_the_window() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let mut h = app_with_wall();
+        let finish = Arc::new(AtomicBool::new(false));
+        let told = Arc::clone(&finish);
+        crate::jobs::start(
+            h.state_mut(),
+            "Abrindo projeto",
+            "casa.newera".to_owned(),
+            move || {
+                newera_core::progress::step("Extraindo imagens e modelos", 3, 10);
+                while !told.load(Ordering::Relaxed) {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                Box::new(|app: &mut NewEraApp| app.set_status("Aberto: casa.newera"))
+            },
+        );
+        h.run_steps(3);
+        // The window says what is happening, to what, and how far along.
+        h.get_by_label_contains("Abrindo projeto");
+        h.get_by_label_contains("casa.newera");
+        h.get_by_label_contains("Extraindo imagens e modelos");
+        h.get_by_label_contains("30%");
+        // And nothing else can be started meanwhile.
+        assert!(crate::jobs::busy(h.state()));
+
+        finish.store(true, Ordering::Relaxed);
+        for _ in 0..400 {
+            h.run_steps(1);
+            if h.state().job.is_none() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(h.state().job.is_none(), "the job ended");
+        assert_eq!(
+            h.state().status.as_ref().map(|(s, _)| s.as_str()),
+            Some("Aberto: casa.newera"),
+            "its result ran on the window's thread"
+        );
+    }
+
+    /// Work that does not stop when asked must not hold the window hostage:
+    /// after a moment there is a way out, and it leaves the work behind.
+    #[test]
+    fn work_that_will_not_stop_can_be_left_behind() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let mut h = app_with_wall();
+        let stop = Arc::new(AtomicBool::new(false));
+        let told = Arc::clone(&stop);
+        crate::jobs::start(
+            h.state_mut(),
+            "Salvando projeto",
+            String::new(),
+            move || {
+                // Deaf to being cancelled, like a write already under way.
+                while !told.load(Ordering::Relaxed) {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                Box::new(|app: &mut NewEraApp| app.set_status("tarde demais"))
+            },
+        );
+        h.run_steps(3);
+        h.get_by_label_contains("Cancelar").click();
+        h.run_steps(2);
+        h.get_by_label_contains("Parando…");
+
+        // The work ignores it, so the way out appears a couple of seconds on.
+        let waited = std::time::Instant::now();
+        while waited.elapsed() < std::time::Duration::from_millis(2500) {
+            h.run_steps(1);
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        h.get_by_label_contains("Forçar").click();
+        h.run_steps(2);
+        assert!(h.state().job.is_none(), "the window stopped waiting");
+        assert!(
+            h.state()
+                .status
+                .as_ref()
+                .is_some_and(|(s, _)| s.contains("segundo plano")),
+            "and says the task is still out there"
+        );
+        stop.store(true, Ordering::Relaxed);
+    }
+
+    /// The real thing, with a file on disk: opening and saving are jobs of
+    /// their own — the window they show is exercised above — and their result
+    /// lands back on this thread with the project in hand. A file this small
+    /// is read before the window can even appear, which is the point: the
+    /// progress window is for the ones that are not.
+    #[test]
+    fn opening_and_saving_a_file_run_behind_the_progress_window() {
+        let dir = std::env::temp_dir().join(format!("newera-app-job-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("casa.newera");
+        {
+            let mut other = Document::default();
+            for x in [0.0, 500.0] {
+                let wall = Wall::new(
+                    other.new_wall_id(),
+                    Point2::new(x, 0.0),
+                    Point2::new(x, 300.0),
+                );
+                other.execute(Command::insert(wall)).unwrap();
+            }
+            newera_core::save_project(&other, &path).unwrap();
+        }
+
+        let mut h = app_with_wall();
+        h.state_mut().open_path(&path);
+        assert!(
+            crate::jobs::busy(h.state()),
+            "reading it is a job of its own"
+        );
+        for _ in 0..400 {
+            h.run_steps(1);
+            if h.state().job.is_none() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert_eq!(walls(&h).len(), 2, "the file is open");
+        assert!(!h.state().is_modified());
+
+        // Saving goes the same way, straight to the path it came from.
+        h.state_mut().run(|doc| {
+            let wall = Wall::new(
+                doc.new_wall_id(),
+                Point2::new(0.0, 300.0),
+                Point2::new(500.0, 300.0),
+            );
+            doc.execute(Command::insert(wall))
+        });
+        assert!(h.state().is_modified());
+        let before = std::fs::metadata(&path).unwrap().len();
+        assert!(h.state_mut().save(false), "saving started");
+        for _ in 0..400 {
+            h.run_steps(1);
+            if h.state().job.is_none() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(!h.state().is_modified(), "saved");
+        assert_ne!(std::fs::metadata(&path).unwrap().len(), before);
+        std::fs::remove_dir_all(dir).ok();
     }
 
     #[test]

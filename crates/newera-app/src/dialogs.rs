@@ -898,9 +898,9 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
             });
             match choice {
                 Some(0) => {
-                    if app.save(false) {
-                        app.perform(action);
-                    }
+                    // The save runs in the background; what was waiting on it
+                    // happens when it lands.
+                    app.save_then(false, Some(action));
                     DialogOutcome::Close
                 }
                 Some(1) => {
