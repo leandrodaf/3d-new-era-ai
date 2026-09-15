@@ -66,10 +66,11 @@ impl Default for Profile {
 }
 
 /// How much a finding matters.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
     /// Something can't be used as drawn.
+    #[default]
     Erro,
     /// Below the reference: works badly.
     Alerta,
@@ -90,7 +91,7 @@ impl Severity {
 }
 
 /// One thing to look at.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct Finding {
     pub severity: Severity,
     /// Room or piece it is about, e.g. `Quarto r5` or `Cama de casal f12`.
@@ -106,6 +107,17 @@ pub struct Finding {
     /// `{"tool":"update","items":[{"id":"f3","hinge_right":true}]}`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fix: Option<serde_json::Value>,
+    /// What the score would gain if this one went away. A score that moves
+    /// without saying why is a number nobody can act on.
+    #[serde(default)]
+    pub weight: u32,
+    /// Name to accept it by, stable across runs: the rule and the place.
+    pub key: String,
+    /// Looked at and accepted, with the reason given. It still shows — a
+    /// plan where a real finding is silently dropped is worse than one that
+    /// carries it — but it no longer costs anything in the score.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accepted: Option<String>,
 }
 
 /// What the home offers its people.
@@ -178,6 +190,9 @@ struct Review<'s, 'a> {
     scene: &'s Scene<'a>,
     profile: &'s Profile,
     findings: Vec<Finding>,
+    /// Glass that lights and airs each room, shared across rooms open to
+    /// each other — see [`glass_by_room`].
+    glass: std::collections::BTreeMap<newera_core::RoomId, f64>,
 }
 
 impl Review<'_, '_> {
@@ -188,6 +203,7 @@ impl Review<'_, '_> {
             message: message.into(),
             reference: None,
             fix: None,
+            ..Finding::default()
         });
     }
 
@@ -221,6 +237,7 @@ impl Review<'_, '_> {
             message: message.into(),
             reference: Some(source.code),
             fix: None,
+            ..Finding::default()
         });
     }
 
@@ -433,6 +450,7 @@ impl Review<'_, '_> {
                         ),
                         reference,
                         fix,
+                        ..Finding::default()
                     })
                 } else {
                     None
@@ -710,6 +728,7 @@ impl Review<'_, '_> {
                         "tool": "update",
                         "items": [{"id": door.id.to_string(), "hinge_right": right}],
                     })),
+                    ..Finding::default()
                 });
                 continue;
             }
@@ -728,6 +747,7 @@ impl Review<'_, '_> {
                 },
                 reference: None,
                 fix: moved.map(without_distance),
+                ..Finding::default()
             });
         }
         for (a, b) in scene.overlaps() {
@@ -749,6 +769,7 @@ impl Review<'_, '_> {
                 },
                 reference: None,
                 fix: fix.map(without_distance),
+                ..Finding::default()
             });
         }
     }
@@ -775,18 +796,7 @@ impl Review<'_, '_> {
                     .map(|w| w.height.min(w.height_at_end.unwrap_or(w.height)))
                     .reduce(f64::min)
                     .unwrap_or(home.wall_height);
-                let glass: f64 = home
-                    .furniture
-                    .iter()
-                    .filter(|f| {
-                        f.visible
-                            && f.opening.as_ref().is_some_and(|o| {
-                                o.kind == OpeningKind::Window || f.catalog == "french-window"
-                            })
-                            && near_outline(&s.room.points, f.position, f.depth.max(15.0))
-                    })
-                    .map(|f| f.width * f.height)
-                    .sum();
+                let glass: f64 = self.glass.get(&s.room.id).copied().unwrap_or_default();
                 let uses = s.units.iter().map(|&i| scene.units[i].what).collect();
                 RoomFacts {
                     label: s.label(),
@@ -1059,32 +1069,39 @@ impl Review<'_, '_> {
                     );
                 }
             }
-            // Worktop height: about 10 to 15 cm below the elbow (63 % of stature).
+            // Worktop height: about 10 to 15 cm below the elbow (63 % of
+            // stature). The kitchen has one counter height, and it is the one
+            // most of the stone is at — an appliance sitting 6 cm lower under
+            // the same stone is not a counter to measure, and reading it as
+            // one accused a correct kitchen in a real session.
             let ideal = stature * 0.63 - 12.0;
-            for &i in &space.units {
-                let u = &scene.units[i];
-                if !matches!(u.what, Use::Sink | Use::Counter) || scene.embedded(i) || scene.thin(i)
-                {
-                    continue;
-                }
-                let top = u.piece.height_range().1;
-                if top < 70.0 {
-                    continue;
-                }
-                if (top - ideal).abs() > 6.0 {
-                    self.push_ref(
-                        Severity::Dica,
-                        u.label(),
-                        format!(
-                            "Bancada a {} cm; para quem tem {} cm de altura o conforto fica perto de {} cm.",
-                            cm(top),
-                            cm(stature),
-                            cm(ideal.round())
-                        ),
-                        "blum-zonas",
-                    );
-                    break;
-                }
+            let mut tops: Vec<(f64, usize)> = space
+                .units
+                .iter()
+                .filter(|&&i| {
+                    let u = &scene.units[i];
+                    matches!(u.what, Use::Sink | Use::Counter)
+                        && !scene.embedded(i)
+                        && !scene.thin(i)
+                        && u.piece.height_range().1 >= 70.0
+                })
+                .map(|&i| (scene.units[i].piece.height_range().1, i))
+                .collect();
+            tops.sort_by(|a, b| a.0.total_cmp(&b.0));
+            if let Some(&(top, which)) = tops.get(tops.len() / 2)
+                && (top - ideal).abs() > 6.0
+            {
+                self.push_ref(
+                    Severity::Dica,
+                    scene.units[which].label(),
+                    format!(
+                        "Bancada a {} cm; para quem tem {} cm de altura o conforto fica perto de {} cm.",
+                        cm(top),
+                        cm(stature),
+                        cm(ideal.round())
+                    ),
+                    "blum-zonas",
+                );
             }
             // Wall cabinets: above the head at the counter, within reach.
             let reach = if self.profile.wheelchair {
@@ -1265,7 +1282,7 @@ impl Review<'_, '_> {
             if let Some(stove) = find(|u| matches!(u, Use::Stove)) {
                 let gas = !electric(&stove.piece.name);
                 if gas {
-                    let glass = window_area(scene, &space.room.points);
+                    let glass = self.glass.get(&space.room.id).copied().unwrap_or_default();
                     if glass <= 0.0 {
                         self.push_ref(
                             Severity::Erro,
@@ -1535,6 +1552,110 @@ fn outline_length(points: &[Point2]) -> f64 {
 }
 
 /// Glazed area on a room's outline, cm².
+/// Glass that lights and airs each room, by room id.
+///
+/// A room is not a sealed box. Where two rooms run into each other with no
+/// wall between — a living room open to its balcony, a kitchen open to the
+/// living room — the light and the air of one are the light and the air of
+/// the other, and a check that reads room by room accuses a plan that is
+/// right. Which it did, three sessions running, on a kitchen whose balcony
+/// carries a window 4,5 m wide.
+///
+/// Translucent pieces count too: a fixed pane, a fluted glass panel, a glass
+/// door. They are drawn as furniture with `opacity`, not as openings, and
+/// they are how a room with no facade of its own gets daylight.
+fn glass_by_room(scene: &Scene<'_>) -> std::collections::BTreeMap<newera_core::RoomId, f64> {
+    let home = scene.home;
+    let own: Vec<(newera_core::RoomId, f64)> = home
+        .rooms
+        .iter()
+        .map(|room| {
+            let windows = window_area(scene, &room.points);
+            let panes: f64 = home
+                .furniture
+                .iter()
+                .flat_map(newera_core::Furniture::flatten)
+                .filter(|f| {
+                    f.visible
+                        && f.opacity.is_some_and(|o| o < 1.0)
+                        && near_outline(&room.points, f.position, f.depth.max(15.0) + 5.0)
+                })
+                .map(|f| f.width * f.height)
+                .sum();
+            (room.id, windows + panes)
+        })
+        .collect();
+
+    // Rooms open to each other share what they have, however many hops away:
+    // light crosses two open thresholds as readily as one.
+    let mut group: Vec<usize> = (0..home.rooms.len()).collect();
+    for i in 0..home.rooms.len() {
+        for j in (i + 1)..home.rooms.len() {
+            if open_between(home, &home.rooms[i], &home.rooms[j]) {
+                let (a, b) = (group[i], group[j]);
+                let root = a.min(b);
+                for g in &mut group {
+                    if *g == a || *g == b {
+                        *g = root;
+                    }
+                }
+            }
+        }
+    }
+    let mut shared: std::collections::BTreeMap<usize, f64> = std::collections::BTreeMap::new();
+    for (i, (_, glass)) in own.iter().enumerate() {
+        *shared.entry(group[i]).or_default() += glass;
+    }
+    own.iter()
+        .enumerate()
+        .map(|(i, (id, _))| (*id, shared.get(&group[i]).copied().unwrap_or_default()))
+        .collect()
+}
+
+/// How wide an opening between two rooms has to be for one to air the other.
+const OPEN_ENOUGH: f64 = 80.0;
+
+/// Whether two rooms run into each other with no wall between them.
+///
+/// Their outlines touch along a stretch — that is what "no wall" looks like
+/// in a drawing — and no wall stands on it.
+fn open_between(home: &Home, a: &newera_core::Room, b: &newera_core::Room) -> bool {
+    const STEP: f64 = 10.0;
+    let walls: Vec<geo::Polygon<f64>> = home
+        .wall_outlines()
+        .iter()
+        .filter(|o| o.len() >= 3)
+        .map(|o| newera_core::to_polygon(o))
+        .collect();
+    let in_wall = |p: Point2| {
+        use geo::Contains;
+        walls.iter().any(|w| w.contains(&geo::Point::new(p.x, p.y)))
+    };
+    let mut open: f64 = 0.0;
+    for k in 0..a.points.len() {
+        let (from, to) = (a.points[k], a.points[(k + 1) % a.points.len()]);
+        let length = from.distance(to);
+        if length < STEP {
+            continue;
+        }
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let steps = (length / STEP) as usize;
+        let mut run: f64 = 0.0;
+        for step in 0..=steps {
+            #[allow(clippy::cast_precision_loss)]
+            let t = (step as f64 * STEP / length).min(1.0);
+            let p = Point2::new(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
+            if near_outline(&b.points, p, 5.0) && !in_wall(p) {
+                run += STEP;
+                open = open.max(run);
+            } else {
+                run = 0.0;
+            }
+        }
+    }
+    open >= OPEN_ENOUGH
+}
+
 fn window_area(scene: &Scene<'_>, points: &[Point2]) -> f64 {
     scene
         .home
@@ -1616,10 +1737,39 @@ fn short_side(points: &[Point2]) -> f64 {
 }
 
 /// Reviews the current storey of `home` for the people in `profile`.
+/// The name a finding is accepted by: its rule and its place, so the same
+/// finding keeps the same name from one run to the next, and a different one
+/// about the same room does not inherit an acceptance it never had.
+fn key_of(finding: &Finding) -> String {
+    let rule = finding.reference.unwrap_or("-");
+    // The words of the message, not its numbers: the numbers move with every
+    // edit, and an acceptance that lapses whenever a centimetre changes is an
+    // acceptance nobody can rely on.
+    let words: String = newera_core::fold(&finding.message)
+        .split(|c: char| !c.is_alphabetic())
+        .filter(|w| w.len() > 3)
+        .take(4)
+        .collect::<Vec<_>>()
+        .join("-");
+    let place = newera_core::fold(&finding.place)
+        .split_whitespace()
+        .last()
+        .unwrap_or_default()
+        .to_owned();
+    format!("{rule}:{place}:{words}")
+}
+
 pub fn review(home: &Home, profile: &Profile) -> Report {
     let view = home.level_view(home.current_level());
     let scene = Scene::new(&view);
+    // The city is the project's, so every caller weighs the same rules; one
+    // passed in the call still wins, for asking "and under this code?".
+    let profile = &Profile {
+        city: profile.city.clone().or_else(|| home.compass.city.clone()),
+        ..profile.clone()
+    };
     let mut review = Review {
+        glass: glass_by_room(&scene),
         scene: &scene,
         profile,
         findings: Vec::new(),
@@ -1650,14 +1800,34 @@ pub fn review(home: &Home, profile: &Profile) -> Report {
         }
     }
     findings.sort_by_key(|f| f.severity);
+    // Each finding gets the name it is accepted by, and the ones already
+    // looked at carry the reason instead of the cost.
+    for finding in &mut findings {
+        finding.key = key_of(finding);
+        finding.accepted = home.accepted.get(&finding.key).cloned();
+    }
     // Errors weigh fully; many alerts or tips of a crowded plan level off.
-    let count = |sev: Severity| findings.iter().filter(|f| f.severity == sev).count() as u32;
-    let (errors, alerts, tips) = (
-        count(Severity::Erro),
-        count(Severity::Alerta),
-        count(Severity::Dica),
-    );
-    let penalty = errors * 12 + alerts.min(6) * 5 + alerts.saturating_sub(6) + tips.min(10);
+    let penalty_of = |list: &[Finding]| {
+        let count = |sev: Severity| {
+            list.iter()
+                .filter(|f| f.severity == sev && f.accepted.is_none())
+                .count() as u32
+        };
+        let (errors, alerts, tips) = (
+            count(Severity::Erro),
+            count(Severity::Alerta),
+            count(Severity::Dica),
+        );
+        errors * 12 + alerts.min(6) * 5 + alerts.saturating_sub(6) + tips.min(10)
+    };
+    let penalty = penalty_of(&findings);
+    // What each one costs: the score without it, minus the score with it.
+    // A number that moves without saying why is a number nobody can act on.
+    for at in 0..findings.len() {
+        let mut without = findings.clone();
+        without.remove(at);
+        findings[at].weight = penalty.saturating_sub(penalty_of(&without));
+    }
     // Each source once, in the order the findings first lean on it.
     let mut refs: Vec<&'static Standard> = Vec::new();
     for code in findings.iter().filter_map(|f| f.reference) {
@@ -2105,6 +2275,7 @@ mod tests {
             scene: &scene,
             profile: &profile,
             findings: Vec::new(),
+            glass: std::collections::BTreeMap::new(),
         };
         // Tier A, checked at the source: an error stays an error.
         review.push_ref(Severity::Erro, "Casa", "gás sem abertura", "nbr13103");
@@ -2222,6 +2393,156 @@ mod tests {
                 && cites(&report, Severity::Dica, "blum-zonas"),
             "{report:#?}"
         );
+    }
+
+    /// The plan that was right and kept being accused: a kitchen open to a
+    /// living room, open in turn to a balcony whose facade is one long
+    /// window. Nothing between them but air, and every round of review said
+    /// "gas appliance with no window" and "living room with no window".
+    #[test]
+    fn light_and_air_cross_a_room_that_is_open_to_the_next() {
+        let mut home = Home::default();
+        // Three rooms in a row, sharing their boundaries with no wall on them:
+        // kitchen 0..300, living 300..600, balcony 600..800 along x.
+        let outer = [(0.0, 0.0), (800.0, 0.0), (800.0, 400.0), (0.0, 400.0)];
+        for k in 0..4 {
+            let (a, b) = (outer[k], outer[(k + 1) % 4]);
+            let mut wall = Wall::new(
+                WallId(k as u64 + 1),
+                Point2::new(a.0, a.1),
+                Point2::new(b.0, b.1),
+            );
+            wall.thickness = 15.0;
+            wall.height = 260.0;
+            home.walls.push(wall);
+        }
+        let room = |id: u64, name: &str, x0: f64, x1: f64| {
+            Room::new(
+                RoomId(id),
+                name,
+                vec![
+                    Point2::new(x0, 7.5),
+                    Point2::new(x1, 7.5),
+                    Point2::new(x1, 392.5),
+                    Point2::new(x0, 392.5),
+                ],
+            )
+        };
+        home.rooms.push(room(1, "Cozinha", 7.5, 300.0));
+        home.rooms.push(room(2, "Sala", 300.0, 600.0));
+        home.rooms.push(room(3, "Varanda", 600.0, 792.5));
+        // The only window in the home is on the balcony's facade.
+        let mut window = piece(70, "window", (700.0, 392.5), (452.0, 15.0, 155.0), 0.0);
+        window.opening = Some(newera_core::Opening {
+            kind: OpeningKind::Window,
+            ..newera_core::Opening::default()
+        });
+        window.elevation = 100.0;
+        home.furniture.push(window);
+        // A gas cooktop in the kitchen, and the rest of a kitchen around it.
+        let mut stove = piece(71, "stove", (150.0, 40.0), (75.0, 62.0, 91.0), 0.0);
+        stove.name = "Fogão 5 bocas a gás".to_owned();
+        home.furniture.push(stove);
+        home.furniture.push(piece(
+            72,
+            "sink-counter",
+            (60.0, 40.0),
+            (120.0, 60.0, 91.0),
+            0.0,
+        ));
+        home.furniture
+            .push(piece(73, "fridge", (260.0, 45.0), (70.0, 70.0, 180.0), 0.0));
+
+        let report = review(&home, &Profile::default());
+        assert!(
+            !says(
+                &report,
+                Severity::Erro,
+                "sem janela nem abertura permanente"
+            ),
+            "the balcony airs the kitchen through the living room: {report:#?}"
+        );
+        assert!(
+            !says(&report, Severity::Alerta, "Sem janela"),
+            "and lights it: {report:#?}"
+        );
+
+        // Close the kitchen off with a wall and the finding comes back, as
+        // it should: then there really is nowhere for the gas to go.
+        let mut divider = Wall::new(
+            WallId(9),
+            Point2::new(300.0, 7.5),
+            Point2::new(300.0, 392.5),
+        );
+        divider.thickness = 15.0;
+        divider.height = 260.0;
+        home.walls.push(divider);
+        home.rooms[0] = room(1, "Cozinha", 7.5, 292.5);
+        home.rooms[1] = room(2, "Sala", 307.5, 600.0);
+        let closed = review(&home, &Profile::default());
+        assert!(
+            says(
+                &closed,
+                Severity::Erro,
+                "sem janela nem abertura permanente"
+            ),
+            "{closed:#?}"
+        );
+    }
+
+    /// A dishwasher under the stone is 6 cm lower than the stone, by design.
+    /// Reading its top as the counter accused a kitchen whose stone was right
+    /// — the height of a kitchen is where most of its stone is.
+    #[test]
+    fn an_appliance_lower_than_the_stone_is_not_read_as_the_counter() {
+        let mut home = Home::default();
+        square(&mut home, "Cozinha", 400.0, 300.0);
+        for (id, x) in [(60_u64, 80.0), (61, 260.0)] {
+            home.furniture.push(piece(
+                id,
+                "sink-counter",
+                (x, 7.5 + 30.0),
+                (120.0, 60.0, 91.0),
+                0.0,
+            ));
+        }
+        home.furniture.push(piece(
+            62,
+            "stove",
+            (180.0, 7.5 + 31.0),
+            (60.0, 62.0, 91.0),
+            0.0,
+        ));
+        home.furniture.push(piece(
+            63,
+            "fridge",
+            (350.0, 7.5 + 35.0),
+            (70.0, 70.0, 180.0),
+            0.0,
+        ));
+        // The dishwasher: its own 84,5 cm, tucked under the same stone.
+        let mut washer = piece(
+            64,
+            "dishwasher",
+            (150.0, 7.5 + 30.0),
+            (60.0, 58.0, 84.5),
+            0.0,
+        );
+        washer.name = "LP14V lava-louças".to_owned();
+        home.furniture.push(washer);
+
+        // 91 cm is right for someone 165 cm tall, so nothing is said.
+        let report = review(&home, &Profile::default());
+        assert!(!says(&report, Severity::Dica, "Bancada a"), "{report:#?}");
+
+        // Lower the stone itself and the kitchen is reported, as it should be.
+        for piece in &mut home.furniture {
+            if piece.catalog == "sink-counter" {
+                piece.height = 78.0;
+            }
+        }
+        let report = review(&home, &Profile::default());
+        assert!(says(&report, Severity::Dica, "Bancada a 78"), "{report:#?}");
     }
 
     /// What the laboratory knows: capture is the canopy's job, and a hood

@@ -590,6 +590,10 @@ pub(crate) struct UpdateSpec {
     /// Room polygon.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pts: Option<Vec<Point2>>,
+    /// The piece a note is about, e.g. `f1185`; its numbers are then checked
+    /// against that piece by `annotations(stale=true)`. `""` unties it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub about: Option<String>,
     /// Room floor visible.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub floor: Option<bool>,
@@ -717,6 +721,28 @@ impl UpdateSpec {
     }
 }
 
+/// Why an id does not resolve, in the terms of whoever asked.
+///
+/// The commonest miss is a part of a group: those ids come out of diffs and
+/// of `check_layout`, so trying one is fair, and "not found" would send the
+/// caller looking for a typo instead of at the parent it belongs to.
+pub(crate) fn missing(home: &newera_core::Home, id: ElementId) -> String {
+    if let ElementId::Furniture(piece) = id
+        && let Some(owner) = home.part_owner(piece)
+    {
+        let part = owner
+            .flatten()
+            .into_iter()
+            .find(|p| p.id == piece)
+            .map_or_else(String::new, |p| format!(" ({})", p.name));
+        return format!(
+            "{id}{part} is a part of {}; edit {} instead — changing the group rebuilds its parts",
+            owner.id, owner.id
+        );
+    }
+    format!("{id} not found")
+}
+
 pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<()> {
     let mut commands = Vec::with_capacity(items.len());
     let mut reshaped: Vec<Wall> = Vec::new();
@@ -725,7 +751,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
         let element = doc
             .home()
             .element(id)
-            .ok_or_else(|| format!("{id} not found"))?;
+            .ok_or_else(|| missing(doc.home(), id))?;
         let allowed: &[&str] = match element {
             Element::Polyline(_) => &["pts", "t", "color", "level", "divider"],
             Element::Wall(_) => &[
@@ -744,7 +770,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
             Element::Dimension(_) => &["a", "b", "off", "level", "in3d", "elev", "pitch"],
             Element::Label(_) => &[
                 "text", "at", "size", "angle", "level", "bold", "italic", "align", "color", "in3d",
-                "elev", "pitch",
+                "elev", "pitch", "about",
             ],
             Element::Level(_) => &["name", "elev", "h", "slab"],
             Element::Furniture(_) => &[
@@ -894,6 +920,12 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 l.align = spec.align.unwrap_or(l.align);
                 l.color = spec.color.or(l.color);
                 l.elevation = spec.elev.unwrap_or(l.elevation);
+                if let Some(raw) = &spec.about {
+                    l.about = match raw.trim() {
+                        "" => None,
+                        id => Some(id.parse().map_err(|e| format!("about: {e}"))?),
+                    };
+                }
                 l.pitch = match (spec.in3d, spec.pitch) {
                     (Some(false), _) => None,
                     (_, Some(pitch)) => Some(pitch),

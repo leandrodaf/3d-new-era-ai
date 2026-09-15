@@ -498,6 +498,19 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
                 json!([issue_ref(home, door.into()), issue_ref(home, by.into())]),
             ),
             Issue::OutsideRooms(f) => push("outside_rooms", issue_ref(home, f.into())),
+            Issue::LooseOpening(f) => push("loose_opening", issue_ref(home, f.into())),
+            Issue::Turned {
+                piece,
+                built,
+                placed,
+            } => push(
+                "turned",
+                obj([
+                    ("piece", issue_ref(home, piece.into())),
+                    ("built", json!(built)),
+                    ("placed", json!(placed)),
+                ]),
+            ),
         }
     }
     if !counts.is_empty() {

@@ -37,13 +37,13 @@ mod wallrun;
 
 pub use analysis::{Issue, Overlap, Storeys, check_layout, check_layout_in, door_swing};
 pub use annotations::{
-    PlanAnnotations, ReferenceItem, RoomReference, auto_dimensions, room_references,
+    PlanAnnotations, ReferenceItem, RoomReference, auto_dimensions, fold, room_references,
 };
 pub use command::Command;
 pub use detect::{detect_room, detect_room_with_dividers, interior_point, rooms_following_walls};
 pub use document::{Document, FIRST_VARIANT_NAME, SharedDocument, Variant, VariantInfo};
 pub use elements::{
-    BackgroundImage, Baseboard, Compass, Dimension, Element, Label, Level, Room, Wall,
+    BackgroundImage, Baseboard, Compass, Dimension, Element, Hold, Label, Level, Room, Wall,
 };
 pub use error::{CoreError, CoreResult};
 pub use furniture::{
@@ -60,8 +60,9 @@ pub use levels::{FloorShape, floor_shapes, stair_holes};
 pub use lighting::{LampType, RoomLighting};
 pub use materials::{Material, Pattern, WALL_TYPES, WallFamily, WallType, wall_type};
 pub use measure::{
-    Axis, Clearance, Dir, Obstacle, Solid, Span, Stale, clearance, element_bounds, facing,
-    free_span, obstacles, plan_bounds, stale_annotations, wall_bounds,
+    Axis, Clearance, Dir, Obstacle, Solid, Span, Stale, anchor_dimensions, clearance,
+    dimensions_following, element_bounds, facing, facing_disagrees, free_span, hold_point,
+    obstacles, plan_bounds, stale_annotations, wall_bounds,
 };
 pub use project::{
     BundledFiles, PROJECT_EXTENSION, Project, ProjectError, cache_dir, from_project_json,

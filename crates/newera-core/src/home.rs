@@ -33,6 +33,14 @@ pub struct Home {
     pub selected_level: Option<LevelId>,
     #[serde(default)]
     pub compass: Compass,
+    /// Findings looked at and accepted, by their key, with the reason.
+    ///
+    /// A review that keeps accusing what somebody already analysed makes the
+    /// next agent redo the analysis — and a plan that is right never reaches
+    /// zero, so nobody can tell "done" from "given up". These stay in the
+    /// report, marked and explained, and stop costing score.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub accepted: std::collections::BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background: Option<BackgroundImage>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -84,6 +92,7 @@ impl Default for Home {
             levels: Vec::new(),
             selected_level: None,
             compass: Compass::default(),
+            accepted: std::collections::BTreeMap::new(),
             background: None,
             polylines: Vec::new(),
             wall_height: Self::default_wall_height(),
@@ -180,6 +189,21 @@ macro_rules! collections {
             }
         }
     };
+}
+
+impl Home {
+    /// The piece a nested id belongs to: the one whose group holds it.
+    ///
+    /// Ids of parts show up in what reads and writes report — a group that
+    /// rebuilt lists the parts that changed — so they are a fair thing for a
+    /// caller to try. They are not editable on their own, and saying whose
+    /// they are is the difference between a dead end and the next step.
+    #[must_use]
+    pub fn part_owner(&self, id: crate::ids::FurnitureId) -> Option<&Furniture> {
+        self.furniture
+            .iter()
+            .find(|top| top.id != id && top.flatten().iter().any(|p| p.id == id))
+    }
 }
 
 collections! {
@@ -325,6 +349,7 @@ impl Home {
             levels: self.levels.clone(),
             selected_level: self.selected_level,
             compass: self.compass.clone(),
+            accepted: self.accepted.clone(),
             background: self.background.clone(),
             wall_height: self.wall_height,
             environment: self.environment.clone(),

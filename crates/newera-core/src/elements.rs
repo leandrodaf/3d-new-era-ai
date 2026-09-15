@@ -341,8 +341,24 @@ pub struct Dimension {
     /// Tilt of the dimension line around its axis, degrees.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub pitch: f64,
+    /// What each end holds onto, so the dimension is measured again whenever
+    /// what it marks moves. A dimension drawn between two bare points goes on
+    /// stating the distance between those points, which after an edit is no
+    /// longer the distance anyone asked for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub holds: Option<[Hold; 2]>,
     #[serde(default, skip_serializing_if = "Properties::is_empty")]
     pub properties: Properties,
+}
+
+/// What one end of a dimension is measured from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Hold {
+    /// The element measured from: a piece, a wall, a room.
+    pub id: crate::ids::ElementId,
+    /// Which side of it — `+x`, `-x`, `+y`, `-y` — or its middle when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edge: Option<String>,
 }
 
 impl Default for Dimension {
@@ -360,6 +376,7 @@ impl Default for Dimension {
             discipline: None,
             elevation: [0.0, 0.0],
             pitch: 0.0,
+            holds: None,
             properties: Properties::new(),
         }
     }
@@ -420,6 +437,11 @@ pub struct Label {
     /// Technical project it belongs to; `None` is the architectural plan.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub discipline: Option<crate::style::Discipline>,
+    /// The piece this note is about, when it is about one. A note that names
+    /// its piece is checked against it — the sizes written in a joiner's
+    /// legend are the first thing an edit leaves behind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub about: Option<crate::ids::FurnitureId>,
     /// Halo drawn around the letters.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outline: Option<[u8; 3]>,
@@ -448,6 +470,7 @@ impl Default for Label {
             align: crate::style::TextAlign::Center,
             color: None,
             discipline: None,
+            about: None,
             outline: None,
             elevation: 0.0,
             pitch: None,
@@ -505,6 +528,12 @@ pub struct Compass {
     /// IANA time zone, e.g. `America/Sao_Paulo`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time_zone: Option<String>,
+    /// City whose building code applies, e.g. `sao-paulo`. It belongs to the
+    /// project and not to whoever asks: a review, a dry run and a layout
+    /// check all have to weigh the same rules, or testing a change against
+    /// the number it moves is guesswork.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub city: Option<String>,
 }
 
 impl Default for Compass {
@@ -517,6 +546,7 @@ impl Default for Compass {
             latitude: None,
             longitude: None,
             time_zone: None,
+            city: None,
         }
     }
 }

@@ -63,8 +63,38 @@ pub(super) fn on_variant(doc: &mut Document, v: Option<usize>) -> Result<(), Err
 /// Trying a size used to mean applying it, reviewing, and undoing — a round
 /// trip that showed in the user's window and burned a revision each time.
 /// The copy has no history and is thrown away, so nothing of that happens.
-pub(super) fn preview(
+/// How much of a dry run to answer with.
+///
+/// `true` answers with everything it would change; `"summary"` answers with
+/// the decision — how many pieces move, which roots, the clearances, the
+/// findings and the score — because a group that rebuilds lists ninety-seven
+/// parts for a choice that fits in five lines.
+#[derive(Debug, Clone, serde::Deserialize, schemars::JsonSchema)]
+#[serde(untagged)]
+pub(crate) enum Dry {
+    All(bool),
+    How(String),
+}
+
+impl Dry {
+    /// Whether this asks for a dry run at all.
+    pub(crate) fn on(value: Option<&Self>) -> bool {
+        match value {
+            Some(Self::All(on)) => *on,
+            Some(Self::How(how)) => !how.trim().is_empty() && how.trim() != "false",
+            None => false,
+        }
+    }
+
+    /// Whether it asks for the short answer.
+    pub(crate) fn brief(value: Option<&Self>) -> bool {
+        matches!(value, Some(Self::How(how)) if how.trim().eq_ignore_ascii_case("summary"))
+    }
+}
+
+pub(super) fn preview_with(
     doc: &Document,
+    brief: bool,
     apply: impl FnOnce(&mut Document) -> Result<(), ErrorData>,
 ) -> Result<String, ErrorData> {
     let before = doc.home().clone();
@@ -184,6 +214,35 @@ pub(super) fn preview(
             .collect();
         if !list.is_empty() {
             object.insert(label.to_owned(), serde_json::json!(list));
+        }
+    }
+    if brief {
+        // The parts a group rebuilds are not a decision; the roots are.
+        for key in ["changed", "added", "removed"] {
+            let Some(list) = object.get(key).and_then(|v| v.as_array()).cloned() else {
+                continue;
+            };
+            let roots: Vec<serde_json::Value> = list
+                .iter()
+                .filter_map(|c| {
+                    let raw = if c.is_string() {
+                        c.as_str()?
+                    } else {
+                        c["id"].as_str()?
+                    };
+                    let id: newera_core::ElementId = raw.parse().ok()?;
+                    match id {
+                        newera_core::ElementId::Furniture(piece)
+                            if after.part_owner(piece).is_some() =>
+                        {
+                            None
+                        }
+                        _ => Some(serde_json::json!(raw)),
+                    }
+                })
+                .collect();
+            object.insert(format!("{key}_count"), serde_json::json!(list.len()));
+            object.insert(key.to_owned(), serde_json::json!(roots));
         }
     }
     Ok(serde_json::Value::Object(object.clone()).to_string())

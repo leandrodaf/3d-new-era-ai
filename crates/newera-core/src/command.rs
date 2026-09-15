@@ -46,6 +46,14 @@ pub enum Command {
     SetAnnotations {
         annotations: crate::annotations::PlanAnnotations,
     },
+    /// Findings already looked at and accepted, by key, with the reason.
+    SetAccepted {
+        accepted: std::collections::BTreeMap<String, String>,
+    },
+    /// The home's own key/value notes, checkpoints among them.
+    SetProperties {
+        properties: crate::style::Properties,
+    },
     /// Look of the 3D world (sky, ground, light, photo settings).
     SetEnvironment {
         environment: crate::style::Environment,
@@ -139,6 +147,16 @@ impl Command {
                 let previous = std::mem::replace(&mut home.annotations, annotations);
                 Ok(Self::SetAnnotations {
                     annotations: previous,
+                })
+            }
+            Self::SetAccepted { accepted } => {
+                let previous = std::mem::replace(&mut home.accepted, accepted);
+                Ok(Self::SetAccepted { accepted: previous })
+            }
+            Self::SetProperties { properties } => {
+                let previous = std::mem::replace(&mut home.properties, properties);
+                Ok(Self::SetProperties {
+                    properties: previous,
                 })
             }
             Self::SetCameras { cameras } => {

@@ -45,6 +45,10 @@ pub(crate) struct CatalogParams {
     cat: Option<String>,
     /// Max rows (default 40).
     limit: Option<usize>,
+    /// `project` lists what this plan already uses — imported models
+    /// included — instead of the catalog, so a new piece can match what is
+    /// there rather than reintroduce a generic one.
+    scope: Option<String>,
 }
 /// The elements with these ids, grouped by kind like a full read.
 ///
@@ -156,13 +160,18 @@ fn narrow(home: &Home, out: &mut serde_json::Value, p: &GetHomeParams) -> Result
     }
 
     if let Some(fields) = &p.fields {
+        // `parts` was asked for as well: trimming the columns must not throw
+        // away the answer to the other question.
+        let parts = p.parts.unwrap_or(false);
         for kind in compact::KINDS {
             let Some(list) = out.get_mut(kind).and_then(|v| v.as_array_mut()) else {
                 continue;
             };
             for element in list {
                 if let Some(map) = element.as_object_mut() {
-                    map.retain(|k, _| k == "id" || fields.iter().any(|f| f == k));
+                    map.retain(|k, _| {
+                        k == "id" || (parts && k == "inside") || fields.iter().any(|f| f == k)
+                    });
                 }
             }
         }
@@ -236,6 +245,16 @@ impl NewEraMcp {
             expand_parts(&view, &mut out);
         }
         narrow(&view, &mut out, &p)?;
+        // Silence here reads as "the group is empty"; it usually means what
+        // was asked about is not a group at all.
+        if p.parts.unwrap_or(false)
+            && !out
+                .get("furniture")
+                .and_then(|v| v.as_array())
+                .is_some_and(|list| list.iter().any(|f| f.get("inside").is_some()))
+        {
+            out["parts"] = serde_json::json!("nothing in this answer is a group with parts inside");
+        }
         if !full.levels.is_empty() && p.kinds.is_none() && p.ids.is_none() {
             out["levels"] = compact::levels(full);
         }
@@ -255,9 +274,37 @@ impl NewEraMcp {
     pub(crate) fn materials(&self) -> String {
         compact::materials().to_string()
     }
-    #[allow(clippy::unused_self)] // tool methods need the receiver
-    #[tool(description = "Find catalog items: rows [id,name,w,d,h] in cm.")]
+    #[tool(
+        description = "Find catalog items: rows [id,name,w,d,h] in cm. scope=project lists what this plan already uses instead — catalog id or imported model, with how many there are and one id to copy from — which is how a new piece matches the drawing rather than reintroducing a generic one."
+    )]
     pub(crate) fn catalog(&self, Parameters(p): Parameters<CatalogParams>) -> String {
+        if p.scope.as_deref().map(str::trim) == Some("project") {
+            let doc = self.document.read();
+            let home = doc.home();
+            // By what a piece actually is: an imported model is its file,
+            // everything else its catalog entry.
+            let mut used: std::collections::BTreeMap<String, (usize, String, String)> =
+                std::collections::BTreeMap::new();
+            for piece in home
+                .furniture
+                .iter()
+                .flat_map(newera_core::Furniture::flatten)
+            {
+                let what = piece.model.clone().unwrap_or_else(|| piece.catalog.clone());
+                if what.is_empty() {
+                    continue;
+                }
+                let row = used
+                    .entry(what)
+                    .or_insert((0, piece.name.clone(), piece.id.to_string()));
+                row.0 += 1;
+            }
+            let rows: Vec<serde_json::Value> = used
+                .into_iter()
+                .map(|(what, (count, name, id))| serde_json::json!([what, name, count, id]))
+                .collect();
+            return serde_json::json!({ "used": rows }).to_string();
+        }
         compact::catalog(p.q.as_deref(), p.cat.as_deref(), p.limit.unwrap_or(40)).to_string()
     }
 }
@@ -353,5 +400,79 @@ mod tests {
             let value: serde_json::Value = serde_json::from_str(row).unwrap();
             assert_eq!(value["k"], "furniture", "{row}");
         }
+    }
+    /// A group is a black box until its parts are asked for; and when the
+    /// answer has no group in it, that is said rather than left to look like
+    /// an empty one.
+    #[test]
+    fn parts_open_groups_and_say_so_when_there_are_none() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(r#"{"walls":[{"pts":[[0,0],[400,0]],"t":10}]}"#).unwrap(),
+        ))
+        .unwrap();
+        {
+            let mut doc = s.document.write();
+            let mut group = newera_core::Furniture {
+                id: doc.new_furniture_id(),
+                catalog: "group".into(),
+                name: "Torre".into(),
+                position: newera_core::Point2::new(100.0, 100.0),
+                width: 80.0,
+                depth: 60.0,
+                height: 200.0,
+                visible: true,
+                ..Default::default()
+            };
+            for (i, name) in ["Porta", "Fundo"].iter().enumerate() {
+                #[allow(clippy::cast_precision_loss)]
+                let y = 70.0 + 60.0 * i as f64;
+                group.children.push(newera_core::Furniture {
+                    id: doc.new_furniture_id(),
+                    catalog: "panel".into(),
+                    name: (*name).into(),
+                    position: newera_core::Point2::new(100.0, y),
+                    width: 78.0,
+                    depth: 2.0,
+                    height: 200.0,
+                    visible: true,
+                    ..Default::default()
+                });
+            }
+            doc.execute(newera_core::Command::insert(group)).unwrap();
+        }
+        let opened: serde_json::Value = serde_json::from_str(
+            &s.get_home(Parameters(
+                serde_json::from_str(r#"{"ids":["f2"],"parts":true,"fields":["name"]}"#).unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let group = &opened["furniture"][0];
+        assert_eq!(group["inside"][0]["name"], "Porta", "{opened}");
+        assert_eq!(group["inside"][1]["name"], "Fundo", "{opened}");
+        // The door is the built front, so the group opens toward it.
+        let faces: serde_json::Value = serde_json::from_str(
+            &s.get_home(Parameters(
+                serde_json::from_str(r#"{"ids":["f2"],"fields":["faces"]}"#).unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(faces["furniture"][0]["faces"], "-y", "{faces}");
+
+        let walls_only: serde_json::Value = serde_json::from_str(
+            &s.get_home(Parameters(
+                serde_json::from_str(r#"{"kinds":["walls"],"parts":true}"#).unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(
+            walls_only["parts"]
+                .as_str()
+                .is_some_and(|s| s.contains("group")),
+            "{walls_only}"
+        );
     }
 }

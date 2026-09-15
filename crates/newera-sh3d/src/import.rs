@@ -1052,6 +1052,7 @@ impl<'g> Importer<'g> {
             latitude: c.num("latitude").map(f64::to_degrees),
             longitude: c.num("longitude").map(f64::to_degrees),
             time_zone,
+            city: None,
         };
         if compass.diameter <= 0.0 {
             compass.diameter = 100.0;

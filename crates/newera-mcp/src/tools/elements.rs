@@ -11,7 +11,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use super::NewEraMcp;
-use super::reply::{applied, background_scale, core, invalid, ok, on_variant, preview};
+use super::reply::{self, Dry, applied, background_scale, core, invalid, ok, on_variant};
 use crate::edit::{self, CreateParams, UpdateSpec};
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -23,7 +23,7 @@ pub(crate) struct UpdateParams {
     /// around every piece it touches, and which layout and ergonomics
     /// findings it would resolve or create. Nothing is written and the
     /// user's window does not move.
-    pub(crate) dry: Option<bool>,
+    pub(crate) dry: Option<Dry>,
 }
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct IdsParams {
@@ -37,7 +37,7 @@ pub(crate) struct MoveParams {
     /// Drag endpoints of walls joined to moved walls (default true).
     joined: Option<bool>,
     /// Try it without applying; see `update`.
-    dry: Option<bool>,
+    dry: Option<Dry>,
 }
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct SplitParams {
@@ -64,16 +64,16 @@ impl NewEraMcp {
         Ok(ok(&doc, &ids))
     }
     #[tool(
-        description = "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto, polyline divider). anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. dry=true answers what it would do — changed fields, clearances around each piece it touches, findings resolved and created — without writing anything, so a size can be tried before it is applied. Otherwise the reply names what changed."
+        description = "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto, polyline divider). anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. dry=true answers what it would do — changed fields, clearances around each piece it touches, findings resolved and created — without writing anything, so a size can be tried before it is applied; dry=\"summary\" answers the same decision without listing the parts a group rebuilds. Otherwise the reply names what changed."
     )]
     pub(crate) fn update(
         &self,
         Parameters(p): Parameters<UpdateParams>,
     ) -> Result<String, ErrorData> {
-        if p.dry.unwrap_or(false) {
+        if Dry::on(p.dry.as_ref()) {
             let doc = self.document.read();
             let items = p.items;
-            return preview(&doc, move |scratch| {
+            return reply::preview_with(&doc, Dry::brief(p.dry.as_ref()), move |scratch| {
                 edit::update(scratch, items).map_err(invalid)
             });
         }
@@ -93,7 +93,7 @@ impl NewEraMcp {
     }
     #[tool(
         name = "move",
-        description = "Move elements by dx,dy cm. dry=true answers what it would do without writing anything; see `update`."
+        description = "Move elements by dx,dy cm. dry=true answers what it would do without writing anything, dry=\"summary\" answers it short; see `update`."
     )]
     pub(crate) fn move_elements(
         &self,
@@ -101,9 +101,9 @@ impl NewEraMcp {
     ) -> Result<String, ErrorData> {
         let ids = edit::parse_ids(&p.ids).map_err(invalid)?;
         let joined = p.joined.unwrap_or(true);
-        if p.dry.unwrap_or(false) {
+        if Dry::on(p.dry.as_ref()) {
             let doc = self.document.read();
-            return preview(&doc, move |scratch| {
+            return reply::preview_with(&doc, Dry::brief(p.dry.as_ref()), move |scratch| {
                 ops::translate(scratch, &ids, p.dx, p.dy, joined).map_err(core)
             });
         }
@@ -175,7 +175,7 @@ mod tests {
             &s.update(Parameters(UpdateParams {
                 items: serde_json::from_str(r#"[{"id":"f6","d":100}]"#).unwrap(),
                 v: None,
-                dry: Some(true),
+                dry: Some(Dry::All(true)),
             }))
             .unwrap(),
         )

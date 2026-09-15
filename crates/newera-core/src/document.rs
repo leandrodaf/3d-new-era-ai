@@ -116,6 +116,16 @@ impl Document {
         self.revision
     }
 
+    /// How many changes can still be undone on the active variant.
+    ///
+    /// A checkpoint is this number: undoing back down to it puts the plan
+    /// exactly where it was, with every id intact — which duplicating the
+    /// variant cannot promise.
+    #[must_use]
+    pub fn undo_depth(&self) -> usize {
+        self.current().undo_stack.len()
+    }
+
     /// Allocates a fresh wall id. Ids are never reused, even after undo.
     pub fn new_wall_id(&mut self) -> WallId {
         self.current_mut().home.new_wall_id()
@@ -217,6 +227,24 @@ impl Document {
                 undo_rooms.push(inverse);
                 inverse = Command::Batch {
                     commands: undo_rooms,
+                };
+            }
+        }
+        // Dimensions that hold onto what they mark are measured again, in
+        // the same undo step: a plan whose numbers drift is worse than one
+        // with no numbers at all.
+        if variant.home.dimensions.iter().any(|d| d.holds.is_some()) {
+            let mut undo_dims = Vec::new();
+            for dim in crate::measure::dimensions_following(&variant.home) {
+                if let Ok(previous) = Command::update(dim).apply(&mut variant.home) {
+                    undo_dims.push(previous);
+                }
+            }
+            if !undo_dims.is_empty() {
+                undo_dims.reverse();
+                undo_dims.push(inverse);
+                inverse = Command::Batch {
+                    commands: undo_dims,
                 };
             }
         }

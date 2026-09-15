@@ -217,6 +217,7 @@ bedroom with a door and a window, furnish it and render a photo."*
 | `update` / `move` / `delete` | Edit any element by id |
 | `arrange` | Copies in a row, rotate, mirror, group/ungroup, drawing order |
 | `split_wall` / `merge_walls` | Split a wall in two, or join walls on one line into a single wall |
+| `checkpoint` | Name where the plan is and come back to it, keeping every id |
 | `set_home` | Project name and compass (north) |
 | `set_background` | Scanned plan at real scale: calibrations, X/Y scale, rotation |
 | `trace_background` | Find walls in the scanned plan and list or create them |
@@ -234,12 +235,13 @@ bedroom with a door and a window, furnish it and render a photo."*
 | `save_home` / `open_home` / `new_home` | Projects (`.newera`) and Sweet Home 3D import (`.sh3d`) |
 | `catalog` | Search the parametric furniture catalog (rows `[id,name,w,d,h]`) |
 | `place` | Furniture, doors and windows (snap into walls, swing side), beams, finishes, glass, batch defaults |
-| `check_layout` | Overlaps, pieces in walls, blocked doors, pieces outside rooms, areas vs. reference |
+| `check_layout` | Overlaps, pieces in walls, blocked doors, cabinets turned against their own fronts, doors in no wall, pieces outside rooms, areas vs. reference |
 | `variants` | Plan versions as tabs: list with stats, duplicate, switch, rename, delete |
 | `levels` / `cameras` / `video` | Storeys, points of view, camera path videos |
-| `materials` / `disciplines` / `annotations` | Finishes, electrical and plumbing projects, dimension chains and reference schedules |
+| `materials` / `disciplines` / `annotations` | Finishes, electrical and plumbing projects, dimension chains and reference schedules; `stale` finds notes whose numbers stopped matching the drawing, `anchor` ties dimensions to what they mark so they measure themselves again |
+| `measure` | Tape over the plan: free floor around a piece, the gap between two, what a straight probe runs into — and `fit`, how big a piece can grow before a clearance breaks |
 | `plugins` / `sessions` | External plugins and the people working on the project |
-| `undo` / `redo` | Shared history with the user |
+| `undo` / `redo` / `checkpoint` | Shared history with the user; named points to come back to, ids intact |
 
 ## Modes
 

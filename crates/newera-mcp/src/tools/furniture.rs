@@ -20,10 +20,13 @@ pub(crate) struct PlaceParams {
     px: bool,
     /// Plan version (tab) to write to; switches to it first.
     v: Option<usize>,
+    /// Try it without applying; see `update`. `"summary"` answers short.
+    dry: Option<crate::tools::reply::Dry>,
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct ArrangeParams {
-    /// `array` (copies in a row), `rotate`, `mirror`, `group`, `ungroup`, `front`, `back`.
+    /// `array` (copies in a row), `align`, `distribute`, `flip`, `rotate`,
+    /// `mirror`, `group`, `ungroup`, `front`, `back`.
     action: String,
     ids: Vec<String>,
     /// array: number of copies (default 1).
@@ -44,21 +47,32 @@ pub(crate) struct ArrangeParams {
     copy: bool,
     /// group: its name.
     name: Option<String>,
+    /// align/distribute: `x` or `y`.
+    axis: Option<String>,
+    /// align: which edge to line up — `low` (left, or top of the plan),
+    /// `middle`, `high` — and `value`, the coordinate to put it on.
+    edge: Option<String>,
+    value: Option<f64>,
+    /// distribute: centimeters between one piece and the next (default 0).
+    gap: Option<f64>,
 }
 #[tool_router(router = furniture_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Place catalog items: at=[x,y] center (doors/windows near a wall snap into it; into=[x,y] picks the swing side), or wall=id (+along cm) to put doors/windows in a wall or furniture against it. Sizes w/d/h override defaults; pitch/roll tilt; angle clockwise degrees (0: front faces +y, down the plan; back/headboard toward -y); mat finish (wood, marble, img:…; 'img:facade.png fit' stretches one image: a reference board to compare with render_3d view=front) and opacity (glass 0.3); defaults {…} fills every item; px=true reads coordinates as background pixels. cat=beam with a,b=[x,y,z] (z above the floor) and w×h section makes rafters, posts and braces; a beam reaching into a roof stops under it. Pools: pool or pool-oval."
+        description = "Place catalog items: at=[x,y] center (doors/windows near a wall snap into it; into=[x,y] picks the swing side), or wall=id (+along cm) to put doors/windows in a wall or furniture against it. Sizes w/d/h override defaults; pitch/roll tilt; angle clockwise degrees (0: front faces +y, down the plan; back/headboard toward -y); mat finish (wood, marble, img:…; 'img:facade.png fit' stretches one image: a reference board to compare with render_3d view=front) and opacity (glass 0.3); defaults {…} fills every item; px=true reads coordinates as background pixels. cat=beam with a,b=[x,y,z] (z above the floor) and w×h section makes rafters, posts and braces; a beam reaching into a roof stops under it. Pools: pool or pool-oval. dry=true answers what it would do — what it would add, the clearances around it, the findings it would settle or create — without writing; dry=\"summary\" answers short."
     )]
     pub(crate) fn place(
         &self,
         Parameters(p): Parameters<PlaceParams>,
     ) -> Result<String, ErrorData> {
-        let mut doc = self.document.write();
-        on_variant(&mut doc, p.v)?;
+        let dry = crate::tools::reply::Dry::on(p.dry.as_ref());
+        let brief = crate::tools::reply::Dry::brief(p.dry.as_ref());
         let mut items = edit::with_defaults(p.items, p.defaults.as_ref()).map_err(invalid)?;
         if p.px {
-            let bg = background_scale(&doc)?;
+            let bg = {
+                let doc = self.document.read();
+                background_scale(&doc)?
+            };
             for item in &mut items {
                 item.at = item.at.map(|q| bg.point(q));
                 item.into = item.into.map(|q| bg.point(q));
@@ -71,11 +85,22 @@ impl NewEraMcp {
                 }
             }
         }
+        // A dry run does not switch version either: nothing about the plan,
+        // or about what the user is looking at, moves.
+        if dry {
+            let doc = self.document.read();
+            return crate::tools::reply::preview_with(&doc, brief, move |scratch| {
+                edit::place(scratch, items).map(|_| ()).map_err(invalid)
+            });
+        }
+        let mut doc = self.document.write();
+        on_variant(&mut doc, p.v)?;
         let ids = edit::place(&mut doc, items).map_err(invalid)?;
         Ok(ok(&doc, &ids))
     }
+
     #[tool(
-        description = "Arrange elements in one undo step. array {ids,n,dx,dy,dz} adds n copies stepping by dx/dy/dz cm (rafters, columns); rotate {ids,angle clockwise,about?,copy?}; mirror {ids,a,b,copy?} across the line a-b; group {ids,name?} joins pieces into one box that moves/hides together, ungroup {ids:[group]}; front/back {ids} draws rooms or pieces on top/underneath (pool over deck, rug under sofa). Returns new ids."
+        description = "Arrange elements in one undo step. array {ids,n,dx,dy,dz} adds n copies stepping by dx/dy/dz cm (rafters, columns); align {ids,axis,edge:low|middle|high,value} lines pieces up by an edge — backs on one line, fronts on another — instead of by centers you work out yourself; distribute {ids,axis,gap?} sets them side by side in the order given, from where the first one is (a run of joinery); flip {ids} turns a piece back to front, rebuilding what is inside it (mirror only swaps left and right and leaves the front where it was); rotate {ids,angle clockwise,about?,copy?}; mirror {ids,a,b,copy?} across the line a-b; group {ids,name?} joins pieces into one box that moves/hides together, ungroup {ids:[group]}; front/back {ids} draws rooms or pieces on top/underneath (pool over deck, rug under sofa). Returns new ids."
     )]
     pub(crate) fn arrange(
         &self,
@@ -156,6 +181,53 @@ impl NewEraMcp {
                     .into_iter()
                     .map(Into::into)
                     .collect()
+            }
+            "align" | "distribute" => {
+                let axis = match p.axis.as_deref().map(str::trim) {
+                    Some("x" | "+x" | "-x") => newera_core::Axis::X,
+                    Some("y" | "+y" | "-y") => newera_core::Axis::Y,
+                    _ => return Err(invalid("`axis`: x or y")),
+                };
+                let pieces: Vec<newera_core::FurnitureId> = ids
+                    .iter()
+                    .map(|id| match id {
+                        newera_core::ElementId::Furniture(f) => Ok(*f),
+                        other => Err(invalid(format!("{other} is not a piece of furniture"))),
+                    })
+                    .collect::<Result<_, _>>()?;
+                if p.action == "align" {
+                    let edge = match p.edge.as_deref().map(str::trim) {
+                        Some("low" | "left" | "top" | "back") => newera_core::arrange::Edge::Low,
+                        Some("middle" | "center") => newera_core::arrange::Edge::Middle,
+                        Some("high" | "right" | "bottom" | "front") => {
+                            newera_core::arrange::Edge::High
+                        }
+                        _ => return Err(invalid("`edge`: low, middle or high")),
+                    };
+                    let value = p.value.ok_or_else(|| invalid("`value` is required"))?;
+                    newera_core::arrange::align(&mut doc, &pieces, axis, edge, value)
+                        .map_err(core)?
+                } else {
+                    newera_core::arrange::distribute(&mut doc, &pieces, axis, p.gap.unwrap_or(0.0))
+                        .map_err(core)?
+                }
+            }
+            // Back to front, the whole piece with it. `mirror` swaps left
+            // and right and leaves the front where it was, which is a
+            // different thing and the one that surprises people.
+            "flip" => {
+                let mut commands = Vec::new();
+                for id in &ids {
+                    let Some(newera_core::Element::Furniture(mut piece)) = doc.home().element(*id)
+                    else {
+                        return Err(invalid(format!("{id} is not a piece of furniture")));
+                    };
+                    piece.angle = (piece.angle + 180.0).rem_euclid(360.0);
+                    commands.push(newera_core::Command::update(piece));
+                }
+                doc.execute(newera_core::Command::Batch { commands })
+                    .map_err(core)?;
+                ids.clone()
             }
             "front" | "back" => {
                 arrange::reorder(&mut doc, &ids, p.action == "front").map_err(core)?;
@@ -283,6 +355,98 @@ mod tests {
         assert_eq!(
             (wall.start, wall.end),
             (Point2::new(100.0, 50.0), Point2::new(400.0, 50.0))
+        );
+    }
+
+    /// Lining a run of joinery up by its back, setting the modules side by
+    /// side, and turning one back to front: three sentences that used to be
+    /// arithmetic with centers, and where a plan quietly drifted.
+    #[test]
+    fn align_distribute_and_flip_say_it_in_the_words_of_the_drawing() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[600,0],[600,400],[0,400]],"closed":true,"t":15}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"base-cabinet","at":[100,100],"w":60,"d":60,"h":90},
+                             {"cat":"base-cabinet","at":[200,140],"w":80,"d":60,"h":90},
+                             {"cat":"base-cabinet","at":[320,90],"w":40,"d":60,"h":90}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let arrange = |json: &str| {
+            s.arrange(Parameters(serde_json::from_str(json).unwrap()))
+                .unwrap()
+        };
+        // Backs on y = 60, whatever depth each one has.
+        arrange(r#"{"action":"align","ids":["f5","f6","f7"],"axis":"y","edge":"low","value":60}"#);
+        let home = s.document.read().home().clone();
+        for piece in &home.furniture {
+            let (min, _) = newera_core::plan_bounds(piece);
+            assert!((min.y - 60.0).abs() < 1e-6, "{} at {min:?}", piece.id);
+        }
+
+        // Side by side from where the first one is, no gaps: one run.
+        arrange(r#"{"action":"distribute","ids":["f5","f6","f7"],"axis":"x"}"#);
+        let home = s.document.read().home().clone();
+        let mut edges: Vec<(f64, f64)> = home
+            .furniture
+            .iter()
+            .map(|f| {
+                let (min, max) = newera_core::plan_bounds(f);
+                (min.x, max.x)
+            })
+            .collect();
+        edges.sort_by(|a, b| a.0.total_cmp(&b.0));
+        assert!((edges[0].0 - 70.0).abs() < 1e-6, "{edges:?}");
+        for pair in edges.windows(2) {
+            assert!((pair[1].0 - pair[0].1).abs() < 1e-6, "{edges:?}");
+        }
+
+        // And back to front, which `mirror` does not do.
+        let before = s.document.read().home().furniture[0].angle;
+        arrange(r#"{"action":"flip","ids":["f5"]}"#);
+        let after = s.document.read().home().furniture[0].angle;
+        assert!((after - (before + 180.0).rem_euclid(360.0)).abs() < 1e-6);
+    }
+
+    /// Placing a door the wrong way round used to be found by the next
+    /// check; asked first, it is found before anything is written.
+    #[test]
+    fn place_can_be_asked_before_it_is_done() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true,"t":15}],
+                    "rooms":[{"name":"Quarto","at":[200,150]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let before = s.document.read().revision();
+        let dry: serde_json::Value = serde_json::from_str(
+            &s.place(Parameters(
+                serde_json::from_str(
+                    r#"{"items":[{"cat":"bed-double","at":[200,150]}],"dry":"summary"}"#,
+                )
+                .unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(dry["dry"], true, "{dry}");
+        assert_eq!(dry["added_count"], 1, "{dry}");
+        assert!(dry["clearances"].is_object(), "{dry}");
+        assert_eq!(
+            s.document.read().revision(),
+            before,
+            "nothing was written: {dry}"
         );
     }
 }

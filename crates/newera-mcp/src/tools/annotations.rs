@@ -21,6 +21,9 @@ pub(crate) struct AnnotationParams {
     /// off its notes, so one that still says 66,5 over a corridor of 86 is
     /// worse than no note at all.
     stale: Option<bool>,
+    /// Tie every straight dimension to what its ends touch right now, so from
+    /// here on they follow the drawing. Run it while the numbers are right.
+    anchor: Option<bool>,
     /// Search label text, accent- and case-insensitive, e.g. `porta`.
     q: Option<String>,
     /// Show engineering dimension chains.
@@ -40,22 +43,6 @@ pub(crate) struct DisciplineParams {
     action: Option<String>,
     /// `electrical`, `plumbing` or `architecture`.
     d: Option<String>,
-}
-/// Lowercased and stripped of accents, so `porta` finds `Portão` and a
-/// query typed without accents still matches a plan written with them.
-fn fold(text: &str) -> String {
-    text.chars()
-        .flat_map(char::to_lowercase)
-        .map(|c| match c {
-            'á' | 'à' | 'â' | 'ã' | 'ä' => 'a',
-            'é' | 'ê' | 'ë' => 'e',
-            'í' | 'î' | 'ï' => 'i',
-            'ó' | 'ô' | 'õ' | 'ö' => 'o',
-            'ú' | 'û' | 'ü' => 'u',
-            'ç' => 'c',
-            other => other,
-        })
-        .collect()
 }
 #[tool_router(router = annotations_router, vis = "pub(crate)")]
 impl NewEraMcp {
@@ -134,12 +121,23 @@ impl NewEraMcp {
         Ok(serde_json::json!({"active": home.active_discipline, "hidden": home.hidden_disciplines}).to_string())
     }
     #[tool(
-        description = "Plan annotations. stale=true lists dimensions and notes that no longer match the drawing: rows [id, written, measured, against, text] — run it after moving geometry, before handing the plan over. q=<text> searches label text. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs), legend (symbol legend with counts); bake=true turns the automatic chains into editable dimensions (ids returned). Otherwise returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
+        description = "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about and dimensions whose anchor is gone: rows [id, written, measured, against, text] — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right. q=<text> searches label text. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs), legend (symbol legend with counts); bake=true turns the automatic chains into editable dimensions (ids returned). Otherwise returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
     )]
     pub(crate) fn annotations(
         &self,
         Parameters(p): Parameters<AnnotationParams>,
     ) -> Result<String, ErrorData> {
+        if p.anchor.unwrap_or(false) {
+            let mut doc = self.document.write();
+            let view = doc.home().level_view(doc.home().current_level());
+            let held = newera_core::anchor_dimensions(&view);
+            let ids: Vec<String> = held.iter().map(|d| d.id.to_string()).collect();
+            if !held.is_empty() {
+                let commands = held.into_iter().map(Command::update).collect();
+                doc.execute(Command::Batch { commands }).map_err(core)?;
+            }
+            return Ok(serde_json::json!({"anchored": ids}).to_string());
+        }
         if p.stale.unwrap_or(false) || p.q.is_some() {
             let doc = self.document.read();
             let view = doc.home().level_view(doc.home().current_level());
@@ -160,11 +158,11 @@ impl NewEraMcp {
                 out.insert("stale".to_owned(), serde_json::json!(rows));
             }
             if let Some(query) = &p.q {
-                let needle = fold(query);
+                let needle = newera_core::fold(query);
                 let rows: Vec<serde_json::Value> = view
                     .labels
                     .iter()
-                    .filter(|l| fold(&l.text).contains(&needle))
+                    .filter(|l| newera_core::fold(&l.text).contains(&needle))
                     .map(compact::label)
                     .collect();
                 out.insert("labels".to_owned(), serde_json::json!(rows));
@@ -283,21 +281,38 @@ mod tests {
             annotations(r#"{"stale":true}"#)
         );
 
-        // Deepen the counter and both the dimension and the note go stale.
+        // Tie the dimension to the two counters it runs between, while the
+        // drawing and the number still agree.
+        let anchored = annotations(r#"{"anchor":true}"#);
+        assert_eq!(anchored["anchored"][0], "d5", "{anchored}");
+
+        // Deepen the counter: the dimension follows it, the note does not.
         s.update(Parameters(UpdateParams {
             items: serde_json::from_str(r#"[{"id":"f7","d":100,"anchor":"back"}]"#).unwrap(),
             v: None,
             dry: None,
         }))
         .unwrap();
+        let home: serde_json::Value = serde_json::from_str(
+            &s.get_home(Parameters(
+                serde_json::from_str(r#"{"kinds":["dims"]}"#).unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let dim = &home["dims"][0];
+        assert_eq!(dim["a"], serde_json::json!([250, 110]), "{home}");
+        assert!(
+            (dim["len"].as_f64().unwrap() - 200.0).abs() < 0.5,
+            "the dimension measured itself again: {home}"
+        );
+
         let stale = annotations(r#"{"stale":true}"#);
         let rows = stale["stale"].as_array().unwrap();
-        let dim = rows
-            .iter()
-            .find(|r| r[0] == "d5")
-            .unwrap_or_else(|| panic!("{stale}"));
-        assert!((dim[1].as_f64().unwrap() - 240.0).abs() < 0.5, "{stale}");
-        assert!((dim[2].as_f64().unwrap() - 200.0).abs() < 0.5, "{stale}");
+        assert!(
+            !rows.iter().any(|r| r[0] == "d5"),
+            "a dimension that follows the drawing is never stale: {stale}"
+        );
         let note = rows
             .iter()
             .find(|r| r[0] == "t6")
@@ -357,6 +372,78 @@ mod tests {
             .unwrap();
         assert!(!png.content.is_empty());
     }
+    /// The note that lies is a legend beside its cabinet, not on it: the one
+    /// a joiner reads to cut. Three rounds of a real session were spent
+    /// finding those by eye.
+    #[test]
+    fn a_legend_beside_its_piece_is_checked_against_it() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[600,0],[600,400],[0,400]],"closed":true}],
+                    "labels":[{"text":"07 Armário portas: 65,83 × 84 × 87","at":[300,150]},
+                              {"text":"Escala 1:50","at":[560,380]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"base-cabinet","at":[300,200],"w":65.83,"d":84,"h":87}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let annotations = |json: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.annotations(Parameters(serde_json::from_str(json).unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        assert!(
+            annotations(r#"{"stale":true}"#)["stale"]
+                .as_array()
+                .unwrap()
+                .is_empty(),
+            "the legend still matches the cabinet"
+        );
+
+        // The cabinet is narrowed and made shallower; the legend stays as
+        // typed, which is how a plan ends up lying to the workshop.
+        s.update(Parameters(UpdateParams {
+            items: serde_json::from_str(r#"[{"id":"f7","w":59.85,"d":72}]"#).unwrap(),
+            v: None,
+            dry: None,
+        }))
+        .unwrap();
+        let stale = annotations(r#"{"stale":true}"#);
+        let rows = stale["stale"].as_array().unwrap();
+        assert_eq!(rows.len(), 1, "{stale}");
+        assert_eq!(rows[0][0], "t5", "{stale}");
+        assert_eq!(rows[0][3], "f7", "the piece it is about: {stale}");
+
+        // Said outright, the tie holds wherever the note sits.
+        s.update(Parameters(UpdateParams {
+            items: serde_json::from_str(r#"[{"id":"t5","at":[560,20],"about":"f7"}]"#).unwrap(),
+            v: None,
+            dry: None,
+        }))
+        .unwrap();
+        let stale = annotations(r#"{"stale":true}"#);
+        assert_eq!(stale["stale"].as_array().unwrap().len(), 1, "{stale}");
+
+        // And a note about nothing in particular is nobody's business.
+        assert!(
+            !stale["stale"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|r| r[0] == "t6"),
+            "{stale}"
+        );
+    }
+
     #[test]
     fn annotations_list_rooms_with_details() {
         let s = server();
@@ -381,6 +468,7 @@ mod tests {
         .unwrap();
         let reply = s
             .annotations(Parameters(AnnotationParams {
+                anchor: None,
                 stale: None,
                 q: None,
                 dims: Some(true),
@@ -432,6 +520,7 @@ mod tests {
         drop(doc);
         let baked = s
             .annotations(Parameters(AnnotationParams {
+                anchor: None,
                 bake: Some(true),
                 ..AnnotationParams::default()
             }))

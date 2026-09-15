@@ -14,7 +14,7 @@
 
 use geo::{Area, BooleanOps, Polygon};
 
-use crate::elements::Wall;
+use crate::elements::{Dimension, Hold, Label, Wall};
 use crate::furniture::Furniture;
 use crate::geometry::Point2;
 use crate::home::Home;
@@ -103,16 +103,44 @@ impl Dir {
             "-y" | "up" | "north" => return plan(Axis::Y, -1.0),
             _ => {}
         }
-        // Piece-relative: its front is local +y, turned by its angle.
+        // Piece-relative: measured from the side it opens to, which is what
+        // was built into it — see [`facing`] — and not from `angle` alone.
         let piece = piece?;
-        let local = match raw.as_str() {
-            "front" => 0.0,
-            "back" => 180.0,
-            "left" => 90.0,
-            "right" => -90.0,
+        let quarters = match raw.as_str() {
+            "front" => 0,
+            "left" => 1,
+            "back" => 2,
+            "right" => 3,
             _ => return None,
         };
-        Some(snap(piece.angle + local))
+        let front = Self::parse(facing(piece), None)?;
+        Some(front.turn(quarters))
+    }
+
+    /// This direction turned `quarters` times to the left of the plan, the
+    /// way `angle` turns a piece: `+y` → `-x` → `-y` → `+x`.
+    #[must_use]
+    pub fn turn(self, quarters: u8) -> Self {
+        let order = [
+            Self {
+                axis: Axis::Y,
+                sign: 1.0,
+            },
+            Self {
+                axis: Axis::X,
+                sign: -1.0,
+            },
+            Self {
+                axis: Axis::Y,
+                sign: -1.0,
+            },
+            Self {
+                axis: Axis::X,
+                sign: 1.0,
+            },
+        ];
+        let at = order.iter().position(|d| *d == self).unwrap_or_default();
+        order[(at + quarters as usize) % 4]
     }
 
     pub fn name(self) -> &'static str {
@@ -153,14 +181,109 @@ fn snap(angle_degrees: f64) -> Dir {
     }
 }
 
+/// How thin a part has to be, in cm, to be a panel and not a body.
+const PANEL: f64 = 6.0;
+
+/// How close to a face of the group a panel has to sit to be on it, in cm.
+const AT_FACE: f64 = 4.0;
+
+/// What a part's name says about which side it is: a door and a drawer front
+/// are the opening side, a back panel and a blind panel are the other one.
+/// Names come from the joinery builder and from whoever drew the group, in
+/// the two languages this app speaks.
+fn front_word(name: &str) -> f64 {
+    let name = crate::annotations::fold(name);
+    let has = |words: &[&str]| words.iter().any(|w| name.contains(w));
+    if has(&["cego", "fundo", "costa", "back panel", "blind"]) {
+        return -4.0;
+    }
+    if has(&[
+        "frente", "porta", "gavet", "front", "door", "drawer", "rodape", "kick",
+    ]) {
+        return 3.0;
+    }
+    0.0
+}
+
+/// The face a group's fronts are on, when the parts say it clearly.
+///
+/// A panel across a face — a door, a drawer front, the fixed front under a
+/// sink — is built on the side the piece opens to. Several of them on one
+/// face and a single blind panel on the other is not ambiguous, and it is
+/// exactly what `angle` cannot tell: a group brought in from another program
+/// carries whatever angle it was placed with.
+fn built_front(group: &Furniture) -> Option<&'static str> {
+    let parts: Vec<&Furniture> = group.flatten().into_iter().skip(1).collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let (min, max) = plan_bounds(group);
+    // Faces in the order `-x`, `+x`, `-y`, `+y`.
+    let mut score = [0.0_f64; 4];
+    for part in parts {
+        let name = part
+            .properties
+            .get("joinery:part")
+            .map_or(part.name.as_str(), String::as_str);
+        let weight = 1.0 + front_word(name);
+        if weight <= 0.0 {
+            continue;
+        }
+        let (lo, hi) = plan_bounds(part);
+        let (across_x, across_y) = (hi.x - lo.x, hi.y - lo.y);
+        // A panel lies flat against one face: thin one way, wide the other.
+        if across_y <= PANEL && across_x > across_y {
+            if (lo.y - min.y).abs() <= AT_FACE {
+                score[2] += weight;
+            }
+            if (hi.y - max.y).abs() <= AT_FACE {
+                score[3] += weight;
+            }
+        } else if across_x <= PANEL && across_y > across_x {
+            if (lo.x - min.x).abs() <= AT_FACE {
+                score[0] += weight;
+            }
+            if (hi.x - max.x).abs() <= AT_FACE {
+                score[1] += weight;
+            }
+        }
+    }
+    let names = ["-x", "+x", "-y", "+y"];
+    let best = (0..4).max_by(|a, b| score[*a].total_cmp(&score[*b]))?;
+    let runner_up = (0..4)
+        .filter(|f| *f != best)
+        .map(|f| score[f])
+        .fold(0.0_f64, f64::max);
+    // Only a clear majority overrules `angle`: one door against one back panel
+    // says nothing, five fronts against a blind panel says everything.
+    (score[best] >= 2.0 && score[best] >= 2.0 * runner_up).then(|| names[best])
+}
+
 /// Which way a piece's front looks, as `+x`, `-x`, `+y` or `-y`.
 ///
 /// For a cabinet this is the side its doors open toward, which decides
 /// whether it can be used at all — and is invisible in `angle` alone.
+///
+/// A piece on its own is read from `angle`: a catalog model is built facing
+/// its own `+y`. A group is read from what was built into it — doors, drawer
+/// fronts, the blind panel on the back — because that is the thing that
+/// exists; `angle` only says how the group was placed, and for one imported
+/// from another program it may say nothing at all. Where the two disagree,
+/// [`crate::check_layout`] reports it rather than picking a side in silence.
 pub fn facing(piece: &Furniture) -> &'static str {
     // Mirroring flips the piece's local x (a left-hinged door becomes
     // right-hinged); the front stays local +y, so it does not move.
-    snap(piece.angle).name()
+    built_front(piece).unwrap_or_else(|| snap(piece.angle).name())
+}
+
+/// Whether the parts built into a group say it opens somewhere other than
+/// `angle` does: a modeling mistake, and one that quietly turns a cabinet
+/// against a wall.
+#[must_use]
+pub fn facing_disagrees(piece: &Furniture) -> Option<(&'static str, &'static str)> {
+    let built = built_front(piece)?;
+    let placed = snap(piece.angle).name();
+    (built != placed).then_some((built, placed))
 }
 
 /// Axis-aligned plan box of a piece, `angle`, mirroring and tilt applied.
@@ -577,6 +700,60 @@ mod tests {
         }
     }
 
+    /// The tall unit of a kitchen island: fronts, drawers and a door built on
+    /// the kitchen side, one blind panel toward the living room, and an angle
+    /// that says the opposite because that is how the group was imported.
+    fn island_tower(angle: f64) -> Furniture {
+        // Body 80 wide × 64 deep, kitchen side at y = 421, living room at 485.
+        let mut group = piece(1, (455.0, 453.0), (80.0, 64.0, 280.0), angle);
+        let panel = |id: u64, name: &str, y: f64, h: f64, elev: f64| {
+            let mut part = piece(id, (455.0, y), (78.0, 2.0, h), 0.0);
+            part.name = name.to_owned();
+            part.elevation = elev;
+            part
+        };
+        group.children = vec![
+            panel(2, "Frente fixa de madeira sob cuba", 422.0, 40.0, 0.0),
+            panel(3, "Gaveta superior", 422.0, 30.0, 40.0),
+            panel(4, "Gaveta inferior", 422.0, 30.0, 70.0),
+            panel(5, "Porta do forno", 422.0, 60.0, 100.0),
+            panel(6, "Painel cego voltado à sala", 484.0, 280.0, 0.0),
+        ];
+        group
+    }
+
+    #[test]
+    fn a_group_opens_where_its_fronts_are_not_where_its_angle_points() {
+        // `angle` 0 says the front looks at +y — the living room — but every
+        // front panel was built at y = 422, the kitchen side.
+        let tower = island_tower(0.0);
+        assert_eq!(facing(&tower), "-y");
+        assert_eq!(facing_disagrees(&tower), Some(("-y", "+y")));
+
+        // Turned to agree with what is built, there is nothing to report.
+        let turned = island_tower(180.0);
+        assert_eq!(facing(&turned), "-y");
+        assert_eq!(facing_disagrees(&turned), None);
+    }
+
+    #[test]
+    fn a_piece_on_its_own_and_an_even_group_still_read_their_angle() {
+        let alone = piece(1, (0.0, 0.0), (60.0, 60.0, 90.0), 90.0);
+        assert_eq!(facing(&alone), "-x");
+        assert_eq!(facing_disagrees(&alone), None);
+
+        // Two panels that say nothing about themselves, one on each face:
+        // the group is a box as far as anyone can tell, so `angle` decides.
+        let mut even = piece(1, (0.0, 0.0), (80.0, 60.0, 90.0), 0.0);
+        let mut one = piece(2, (0.0, -29.0), (78.0, 2.0, 88.0), 0.0);
+        one.name = "Painel 1".into();
+        let mut other = piece(3, (0.0, 29.0), (78.0, 2.0, 88.0), 0.0);
+        other.name = "Painel 2".into();
+        even.children = vec![one, other];
+        assert_eq!(facing(&even), "+y", "the angle is all there is to go on");
+        assert_eq!(facing_disagrees(&even), None);
+    }
+
     #[test]
     fn bounds_resolve_a_quarter_turn() {
         let turned = piece(1, (100.0, 100.0), (200.0, 60.0, 90.0), 90.0);
@@ -744,17 +921,83 @@ pub struct Stale {
     pub text: String,
 }
 
-/// How far a dimension may be off before it counts as stale, cm.
-const STALE_TOLERANCE: f64 = 1.0;
-
-/// Dimensions whose length no longer matches the run they mark, and labels
-/// whose written sizes no longer match the piece they sit on.
+/// Where a dimension end that holds onto something sits now.
 ///
-/// Only axis-aligned dimensions are checked: a slanted one has no single
-/// run to compare against, and guessing would cost more than it saves.
-pub fn stale_annotations(home: &Home) -> Vec<Stale> {
+/// Only the coordinate along the dimension moves: the other one is where
+/// whoever drew it put the line, and moving that would drag the annotation
+/// across the drawing instead of keeping it where it reads.
+#[must_use]
+pub fn hold_point(home: &Home, hold: &Hold, axis: Axis, keep_across: f64) -> Option<Point2> {
+    let (min, max) = element_bounds(home, hold.id)?;
+    let along = match hold.edge.as_deref().map(str::trim) {
+        Some("+x") => max.x,
+        Some("-x") => min.x,
+        Some("+y") => max.y,
+        Some("-y") => min.y,
+        _ => match axis {
+            Axis::X => f64::midpoint(min.x, max.x),
+            Axis::Y => f64::midpoint(min.y, max.y),
+        },
+    };
+    Some(match axis {
+        Axis::X => Point2::new(along, keep_across),
+        Axis::Y => Point2::new(keep_across, along),
+    })
+}
+
+/// Dimensions that hold onto something and no longer sit where it is: the
+/// same dimension, measured again. Everything else is left alone.
+///
+/// A dimension between two bare points is not touched, because nothing says
+/// what it was meant to mark; [`anchor_dimensions`] turns those into held
+/// ones while the drawing still matches them.
+#[must_use]
+pub fn dimensions_following(home: &Home) -> Vec<Dimension> {
     let mut out = Vec::new();
     for dim in &home.dimensions {
+        let Some(holds) = dim.holds.as_ref() else {
+            continue;
+        };
+        let (dx, dy) = (dim.end.x - dim.start.x, dim.end.y - dim.start.y);
+        let axis = if dy.abs() <= dx.abs() {
+            Axis::X
+        } else {
+            Axis::Y
+        };
+        let across = |p: Point2| match axis {
+            Axis::X => p.y,
+            Axis::Y => p.x,
+        };
+        let (Some(start), Some(end)) = (
+            hold_point(home, &holds[0], axis, across(dim.start)),
+            hold_point(home, &holds[1], axis, across(dim.end)),
+        ) else {
+            continue; // what it held is gone; `stale` reports that
+        };
+        if start.distance(dim.start) > 1e-6 || end.distance(dim.end) > 1e-6 {
+            out.push(Dimension {
+                start,
+                end,
+                ..dim.clone()
+            });
+        }
+    }
+    out
+}
+
+/// Ties every axis-aligned dimension to whatever its ends touch right now, so
+/// that from here on it follows the drawing.
+///
+/// Run while the drawing and its dimensions still agree: this reads the
+/// current geometry as the intent. Dimensions that already hold onto
+/// something, and ends that touch nothing, are left as they are.
+#[must_use]
+pub fn anchor_dimensions(home: &Home) -> Vec<Dimension> {
+    let mut out = Vec::new();
+    for dim in &home.dimensions {
+        if dim.holds.is_some() {
+            continue;
+        }
         let (dx, dy) = (dim.end.x - dim.start.x, dim.end.y - dim.start.y);
         let axis = if dy.abs() <= 0.5 && dx.abs() > 0.5 {
             Axis::X
@@ -763,32 +1006,171 @@ pub fn stale_annotations(home: &Home) -> Vec<Stale> {
         } else {
             continue;
         };
-        let across = axis.across();
-        let at = across.of(dim.start);
-        let (lo, hi) = {
-            let (a, b) = (axis.of(dim.start), axis.of(dim.end));
-            (a.min(b), a.max(b))
-        };
-        // The run the dimension sits in: the stretch of the probe that its
-        // own middle falls into.
-        let middle = f64::midpoint(lo, hi);
-        let Some(span) = free_span(home, axis, at, None, (0.0, 200.0))
-            .into_iter()
-            .find(|s| s.from <= middle && middle <= s.to)
-        else {
+        let (Some(start), Some(end)) = (
+            touching(home, dim.start, axis, dim.end),
+            touching(home, dim.end, axis, dim.start),
+        ) else {
             continue;
         };
-        // A dimension over a solid measures that piece, not a gap; either
-        // way the comparison is the same.
-        let measured = span.cm();
-        if (measured - dim.length()).abs() > STALE_TOLERANCE {
-            out.push(Stale {
-                id: dim.id.into(),
-                drawn: (dim.length() * 10.0).round() / 10.0,
-                measured: (measured * 10.0).round() / 10.0,
-                against: span.what.as_ref().map(Solid::id),
-                text: span.name.clone(),
-            });
+        out.push(Dimension {
+            holds: Some([start, end]),
+            ..dim.clone()
+        });
+    }
+    out
+}
+
+/// The element face a dimension end sits on: the side of a solid that the
+/// end touches, looked for from the direction the dimension comes from.
+fn touching(home: &Home, at: Point2, axis: Axis, from: Point2) -> Option<Hold> {
+    let toward = if axis.of(from) >= axis.of(at) {
+        1.0
+    } else {
+        -1.0
+    };
+    let near = |a: f64, b: f64| (a - b).abs() <= 1.0;
+    let mut best: Option<(f64, Hold)> = None;
+    for solid in obstacles(home, &|_| false) {
+        let (min, max) = bounds_of(&solid.outline);
+        // The end has to be within the solid across the measured axis, and on
+        // one of its two faces along it.
+        let (lo, hi, across_lo, across_hi) = match axis {
+            Axis::X => (min.x, max.x, min.y, max.y),
+            Axis::Y => (min.y, max.y, min.x, max.x),
+        };
+        let across = match axis {
+            Axis::X => at.y,
+            Axis::Y => at.x,
+        };
+        if across < across_lo - 1.0 || across > across_hi + 1.0 {
+            continue;
+        }
+        let along = axis.of(at);
+        // The face the dimension leaves from: the one on the side it runs to.
+        let (edge, at_face) = if toward > 0.0 {
+            (if axis == Axis::X { "+x" } else { "+y" }, hi)
+        } else {
+            (if axis == Axis::X { "-x" } else { "-y" }, lo)
+        };
+        let other = if toward > 0.0 { lo } else { hi };
+        let (edge, face) = if near(along, at_face) {
+            (edge, at_face)
+        } else if near(along, other) {
+            (
+                match (axis, toward > 0.0) {
+                    (Axis::X, true) => "-x",
+                    (Axis::X, false) => "+x",
+                    (Axis::Y, true) => "-y",
+                    _ => "+y",
+                },
+                other,
+            )
+        } else {
+            continue;
+        };
+        let away = (face - along).abs();
+        if best.as_ref().is_none_or(|(d, _)| away < *d) {
+            best = Some((
+                away,
+                Hold {
+                    id: solid.what.id(),
+                    edge: Some(edge.to_owned()),
+                },
+            ));
+        }
+    }
+    best.map(|(_, hold)| hold)
+}
+
+fn bounds_of(points: &[Point2]) -> (Point2, Point2) {
+    let mut min = Point2::new(f64::MAX, f64::MAX);
+    let mut max = Point2::new(f64::MIN, f64::MIN);
+    for p in points {
+        min = Point2::new(min.x.min(p.x), min.y.min(p.y));
+        max = Point2::new(max.x.max(p.x), max.y.max(p.y));
+    }
+    (min, max)
+}
+
+/// How far a dimension may be off before it counts as stale, cm.
+const STALE_TOLERANCE: f64 = 1.0;
+
+/// How far from a piece a note can sit and still be about it, cm.
+const BESIDE: f64 = 40.0;
+
+/// The piece a note is about, when that is not a guess.
+///
+/// `ref` says it outright. Standing on the piece says it too. Failing both,
+/// a note right beside a single piece that still shares one of its numbers
+/// is about that piece: a note reading `65,83 × 84 × 87` next to a cabinet
+/// now 60 × 72 × 87 is the same note, with two numbers left behind — and
+/// that is exactly the one worth reporting. A note that shares nothing with
+/// what is near it is somebody else's note, and stays out of the report.
+fn label_subject<'h>(home: &'h Home, label: &Label, sizes: &[Vec<f64>]) -> Option<&'h Furniture> {
+    let pieces: Vec<&Furniture> = home.furniture.iter().flat_map(Furniture::flatten).collect();
+    if let Some(id) = label.about {
+        return pieces.into_iter().find(|f| f.id == id);
+    }
+    let matches = |f: &Furniture| {
+        let actual = [f.width, f.depth, f.height];
+        sizes
+            .iter()
+            .flatten()
+            .any(|w| actual.iter().any(|a| (a - w).abs() <= STALE_TOLERANCE))
+    };
+    let standing_on = pieces.iter().copied().find(|f| {
+        let (min, max) = plan_bounds(f);
+        (min.x..=max.x).contains(&label.position.x) && (min.y..=max.y).contains(&label.position.y)
+    });
+    if standing_on.is_some() {
+        return standing_on;
+    }
+    let mut beside = pieces.into_iter().filter(|f| {
+        let (min, max) = plan_bounds(f);
+        let dx = (min.x - label.position.x)
+            .max(label.position.x - max.x)
+            .max(0.0);
+        let dy = (min.y - label.position.y)
+            .max(label.position.y - max.y)
+            .max(0.0);
+        dx.hypot(dy) <= BESIDE && matches(f)
+    });
+    let first = beside.next()?;
+    // Two candidates and the note could be about either: say nothing rather
+    // than report the wrong piece.
+    beside.next().is_none().then_some(first)
+}
+
+/// Annotations that stopped telling the truth about the drawing.
+///
+/// A dimension states the distance between its own two points, so it cannot
+/// be wrong about that — what goes wrong is that the drawing moved out from
+/// under it. One that [holds](crate::Hold) onto what it marks is measured
+/// again on every change and never drifts; one whose hold is gone is
+/// reported here, because it now marks nothing at all.
+///
+/// A label is the opposite: its numbers are typed by hand and nothing keeps
+/// them. Those are checked against the piece the label is about — the one it
+/// names with `ref`, the one it stands on, or the one beside it that some of
+/// its numbers still match — which is where the plan of a joiner quietly goes
+/// wrong after a resize.
+pub fn stale_annotations(home: &Home) -> Vec<Stale> {
+    let mut out = Vec::new();
+    for dim in &home.dimensions {
+        let Some(holds) = dim.holds.as_ref() else {
+            continue;
+        };
+        for hold in holds {
+            if element_bounds(home, hold.id).is_none() {
+                out.push(Stale {
+                    id: dim.id.into(),
+                    drawn: (dim.length() * 10.0).round() / 10.0,
+                    measured: (dim.length() * 10.0).round() / 10.0,
+                    against: Some(hold.id),
+                    text: format!("{} is gone; this no longer marks anything", hold.id),
+                });
+                break;
+            }
         }
     }
 
@@ -797,18 +1179,7 @@ pub fn stale_annotations(home: &Home) -> Vec<Stale> {
         if sizes.is_empty() {
             continue;
         }
-        // Only labels standing on a piece are checked: for those the piece
-        // they are about is not a guess.
-        let Some(piece) = home
-            .furniture
-            .iter()
-            .flat_map(Furniture::flatten)
-            .find(|f| {
-                let (min, max) = plan_bounds(f);
-                (min.x..=max.x).contains(&label.position.x)
-                    && (min.y..=max.y).contains(&label.position.y)
-            })
-        else {
+        let Some(piece) = label_subject(home, label, &sizes) else {
             continue;
         };
         let actual = [piece.width, piece.depth, piece.height];

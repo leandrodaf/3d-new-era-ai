@@ -9,6 +9,17 @@ use super::NewEraMcp;
 use super::reply::invalid;
 use crate::compact;
 
+/// Who lives there, plus what has already been looked at.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct ErgonomicsParams {
+    #[serde(flatten)]
+    pub(crate) profile: newera_ergonomics::Profile,
+    /// Findings already analysed: `[[key, reason]]`. They keep showing, with
+    /// the reason, and stop costing score. An empty reason takes it back.
+    #[serde(default)]
+    pub(crate) accept: Vec<Vec<String>>,
+}
+
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct CheckParams {
     /// Expected room areas in m² by room name or id, e.g. {"Sala": 10.91};
@@ -25,23 +36,44 @@ fn round2(v: f64) -> f64 {
 #[tool_router(router = check_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Ergonomics and habitability review for the people living there (occupants, children, elderly, wheelchair, stature cm, city): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen (work triangle, counter heights, Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. Reply {score, capacity, findings:[[erro|alerta|dica, place, message, src, fix?]], sources:{src:[title, tier, url]}}. src is the source the finding stands on, empty when it is common practice; resolve it in sources instead of asking. tier is the reliability ladder A obliges (Brazilian standard, municipal code) · B references (foreign standard) · C doctrine · D measured · E survey — and it is why a finding is an error or only a tip. fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap). city, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against a standard the more restrictive one wins."
+        description = "Ergonomics and habitability review for the people living there (occupants, children, elderly, wheelchair, stature cm, city): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen (work triangle, counter heights, Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. Reply {score, capacity, findings:[{sev, place, msg, key, weight, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. weight is what the score would gain if that one went away, so a score that moved can be read; key names the finding for accept. src is the source the finding stands on, empty when it is common practice; resolve it in sources instead of asking. tier is the reliability ladder A obliges (Brazilian standard, municipal code) · B references (foreign standard) · C doctrine · D measured · E survey — and it is why a finding is an error or only a tip. fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap). city, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against a standard the more restrictive one wins — set it once with set_home(city=…) so dry runs and check_layout weigh the same rules. accept=[[key, reason]] marks findings already looked at: they stay in the report with their reason and stop costing score, which is what lets a correct plan reach zero pendencies honestly; accept=[[key, empty]] takes it back."
     )]
-    pub(crate) fn ergonomics(
-        &self,
-        Parameters(p): Parameters<newera_ergonomics::Profile>,
-    ) -> String {
+    pub(crate) fn ergonomics(&self, Parameters(p): Parameters<ErgonomicsParams>) -> String {
+        if !p.accept.is_empty() {
+            let mut doc = self.document.write();
+            let mut accepted = doc.home().accepted.clone();
+            for pair in &p.accept {
+                let (key, reason) = (pair.first().cloned().unwrap_or_default(), pair.get(1));
+                match reason.map(String::as_str) {
+                    None | Some("") => accepted.remove(&key),
+                    Some(why) => accepted.insert(key, why.to_owned()),
+                };
+            }
+            let _ = doc.execute(newera_core::Command::SetAccepted { accepted });
+        }
         let doc = self.document.read();
-        let report = newera_ergonomics::review(doc.home(), &p);
+        let report = newera_ergonomics::review(doc.home(), &p.profile);
         let findings: Vec<serde_json::Value> = report
             .findings
             .iter()
             .map(|f| {
-                let code = f.reference.unwrap_or_default();
-                match &f.fix {
-                    Some(fix) => serde_json::json!([f.severity, f.place, f.message, code, fix]),
-                    None => serde_json::json!([f.severity, f.place, f.message, code]),
+                let mut row = serde_json::json!({
+                    "sev": f.severity,
+                    "place": f.place,
+                    "msg": f.message,
+                    "key": f.key,
+                    "weight": f.weight,
+                });
+                if let Some(code) = f.reference {
+                    row["src"] = serde_json::json!(code);
                 }
+                if let Some(fix) = &f.fix {
+                    row["fix"] = fix.clone();
+                }
+                if let Some(why) = &f.accepted {
+                    row["accepted"] = serde_json::json!(why);
+                }
+                row
             })
             .collect();
         // Each source spelled out once, not once per sentence.
@@ -55,7 +87,7 @@ impl NewEraMcp {
         .to_string()
     }
     #[tool(
-        description = "Layout problems: overlap, blocked, in_wall, blocks_door, outside_rooms; {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing."
+        description = "Layout problems: overlap, blocked, in_wall, blocks_door, turned, loose_opening, outside_rooms; {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing."
     )]
     pub(crate) fn check_layout(
         &self,
@@ -175,6 +207,8 @@ mod tests {
         }
         let result = s
             .render_plan(Parameters(RenderParams {
+                room: None,
+                pad: None,
                 w: Some(96),
                 h: Some(72),
                 region: None,
@@ -200,10 +234,13 @@ mod tests {
         )
         .unwrap();
         s.place(Parameters(place)).unwrap();
-        let profile: newera_ergonomics::Profile =
-            serde_json::from_str(r#"{"occupants":3,"wheelchair":true}"#).unwrap();
-        let report: serde_json::Value =
-            serde_json::from_str(&s.ergonomics(Parameters(profile))).unwrap();
+        let review = |json: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.ergonomics(Parameters(serde_json::from_str(json).expect("params"))),
+            )
+            .expect("json")
+        };
+        let report = review(r#"{"occupants":3,"wheelchair":true}"#);
         let text = report["findings"].to_string();
         assert_eq!(report["capacity"]["beds"], 2, "{report}");
         assert!(text.contains("falta 1"), "{text}");
@@ -217,6 +254,44 @@ mod tests {
         );
         // The bed is 90 cm from the left wall's axis: 7,5 cm wall, 79 cm half bed → 3,5 cm.
         assert!(text.contains("transferência da cadeira"), "{text}");
-        assert!(report["score"].as_u64().unwrap() < 80, "{report}");
+        let score = report["score"].as_u64().unwrap();
+        assert!(score < 80, "{report}");
+
+        // Every finding says what it costs, and the costs add up to the score.
+        let findings = report["findings"].as_array().unwrap();
+        assert!(
+            findings.iter().all(|f| f["key"].is_string()),
+            "each finding is named so it can be accepted: {report}"
+        );
+        let worst = findings
+            .iter()
+            .max_by_key(|f| f["weight"].as_u64().unwrap_or(0))
+            .cloned()
+            .unwrap();
+        assert!(worst["weight"].as_u64().unwrap() > 0, "{report}");
+
+        // Accept it with a reason: it stays in the report, explained, and
+        // stops costing score — which is how a plan that is right can reach
+        // zero pendencies without anything being swept away.
+        let key = worst["key"].as_str().unwrap().to_owned();
+        let after = review(&format!(
+            r#"{{"occupants":3,"wheelchair":true,"accept":[["{key}","varanda envidraçada dá a luz"]]}}"#
+        ));
+        let same = after["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["key"] == key.as_str())
+            .unwrap_or_else(|| panic!("{after}"));
+        assert_eq!(same["accepted"], "varanda envidraçada dá a luz", "{after}");
+        assert_eq!(same["weight"], 0, "{after}");
+        assert!(
+            after["score"].as_u64().unwrap() > score,
+            "the score moves by what was accepted: {after}"
+        );
+
+        // And it is remembered: the next review does not accuse it again.
+        let again = review(r#"{"occupants":3,"wheelchair":true}"#);
+        assert_eq!(again["score"], after["score"], "{again}");
     }
 }

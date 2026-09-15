@@ -21,7 +21,13 @@ pub(crate) struct RenderParams {
     /// Height px (default 480, max 2048).
     pub(crate) h: Option<u32>,
     /// Plan region `[[minx,miny],[maxx,maxy]]`; default fits the drawing.
+    /// The region is fitted to the image's aspect and grown on the short
+    /// side — never cropped — so everything asked for is in the picture.
     pub(crate) region: Option<[Point2; 2]>,
+    /// Instead of `region`: a room id or name to frame, with `pad` cm of
+    /// margin around it (default 30).
+    pub(crate) room: Option<String>,
+    pub(crate) pad: Option<f64>,
     /// Draw the grid (default true).
     pub(crate) grid: Option<bool>,
     /// Background image opacity for this render (e.g. 0.5 to compare the
@@ -144,16 +150,35 @@ impl NewEraMcp {
 #[tool_router(router = render_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "PNG of the floor plan, exactly as the user sees it. bg=0..1 overlays the background image to compare with the reference. Keep w/h small to save tokens."
+        description = "PNG of the floor plan, exactly as the user sees it. region=[[minx,miny],[maxx,maxy]] frames a place — it is fitted to the image's aspect by growing the short side, never by cropping, so everything asked for is in the picture — or room=<id|name> with pad cm (default 30) frames a room without working the rectangle out. bg=0..1 overlays the background image to compare with the reference. Keep w/h small to save tokens."
     )]
     pub(crate) fn render_plan(
         &self,
         Parameters(p): Parameters<RenderParams>,
     ) -> Result<CallToolResult, ErrorData> {
+        let region = match &p.room {
+            Some(raw) => {
+                let doc = self.document.read();
+                let home = doc.home().level_view(doc.home().current_level());
+                let room = home
+                    .rooms
+                    .iter()
+                    .find(|r| r.id.to_string() == *raw || r.name.eq_ignore_ascii_case(raw))
+                    .ok_or_else(|| invalid(format!("no room `{raw}` on this storey")))?;
+                let (min, max) = newera_core::element_bounds(&home, room.id.into())
+                    .ok_or_else(|| invalid("that room has no outline"))?;
+                let pad = p.pad.unwrap_or(30.0);
+                Some([
+                    Point2::new(min.x - pad, min.y - pad),
+                    Point2::new(max.x + pad, max.y + pad),
+                ])
+            }
+            None => p.region,
+        };
         let png = self.render_with(
             p.w.unwrap_or(640),
             p.h.unwrap_or(480),
-            p.region,
+            region,
             p.grid.unwrap_or(true),
             p.bg,
         )?;

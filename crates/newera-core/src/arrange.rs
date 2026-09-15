@@ -238,6 +238,119 @@ pub fn array(
 ///
 /// # Errors
 /// Fewer than two pieces, or ids that are not top-level furniture.
+/// Which edge of a piece an alignment holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Edge {
+    /// The lower coordinate along the axis: left on x, the top of the plan on y.
+    Low,
+    /// The middle.
+    Middle,
+    /// The higher coordinate.
+    High,
+}
+
+/// Lines up pieces on one edge, at `value` cm along `axis`.
+///
+/// What a run of joinery needs is its backs on one line and its fronts on
+/// another, and that is a sentence about edges — not about centers, which is
+/// what every write takes. Doing it by hand means recomputing a center per
+/// piece, per resize, and it is where a plan drifts.
+///
+/// # Errors
+/// When an id is not a piece of furniture, or is not on this storey.
+pub fn align(
+    doc: &mut Document,
+    ids: &[FurnitureId],
+    axis: crate::measure::Axis,
+    edge: Edge,
+    value: f64,
+) -> CoreResult<Vec<ElementId>> {
+    let mut commands = Vec::new();
+    let mut moved = Vec::new();
+    for id in ids {
+        let piece = doc
+            .home()
+            .piece(*id)
+            .cloned()
+            .ok_or(CoreError::NotFound((*id).into()))?;
+        let (min, max) = crate::measure::plan_bounds(&piece);
+        let (lo, hi, center) = match axis {
+            crate::measure::Axis::X => (min.x, max.x, piece.position.x),
+            crate::measure::Axis::Y => (min.y, max.y, piece.position.y),
+        };
+        let at = match edge {
+            Edge::Low => lo,
+            Edge::Middle => f64::midpoint(lo, hi),
+            Edge::High => hi,
+        };
+        let shift = value - at;
+        if shift.abs() < 1e-9 {
+            continue;
+        }
+        let mut piece = piece;
+        let moved_to = center + shift;
+        match axis {
+            crate::measure::Axis::X => piece.translate(moved_to - piece.position.x, 0.0),
+            crate::measure::Axis::Y => piece.translate(0.0, moved_to - piece.position.y),
+        }
+        moved.push(ElementId::from(piece.id));
+        commands.push(Command::update(piece));
+    }
+    if !commands.is_empty() {
+        doc.execute(Command::Batch { commands })?;
+    }
+    Ok(moved)
+}
+
+/// Sets the pieces side by side along `axis`, in the order they are given,
+/// leaving `gap` cm between them and starting where the first one is.
+///
+/// A run of cabinets is drawn like this and only like this: touching, in
+/// order, from one end. Spelling it as centers is arithmetic nobody should
+/// be doing twice.
+///
+/// # Errors
+/// When an id is not a piece of furniture, or is not on this storey.
+pub fn distribute(
+    doc: &mut Document,
+    ids: &[FurnitureId],
+    axis: crate::measure::Axis,
+    gap: f64,
+) -> CoreResult<Vec<ElementId>> {
+    let mut cursor: Option<f64> = None;
+    let mut commands = Vec::new();
+    let mut moved = Vec::new();
+    for id in ids {
+        let piece = doc
+            .home()
+            .piece(*id)
+            .cloned()
+            .ok_or(CoreError::NotFound((*id).into()))?;
+        let (min, max) = crate::measure::plan_bounds(&piece);
+        let (lo, hi) = match axis {
+            crate::measure::Axis::X => (min.x, max.x),
+            crate::measure::Axis::Y => (min.y, max.y),
+        };
+        let start = cursor.unwrap_or(lo);
+        let shift = start - lo;
+        cursor = Some(start + (hi - lo) + gap);
+        if shift.abs() < 1e-9 {
+            continue;
+        }
+        let mut piece = piece;
+        match axis {
+            crate::measure::Axis::X => piece.translate(shift, 0.0),
+            crate::measure::Axis::Y => piece.translate(0.0, shift),
+        }
+        moved.push(ElementId::from(piece.id));
+        commands.push(Command::update(piece));
+    }
+    if !commands.is_empty() {
+        doc.execute(Command::Batch { commands })?;
+    }
+    Ok(moved)
+}
+
 pub fn group(doc: &mut Document, ids: &[ElementId], name: &str) -> CoreResult<FurnitureId> {
     let pieces: Vec<Furniture> = ids
         .iter()

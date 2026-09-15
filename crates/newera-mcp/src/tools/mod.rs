@@ -20,7 +20,7 @@
 //! | [`annotations`] | `annotations`, `disciplines` |
 //! | [`background`] | `set_background`, `trace_background` |
 //! | [`levels`] | `levels` |
-//! | [`project`] | `save_home`, `open_home`, `new_home`, `set_home`, `undo`, `redo`, `sessions`, `plugins`, `variants` |
+//! | [`project`] | `save_home`, `open_home`, `new_home`, `set_home`, `undo`, `redo`, `checkpoint`, `sessions`, `plugins`, `variants` |
 //! | [`reply`] | no tools: what every write needs to answer |
 //!
 //! A new tool goes in the domain it belongs to, and its router joins
@@ -169,10 +169,9 @@ mod tests {
     #[test]
     fn tool_surface_is_unchanged() {
         const NAMES: &str = "annotations,arrange,cabinet_run,cameras,catalog,check_layout,\
-create,cut_list,delete,disciplines,embed,ergonomics,export_plan,fit_roof,get_home,joinery,\
-levels,lighting,materials,measure,merge_walls,move,new_home,open_home,place,plugins,redo,\
-render_3d,\
-render_photo,render_plan,save_home,sessions,set_background,set_home,split_wall,\
+checkpoint,create,cut_list,delete,disciplines,embed,ergonomics,export_plan,fit_roof,get_home,\
+joinery,levels,lighting,materials,measure,merge_walls,move,new_home,open_home,place,plugins,\
+redo,render_3d,render_photo,render_plan,save_home,sessions,set_background,set_home,split_wall,\
 trace_background,undo,update,variants,video";
 
         let tools = server().tool_router.list_all();
@@ -180,7 +179,7 @@ trace_background,undo,update,variants,video";
         assert_eq!(names.join(","), NAMES, "the set of tools changed");
         let bytes = serde_json::to_string(&tools).unwrap().len();
         assert_eq!(
-            bytes, 51162,
+            bytes, 58786,
             "a description or schema changed; this test guards a pure move"
         );
     }

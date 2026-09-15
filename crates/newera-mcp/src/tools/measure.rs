@@ -43,12 +43,17 @@ pub(crate) struct MeasureParams {
     /// Height band that counts, `[z0, z1]` cm above this storey's floor.
     /// Default `[0, 200]`: what a person walking through meets.
     z: Option<[f64; 2]>,
+    /// With a probe: how much free floor has to be left along it, cm.
+    gap: Option<f64>,
+    /// With a probe and `gap`: the piece that would grow. The answer says
+    /// how big it can be along the axis and what stops it there.
+    grow: Option<String>,
 }
 
 #[tool_router(router = measure_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Tape measure over the plan, in cm. from=<id> alone: free floor on all four sides, {clear:{\"+y\":[cm,id,name]}} — dirs picks sides (+x -x +y -y, or front/back/left/right of the piece). from+to (ids or [x,y]): the distance between them, {cm}, or the gap along axis. axis+at: what a straight probe runs into, {spans:[[from,to,id,name]]} with id null for free floor — the answer to \"how wide is the corridor here, and between what\". z limits the height band that counts (default 0-200)."
+        description = "Tape measure over the plan, in cm. from=<id> alone: free floor on all four sides, {clear:{\"+y\":[cm,id,name]}} — dirs picks sides (+x -x +y -y, or front/back/left/right of the piece). from+to (ids or [x,y]): the distance between them, {cm}, or the gap along axis. axis+at: what a straight probe runs into, {spans:[[from,to,id,name]]} with id null for free floor — the answer to \"how wide is the corridor here, and between what\". Add gap=<cm to keep free> and grow=<id> and it also answers how big that piece can be along the axis before the gap is broken, and what stops it there: {fit:{free,max,blocked_by}} — the question a layout decision actually ends in, without trying a size and undoing it. z limits the height band that counts (default 0-200)."
     )]
     pub(crate) fn measure(
         &self,
@@ -94,7 +99,68 @@ impl NewEraMcp {
                         ])
                     })
                     .collect();
-            return Ok(serde_json::json!({ "spans": spans }).to_string());
+            let mut out = serde_json::json!({ "spans": spans });
+            // "How deep can this be?" — the question every layout decision
+            // ends in, and the one that used to be answered by trying a size,
+            // reading the findings and undoing.
+            if let Some(gap) = p.gap {
+                let probe = measure::free_span(&home, axis, at, p.range.map(|[a, b]| (a, b)), z);
+                let grow: Option<newera_core::ElementId> = match &p.grow {
+                    Some(raw) => Some(raw.parse().map_err(|e| invalid(format!("{e}")))?),
+                    None => None,
+                };
+                let span = probe.iter().fold((f64::MAX, f64::MIN), |(lo, hi), s| {
+                    (lo.min(s.from), hi.max(s.to))
+                });
+                let total = (span.1 - span.0).max(0.0);
+                let solid = |s: &&newera_core::Span| s.what.is_some();
+                let mine = probe
+                    .iter()
+                    .position(|s| s.what.as_ref().map(newera_core::Solid::id) == grow);
+                let taken: f64 = probe
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, s)| s.what.is_some() && Some(*i) != mine)
+                    .map(|(_, s)| s.cm())
+                    .sum();
+                let held: f64 = mine.map_or(0.0, |i| probe[i].cm());
+                // What stops it is the first solid across the free floor it
+                // grows into — not the wall it already has its back to.
+                let across = |list: &[newera_core::Span]| -> (f64, Option<newera_core::Span>) {
+                    let free: f64 = list
+                        .iter()
+                        .take_while(|s| s.what.is_none())
+                        .map(newera_core::Span::cm)
+                        .sum();
+                    (free, list.iter().find(solid).cloned())
+                };
+                let (ahead, blocks_ahead) = mine.map_or((0.0, None), |i| across(&probe[i + 1..]));
+                let behind = mine.map_or((0.0, None), |i| {
+                    let mut before: Vec<newera_core::Span> = probe[..i].to_vec();
+                    before.reverse();
+                    across(&before)
+                });
+                let against = if ahead >= behind.0 {
+                    blocks_ahead
+                } else {
+                    behind.1
+                };
+                let max = (total - taken - gap).max(0.0);
+                let fits = serde_json::json!({
+                    "free": compact::num(total - taken - held),
+                    "max": compact::num(max),
+                    "blocked_by": against.map(|s| {
+                        serde_json::json!([
+                            s.what.as_ref().map(|w| w.id().to_string()),
+                            s.name,
+                            compact::num(s.from),
+                            compact::num(s.to),
+                        ])
+                    }),
+                });
+                out["fit"] = fits;
+            }
+            return Ok(out.to_string());
         }
 
         let from = p
@@ -328,5 +394,46 @@ mod tests {
         )
         .unwrap();
         assert!((face.start.distance(face.end) - 380.0).abs() < 1e-9);
+    }
+
+    /// "How deep can the counter be?" — asked once, instead of trying a size,
+    /// reading five new findings and undoing.
+    #[test]
+    fn fit_answers_how_much_room_is_left_for_the_piece_that_grows() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[600,0],[600,500],[0,500]],"closed":true,"t":15}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        // A counter against the top wall and a tall unit against the bottom
+        // one, with the corridor in between.
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"base-cabinet","at":[300,37.5],"w":200,"d":60,"h":90},
+                             {"cat":"wardrobe","at":[300,462.5],"w":200,"d":60,"h":220}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let fit: serde_json::Value = serde_json::from_str(
+            &s.measure(Parameters(
+                serde_json::from_str(
+                    r#"{"axis":"y","at":300,"range":[0,500],"gap":85,"grow":"f5"}"#,
+                )
+                .unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        // Room 7,5..492,5 between the walls; the wardrobe takes 60 and 85 has
+        // to stay free, so the counter can be 340.
+        assert!(
+            (fit["fit"]["max"].as_f64().unwrap() - 340.0).abs() < 0.5,
+            "{fit}"
+        );
+        assert_eq!(fit["fit"]["blocked_by"][0], "f6", "{fit}");
     }
 }

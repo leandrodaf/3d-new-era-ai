@@ -81,6 +81,22 @@ pub enum Issue {
     BlocksDoor { door: FurnitureId, by: FurnitureId },
     /// A piece is outside every room (only reported when rooms exist).
     OutsideRooms(FurnitureId),
+    /// A door or a window that is in no wall: a hole drawn as a panel, or a
+    /// leaf left leaning where a passage was meant to be. It reads as an
+    /// opening everywhere — schedules, quantities, the 3D — and opens
+    /// nothing.
+    LooseOpening(FurnitureId),
+    /// The fronts built into a group face one way and its `angle` another.
+    /// The piece opens where its panels are; whoever set the angle meant the
+    /// other side. Every check that measures "in front of" has to pick one,
+    /// so this says it out loud instead of choosing in silence.
+    Turned {
+        piece: FurnitureId,
+        /// Where the doors, drawer fronts and kick actually are.
+        built: &'static str,
+        /// Where `angle` says the piece looks.
+        placed: &'static str,
+    },
 }
 
 impl Issue {
@@ -91,7 +107,8 @@ impl Issue {
             Self::Blocked { piece, against, .. } => vec![(*piece).into(), *against],
             Self::InWall(f, w) => vec![(*f).into(), (*w).into()],
             Self::BlocksDoor { door, by } => vec![(*door).into(), (*by).into()],
-            Self::OutsideRooms(f) => vec![(*f).into()],
+            Self::OutsideRooms(f) | Self::LooseOpening(f) => vec![(*f).into()],
+            Self::Turned { piece, .. } => vec![(*piece).into()],
         }
     }
 
@@ -366,6 +383,44 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
         }
     }
 
+    // A door or window standing in no wall at all.
+    for (i, piece) in pieces.iter().enumerate() {
+        if !piece.is_opening() {
+            continue;
+        }
+        let in_a_wall = home
+            .walls
+            .iter()
+            .zip(&outlines)
+            .filter(|(wall, outline)| {
+                outline.len() >= 3 && home.resolve_level(wall.level) == levels[i]
+            })
+            .any(|(_, outline)| {
+                footprints[i]
+                    .intersection(&polygon(outline))
+                    .unsigned_area()
+                    > MIN_OVERLAP
+            });
+        if !in_a_wall {
+            issues.push(Issue::LooseOpening(piece.id));
+        }
+    }
+
+    // A group whose `angle` and whose fronts point different ways: the score
+    // would reward turning it to silence a clearance warning, and the piece
+    // would end up opening against a wall. Better to name the contradiction.
+    for top in home.furniture.iter().filter(|f| wanted(f.level)) {
+        for group in top.flatten().into_iter().filter(|p| p.is_group()) {
+            if let Some((built, placed)) = crate::measure::facing_disagrees(group) {
+                issues.push(Issue::Turned {
+                    piece: group.id,
+                    built,
+                    placed,
+                });
+            }
+        }
+    }
+
     if !home.rooms.is_empty() {
         let rooms: Vec<(Option<LevelId>, Polygon<f64>)> = home
             .rooms
@@ -578,6 +633,46 @@ mod tests {
             }],
             "{issues:?}"
         );
+    }
+
+    /// The trap the score itself set: a group whose fronts were built toward
+    /// the kitchen carried an `angle` pointing at the living room, so every
+    /// clearance was measured on the blind side and turning the piece
+    /// "fixed" the warning while breaking the kitchen.
+    #[test]
+    fn a_group_that_opens_where_its_angle_does_not_is_reported() {
+        let mut home = room_home();
+        let mut tower = piece(50, (200.0, 150.0), (80.0, 64.0, 220.0));
+        tower.angle = 0.0; // says it looks at +y
+        let panel = |id: u64, name: &str, y: f64, h: f64, elev: f64| {
+            let mut part = piece(id, (200.0, y), (78.0, 2.0, h));
+            part.name = name.to_owned();
+            part.elevation = elev;
+            part
+        };
+        tower.children = vec![
+            panel(51, "Frente fixa", 119.0, 40.0, 0.0),
+            panel(52, "Gaveta", 119.0, 30.0, 40.0),
+            panel(53, "Porta", 119.0, 60.0, 70.0),
+            panel(54, "Painel cego", 181.0, 220.0, 0.0),
+        ];
+        home.furniture.push(tower);
+        let issues = check_layout(&home);
+        let turned = issues
+            .iter()
+            .find(|i| matches!(i, Issue::Turned { .. }))
+            .unwrap_or_else(|| panic!("{issues:?}"));
+        assert_eq!(
+            *turned,
+            Issue::Turned {
+                piece: FurnitureId(50),
+                built: "-y",
+                placed: "+y",
+            }
+        );
+        // And what is in front of it is measured on the side it opens to.
+        let front = crate::measure::Dir::parse("front", home.furniture.last()).unwrap();
+        assert_eq!(front.name(), "-y");
     }
 
     #[test]

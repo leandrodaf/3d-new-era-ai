@@ -38,6 +38,24 @@ const FACADE_REACH: f64 = 40.0;
 /// Stops closer than this are merged, cm.
 const MIN_STEP: f64 = 1.0;
 
+/// Lowercased and stripped of accents, so `porta` finds `Portão` and a
+/// query typed without accents still matches a plan written with them.
+#[must_use]
+pub fn fold(text: &str) -> String {
+    text.chars()
+        .flat_map(char::to_lowercase)
+        .map(|c| match c {
+            'á' | 'à' | 'â' | 'ã' | 'ä' => 'a',
+            'é' | 'ê' | 'ë' => 'e',
+            'í' | 'î' | 'ï' => 'i',
+            'ó' | 'ô' | 'õ' | 'ö' => 'o',
+            'ú' | 'û' | 'ü' => 'u',
+            'ç' => 'c',
+            other => other,
+        })
+        .collect()
+}
+
 fn inside(points: &[Point2], p: Point2) -> bool {
     let mut inside = false;
     let n = points.len();

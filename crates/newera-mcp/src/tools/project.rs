@@ -22,6 +22,10 @@ pub(crate) struct SetHomeParams {
     /// Compass diameter cm.
     compass_d: Option<f64>,
     compass_visible: Option<bool>,
+    /// City whose building code applies, e.g. `sao-paulo`; `""` clears it.
+    /// Kept with the project, so `ergonomics`, `check_layout` and every dry
+    /// run weigh the same municipal rules.
+    city: Option<String>,
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct PluginsParams {
@@ -40,6 +44,14 @@ pub(crate) struct VariantsParams {
     /// Name for duplicate/new/rename.
     name: Option<String>,
 }
+/// A point in the work, by name.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct CheckpointParams {
+    /// `list` (default), `checkpoint` (remember here), `revert` (go back).
+    action: Option<String>,
+    label: Option<String>,
+}
+
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct PathParams {
     /// Project file (`.newera`). Optional for save when already saved once.
@@ -54,7 +66,9 @@ fn with_extension(path: PathBuf) -> PathBuf {
 }
 #[tool_router(router = project_router, vis = "pub(crate)")]
 impl NewEraMcp {
-    #[tool(description = "Rename the project and/or set the compass (north).")]
+    #[tool(
+        description = "Rename the project, set the compass (north), and set the city whose building code applies (city=sao-paulo). The city belongs to the project: ergonomics, check_layout and every dry run then weigh the same municipal rules, so a change can be tested against the score it moves."
+    )]
     pub(crate) fn set_home(
         &self,
         Parameters(p): Parameters<SetHomeParams>,
@@ -68,6 +82,7 @@ impl NewEraMcp {
             || p.compass_at.is_some()
             || p.compass_d.is_some()
             || p.compass_visible.is_some()
+            || p.city.is_some()
         {
             let c = doc.home().compass.clone();
             commands.push(Command::SetCompass {
@@ -76,6 +91,11 @@ impl NewEraMcp {
                     diameter: p.compass_d.unwrap_or(c.diameter),
                     north_degrees: p.north.unwrap_or(c.north_degrees),
                     visible: p.compass_visible.unwrap_or(c.visible),
+                    city: match p.city.as_deref().map(str::trim) {
+                        Some("") => None,
+                        Some(city) => Some(city.to_owned()),
+                        None => c.city.clone(),
+                    },
                     ..c.clone()
                 },
             });
@@ -210,6 +230,59 @@ impl NewEraMcp {
             }
             "delete" => {
                 doc.remove_variant(need(p.i)?).map_err(core)?;
+                Ok(ok(&doc, &[]))
+            }
+            other => Err(invalid(format!("unknown action `{other}`"))),
+        }
+    }
+    #[tool(
+        description = "Name where the plan is now, and come back to it. checkpoint {label} remembers this point; revert {label} undoes back down to it, keeping every id — which duplicating a version cannot do, since a copy renumbers. list (default) shows what is remembered and how many changes ago it was. A checkpoint lives with the project and survives saving."
+    )]
+    pub(crate) fn checkpoint(
+        &self,
+        Parameters(p): Parameters<CheckpointParams>,
+    ) -> Result<String, ErrorData> {
+        const KEY: &str = "checkpoint:";
+        let action = p.action.as_deref().unwrap_or("list");
+        let mut doc = self.document.write();
+        let depth = doc.undo_depth();
+        let mut properties = doc.home().properties.clone();
+        match action {
+            "list" => {
+                let rows: Vec<serde_json::Value> = properties
+                    .iter()
+                    .filter_map(|(key, value)| {
+                        let label = key.strip_prefix(KEY)?;
+                        let at: usize = value.parse().ok()?;
+                        Some(serde_json::json!([label, depth.saturating_sub(at)]))
+                    })
+                    .collect();
+                Ok(serde_json::json!({ "checkpoints": rows }).to_string())
+            }
+            "checkpoint" | "set" => {
+                let label = p.label.ok_or_else(|| invalid("`label` is required"))?;
+                // Writing the checkpoint is itself a change: the point to
+                // come back to is the one just after it, so coming back does
+                // not undo the checkpoint along with the work.
+                properties.insert(format!("{KEY}{label}"), (depth + 1).to_string());
+                doc.execute(Command::SetProperties { properties })
+                    .map_err(core)?;
+                Ok(ok(&doc, &[]))
+            }
+            "revert" => {
+                let label = p.label.ok_or_else(|| invalid("`label` is required"))?;
+                let at: usize = properties
+                    .get(&format!("{KEY}{label}"))
+                    .and_then(|v| v.parse().ok())
+                    .ok_or_else(|| invalid(format!("no checkpoint `{label}`")))?;
+                if at > depth {
+                    return Err(invalid(format!(
+                        "`{label}` is ahead of where the plan is: nothing to undo"
+                    )));
+                }
+                for _ in 0..(depth - at) {
+                    doc.undo().map_err(core)?;
+                }
                 Ok(ok(&doc, &[]))
             }
             other => Err(invalid(format!("unknown action `{other}`"))),
@@ -358,5 +431,56 @@ mod tests {
         let bad: CreateParams =
             serde_json::from_str(r#"{"v":9,"walls":[{"pts":[[0,0],[100,0]]}]}"#).unwrap();
         assert!(s.create(Parameters(bad)).is_err());
+    }
+
+    /// Somewhere to come back to that does not renumber the plan: the reason
+    /// a real session edited the user's own drawing instead of a copy.
+    #[test]
+    fn a_checkpoint_comes_back_without_renumbering_anything() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true,"t":15}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let ids = |s: &NewEraMcp| -> Vec<String> {
+            s.document
+                .read()
+                .home()
+                .walls
+                .iter()
+                .map(|w| w.id.to_string())
+                .collect()
+        };
+        let before = ids(&s);
+        let checkpoint = |json: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.checkpoint(Parameters(serde_json::from_str(json).unwrap()))
+                    .unwrap(),
+            )
+            .unwrap_or_default()
+        };
+        checkpoint(r#"{"action":"checkpoint","label":"banheiros"}"#);
+
+        s.create(Parameters(
+            serde_json::from_str(r#"{"walls":[{"pts":[[200,0],[200,300]],"t":10}]}"#).unwrap(),
+        ))
+        .unwrap();
+        s.create(Parameters(
+            serde_json::from_str(r#"{"walls":[{"pts":[[0,150],[200,150]],"t":10}]}"#).unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(s.document.read().home().walls.len(), 6);
+        let listed = checkpoint(r#"{"action":"list"}"#);
+        assert_eq!(listed["checkpoints"][0][0], "banheiros", "{listed}");
+        assert_eq!(listed["checkpoints"][0][1], 2, "two changes ago: {listed}");
+
+        checkpoint(r#"{"action":"revert","label":"banheiros"}"#);
+        assert_eq!(ids(&s), before, "the same walls, with the same ids");
+        // And the checkpoint is still there to come back to again.
+        let listed = checkpoint(r#"{"action":"list"}"#);
+        assert_eq!(listed["checkpoints"][0][0], "banheiros", "{listed}");
     }
 }
