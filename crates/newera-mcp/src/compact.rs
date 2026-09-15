@@ -128,14 +128,7 @@ pub(crate) fn polyline(p: &newera_core::Polyline) -> Value {
 }
 
 /// The array key each kind of element is listed under.
-pub(crate) const KINDS: [&str; 6] = [
-    "walls",
-    "rooms",
-    "dims",
-    "labels",
-    "furniture",
-    "polylines",
-];
+pub(crate) const KINDS: [&str; 6] = ["walls", "rooms", "dims", "labels", "furniture", "polylines"];
 
 pub(crate) fn kind_of(id: newera_core::ElementId) -> &'static str {
     use newera_core::ElementId;
@@ -180,7 +173,10 @@ pub(crate) fn home(home: &Home, revision: u64) -> Value {
         ("labels", home.labels.iter().map(label).collect()),
         (
             "furniture",
-            home.furniture.iter().map(|f| piece(home, &cuts, f)).collect(),
+            home.furniture
+                .iter()
+                .map(|f| piece(home, &cuts, f))
+                .collect(),
         ),
         ("polylines", home.polylines.iter().map(polyline).collect()),
     ] {
@@ -223,7 +219,11 @@ pub(crate) fn made_by(f: &newera_core::Furniture) -> &'static str {
 }
 
 /// A piece, omitting whatever matches its catalog defaults.
-pub(crate) fn piece(home: &Home, cuts: &[Vec<newera_core::WallCut>], f: &newera_core::Furniture) -> Value {
+pub(crate) fn piece(
+    home: &Home,
+    cuts: &[Vec<newera_core::WallCut>],
+    f: &newera_core::Furniture,
+) -> Value {
     let mut v = obj([
         ("id", json!(f.id.to_string())),
         ("cat", json!(f.catalog)),
@@ -421,7 +421,11 @@ pub(crate) fn issue_ref(home: &Home, id: newera_core::ElementId) -> Value {
     if let ElementId::Wall(w) = id
         && let Some(wall) = home.wall(w)
     {
-        v["name"] = json!(wall.wall_type.clone().unwrap_or_else(|| "parede".to_owned()));
+        v["name"] = json!(
+            wall.wall_type
+                .clone()
+                .unwrap_or_else(|| "parede".to_owned())
+        );
     }
     if let Some((min, max)) = newera_core::element_bounds(home, id) {
         v["bounds"] = json!([point(min), point(max)]);
@@ -477,11 +481,7 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
                     ]),
                 );
             }
-            Issue::Blocked {
-                piece,
-                against,
-                cm,
-            } => push(
+            Issue::Blocked { piece, against, cm } => push(
                 "blocked",
                 obj([
                     ("piece", issue_ref(home, piece.into())),

@@ -486,9 +486,7 @@ fn classify(
     // A lid resting on a box: flat, and sitting at the other's top.
     let lid_on = |lid: &Furniture, box_: &Furniture, lid_area: f64, box_area: f64| {
         let (lo, _) = lid.height_range();
-        lid.height <= 8.0
-            && (lo - box_.height_range().1).abs() <= 6.0
-            && lid_area >= 0.5 * box_area
+        lid.height <= 8.0 && (lo - box_.height_range().1).abs() <= 6.0 && lid_area >= 0.5 * box_area
     };
     if lid_on(a, b, area_a, area_b) || lid_on(b, a, area_b, area_a) {
         return Overlap::Nesting;
@@ -649,8 +647,10 @@ mod tests {
         home.furniture.extend([sink, dishwasher]);
         let clash = check_layout(&home)
             .into_iter()
-            .find(|i| matches!(i, Issue::Overlap { a, b, .. }
-                if *a == FurnitureId(45) && *b == FurnitureId(46)))
+            .find(|i| {
+                matches!(i, Issue::Overlap { a, b, .. }
+                if *a == FurnitureId(45) && *b == FurnitureId(46))
+            })
             .expect("the sink invading the dishwasher is reported");
         let Issue::Overlap { kind, extent, .. } = clash else {
             unreachable!()

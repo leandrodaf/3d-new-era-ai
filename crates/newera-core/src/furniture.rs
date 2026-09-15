@@ -617,9 +617,11 @@ impl Furniture {
             return true;
         }
         let name = self.name.to_lowercase();
-        ["cadeira", "banqueta", "poltrona", "banco ", "chair", "stool"]
-            .iter()
-            .any(|w| name.contains(w))
+        [
+            "cadeira", "banqueta", "poltrona", "banco ", "chair", "stool",
+        ]
+        .iter()
+        .any(|w| name.contains(w))
     }
 
     /// A worktop or table someone sits or works at: its top is at that

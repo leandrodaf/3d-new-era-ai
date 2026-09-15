@@ -353,7 +353,11 @@ fn crossings(outline: &[Point2], axis: Axis, at: f64) -> Vec<(f64, f64)> {
         }
     }
     hits.sort_by(f64::total_cmp);
-    hits.as_chunks::<2>().0.iter().map(|c| (c[0], c[1])).collect()
+    hits.as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| (c[0], c[1]))
+        .collect()
 }
 
 /// What a straight probe runs into, in order.
@@ -372,7 +376,8 @@ pub fn free_span(
     range: Option<(f64, f64)>,
     z: (f64, f64),
 ) -> Vec<Span> {
-    let (lo, hi) = range.or_else(|| home.bounds().map(|(a, b)| (axis.of(a), axis.of(b))))
+    let (lo, hi) = range
+        .or_else(|| home.bounds().map(|(a, b)| (axis.of(a), axis.of(b))))
         .unwrap_or((0.0, 0.0));
     if hi <= lo {
         return Vec::new();
@@ -459,12 +464,7 @@ pub fn clearance(home: &Home, piece: &Furniture, dir: Dir, max: f64) -> Clearanc
 ///
 /// The piece being measured is expected to be absent from `solids`; it would
 /// otherwise be its own obstacle.
-pub fn clearance_against(
-    solids: &[Obstacle],
-    piece: &Furniture,
-    dir: Dir,
-    max: f64,
-) -> Clearance {
+pub fn clearance_against(solids: &[Obstacle], piece: &Furniture, dir: Dir, max: f64) -> Clearance {
     let (min, max_pt) = plan_bounds(piece);
     let z = piece.height_range();
     let across = dir.axis.across();
@@ -524,7 +524,11 @@ pub fn clearance_against(
             continue;
         }
         let (lo, hi) = o.spans(dir.axis);
-        let d = if dir.sign >= 0.0 { lo - face } else { face - hi };
+        let d = if dir.sign >= 0.0 {
+            lo - face
+        } else {
+            face - hi
+        };
         if d.max(0.0) < best {
             best = d.max(0.0);
             against = Some(o.what.clone());
@@ -580,7 +584,10 @@ mod tests {
         assert!((max.x - min.x - 60.0).abs() < 1e-6, "{min:?} {max:?}");
         assert!((max.y - min.y - 200.0).abs() < 1e-6, "{min:?} {max:?}");
         assert_eq!(facing(&piece(1, (0.0, 0.0), (10.0, 10.0, 10.0), 0.0)), "+y");
-        assert_eq!(facing(&piece(1, (0.0, 0.0), (10.0, 10.0, 10.0), 90.0)), "-x");
+        assert_eq!(
+            facing(&piece(1, (0.0, 0.0), (10.0, 10.0, 10.0), 90.0)),
+            "-x"
+        );
         assert_eq!(
             facing(&piece(1, (0.0, 0.0), (10.0, 10.0, 10.0), 180.0)),
             "-y"
@@ -618,7 +625,13 @@ mod tests {
         // Wall, counter, corridor, counter, the strip behind it, wall.
         let names: Vec<&str> = spans
             .iter()
-            .map(|s| if s.is_free() { "livre" } else { s.name.as_str() })
+            .map(|s| {
+                if s.is_free() {
+                    "livre"
+                } else {
+                    s.name.as_str()
+                }
+            })
             .collect();
         assert_eq!(
             names,
@@ -701,7 +714,8 @@ mod tests {
         home.furniture.push(high);
         let low = free_span(&home, Axis::Y, 200.0, Some((0.0, 300.0)), (0.0, 140.0));
         assert!(
-            low.iter().all(|s| s.is_free() || matches!(s.what, Some(Solid::Wall(_)))),
+            low.iter()
+                .all(|s| s.is_free() || matches!(s.what, Some(Solid::Wall(_)))),
             "{low:#?}"
         );
         let high = free_span(&home, Axis::Y, 200.0, Some((0.0, 300.0)), (140.0, 220.0));
@@ -785,10 +799,16 @@ pub fn stale_annotations(home: &Home) -> Vec<Stale> {
         }
         // Only labels standing on a piece are checked: for those the piece
         // they are about is not a guess.
-        let Some(piece) = home.furniture.iter().flat_map(Furniture::flatten).find(|f| {
-            let (min, max) = plan_bounds(f);
-            (min.x..=max.x).contains(&label.position.x) && (min.y..=max.y).contains(&label.position.y)
-        }) else {
+        let Some(piece) = home
+            .furniture
+            .iter()
+            .flat_map(Furniture::flatten)
+            .find(|f| {
+                let (min, max) = plan_bounds(f);
+                (min.x..=max.x).contains(&label.position.x)
+                    && (min.y..=max.y).contains(&label.position.y)
+            })
+        else {
             continue;
         };
         let actual = [piece.width, piece.depth, piece.height];

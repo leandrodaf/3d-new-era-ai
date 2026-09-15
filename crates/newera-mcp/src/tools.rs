@@ -493,7 +493,9 @@ impl NewEraMcp {
         let view = match p.level.as_deref() {
             Some("all") => full.clone(),
             Some(raw) => {
-                let id = raw.parse().map_err(|_| invalid("level: id like lv3, or all"))?;
+                let id = raw
+                    .parse()
+                    .map_err(|_| invalid("level: id like lv3, or all"))?;
                 if full.level(id).is_none() {
                     return Err(invalid(format!("no storey {raw}")));
                 }
@@ -1011,16 +1013,19 @@ impl NewEraMcp {
                     .find(|f| f.id == id)
                     .cloned()
                     .ok_or_else(|| invalid(format!("{id} not found")))?;
-                let stored = group.properties.get(newera_joinery::PARAMS_KEY).ok_or_else(
-                    // Saying what the piece IS turns a dead end into the
-                    // next call: the tool that owns it is named.
-                    || {
-                        invalid(format!(
-                            "{id} was not made by joinery; it was made by {}",
-                            compact::made_by(&group)
-                        ))
-                    },
-                )?;
+                let stored = group
+                    .properties
+                    .get(newera_joinery::PARAMS_KEY)
+                    .ok_or_else(
+                        // Saying what the piece IS turns a dead end into the
+                        // next call: the tool that owns it is named.
+                        || {
+                            invalid(format!(
+                                "{id} was not made by joinery; it was made by {}",
+                                compact::made_by(&group)
+                            ))
+                        },
+                    )?;
                 (
                     newera_joinery::merged(stored, &patch).map_err(invalid)?,
                     Some(group),
@@ -1656,7 +1661,9 @@ impl NewEraMcp {
         let (view, scope) = match p.level.as_deref() {
             Some("all") => (doc.home().clone(), newera_core::Storeys::All),
             Some(raw) => {
-                let id = raw.parse().map_err(|_| invalid("level: id like lv3, or all"))?;
+                let id = raw
+                    .parse()
+                    .map_err(|_| invalid("level: id like lv3, or all"))?;
                 if doc.home().level(id).is_none() {
                     return Err(invalid(format!("no storey {raw}")));
                 }
@@ -1735,23 +1742,18 @@ impl NewEraMcp {
         if let Some(at) = p.at {
             let axis = axis.ok_or_else(|| invalid("at needs axis: x or y"))?;
             let z = p.z.map_or((0.0, 200.0), |[a, b]| (a, b));
-            let spans: Vec<serde_json::Value> = measure::free_span(
-                &home,
-                axis,
-                at,
-                p.range.map(|[a, b]| (a, b)),
-                z,
-            )
-            .into_iter()
-            .map(|s| {
-                serde_json::json!([
-                    compact::num(s.from),
-                    compact::num(s.to),
-                    s.what.map(|w| w.id().to_string()),
-                    s.name,
-                ])
-            })
-            .collect();
+            let spans: Vec<serde_json::Value> =
+                measure::free_span(&home, axis, at, p.range.map(|[a, b]| (a, b)), z)
+                    .into_iter()
+                    .map(|s| {
+                        serde_json::json!([
+                            compact::num(s.from),
+                            compact::num(s.to),
+                            s.what.map(|w| w.id().to_string()),
+                            s.name,
+                        ])
+                    })
+                    .collect();
             return Ok(serde_json::json!({ "spans": spans }).to_string());
         }
 
@@ -1786,10 +1788,7 @@ impl NewEraMcp {
                     out.insert("cm".to_owned(), compact::num((b.y - a.y).abs()));
                 }
                 (None, None) => {
-                    out.insert(
-                        "cm".to_owned(),
-                        compact::num((b.x - a.x).hypot(b.y - a.y)),
-                    );
+                    out.insert("cm".to_owned(), compact::num((b.x - a.x).hypot(b.y - a.y)));
                 }
             }
             return Ok(serde_json::Value::Object(out).to_string());
@@ -1807,8 +1806,9 @@ impl NewEraMcp {
             Some(raw) => raw
                 .iter()
                 .map(|d| {
-                    Dir::parse(d, Some(piece))
-                        .ok_or_else(|| invalid(format!("dir {d}: +x -x +y -y, front/back/left/right")))
+                    Dir::parse(d, Some(piece)).ok_or_else(|| {
+                        invalid(format!("dir {d}: +x -x +y -y, front/back/left/right"))
+                    })
                 })
                 .collect::<Result<_, _>>()?,
             None => Dir::PLAN.to_vec(),
@@ -2559,11 +2559,7 @@ fn expand_parts(home: &Home, out: &mut serde_json::Value) {
 }
 
 /// Applies `kinds`, `room`, `rect` and `fields` to a read.
-fn narrow(
-    home: &Home,
-    out: &mut serde_json::Value,
-    p: &GetHomeParams,
-) -> Result<(), ErrorData> {
+fn narrow(home: &Home, out: &mut serde_json::Value, p: &GetHomeParams) -> Result<(), ErrorData> {
     if let Some(kinds) = &p.kinds {
         for kind in kinds {
             if !compact::KINDS.contains(&kind.as_str()) {
@@ -2602,9 +2598,9 @@ fn narrow(
     if !boxes.is_empty() {
         let meets = |id: newera_core::ElementId| {
             newera_core::element_bounds(home, id).is_some_and(|(min, max)| {
-                boxes
-                    .iter()
-                    .all(|(lo, hi)| min.x <= hi.x && lo.x <= max.x && min.y <= hi.y && lo.y <= max.y)
+                boxes.iter().all(|(lo, hi)| {
+                    min.x <= hi.x && lo.x <= max.x && min.y <= hi.y && lo.y <= max.y
+                })
             })
         };
         for kind in compact::KINDS {
@@ -2633,7 +2629,11 @@ fn narrow(
     }
     // Empty arrays say nothing; dropping them keeps "not here" unambiguous.
     for kind in compact::KINDS {
-        if out.get(kind).and_then(|v| v.as_array()).is_some_and(Vec::is_empty) {
+        if out
+            .get(kind)
+            .and_then(|v| v.as_array())
+            .is_some_and(Vec::is_empty)
+        {
             out.as_object_mut().expect("object").remove(kind);
         }
     }
@@ -2690,7 +2690,11 @@ fn preview(
         .flatten()
         .chain(out["added"].as_array().into_iter().flatten())
         .filter_map(|c| {
-            let raw = if c.is_string() { c.as_str()? } else { c["id"].as_str()? };
+            let raw = if c.is_string() {
+                c.as_str()?
+            } else {
+                c["id"].as_str()?
+            };
             raw.parse().ok()
         })
         .collect();
@@ -2724,9 +2728,10 @@ fn preview(
         clearances.insert(id.to_string(), serde_json::Value::Object(sides));
     }
     if !clearances.is_empty() {
-        out.as_object_mut()
-            .expect("object")
-            .insert("clearances".to_owned(), serde_json::Value::Object(clearances));
+        out.as_object_mut().expect("object").insert(
+            "clearances".to_owned(),
+            serde_json::Value::Object(clearances),
+        );
     }
 
     // Which findings it would settle, and which it would create.
@@ -2770,7 +2775,10 @@ fn preview(
     let new_keys: std::collections::BTreeSet<String> = now.findings.iter().map(&key).collect();
     let object = out.as_object_mut().expect("object");
     if was.score != now.score {
-        object.insert("score".to_owned(), serde_json::json!([was.score, now.score]));
+        object.insert(
+            "score".to_owned(),
+            serde_json::json!([was.score, now.score]),
+        );
     }
     for (label, findings, other) in [
         ("resolved", &was.findings, &new_keys),
@@ -2990,11 +2998,17 @@ mod tests {
         // and `faces` says which way the piece opens.
         let turned = read(r#"{"ids":["f7"],"fields":["bounds","faces","wdh"]}"#);
         let piece = &turned["furniture"][0];
-        let (w, d) = (piece["wdh"][0].as_f64().unwrap(), piece["wdh"][1].as_f64().unwrap());
+        let (w, d) = (
+            piece["wdh"][0].as_f64().unwrap(),
+            piece["wdh"][1].as_f64().unwrap(),
+        );
         let bounds = &piece["bounds"];
         let span_x = bounds[1][0].as_f64().unwrap() - bounds[0][0].as_f64().unwrap();
         let span_y = bounds[1][1].as_f64().unwrap() - bounds[0][1].as_f64().unwrap();
-        assert!((span_x - d).abs() < 0.1 && (span_y - w).abs() < 0.1, "{piece}");
+        assert!(
+            (span_x - d).abs() < 0.1 && (span_y - w).abs() < 0.1,
+            "{piece}"
+        );
         assert_eq!(piece["faces"], "-x", "{piece}");
         assert!(piece.get("at").is_none(), "fields trims the rest: {piece}");
 
@@ -3089,7 +3103,10 @@ mod tests {
 
         // Two points, plainly.
         let straight = measure(r#"{"from":[0,0],"to":[30,40]}"#);
-        assert!((straight["cm"].as_f64().unwrap() - 50.0).abs() < 0.01, "{straight}");
+        assert!(
+            (straight["cm"].as_f64().unwrap() - 50.0).abs() < 0.01,
+            "{straight}"
+        );
     }
 
     #[test]
@@ -3151,7 +3168,10 @@ mod tests {
         .unwrap();
         let overlap = &all["overlap"][0];
         assert_eq!(overlap["kind"], "cross_level", "{all}");
-        assert!(overlap["a"]["name"].is_string(), "names come with it: {all}");
+        assert!(
+            overlap["a"]["name"].is_string(),
+            "names come with it: {all}"
+        );
         assert!(overlap["a"]["bounds"].is_array(), "{all}");
         assert_eq!(all["overlap_kinds"]["cross_level"], 1, "{all}");
 
@@ -3356,13 +3376,25 @@ mod tests {
         .unwrap();
         let stale = annotations(r#"{"stale":true}"#);
         let rows = stale["stale"].as_array().unwrap();
-        let dim = rows.iter().find(|r| r[0] == "d5").unwrap_or_else(|| panic!("{stale}"));
+        let dim = rows
+            .iter()
+            .find(|r| r[0] == "d5")
+            .unwrap_or_else(|| panic!("{stale}"));
         assert!((dim[1].as_f64().unwrap() - 240.0).abs() < 0.5, "{stale}");
         assert!((dim[2].as_f64().unwrap() - 200.0).abs() < 0.5, "{stale}");
-        let note = rows.iter().find(|r| r[0] == "t6").unwrap_or_else(|| panic!("{stale}"));
+        let note = rows
+            .iter()
+            .find(|r| r[0] == "t6")
+            .unwrap_or_else(|| panic!("{stale}"));
         assert_eq!(note[3], "f7", "the piece the note sits on: {stale}");
-        assert!((note[1].as_f64().unwrap() - 60.0).abs() < 0.01, "written: {stale}");
-        assert!((note[2].as_f64().unwrap() - 100.0).abs() < 0.01, "measured: {stale}");
+        assert!(
+            (note[1].as_f64().unwrap() - 60.0).abs() < 0.01,
+            "written: {stale}"
+        );
+        assert!(
+            (note[2].as_f64().unwrap() - 100.0).abs() < 0.01,
+            "measured: {stale}"
+        );
 
         // And notes can be found by their text, which no read could do.
         let found = annotations(r#"{"q":"torre"}"#);
@@ -3398,7 +3430,8 @@ mod tests {
 
         // The upper storey starts empty; new walls go on it.
         let home: serde_json::Value =
-            serde_json::from_str(&s.get_home(Parameters(GetHomeParams::default())).unwrap()).unwrap();
+            serde_json::from_str(&s.get_home(Parameters(GetHomeParams::default())).unwrap())
+                .unwrap();
         assert!(
             home.get("walls")
                 .is_none_or(|w| w.as_array().unwrap().is_empty()),
@@ -3419,7 +3452,8 @@ mod tests {
         }))
         .unwrap();
         let home: serde_json::Value =
-            serde_json::from_str(&s.get_home(Parameters(GetHomeParams::default())).unwrap()).unwrap();
+            serde_json::from_str(&s.get_home(Parameters(GetHomeParams::default())).unwrap())
+                .unwrap();
         assert_eq!(home["walls"].as_array().unwrap().len(), 4, "{home}");
 
         let upper = rows[1][0].as_str().unwrap().to_owned();
@@ -4392,15 +4426,14 @@ mod tests {
         )
         .unwrap();
         s.create(Parameters(params)).unwrap();
-        let report: serde_json::Value =
-            serde_json::from_str(
-                &s.check_layout(Parameters(CheckParams {
-                    areas: Some([("sala".to_owned(), 10.0), ("Cozinha".to_owned(), 8.0)].into()),
-                    level: None,
-                }))
-                .unwrap(),
-            )
-            .unwrap();
+        let report: serde_json::Value = serde_json::from_str(
+            &s.check_layout(Parameters(CheckParams {
+                areas: Some([("sala".to_owned(), 10.0), ("Cozinha".to_owned(), 8.0)].into()),
+                level: None,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
         let rows = report["areas"].as_array().unwrap();
         let cozinha = rows.iter().find(|r| r[0] == "Cozinha").unwrap();
         assert!(
