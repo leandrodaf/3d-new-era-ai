@@ -4,6 +4,8 @@
 .idea/
 .vscode/
 *.profraw
+__pycache__/
+
 # Local projects and exports
 *.sh3d
 *.newera
