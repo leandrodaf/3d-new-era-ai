@@ -3706,6 +3706,31 @@ mod tests {
         );
     }
 
+    /// The whole tool surface, frozen: the names an agent can call and the
+    /// exact bytes of what it reads to learn them.
+    ///
+    /// `list_all` sorts by name, so this is stable across runs. It is the
+    /// guard for moving tools between modules: a dropped router, two modules
+    /// claiming one name (the merge overwrites in silence), a description
+    /// left behind or a schema that missed compaction all change it.
+    #[test]
+    fn tool_surface_is_unchanged() {
+        const NAMES: &str = "annotations,arrange,cabinet_run,cameras,catalog,check_layout,\
+create,cut_list,delete,disciplines,embed,ergonomics,export_plan,fit_roof,get_home,joinery,\
+levels,lighting,materials,measure,move,new_home,open_home,place,plugins,redo,render_3d,\
+render_photo,render_plan,save_home,sessions,set_background,set_home,split_wall,\
+trace_background,undo,update,variants,video";
+
+        let tools = server().tool_router.list_all();
+        let names: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
+        assert_eq!(names.join(","), NAMES, "the set of tools changed");
+        let bytes = serde_json::to_string(&tools).unwrap().len();
+        assert_eq!(
+            bytes, 49408,
+            "a description or schema changed; this test guards a pure move"
+        );
+    }
+
     #[test]
     #[ignore = "prints the size of the tool list"]
     fn tool_list_size() {
