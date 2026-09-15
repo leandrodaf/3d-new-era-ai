@@ -49,6 +49,10 @@ mcp-stdio: ## MCP via stdin/stdout (para clientes que iniciam o processo)
 icons: ## Regera os ícones (app, documento, macOS, Windows e Linux) a partir da marca
 	python3 scripts/make-icons.py
 
+.PHONY: logo
+logo: ## Mostra a marca em ANSI (a mesma que os instaladores imprimem)
+	@cat assets/logo.ansi
+
 .PHONY: web
 web: ## Compila o visualizador web (WebAssembly) em web/
 	@rustup target list --installed | grep -q wasm32-unknown-unknown || rustup target add wasm32-unknown-unknown
@@ -118,6 +122,50 @@ doc: ## Gera e abre a documentação das crates
 .PHONY: clean
 clean: ## Remove artefatos de build
 	$(CARGO) clean
+
+##@ Instalar no sistema
+
+APPS ?= $(HOME)/Applications
+
+.PHONY: install
+install: ## Instala o app deste código aqui (macOS: ~/Applications; Linux: menu, ícones e .newera)
+	@set -e; \
+	case "$$(uname -s)" in \
+	Darwin) \
+	  $(CARGO) build -p newera --release; \
+	  app=$$(scripts/macos-app.sh "$(RELEASE)" "$(APPS)" "$$(git rev-parse HEAD 2>/dev/null || true)" | tail -1); \
+	  reg=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister; \
+	  [ -x $$reg ] && $$reg -f "$$app" >/dev/null 2>&1 || true; \
+	  mkdir -p "$(HOME)/.local/bin"; \
+	  ln -sf "$$app/Contents/MacOS/newera" "$(HOME)/.local/bin/newera"; \
+	  echo "instalado: $$app"; \
+	  ;; \
+	Linux) \
+	  $(CARGO) build -p newera --release; \
+	  stage=target/desktop; \
+	  rm -rf $$stage; \
+	  mkdir -p $$stage/share/applications $$stage/share/mime/packages $$stage/share/metainfo $$stage/share/icons; \
+	  cp $(RELEASE) scripts/install-desktop.sh $$stage/; \
+	  cp assets/linux/newera.desktop $$stage/share/applications/; \
+	  cp assets/linux/newera.xml $$stage/share/mime/packages/; \
+	  cp assets/linux/io.github.leandrodaf.newera.metainfo.xml $$stage/share/metainfo/; \
+	  cp -r assets/linux/hicolor $$stage/share/icons/; \
+	  sh $$stage/install-desktop.sh; \
+	  ;; \
+	*) echo "no Windows: scripts/install-windows.ps1"; exit 1;; \
+	esac
+
+.PHONY: uninstall
+uninstall: ## Remove o que o `make install` colocou no sistema
+	@case "$$(uname -s)" in \
+	Darwin) \
+	  rm -rf "$(APPS)/3D New Era AI.app"; \
+	  rm -f "$(HOME)/.local/bin/newera"; \
+	  echo "removidos: o app e o link newera"; \
+	  ;; \
+	Linux) sh scripts/install-desktop.sh --uninstall;; \
+	*) echo "no Windows: scripts/install-windows.ps1 -Uninstall"; exit 1;; \
+	esac
 
 ##@ IA / MCP
 
