@@ -1,5 +1,32 @@
 //! MCP tool surface. Each tool is a thin adapter over [`crate::edit`] or
 //! `newera-core`; all of them share the document the editor is showing.
+//!
+//! One module per domain, each with its own router, its params and its
+//! tests. Where a tool lives:
+//!
+//! | module | tools |
+//! |---|---|
+//! | [`read`] | `get_home`, `materials`, `catalog` |
+//! | [`elements`] | `create`, `update`, `delete`, `move`, `split_wall` |
+//! | [`furniture`] | `place`, `arrange` |
+//! | [`joinery`] | `joinery`, `cut_list` |
+//! | [`cabinets`] | `cabinet_run`, `embed` |
+//! | [`roof`] | `fit_roof` |
+//! | [`lighting`] | `lighting` |
+//! | [`render`] | `render_plan`, `render_3d`, `render_photo`, `export_plan` |
+//! | [`cameras`] | `cameras`, `video` |
+//! | [`measure`] | `measure` |
+//! | [`check`] | `check_layout`, `ergonomics` |
+//! | [`annotations`] | `annotations`, `disciplines` |
+//! | [`background`] | `set_background`, `trace_background` |
+//! | [`levels`] | `levels` |
+//! | [`project`] | `save_home`, `open_home`, `new_home`, `set_home`, `undo`, `redo`, `sessions`, `plugins`, `variants` |
+//! | [`reply`] | no tools: what every write needs to answer |
+//!
+//! A new tool goes in the domain it belongs to, and its router joins
+//! `parts` in [`NewEraMcp::new`]. Two domains claiming one name would
+//! overwrite in silence, so the count is asserted there and the whole
+//! surface is frozen by `tool_surface_is_unchanged`.
 
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::model::{Implementation, ServerCapabilities, ServerInfo};

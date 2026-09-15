@@ -40,7 +40,7 @@ That is what makes these properties hold everywhere, for free:
 | `newera-core` | serde, schemars, geo | Model (`Home`, `Element`: walls, rooms, dimensions, labels), geometry (joins, triangulation, room detection), `Command`, `Document`, project format. No UI, no async, no I/O. |
 | `newera-catalog` | core, tobj, gltf | Parametric furniture: procedural 3D meshes and plan symbols at any size; model import. |
 | `newera-draw` | core, catalog, tiny-skia | Plan scene (styled primitives in cm) and its PNG/SVG backends. |
-| `newera-mcp` | core, draw, rmcp | MCP tools and their token-efficient wire format. |
+| `newera-mcp` | core, draw, rmcp | MCP tools and their token-efficient wire format. One module per domain under `src/tools/`, each with its own router; `src/tools/mod.rs` maps them. |
 | `newera-render` | core, catalog | 3D meshes, software renderer, photos, videos, GLB/OBJ export. |
 | `newera-plugins` | core | Plugin discovery and runs: external programs that edit through the HTTP API. |
 | `newera-server` | core, mcp, plugins, axum | HTTP transport: REST API, sessions, plugins and the Streamable HTTP MCP endpoint. |

@@ -26,7 +26,9 @@ CI runs the same checks on Linux, macOS and Windows.
 - **Every change to a home goes through a `Command`.** Don't mutate `Home` from UI
   or MCP code. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **A feature ships with its MCP tool.** Keep tool payloads compact: short ids,
-  `[x, y]` points, omitted defaults, one-line write replies.
+  `[x, y]` points, omitted defaults, one-line write replies. A tool goes in the
+  domain module it belongs to under `crates/newera-mcp/src/tools/` (the table in
+  `tools/mod.rs` says which), and its router joins `parts` in `NewEraMcp::new`.
 - **Units are centimeters.** Name fields after what they measure, and document units.
 - **Tests**: core logic gets unit tests; MCP tools get tests for their wire format;
   end-to-end behavior goes in `scripts/mcp-smoke.sh` when it crosses processes.
