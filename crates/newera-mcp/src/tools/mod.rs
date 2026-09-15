@@ -16,6 +16,7 @@ use serde::Deserialize;
 use crate::compact;
 use crate::edit::{self, BackgroundParams, CreateParams, PlaceSpec, UpdateSpec};
 
+mod levels;
 mod reply;
 
 use reply::{applied, background_scale, core, invalid, ok, on_variant, preview};
@@ -401,24 +402,6 @@ pub(crate) struct PluginsParams {
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
-pub(crate) struct LevelsParams {
-    /// `list` (default), `add`, `select`, `update`, `delete`.
-    action: Option<String>,
-    /// Level id, e.g. `lv3`.
-    id: Option<String>,
-    name: Option<String>,
-    /// Storey height cm for `add` and `update`.
-    h: Option<f64>,
-    /// Floor elevation cm for `add` and `update` (e.g. a house on stilts).
-    elev: Option<f64>,
-    /// Mark the storey as a reference layer: a traced plan, a scan, an
-    /// earlier version. Its content is drawing, not building, so layout
-    /// checks and ergonomics leave it alone even when it sits at the same
-    /// elevation as the storey being designed.
-    reference: Option<bool>,
-}
-
-#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct VariantsParams {
     /// `list` (default), `duplicate` (copy active), `new` (empty), `switch`, `rename`, `delete`.
     action: Option<String>,
@@ -471,10 +454,24 @@ pub(crate) struct PathParams {
     path: Option<String>,
 }
 
-#[tool_router]
+/// The MCP server, assembled from one router per domain.
+///
+/// A new tool means a `#[tool]` in a domain module and its router in
+/// `parts`. Two domains claiming one name would overwrite in silence — the
+/// merge is a map insert — so the count is checked here, and the whole
+/// surface is frozen by `tool_surface_is_unchanged`.
 impl NewEraMcp {
     pub fn new(document: SharedDocument) -> Self {
-        let mut tool_router = Self::tool_router();
+        let parts = [Self::tool_router(), Self::levels_router()];
+        let expected: usize = parts.iter().map(|r| r.map.len()).sum();
+        let mut tool_router = parts
+            .into_iter()
+            .fold(ToolRouter::new(), |all, part| all + part);
+        debug_assert_eq!(
+            tool_router.map.len(),
+            expected,
+            "two domains registered the same tool name"
+        );
         for route in tool_router.map.values_mut() {
             let mut schema = serde_json::Value::Object((*route.attr.input_schema).clone());
             crate::schema::compact(&mut schema);
@@ -487,7 +484,10 @@ impl NewEraMcp {
             tool_router,
         }
     }
+}
 
+#[tool_router]
+impl NewEraMcp {
     #[tool(
         description = "Home state. detail=summary is cheapest. Ask for less instead of reading everything: ids=[…] resolves ids (group parts included), room=<id|name> and rect=[[x0,y0],[x1,y1]] read one place, kinds=[walls|rooms|dims|labels|furniture|polylines] and fields=[…] trim each row, parts=true opens groups, ndjson=true prints one element per line so a long answer can be read a slice at a time. Every piece carries bounds (plan box with angle applied) and faces (the side it opens toward). Ids share one counter per version (w1, r2, f3…) and are never reused, so a new version may start at any number."
     )]
@@ -2328,70 +2328,6 @@ impl NewEraMcp {
     }
 
     #[tool(
-        description = "Storeys. list (default): rows [id,name,elev,h,selected,layout_index,viewable,reference]. add {name?,h?,elev?} adds one on top (or at elev cm) and selects it; select {id}; delete {id} removes it and its content. update {id, elev?|h?|name?|reference?}: elev raises a storey with its walls, floors and openings (houses on stilts); reference=true marks it a tracing layer (imported plan, older version) that checks and ergonomics skip, which is what you want when two storeys share an elevation. Other tools act on the selected storey."
-    )]
-    pub(crate) fn levels(
-        &self,
-        Parameters(p): Parameters<LevelsParams>,
-    ) -> Result<String, ErrorData> {
-        let mut doc = self.document.write();
-        let id = || -> Result<newera_core::LevelId, ErrorData> {
-            p.id.as_deref()
-                .ok_or_else(|| invalid("`id` is required"))?
-                .parse()
-                .map_err(|e| invalid(format!("{e}")))
-        };
-        match p.action.as_deref().unwrap_or("list") {
-            "list" => Ok(compact::levels(doc.home()).to_string()),
-            "add" => {
-                let level = ops::add_level(&mut doc, p.name.clone(), p.h).map_err(core)?;
-                if let Some(elev) = p.elev
-                    && let Some(mut raised) = doc.home().level(level).cloned()
-                {
-                    raised.elevation = elev;
-                    doc.execute(Command::update(raised)).map_err(core)?;
-                }
-                Ok(ok(&doc, &[level.to_string()]))
-            }
-            "select" => {
-                let level = id()?;
-                if doc.home().level(level).is_none() {
-                    return Err(invalid(format!("{level} not found")));
-                }
-                doc.select_level(Some(level));
-                Ok(ok(&doc, &[]))
-            }
-            "update" => {
-                let level = id()?;
-                let mut updated = doc
-                    .home()
-                    .level(level)
-                    .cloned()
-                    .ok_or_else(|| invalid(format!("{level} not found")))?;
-                if let Some(elev) = p.elev {
-                    updated.elevation = elev;
-                }
-                if let Some(h) = p.h {
-                    updated.height = h;
-                }
-                if let Some(name) = p.name.clone() {
-                    updated.name = name;
-                }
-                if let Some(reference) = p.reference {
-                    updated.set_reference(reference);
-                }
-                doc.execute(Command::update(updated)).map_err(core)?;
-                Ok(ok(&doc, &[]))
-            }
-            "delete" => {
-                ops::delete_level(&mut doc, id()?).map_err(core)?;
-                Ok(ok(&doc, &[]))
-            }
-            other => Err(invalid(format!("unknown action `{other}`"))),
-        }
-    }
-
-    #[tool(
         description = "Plan versions (tabs). list: rows [i,name,active,walls,rooms,m2,furniture,issues]. duplicate/new switch to the new one; edits apply to the active version."
     )]
     pub(crate) fn variants(
@@ -2713,13 +2649,15 @@ fn round2(v: f64) -> f64 {
     (v * 100.0).round() / 100.0
 }
 
+/// A server on an empty document, for the domain modules' tests.
+#[cfg(test)]
+fn server() -> NewEraMcp {
+    NewEraMcp::new(SharedDocument::new(Document::default()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn server() -> NewEraMcp {
-        NewEraMcp::new(SharedDocument::new(Document::default()))
-    }
 
     #[test]
     fn create_then_render_returns_a_png_image() {
@@ -2970,92 +2908,6 @@ mod tests {
     }
 
     #[test]
-    fn a_reference_storey_is_drawing_and_checks_leave_it_alone() {
-        let s = server();
-        s.create(Parameters(
-            serde_json::from_str(
-                r#"{"walls":[{"pts":[[0,0],[500,0],[500,400],[0,400]],"closed":true}],
-                    "rooms":[{"name":"Sala","at":[250,200]}]}"#,
-            )
-            .unwrap(),
-        ))
-        .unwrap();
-        s.place(Parameters(
-            serde_json::from_str(r#"{"items":[{"cat":"sofa-3","at":[250,200]}]}"#).unwrap(),
-        ))
-        .unwrap();
-        // A second storey at the same elevation, holding a copy of the plan.
-        s.levels(Parameters(LevelsParams {
-            action: Some("add".into()),
-            name: Some("Novo layout".into()),
-            elev: Some(0.0),
-            ..LevelsParams::default()
-        }))
-        .unwrap();
-        s.place(Parameters(
-            serde_json::from_str(r#"{"items":[{"cat":"sofa-3","at":[250,200]}]}"#).unwrap(),
-        ))
-        .unwrap();
-        let list: serde_json::Value =
-            serde_json::from_str(&s.levels(Parameters(LevelsParams::default())).unwrap()).unwrap();
-        let ground = list[0][0].as_str().unwrap().to_owned();
-
-        // Reading either storey warns that they are stacked.
-        let home: serde_json::Value = serde_json::from_str(
-            &s.get_home(Parameters(
-                serde_json::from_str(r#"{"detail":"summary"}"#).unwrap(),
-            ))
-            .unwrap(),
-        )
-        .unwrap();
-        assert!(
-            home["warnings"][0]
-                .as_str()
-                .unwrap()
-                .contains("share an elevation"),
-            "{home}"
-        );
-
-        // Checked together, the two copies read as an artefact of the layers,
-        // not as a clash.
-        let all: serde_json::Value = serde_json::from_str(
-            &s.check_layout(Parameters(CheckParams {
-                level: Some("all".into()),
-                areas: None,
-            }))
-            .unwrap(),
-        )
-        .unwrap();
-        let overlap = &all["overlap"][0];
-        assert_eq!(overlap["kind"], "cross_level", "{all}");
-        assert!(
-            overlap["a"]["name"].is_string(),
-            "names come with it: {all}"
-        );
-        assert!(overlap["a"]["bounds"].is_array(), "{all}");
-        assert_eq!(all["overlap_kinds"]["cross_level"], 1, "{all}");
-
-        // Marking the old plan as a reference layer takes it out of the check.
-        s.levels(Parameters(LevelsParams {
-            action: Some("update".into()),
-            id: Some(ground),
-            reference: Some(true),
-            ..LevelsParams::default()
-        }))
-        .unwrap();
-        let all: serde_json::Value = serde_json::from_str(
-            &s.check_layout(Parameters(CheckParams {
-                level: Some("all".into()),
-                areas: None,
-            }))
-            .unwrap(),
-        )
-        .unwrap();
-        assert!(all.get("overlap").is_none(), "{all}");
-        assert!(all.get("warnings").is_none(), "and the warning goes: {all}");
-    }
-
-    #[test]
     fn a_dry_write_answers_the_question_without_touching_the_plan() {
         let s = server();
         s.create(Parameters(
@@ -3264,77 +3116,6 @@ mod tests {
                 .as_array()
                 .unwrap()
                 .is_empty()
-        );
-    }
-
-    #[test]
-    fn levels_scope_edits_and_reads_to_the_selected_storey() {
-        let s = server();
-        let walls = r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}]}"#;
-        s.create(Parameters(serde_json::from_str(walls).unwrap()))
-            .unwrap();
-        let add = |name: &str| {
-            s.levels(Parameters(LevelsParams {
-                action: Some("add".into()),
-                name: Some(name.into()),
-                ..LevelsParams::default()
-            }))
-            .unwrap()
-        };
-        let reply = add("Superior");
-        assert!(reply.starts_with("ok"), "{reply}");
-        let list = s.levels(Parameters(LevelsParams::default())).unwrap();
-        let rows: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap();
-        assert_eq!(rows.len(), 2, "{list}");
-        assert_eq!(rows[1][4], true, "new storey is selected: {list}");
-
-        // The upper storey starts empty; new walls go on it.
-        let home: serde_json::Value =
-            serde_json::from_str(&s.get_home(Parameters(GetHomeParams::default())).unwrap())
-                .unwrap();
-        assert!(
-            home.get("walls")
-                .is_none_or(|w| w.as_array().unwrap().is_empty()),
-            "{home}"
-        );
-        assert_eq!(home["levels"].as_array().unwrap().len(), 2);
-        s.create(Parameters(
-            serde_json::from_str(r#"{"walls":[{"pts":[[0,0],[200,0]]}]}"#).unwrap(),
-        ))
-        .unwrap();
-        assert_eq!(s.document.read().home().walls.len(), 5);
-
-        let ground = rows[0][0].as_str().unwrap().to_owned();
-        s.levels(Parameters(LevelsParams {
-            action: Some("select".into()),
-            id: Some(ground),
-            ..LevelsParams::default()
-        }))
-        .unwrap();
-        let home: serde_json::Value =
-            serde_json::from_str(&s.get_home(Parameters(GetHomeParams::default())).unwrap())
-                .unwrap();
-        assert_eq!(home["walls"].as_array().unwrap().len(), 4, "{home}");
-
-        let upper = rows[1][0].as_str().unwrap().to_owned();
-        s.levels(Parameters(LevelsParams {
-            action: Some("delete".into()),
-            id: Some(upper),
-            ..LevelsParams::default()
-        }))
-        .unwrap();
-        assert_eq!(
-            s.document.read().home().walls.len(),
-            4,
-            "upper walls removed with the storey"
-        );
-        assert!(
-            s.levels(Parameters(LevelsParams {
-                action: Some("select".into()),
-                id: Some("lv99".into()),
-                ..LevelsParams::default()
-            }))
-            .is_err()
         );
     }
 
@@ -3947,34 +3728,6 @@ trace_background,undo,update,variants,video";
         assert!(reply.contains(" v=1 i=1"), "{reply}");
         let reply = s.create(Parameters(wall())).unwrap();
         assert!(reply.contains(" v=1 ids="), "{reply}");
-    }
-
-    #[test]
-    fn storeys_can_start_above_the_ground() {
-        let s = server();
-        let reply = s
-            .levels(Parameters(LevelsParams {
-                action: Some("add".into()),
-                elev: Some(55.0),
-                ..LevelsParams::default()
-            }))
-            .unwrap();
-        assert!(reply.starts_with("ok"), "{reply}");
-        let params: CreateParams =
-            serde_json::from_str(r#"{"walls":[{"pts":[[0,0],[300,0]],"h":250}]}"#).unwrap();
-        s.create(Parameters(params)).unwrap();
-        let doc = s.document.read();
-        let home = doc.home();
-        let wall = &home.walls[0];
-        assert!((home.elevation_of(wall.level) - 55.0).abs() < 1e-9);
-        let mesh =
-            newera_render::Mesh::from_home(home, &newera_render::Selection::new(), &|_| None);
-        let top = mesh
-            .vertices
-            .iter()
-            .map(|v| v.position[1])
-            .fold(f32::MIN, f32::max);
-        assert!((top - 3.05).abs() < 0.02, "wall top at 55 + 250 cm: {top}");
     }
 
     #[test]
