@@ -101,7 +101,8 @@ impl NewEraMcp {
 mod tests {
     use super::*;
     use crate::edit::CreateParams;
-    use crate::tools::{CheckParams, GetHomeParams, server};
+    use crate::tools::check::CheckParams;
+    use crate::tools::{GetHomeParams, server};
 
     #[test]
     fn a_reference_storey_is_drawing_and_checks_leave_it_alone() {
