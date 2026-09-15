@@ -116,8 +116,9 @@ mod tests {
     use rmcp::model::ContentBlock;
 
     use crate::edit::CreateParams;
+    use crate::tools::furniture::PlaceParams;
     use crate::tools::render::RenderParams;
-    use crate::tools::{PlaceParams, server};
+    use crate::tools::server;
 
     #[test]
     fn plan_overlay_and_area_comparison() {

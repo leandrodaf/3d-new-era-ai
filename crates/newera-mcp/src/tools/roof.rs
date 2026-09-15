@@ -95,7 +95,8 @@ impl NewEraMcp {
 mod tests {
     use super::*;
     use crate::edit::CreateParams;
-    use crate::tools::{PlaceParams, server};
+    use crate::tools::furniture::PlaceParams;
+    use crate::tools::server;
 
     #[test]
     fn roofs_and_beams() {

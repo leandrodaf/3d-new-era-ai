@@ -240,9 +240,10 @@ impl NewEraMcp {
 mod tests {
     use super::*;
     use crate::edit::{CreateParams, UpdateSpec};
+    use crate::tools::furniture::PlaceParams;
     use crate::tools::read::GetHomeParams;
     use crate::tools::render::RenderParams;
-    use crate::tools::{PlaceParams, UpdateParams, server};
+    use crate::tools::{UpdateParams, server};
 
     #[test]
     fn annotations_report_the_notes_that_stopped_being_true() {

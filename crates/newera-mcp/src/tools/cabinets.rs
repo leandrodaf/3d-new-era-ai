@@ -100,8 +100,9 @@ mod tests {
     use super::*;
     use crate::edit::CreateParams;
     use crate::tools::check::CheckParams;
+    use crate::tools::furniture::PlaceParams;
     use crate::tools::joinery::JoineryParams;
-    use crate::tools::{PlaceParams, server};
+    use crate::tools::server;
 
     #[test]
     fn cabinet_runs_fill_a_kitchen_wall_around_its_appliances() {
