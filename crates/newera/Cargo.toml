@@ -12,6 +12,9 @@ keywords.workspace = true
 categories.workspace = true
 readme = "../../README.md"
 build = "build.rs"
+# Two binaries live here (`newera` and the windowed `newera-gui`), so plain
+# `cargo run -p newera` needs to be told which one is the default.
+default-run = "newera"
 
 [lib]
 name = "newera_cli"
