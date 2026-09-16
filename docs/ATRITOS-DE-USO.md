@@ -95,6 +95,74 @@ ausência for proposital, o caminho é o `accept` com o motivo, como nos demais.
   **Deveria:** a mudança que teria evitado o contorno.
 -->
 
+## 38. O quantitativo não agrupa: 31 linhas de "1"
+
+Com o projeto elétrico pronto, o levantamento para a lista de compras:
+
+```
+disciplines(action="quantities")
+→ ["Tomada — cozinha, sobre a bancada (centro)", 1]
+  ["Tomada — cozinha, sobre a bancada (direita)", 1]
+  ["Tomada — dormitório, cabeceira", 1]
+  …  31 linhas, todas com contagem 1
+```
+
+O agrupamento é pelo **nome** da peça. Como cada ponto tem nome descritivo do
+lugar onde fica — que é o que serve ao eletricista na obra —, nada agrupa. O
+mesmo acontece em `annotations(legend=true)`, que repete as 31 linhas.
+
+O dado certo existe e sai no mesmo instante, da outra ferramenta:
+
+```
+electrical(check) → points: {"Iluminação":21, "TUG":22, "Rede":4, "TV":3}
+```
+
+O incentivo fica invertido: para o `quantities` funcionar seria preciso dar o
+mesmo nome genérico a todas as tomadas, perdendo a indicação de onde cada uma
+vai.
+
+**Reproduzir:** `disciplines(action="quantities")` numa planta cujos pontos
+tenham nomes próprios.
+
+**Deveria:** agrupar por catálogo (`outlet-low`, `outlet-mid`,
+`network-outlet`…), com o nome como detalhe da linha.
+
+## 39. As luminárias vieram sem fluxo, e só a photometria conta
+
+As 21 luminárias da planta — as mesmas que o `electrical` conta como pontos de
+iluminação e distribui nos circuitos C1 e C2 — estavam **sem potência nenhuma**:
+
+```
+f870  Cozinha — geral        light: {lm: None, w: None, lamp: None}
+f865  Escritório — geral     light: {lm: None, w: None, lamp: None}
+…  todas as 21
+```
+
+O resultado, pela NBR ISO/CIE 8995-1:
+
+```
+lighting() → Escritório  24 lx (referência 500)  "abaixo: faltam 476 lx"
+             Cozinha     19 lx (referência 300)  "abaixo: faltam 281 lx"
+             Dormitório  15 lx (referência 150)  "abaixo: faltam 135 lx"
+```
+
+Dez cômodos, dez vezes "abaixo". A casa inteira com 5.184 lm, quando precisa de
+uns 34.000.
+
+E o `ergonomics` dava 99 o tempo todo. É o mesmo padrão do caso 37 com as
+tomadas: a ferramenta específica aponta, o score não reflete, e quem não sabe
+que `lighting` existe entrega a planta assim. Aqui é pior que no 37, porque
+lá o buraco era não ter ponto nenhum; aqui os pontos existem, estão desenhados,
+contados e distribuídos em circuito — só não iluminam.
+
+**Reproduzir:** `lighting()` numa planta cujas luminárias não tenham `lm` nem
+`w` definidos.
+
+**Deveria:** luminária sem fluxo entrar no relatório como pendência, no mesmo
+lugar em que o cômodo sem porta agora entra (`no_door`). Ou o catálogo trazer
+um fluxo padrão por tipo de peça, para que um ponto de luz recém-colocado já
+ilumine algo plausível.
+
 ---
 
 ## Conferidos na planta real
