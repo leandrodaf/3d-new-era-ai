@@ -12,6 +12,11 @@ make dev     # same, rebuilding on every change
 
 Run `make` to list every command.
 
+Builds report to Sentry only with `NEWERA_SENTRY_DSN` set at build time. Released
+binaries get it from the repository secret; to test reporting locally, put
+`NEWERA_SENTRY_DSN=…` in a `.env.local` at the root — git ignores it and the
+Makefile reads it — and run `newera telemetry test`.
+
 ## Before opening a PR
 
 ```sh

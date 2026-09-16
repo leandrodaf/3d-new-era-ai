@@ -285,6 +285,18 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it fits together,
 edition, tier and link, in Portuguese because the sources are Brazilian — and
 [docs/ROADMAP.md](docs/ROADMAP.md) for what comes next.
 
+## Telemetry
+
+Released builds send crash reports to the developers through Sentry, and the
+notes agents leave with the MCP `feedback` tool — what a tool could have done
+better, with the call, the reply and what must not get worse. It is **on by
+default** and off with one click in **Help → Send error reports**, or
+`newera telemetry off`; `NEWERA_TELEMETRY=0` turns it off for a single run.
+Nothing of the project is sent, nor the IP address or the machine's name, and
+the MCP token is removed from every report. Notes are always kept locally in
+the config folder (`notes.jsonl`), sent or not. A build from source reports
+only when built with `NEWERA_SENTRY_DSN`.
+
 ## Contributing
 
 Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). `make check`
