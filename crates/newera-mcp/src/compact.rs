@@ -433,6 +433,16 @@ pub(crate) fn issue_ref(home: &Home, id: newera_core::ElementId) -> Value {
     v
 }
 
+/// A row with the key it is accepted by, first.
+fn keyed(row: Value, key: &str) -> Value {
+    let mut out = serde_json::Map::new();
+    out.insert("key".to_owned(), json!(key));
+    if let Value::Object(fields) = row {
+        out.extend(fields);
+    }
+    Value::Object(out)
+}
+
 /// Layout issues grouped by kind; empty object when everything is fine.
 ///
 /// Overlaps come classified and measured, worst first, so a report of
@@ -482,10 +492,10 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
             push("accepted", row);
             continue;
         }
+        let key = issue.key();
         match issue {
             Issue::Overlap { a, b, kind, extent } => {
                 *counts.entry(kind.name()).or_default() += 1;
-                let key = issue.key();
                 push(
                     "overlap",
                     obj([
@@ -500,24 +510,32 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
             Issue::Blocked { piece, against, cm } => push(
                 "blocked",
                 obj([
+                    ("key", json!(key)),
                     ("piece", issue_ref(home, piece.into())),
                     ("against", issue_ref(home, against)),
                     ("cm", num(cm)),
                 ]),
             ),
+            // Rows that were pairs stay pairs, with the key they are
+            // accepted by third, so readers of the old shape keep working.
             Issue::InWall(f, w) => push(
                 "in_wall",
-                json!([issue_ref(home, f.into()), issue_ref(home, w.into())]),
+                json!([issue_ref(home, f.into()), issue_ref(home, w.into()), key]),
             ),
             Issue::BlocksDoor { door, by } => push(
                 "blocks_door",
-                json!([issue_ref(home, door.into()), issue_ref(home, by.into())]),
+                json!([
+                    issue_ref(home, door.into()),
+                    issue_ref(home, by.into()),
+                    key
+                ]),
             ),
-            Issue::OutsideRooms(f) => push("outside_rooms", issue_ref(home, f.into())),
-            Issue::LooseOpening(f) => push("loose_opening", issue_ref(home, f.into())),
+            Issue::OutsideRooms(f) => push("outside_rooms", keyed(issue_ref(home, f.into()), &key)),
+            Issue::LooseOpening(f) => push("loose_opening", keyed(issue_ref(home, f.into()), &key)),
             Issue::OutgrewNiche { piece, host, over } => push(
                 "outgrew_niche",
                 obj([
+                    ("key", json!(key)),
                     ("piece", issue_ref(home, piece.into())),
                     ("host", issue_ref(home, host.into())),
                     ("over", json!(over.map(num))),
@@ -530,6 +548,7 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
             } => push(
                 "turned",
                 obj([
+                    ("key", json!(key)),
                     ("piece", issue_ref(home, piece.into())),
                     ("built", json!(built)),
                     ("placed", json!(placed)),
