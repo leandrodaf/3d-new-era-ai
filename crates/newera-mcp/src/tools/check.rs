@@ -254,7 +254,7 @@ mod tests {
         .unwrap();
         s.place(Parameters(
             serde_json::from_str(
-                r#"{"items":[{"cat":"box","name":"persiana integrada","at":[200,0],"w":120,"d":10,"h":30},
+                r#"{"items":[{"cat":"box","name":"persiana integrada","at":[200,9],"w":120,"d":10,"h":30},
                              {"cat":"box","name":"shaft","at":[600,150],"w":40,"d":40,"h":250}]}"#,
             )
             .unwrap(),
