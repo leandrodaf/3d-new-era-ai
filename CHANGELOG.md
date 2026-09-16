@@ -6,6 +6,120 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-16
+
+The electrical, telecom and plumbing projects, checked against the text of the
+norms, and a long round of fixes found by an agent working a real 65 m²
+apartment through the MCP server (`docs/ATRITOS-DE-USO.md`).
+
+### Added
+
+- Electrical project: network, TV, Wi-Fi and telecom panel points in the catalog;
+  circuits assigned per point or the whole division in one call (MCP `electrical`
+  `assign`), a load schedule and the NBR 5410 checks, drawn on the plan with circuit
+  numbers and opened from the discipline menu in the editor.
+- The supply is suggested by Enel SP's categories (single-, two- or three-phase and its
+  entry breaker); the panel is filled in DIN modules with DR, surge protector and the
+  spare ways NBR 5410 asks, and says when it does not fit.
+- Runs laid the way they are built: along walls, inside the slab or the floor, by the
+  cheapest tree from the panel, with their bill of materials (conduit, boxes, wire per
+  conductor, cable, connectors), voltage drop and conduit grouping. Cables drawn by hand
+  are measured and replaced by the routed run.
+- Adhesive flat wiring tape (Eletrofitas) as a way to lay power runs: the model by the
+  load and by whether a socket needs earth, refused in wet rooms and over its rating,
+  bought as Leroy Merlin kits with codes, prices and splices.
+- Wi-Fi access points: coverage per room and band from walls, doors, windows, slabs and
+  low-e glass; a suggested placement; standard, PoE, uplink and cable category checks.
+- Automation devices (smart relay, smart switch, dimmer, presence sensor, smart lock),
+  with their standby load and what each needs (neutral in the box, dimmer load, sensor
+  height and reach).
+- Outlets built into furniture: pop-up towers (60, 85 and 100 mm), desk boxes and panel
+  outlets, modelled in 3D, seated on the top they go into and checked for edge distance,
+  room below, sink and cooktop distance and the socket a plug-in tower needs.
+- Plumbing project: cold, hot, sewer, vent and gas points; drains as the models they are
+  (sizes, flow, fixed in the floor), vent branches routed, gas grilles drawn, and rules
+  from NBR 8160, NBR 5626, NBR 13103 and São Paulo's sanitary code.
+- Balcony guards told apart: iron railings, glass guards and glass closures, checked for
+  height (1,10 m), bar gap (11 cm), laminated glass, and a closure that is no guard; MCP
+  `place`/`update` take `glass` and `gap`.
+- Lighting, appliances and joinery are layers of the plan, shown or hidden on the plan
+  and in 3D; hiding the electrical project hides all of it, lamps included.
+- Ergonomics: single beds side by side, accessible tops and beds, gas appliances in
+  bathrooms and bedrooms; a fix says what it leaves behind, and two findings that cannot
+  both fit say so.
+- MCP: `move` takes `to=[x,y]`; `place` copies a piece already in the project;
+  `cut_list` reads joinery drawn by hand; a part of a group can be renamed; findings of
+  every discipline can be accepted with a reason, and an acceptance that outlived its
+  finding is listed, pruned or pointed to the finding that took its place; deleting a
+  piece names the labels left pointing at it; `update fixed` declares a piece fixed or
+  free-standing when its name does not say.
+- Crash reports to Sentry in released binaries, on by default and off from the Help menu.
+- Agents can report what a tool could do better, with the whole case.
+
+### Changed
+
+- Every figure and citation was checked against the norm texts: NBR 5410 (lighting load
+  by area, kitchen and bathroom outlets, DR, grouping, 4 % drop), NBR 16264, NBR 8160,
+  NBR 5626, NBR 13103, NBR 15575-1 annex F, NBR 9050, NBR 14718, NBR 7199 and São
+  Paulo's building code (Decreto 57.776) — see `docs/NORMAS.md`.
+
+### Fixed
+
+- A fixed point (outlet, switch, RJ45, Wi-Fi point, drain) is set on its structure —
+  wall, ceiling, floor or the top it is built into — never loose in a room, on glass, in
+  a door or window span, too close to a frame or inside an appliance; the refusal names
+  the nearest free place.
+- A piece is classified by what it is, not by a word in its name: a cabinet or countertop
+  named after the appliance beside it is joinery, cabinet parts named after the sink are
+  not sinks, and "Lavanderia" is no "lava".
+- A reply names every change it made, and a change that changes nothing says so with the
+  value already there; `update` refuses a field that does not exist.
+- Groups resized keep their boards and the face they declare; dimensions held by a part
+  follow it; reference numbers stay with their piece; a door nudged along its wall keeps
+  its side.
+- A painted wall no longer covers the door in it; the load schedule's findings scroll.
+
+## [1.2.0] - 2026-09-15
+
+### Changed
+
+- A rule advises, it never refuses to draw: what the workshop would say travels with the
+  drawing in `notes`, and a request that cannot be built as asked builds the nearest thing
+  and says so. Only what has no geometry at all fails.
+
+### Added
+
+- The editor says what long work is doing, and it can be walked away from.
+- `faces` is read from what was built into a piece (doors, drawer fronts, kick), a
+  dimension that holds onto what it marks is measured again on every change, findings carry
+  their `weight`, and `dry` can answer `"summary"`.
+
+### Fixed
+
+- An appliance that stopped fitting its niche is reported by `check_layout`.
+- Walls join where they touch, not only where they end.
+- Light and air cross rooms open to each other and through glass; notes that no longer
+  match their piece are reported by `stale`.
+
+## [1.1.0] - 2026-09-15
+
+### Added
+
+- Landing page on GitHub Pages, in Portuguese and English.
+- The mark as a real icon set on macOS, Windows and Linux; installers speak the user's
+  language.
+- MCP answers what an agent actually asks: measure, classify, preview.
+
+### Changed
+
+- The MCP tools moved out of one file into a module per tool, behind a test that freezes
+  the tool surface.
+
+### Fixed
+
+- `cargo run -p newera` picks the editor binary.
+- Installers find the latest release without the GitHub API.
+
 ## [1.0.0] - 2026-09-14
 
 First release: the desktop editor, the browser editor and viewer, the HTTP API and the
@@ -140,5 +254,8 @@ MCP server, with everything below.
 - `scripts/mcp.sh` / `make mcp` to call MCP tools from the shell.
 - CI for formatting, clippy, tests on Linux/macOS/Windows, MCP smoke test, MSRV and cargo-deny; release builds.
 
-[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/leandrodaf/3d-new-era-ai/releases/tag/v1.0.0
