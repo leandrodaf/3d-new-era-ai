@@ -49,12 +49,19 @@ pub(crate) struct ElectricalParams {
     cat: Option<String>,
     /// For `route`: the panel it starts from; default the nearest of its kind.
     from: Option<String>,
+    /// For `wifi`: the access points' standard, `wifi5`, `wifi6`, `wifi6e` or
+    /// `wifi7`, written on `ids`.
+    standard: Option<String>,
+    /// For `wifi`: whether `ids` are fed by their data cable (`PoE`).
+    poe: Option<bool>,
+    /// For `wifi`: the band the suggestion aims at, `2.4`, `5` (default) or `6`.
+    band: Option<String>,
 }
 
 #[tool_router(router = electrical_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Electrical and telecom project, NBR 5410 and NBR 14565. Points are the electrical pieces (catalog electrical: outlets, switches, lighting points, panel, network-outlet RJ45, tv-outlet, wifi-point, telecom-panel) plus every fixture that lights. check (default): {points:{kind:count}, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — accept=[[key, reason]] with any action marks findings looked at (they stay listed with the reason and stop counting in pending), an empty reason takes one back, orphaned lists acceptances whose finding is gone and prune=true drops them — a ceiling lighting point per room, general-use outlets per room (kitchens and laundries one per 3.5 m of perimeter, bathrooms one by the basin, living rooms and bedrooms one per 5 m), a network point in long-stay rooms, a TV point in living rooms and bedrooms, a distribution and a telecom panel, points without a circuit, lighting and outlets sharing a circuit, a dedicated load not alone. circuits: rows [name, kinds, points, VA, V, A, wire mm², breaker A, DR] and main_breaker {a, phases, load_a_per_phase}: the supply to ask the utility for (one phase up to 8 kVA with no 220 V circuit on a 127 V supply, two up to 20 kVA, three above; the utility's own limits prevail) and its main breaker — power by the norm's defaults (100 VA per lighting point; 600 VA for each of the first three outlets of a kitchen, laundry or bathroom, 100 VA after and elsewhere; shower 5500, air conditioning 1500) unless set; wire the larger of what the current needs and 1.5 mm² for lighting or 2.5 for power; DR where a circuit serves a wet room or a balcony; a shower runs on 220 V. assign {ids, circuit, va?} — or the whole division at once, circuits {\"C1\": [ids], \"C2\": [ids]} — writes the circuits (and power, and volts 127|220 per point — a 220 V outlet makes its circuit 220 V) on points in one undoable step. voltage {volts}. cable {kind: power|data|tv, pts} (with ids or circuit instead of pts, it is a route): draws a run of the electrical project, told apart on the plan (power solid, network dashed, TV dash-dot); check then reports cables_m, the length by kind with a tenth for the drops, and network or TV points no run reaches, or a telecom panel none reaches. route {kind: power|data|tv, ids? | circuit?, via?: ceiling|floor|wall, cat?: cat5e|cat6|cat6a, from?}: lays the run the way it is built, along the walls and inside them (or in the slab), from the nearest panel of its kind to the points (all of the kind when none given), sharing the trunk, and draws it replacing the earlier run of the same circuit; replies {via, suggested, length_m {horizontal, vertical, total}, by_premise_m, bends, materials: [[item, qty, unit]]} — conduit, boxes, wire by conductor, cable, connectors. Without via it takes the cheapest premise that can be built; a via that cannot reach a point (wall with a point out of every wall; ceiling with a low point out of every wall, nowhere to drop) is refused naming the points. Circuit numbers are drawn next to the points on the plan, and with annotations(legend=true) the load schedule under the legend."
+        description = "Electrical and telecom project, NBR 5410 and NBR 14565. Points are the electrical pieces (catalog electrical: outlets, switches, lighting points, panel, network-outlet RJ45, tv-outlet, wifi-point, telecom-panel) plus every fixture that lights. check (default): {points:{kind:count}, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — accept=[[key, reason]] with any action marks findings looked at (they stay listed with the reason and stop counting in pending), an empty reason takes one back, orphaned lists acceptances whose finding is gone and prune=true drops them — a ceiling lighting point per room, general-use outlets per room (kitchens and laundries one per 3.5 m of perimeter, bathrooms one by the basin, living rooms and bedrooms one per 5 m), a network point in long-stay rooms, a TV point in living rooms and bedrooms, a distribution and a telecom panel, points without a circuit, lighting and outlets sharing a circuit, a dedicated load not alone. circuits: rows [name, kinds, points, VA, V, A, wire mm², breaker A, DR] and main_breaker {a, phases, load_a_per_phase}: the supply to ask the utility for (one phase up to 8 kVA with no 220 V circuit on a 127 V supply, two up to 20 kVA, three above; the utility's own limits prevail) and its main breaker — power by the norm's defaults (100 VA per lighting point; 600 VA for each of the first three outlets of a kitchen, laundry or bathroom, 100 VA after and elsewhere; shower 5500, air conditioning 1500) unless set; wire the larger of what the current needs and 1.5 mm² for lighting or 2.5 for power; DR where a circuit serves a wet room or a balcony; a shower runs on 220 V. assign {ids, circuit, va?} — or the whole division at once, circuits {\"C1\": [ids], \"C2\": [ids]} — writes the circuits (and power, and volts 127|220 per point — a 220 V outlet makes its circuit 220 V) on points in one undoable step. voltage {volts}. cable {kind: power|data|tv, pts} (with ids or circuit instead of pts, it is a route): draws a run of the electrical project, told apart on the plan (power solid, network dashed, TV dash-dot); check then reports cables_m, the length by kind with a tenth for the drops, and network or TV points no run reaches, or a telecom panel none reaches. route {kind: power|data|tv, ids? | circuit?, via?: ceiling|floor|wall, cat?: cat5e|cat6|cat6a, from?}: lays the run the way it is built, along the walls and inside them (or in the slab), from the nearest panel of its kind to the points (all of the kind when none given), sharing the trunk, and draws it replacing the earlier run of the same circuit; replies {via, suggested, length_m {horizontal, vertical, total}, by_premise_m, bends, materials: [[item, qty, unit]]} — conduit, boxes, wire by conductor, cable, connectors. Without via it takes the cheapest premise that can be built; a via that cannot reach a point (wall with a point out of every wall; ceiling with a low point out of every wall, nowhere to drop) is refused naming the points. wifi {ids?, standard?: wifi5|wifi6|wifi6e|wifi7, poe?, band?: 2.4|5|6}: writes the standard and PoE on access points (wifi-point) when given, and replies {access_points: [[id, standard, bands, uplink]], coverage: [[room, band, median dBm, worst dBm (9 places in 10), share at -67 dBm or better, grade]], suggested: {standard, band, points: [[x, y, z, room]], short: [rooms still under -67 dBm]}} — signal estimated from free-space loss, distance and each wall crossed by its material and thickness (a door or window where the path goes through one), per band; the suggestion is the fewest ceiling points (up to four) at room centres covering the rooms people use. check also asks each access point for its data cable, power (an outlet within 1.5 m or poe) and a cable category that carries its uplink (Wi-Fi 7: 10 GbE, Cat 6A). Circuit numbers are drawn next to the points on the plan, and with annotations(legend=true) the load schedule under the legend."
     )]
     pub(crate) fn electrical(
         &self,
@@ -423,6 +430,10 @@ impl NewEraMcp {
                         .insert(electrical::CABLE_KEY.into(), cable.key().into());
                     line.properties
                         .insert(electrical::RUN_KEY.into(), run.clone());
+                    if cable == electrical::Cable::Data {
+                        line.properties
+                            .insert(electrical::CATEGORY_KEY.into(), category.key().into());
+                    }
                     line.properties
                         .insert(electrical::RUN_CM_KEY.into(), route.length().to_string());
                     line.properties.insert("elec:via".into(), via.key().into());
@@ -478,6 +489,97 @@ impl NewEraMcp {
                 let _ = before;
                 Ok(reply.to_string())
             }
+            "wifi" => {
+                use newera_core::wifi;
+                let standard = match p.standard.as_deref() {
+                    Some(raw) => Some(
+                        wifi::Standard::parse(raw)
+                            .ok_or_else(|| invalid("standard: wifi5, wifi6, wifi6e or wifi7"))?,
+                    ),
+                    None => None,
+                };
+                let band = match p.band.as_deref() {
+                    Some(raw) => {
+                        wifi::Band::parse(raw).ok_or_else(|| invalid("band: 2.4, 5 or 6"))?
+                    }
+                    None => wifi::Band::G5,
+                };
+                let mut doc = self.document.write();
+                if !p.ids.is_empty() && (standard.is_some() || p.poe.is_some()) {
+                    let mut commands = Vec::new();
+                    for raw in &p.ids {
+                        let piece = doc
+                            .home()
+                            .furniture
+                            .iter()
+                            .flat_map(newera_core::Furniture::flatten)
+                            .find(|f| f.id.to_string() == *raw && f.catalog == "wifi-point")
+                            .cloned()
+                            .ok_or_else(|| invalid(format!("{raw} is not a wifi-point")))?;
+                        let mut piece = piece;
+                        if let Some(s) = standard {
+                            piece
+                                .properties
+                                .insert(wifi::STANDARD_KEY.into(), s.key().into());
+                        }
+                        if let Some(poe) = p.poe {
+                            piece
+                                .properties
+                                .insert(wifi::POE_KEY.into(), poe.to_string());
+                        }
+                        commands.push(newera_core::Command::update(piece));
+                    }
+                    doc.execute(newera_core::Command::Batch { commands })
+                        .map_err(core)?;
+                }
+                let home = doc.home();
+                let aps = wifi::access_points(home);
+                let storey = home
+                    .current_level()
+                    .and_then(|id| home.level(id))
+                    .map_or(280.0, |l| l.height);
+                let aimed = standard
+                    .or_else(|| aps.first().map(|a| a.standard))
+                    .unwrap_or(wifi::Standard::Wifi6);
+                if !aimed.bands().contains(&band) {
+                    return Err(invalid(format!(
+                        "{} has no {} GHz band",
+                        aimed.name(),
+                        band.key()
+                    )));
+                }
+                let rows: Vec<serde_json::Value> = wifi::coverage(home, &aps)
+                    .iter()
+                    .map(|r| {
+                        serde_json::json!([
+                            format!("{} {}", r.name, r.room),
+                            r.band.key(),
+                            r.median,
+                            r.worst,
+                            r.good,
+                            wifi::grade(r.worst)
+                        ])
+                    })
+                    .collect();
+                let (points, short) = wifi::suggest(home, aimed, band, storey);
+                Ok(serde_json::json!({
+                    "access_points": aps.iter().map(|a| serde_json::json!([
+                        a.id.map(|i| i.to_string()),
+                        a.standard.key(),
+                        a.standard.bands().iter().map(|b| b.key()).collect::<Vec<_>>(),
+                        a.standard.uplink().0,
+                    ])).collect::<Vec<_>>(),
+                    "coverage": rows,
+                    "suggested": {
+                        "standard": aimed.key(),
+                        "band": band.key(),
+                        "points": points.iter().map(|(a, room)| serde_json::json!([compact::num(a.at.x), compact::num(a.at.y), compact::num(a.z), room])).collect::<Vec<_>>(),
+                        "short": short,
+                    },
+                    "rev": doc.revision(),
+                })
+                .to_string())
+            }
             "cable" => {
                 let cable = p
                     .kind
@@ -517,7 +619,7 @@ impl NewEraMcp {
                 Ok(applied(&doc, &before))
             }
             other => Err(invalid(format!(
-                "action: check, circuits, assign, voltage, cable or route (not {other})"
+                "action: check, circuits, assign, voltage, cable, route or wifi (not {other})"
             ))),
         }
     }
@@ -824,6 +926,102 @@ mod tests {
                 ids[3]
             ))
             .is_err()
+        );
+    }
+
+    #[test]
+    fn an_access_point_asks_for_cable_power_and_category_and_its_coverage_is_given() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[800,0],[800,400],[0,400]],"closed":true},{"pts":[[400,0],[400,400]]}],
+                    "rooms":[{"name":"Sala","at":[200,200]},{"name":"Quarto","at":[600,200]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.disciplines(Parameters(
+            serde_json::from_str(r#"{"action":"select","d":"electrical"}"#).unwrap(),
+        ))
+        .unwrap();
+        let reply = s
+            .place(Parameters(
+                serde_json::from_str(
+                    r#"{"items":[{"cat":"telecom-panel","at":[10,200]},{"cat":"wifi-point","at":[200,200]},
+                                 {"cat":"network-outlet","at":[390,300]}]}"#,
+                )
+                .unwrap(),
+            ))
+            .unwrap();
+        let ids: Vec<String> = reply
+            .rsplit("ids=")
+            .next()
+            .unwrap()
+            .split(',')
+            .map(|s| s.trim().to_owned())
+            .collect();
+        let ap = ids[1].clone();
+        let electrical = |json: &str| {
+            s.electrical(Parameters(serde_json::from_str(json).unwrap()))
+                .map(|r| serde_json::from_str(&r).unwrap_or(serde_json::Value::String(r)))
+        };
+        let keys = |check: &serde_json::Value| check["findings"].to_string();
+        let check = electrical("{}").unwrap();
+        assert!(
+            keys(&check).contains(&format!("elec:wifi-power:{ap}")),
+            "{check}"
+        );
+
+        // A data run that reaches the network outlet but not the access point.
+        electrical(&format!(
+            r#"{{"action":"route","kind":"data","ids":["{}"]}}"#,
+            ids[2]
+        ))
+        .unwrap();
+        let check = electrical("{}").unwrap();
+        assert!(
+            keys(&check).contains(&ap),
+            "the access point has no cable: {check}"
+        );
+
+        // Wi-Fi 7 on PoE over Cat 6: powered, cabled, but short of 10 GbE.
+        electrical(&format!(
+            r#"{{"action":"wifi","ids":["{ap}"],"standard":"wifi7","poe":true}}"#
+        ))
+        .unwrap();
+        electrical(r#"{"action":"route","kind":"data","cat":"cat6"}"#).unwrap();
+        let check = electrical("{}").unwrap();
+        let text = keys(&check);
+        assert!(!text.contains("elec:wifi-power"), "{check}");
+        assert!(!text.contains("elec:unreached:data"), "{check}");
+        assert!(text.contains(&format!("elec:wifi-uplink:{ap}")), "{check}");
+        electrical(r#"{"action":"route","kind":"data","cat":"cat6a"}"#).unwrap();
+        assert!(!keys(&electrical("{}").unwrap()).contains("elec:wifi-uplink"));
+
+        // Coverage per room and band, and where to put the points.
+        let wifi = electrical(r#"{"action":"wifi","band":"6"}"#).unwrap();
+        let rows = wifi["coverage"].as_array().unwrap();
+        assert_eq!(rows.len(), 6, "two rooms × three bands: {wifi}");
+        let at = |room: &str, band: &str| {
+            rows.iter()
+                .find(|r| r[0].as_str().unwrap().starts_with(room) && r[1] == band)
+                .unwrap()[2]
+                .as_f64()
+                .unwrap()
+        };
+        assert!(at("Sala", "5") > at("Quarto", "5"), "{wifi}");
+        assert!(
+            at("Quarto", "2.4") - at("Quarto", "6") > at("Sala", "2.4") - at("Sala", "6"),
+            "the wall costs the high band more: {wifi}"
+        );
+        assert_eq!(wifi["suggested"]["band"], "6");
+        assert!(
+            !wifi["suggested"]["points"].as_array().unwrap().is_empty(),
+            "{wifi}"
+        );
+        assert!(
+            electrical(r#"{"action":"wifi","standard":"wifi6","band":"6"}"#).is_err(),
+            "Wi-Fi 6 has no 6 GHz"
         );
     }
 }

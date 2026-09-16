@@ -287,6 +287,9 @@ pub fn cable_lengths(home: &Home) -> Vec<(Cable, f64)> {
         .collect()
 }
 
+/// Where a routed data run keeps its cable category.
+pub const CATEGORY_KEY: &str = "elec:cat";
+
 /// Cable for data points: category of twisted pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum Category {
@@ -310,9 +313,34 @@ impl Category {
 
     pub fn name(self) -> &'static str {
         match self {
-            Self::Cat5e => "Cabo de rede U/UTP Cat 5e (até 1 Gbps)",
+            Self::Cat5e => "Cabo de rede U/UTP Cat 5e (1 Gbps; 2,5 Gbps até 100 m)",
             Self::Cat6 => "Cabo de rede U/UTP Cat 6 (1 Gbps; 10 Gbps até 55 m)",
             Self::Cat6a => "Cabo de rede F/UTP Cat 6A (10 Gbps até 100 m)",
+        }
+    }
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Cat5e => "cat5e",
+            Self::Cat6 => "cat6",
+            Self::Cat6a => "cat6a",
+        }
+    }
+
+    pub fn short(self) -> &'static str {
+        match self {
+            Self::Cat5e => "Cat 5e",
+            Self::Cat6 => "Cat 6",
+            Self::Cat6a => "Cat 6A (Cat 6 leva 10 GbE só até 55 m)",
+        }
+    }
+
+    /// Higher carries more.
+    pub fn rank(self) -> u8 {
+        match self {
+            Self::Cat5e => 0,
+            Self::Cat6 => 1,
+            Self::Cat6a => 2,
         }
     }
 }
@@ -861,9 +889,10 @@ pub fn check(home: &Home) -> Vec<Finding> {
     // Where cables are drawn, each network and TV point needs one reaching
     // it, and the telecom panel one reaching it too.
     let view_lines = &view.polylines;
-    for (kind, cable) in [
-        (PointKind::Network, Cable::Data),
-        (PointKind::Tv, Cable::Tv),
+    // An access point is a network point too: it needs its cable.
+    for (kinds, cable) in [
+        (&[PointKind::Network, PointKind::Wifi][..], Cable::Data),
+        (&[PointKind::Tv][..], Cable::Tv),
     ] {
         let runs: Vec<&crate::style::Polyline> = view_lines
             .iter()
@@ -874,7 +903,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
         }
         let unreached: Vec<String> = all
             .iter()
-            .filter(|p| p.kind == kind)
+            .filter(|p| kinds.contains(&p.kind))
             .filter(|p| {
                 home.find_piece(p.id)
                     .is_some_and(|f| !runs.iter().any(|l| reaches(l, f.position)))
@@ -905,6 +934,67 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 severity: Severity::Alerta,
                 place: cable.name().into(),
                 message: "Nenhum cabo chega ao quadro de telecom: os pontos precisam ser levados até ele.".into(),
+                source: "nbr14565",
+            });
+        }
+    }
+    // An access point is fed by its data cable (PoE) or by an outlet beside
+    // it, and its cable must carry the uplink its standard is sold with.
+    let outlets: Vec<&Furniture> = all
+        .iter()
+        .filter(|p| p.kind == PointKind::Outlet)
+        .filter_map(|p| view.find_piece(p.id))
+        .collect();
+    for ap in crate::wifi::access_points(home) {
+        let Some(id) = ap.id else { continue };
+        let Some(piece) = view.find_piece(id) else {
+            continue;
+        };
+        let place = format!("{} {id}", piece.name);
+        let poe = piece
+            .properties
+            .get(crate::wifi::POE_KEY)
+            .map(String::as_str);
+        let beside = outlets.iter().any(|o| {
+            o.position
+                .distance(ap.at)
+                .hypot(o.elevation + o.height / 2.0 - ap.z)
+                <= 150.0
+        });
+        if poe != Some("true") && !beside {
+            out.push(Finding {
+                key: format!("elec:wifi-power:{id}"),
+                accepted: None,
+                severity: Severity::Alerta,
+                place: place.clone(),
+                message: "Access point sem alimentação: nenhuma tomada a até 1,5 m. Alimente por PoE (switch ou injetor 802.3af/at no rack, e marque poe) ou ponha uma tomada no forro junto a ele.".into(),
+                source: "nbr14565",
+            });
+        }
+        let (uplink, needs) = ap.standard.uplink();
+        let carried = view_lines
+            .iter()
+            .filter(|l| cable_of(l) == Some(Cable::Data) && reaches(l, ap.at))
+            .filter_map(|l| {
+                l.properties
+                    .get(CATEGORY_KEY)
+                    .and_then(|c| Category::parse(c))
+            })
+            .min_by_key(|c| c.rank());
+        if let Some(cat) = carried
+            && cat.rank() < needs.rank()
+        {
+            out.push(Finding {
+                key: format!("elec:wifi-uplink:{id}"),
+                accepted: None,
+                severity: Severity::Dica,
+                place,
+                message: format!(
+                    "{} sai com uplink de {uplink}: o cabo que chega é {} e o que sustenta essa velocidade é {}.",
+                    ap.standard.name(),
+                    cat.short(),
+                    needs.short()
+                ),
                 source: "nbr14565",
             });
         }

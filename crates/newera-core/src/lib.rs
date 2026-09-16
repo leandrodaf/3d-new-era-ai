@@ -38,6 +38,7 @@ mod style;
 mod units;
 pub mod vfs;
 mod wallrun;
+pub mod wifi;
 
 pub use analysis::{
     Issue, Overlap, Storeys, check_layout, check_layout_in, door_blocked_by, door_swing,
