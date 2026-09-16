@@ -37,6 +37,7 @@ use newera_core::standards::{self, Confidence, Standard, Tier};
 use newera_core::{Home, OpeningKind, Point2};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::fmt::Write as _;
 
 pub use scene::{RoomUse, Scene, Side, Space, Unit, Use};
 
@@ -742,6 +743,74 @@ impl Review<'_, '_> {
                     "nbr9050",
                 );
             }
+        }
+        // A bedroom or a bathroom reached only through an open passage has
+        // no privacy, and nothing else says so: the passage and a panel drawn
+        // beside it as the open leaf are each valid on their own — which is
+        // how four rooms of an imported plan went without a door.
+        for space in self
+            .scene
+            .spaces
+            .iter()
+            .filter(|s| matches!(s.what, RoomUse::Bedroom | RoomUse::Bathroom))
+        {
+            let near_edge = |p: Point2| outline_distance(&space.room.points, p) <= 25.0;
+            let ways_in: Vec<&newera_core::Furniture> = home
+                .furniture
+                .iter()
+                .filter(|f| f.visible)
+                .filter(|f| {
+                    f.opening
+                        .as_ref()
+                        .is_some_and(|o| o.kind != OpeningKind::Window)
+                })
+                .filter(|f| near_edge(f.position))
+                .collect();
+            let passages: Vec<&&newera_core::Furniture> = ways_in
+                .iter()
+                .filter(|f| {
+                    f.opening
+                        .as_ref()
+                        .is_some_and(|o| o.kind == OpeningKind::Passage)
+                })
+                .collect();
+            if passages.is_empty() || passages.len() < ways_in.len() {
+                continue;
+            }
+            // A panel named as a door, standing beside the passage, is the
+            // leaf somebody drew instead of placing one.
+            let drawn_leaf = home
+                .furniture
+                .iter()
+                .filter(|f| f.opening.is_none())
+                .find(|f| {
+                    let name = newera_core::fold(&f.name);
+                    (name.contains("porta") || name.contains("door"))
+                        && passages
+                            .iter()
+                            .any(|p| p.position.distance(f.position) <= 120.0)
+                });
+            let what = if space.what == RoomUse::Bathroom {
+                "banheiro"
+            } else {
+                "dormitório"
+            };
+            let mut message = format!(
+                "Sem porta: o único acesso ao {what} é um vão livre ({}), que não fecha nem dá privacidade; troque por uma porta.",
+                passages
+                    .iter()
+                    .map(|p| p.id.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            if let Some(leaf) = drawn_leaf {
+                let _ = write!(
+                    message,
+                    " {} {} parece a folha desenhada ao lado, sem ser uma abertura.",
+                    leaf.name, leaf.id
+                );
+            }
+            self.push(Severity::Alerta, space.label(), message);
         }
         let scene = self.scene;
         for (door, unit) in scene.door_hits() {
@@ -1591,6 +1660,21 @@ fn electric(name: &str) -> bool {
     ]
     .iter()
     .any(|w| n.contains(w))
+}
+
+/// Distance from a point to the outline of a room, cm.
+fn outline_distance(points: &[Point2], p: Point2) -> f64 {
+    points
+        .iter()
+        .zip(points.iter().cycle().skip(1))
+        .take(points.len())
+        .map(|(a, b)| {
+            let (dx, dy) = (b.x - a.x, b.y - a.y);
+            let len2 = (dx * dx + dy * dy).max(1e-9);
+            let t = (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0);
+            Point2::new(a.x + t * dx, a.y + t * dy).distance(p)
+        })
+        .fold(f64::MAX, f64::min)
 }
 
 /// Perimeter of a room outline, cm.
@@ -2923,6 +3007,52 @@ mod tests {
             "a flip that check_layout would still call blocked is not offered: {hit:#?}"
         );
         assert!(!hit.message.contains("invertendo"), "{hit:#?}");
+    }
+
+    #[test]
+    fn a_bedroom_reached_only_through_a_passage_is_said_to_have_no_door() {
+        let mut home = Home::default();
+        square(&mut home, "Dormitório", 300.0, 300.0);
+        home.furniture.push(piece(
+            20,
+            "bed-double",
+            (150.0, 111.5),
+            (158.0, 208.0, 55.0),
+            0.0,
+        ));
+        let mut passage = piece(21, "passage", (150.0, 300.0), (80.0, 15.0, 210.0), 0.0);
+        passage.name = "Passagem".into();
+        passage.opening = Some(newera_core::Opening {
+            kind: OpeningKind::Passage,
+            ..newera_core::Opening::default()
+        });
+        home.furniture.push(passage);
+        let mut leaf = piece(22, "box", (230.0, 290.0), (78.0, 6.0, 208.0), 0.0);
+        leaf.name = "Porta dormitório — aberta junto à parede".into();
+        home.furniture.push(leaf);
+
+        let report = review(&home, &Profile::default());
+        let said = report
+            .findings
+            .iter()
+            .find(|f| f.message.starts_with("Sem porta"))
+            .unwrap_or_else(|| panic!("{report:#?}"));
+        assert!(
+            said.message.contains("f21") && said.message.contains("f22"),
+            "{said:#?}"
+        );
+
+        // A real door there, and nothing to say.
+        let door = home.furniture.iter_mut().find(|f| f.id.0 == 21).unwrap();
+        door.opening = Some(newera_core::Opening::default());
+        let report = review(&home, &Profile::default());
+        assert!(
+            !report
+                .findings
+                .iter()
+                .any(|f| f.message.starts_with("Sem porta")),
+            "{report:#?}"
+        );
     }
 
     #[test]
