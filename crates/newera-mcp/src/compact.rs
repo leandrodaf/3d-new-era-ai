@@ -516,18 +516,20 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
                     ("cm", num(cm)),
                 ]),
             ),
-            // Rows that were pairs stay pairs, with the key they are
-            // accepted by third, so readers of the old shape keep working.
             Issue::InWall(f, w) => push(
                 "in_wall",
-                json!([issue_ref(home, f.into()), issue_ref(home, w.into()), key]),
+                obj([
+                    ("key", json!(key)),
+                    ("piece", issue_ref(home, f.into())),
+                    ("wall", issue_ref(home, w.into())),
+                ]),
             ),
             Issue::BlocksDoor { door, by } => push(
                 "blocks_door",
-                json!([
-                    issue_ref(home, door.into()),
-                    issue_ref(home, by.into()),
-                    key
+                obj([
+                    ("key", json!(key)),
+                    ("door", issue_ref(home, door.into())),
+                    ("by", issue_ref(home, by.into())),
                 ]),
             ),
             Issue::OutsideRooms(f) => push("outside_rooms", keyed(issue_ref(home, f.into()), &key)),

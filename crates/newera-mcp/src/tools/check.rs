@@ -171,7 +171,7 @@ impl NewEraMcp {
         out.to_string()
     }
     #[tool(
-        description = "Layout problems: overlap, blocked, in_wall, blocks_door, turned, loose_opening, outgrew_niche, outside_rooms; {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. Every row carries the key it is accepted by — `key` in object rows, third in the pairs of in_wall and blocks_door ([piece, wall, key]). accept=[[key, reason]] marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed under accepted {key, kind, why, extent} with its reason, kept in the project; accept=[[key, \"\"]] takes it back; orphaned [[key, reason]] lists acceptances whose finding is gone on every storey, and prune=true drops them. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing."
+        description = "Layout problems: overlap, blocked, in_wall, blocks_door, turned, loose_opening, outgrew_niche, outside_rooms; {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. Every row is an object with the `key` it is accepted by (in_wall {key, piece, wall}, blocks_door {key, door, by}). accept=[[key, reason]] marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed under accepted {key, kind, why, extent} with its reason, kept in the project; accept=[[key, \"\"]] takes it back; orphaned [[key, reason]] lists acceptances whose finding is gone on every storey, and prune=true drops them. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing."
     )]
     pub(crate) fn check_layout(
         &self,
@@ -511,7 +511,7 @@ mod tests {
         };
         let report = check("{}");
         // Each row names the key it is accepted by, so nobody invents one.
-        let blind_key = report["in_wall"][0][2]
+        let blind_key = report["in_wall"][0]["key"]
             .as_str()
             .unwrap_or_else(|| panic!("{report}"))
             .to_owned();
@@ -519,10 +519,14 @@ mod tests {
             .as_str()
             .unwrap_or_else(|| panic!("{report}"))
             .to_owned();
-        let wall = report["in_wall"][0][1]["id"]
+        let wall = report["in_wall"][0]["wall"]["id"]
             .as_str()
             .unwrap_or_else(|| panic!("{report}"));
-        assert_eq!(report["in_wall"][0][0]["id"], blind.as_str(), "{report}");
+        assert_eq!(
+            report["in_wall"][0]["piece"]["id"],
+            blind.as_str(),
+            "{report}"
+        );
         assert_eq!(report["outside_rooms"][0]["id"], shaft.as_str(), "{report}");
 
         let report = check(&format!(
