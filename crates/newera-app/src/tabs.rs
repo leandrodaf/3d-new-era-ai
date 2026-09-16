@@ -182,10 +182,34 @@ pub(crate) fn bar(app: &mut NewEraApp, ui: &mut egui::Ui) {
     }
 }
 
-/// Layers of the plan — lighting, appliances, joinery — shown or hidden on
-/// the drawing; the 3D keeps showing them.
+/// Layers of the plan — the electrical and plumbing projects, lighting,
+/// appliances, joinery — shown or hidden on the drawing and in the 3D.
 fn layers(app: &mut NewEraApp, ui: &mut egui::Ui) {
-    use newera_core::PlanLayer;
+    use newera_core::{Discipline, PlanLayer};
+    let (hidden_disciplines, discipline_counts) = {
+        let doc = app.document.read();
+        let home = doc.home();
+        let count = |d: Discipline| {
+            home.furniture
+                .iter()
+                .flat_map(|top| {
+                    top.flatten()
+                        .into_iter()
+                        .filter(move |leaf| leaf.discipline.or(top.discipline) == Some(d))
+                })
+                .count()
+                + home
+                    .polylines
+                    .iter()
+                    .filter(|l| l.discipline == Some(d))
+                    .count()
+        };
+        (
+            home.hidden_disciplines.clone(),
+            [count(Discipline::Electrical), count(Discipline::Plumbing)],
+        )
+    };
+    let mut discipline_toggle = None;
     let (hidden, counts) = {
         let doc = app.document.read();
         let home = doc.home();
@@ -219,6 +243,31 @@ fn layers(app: &mut NewEraApp, ui: &mut egui::Ui) {
         )
     };
     ui.menu_button(title, |ui| {
+        // A whole project at once: hiding the electrical one takes its
+        // outlets, switches, cables, circuit numbers and every lamp away.
+        for (d, count) in [Discipline::Electrical, Discipline::Plumbing]
+            .into_iter()
+            .zip(discipline_counts)
+        {
+            let label = match d {
+                Discipline::Electrical => format!(
+                    "{} {}",
+                    icon::LIGHTNING,
+                    crate::i18n::tr("Elétrica (tomadas, luz, cabos)")
+                ),
+                Discipline::Plumbing => {
+                    format!("{} {}", icon::DROP, crate::i18n::tr("Hidráulica"))
+                }
+            };
+            let mut visible = !hidden_disciplines.contains(&d);
+            if ui
+                .checkbox(&mut visible, format!("{label} · {count}"))
+                .changed()
+            {
+                discipline_toggle = Some((d, visible));
+            }
+        }
+        ui.separator();
         for (layer, count) in PlanLayer::ALL.into_iter().zip(counts) {
             let label = match layer {
                 PlanLayer::Lighting => {
@@ -256,6 +305,10 @@ fn layers(app: &mut NewEraApp, ui: &mut egui::Ui) {
     .on_hover_text(crate::i18n::tr("Mostrar ou esconder na planta e no 3D"));
     if let Some((layer, visible)) = toggle {
         app.document.write().set_layer_visible(layer, visible);
+        app.plan.invalidate_scene();
+    }
+    if let Some((d, visible)) = discipline_toggle {
+        app.document.write().set_discipline_visible(d, visible);
         app.plan.invalidate_scene();
     }
     if let Some(all) = all_3d {

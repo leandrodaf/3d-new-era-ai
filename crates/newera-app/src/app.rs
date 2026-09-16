@@ -2265,6 +2265,41 @@ mod tests {
     }
 
     #[test]
+    fn the_layers_menu_hides_the_whole_electrical_project_lamps_included() {
+        let mut h = app_with_wall();
+        {
+            let document = h.state().document.clone();
+            let mut doc = document.write();
+            for (cat, at) in [("pendant", (200.0, 150.0)), ("outlet-low", (100.0, 5.0))] {
+                let id = doc.new_furniture_id();
+                let piece = newera_catalog::find(cat)
+                    .unwrap()
+                    .instantiate(id, Point2::new(at.0, at.1));
+                doc.execute(Command::insert(piece)).unwrap();
+            }
+        }
+        h.run_steps(3);
+        h.get_by_label_contains("Camadas").click();
+        h.run_steps(3);
+        h.get_by_label_contains("Elétrica (tomadas, luz, cabos)")
+            .click();
+        h.run_steps(3);
+        let doc = h.state().document.read();
+        let home = doc.home();
+        assert!(
+            home.hidden_disciplines
+                .contains(&newera_core::Discipline::Electrical)
+        );
+        assert!(
+            home.layer_hidden(newera_core::PlanLayer::Lighting),
+            "the lamps go with it"
+        );
+        assert!(!home.shown_in_3d(Some(newera_core::Discipline::Electrical), None));
+        assert!(!home.shown_in_3d(None, Some(newera_core::PlanLayer::Lighting)));
+        assert!(!home.layer_hidden(newera_core::PlanLayer::Joinery));
+    }
+
+    #[test]
     fn the_layers_menu_hides_lighting_from_the_plan() {
         let mut h = app_with_wall();
         {

@@ -409,7 +409,7 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
                 // joinery out of the way of a drawing that is about the rest.
                 .filter(move |leaf| {
                     newera_core::layer_in_group(top, leaf)
-                        .is_none_or(|layer| !home.hidden_layers.contains(&layer))
+                        .is_none_or(|layer| !home.layer_hidden(layer))
                 })
                 .map(move |leaf| {
                     let mut piece = leaf.clone();
@@ -1947,6 +1947,27 @@ mod layer_tests {
                 _ => None,
             })
             .collect()
+    }
+
+    #[test]
+    fn hiding_the_electrical_project_takes_its_lamps_off_the_plan() {
+        use newera_core::{Discipline, Point2};
+        let mut home = Home::default();
+        let lamp = newera_catalog::find("pendant")
+            .unwrap()
+            .instantiate(newera_core::FurnitureId(1), Point2::new(100.0, 100.0));
+        let outlet = newera_catalog::find("outlet-low")
+            .unwrap()
+            .instantiate(newera_core::FurnitureId(2), Point2::new(10.0, 100.0));
+        home.furniture = vec![lamp, outlet];
+        let count = |home: &Home| plan_scene(home, &SceneOptions::default()).items.len();
+        let all = count(&home);
+        home.hidden_disciplines = vec![Discipline::Electrical];
+        let none = count(&home);
+        home.hidden_disciplines.clear();
+        home.hidden_layers = vec![newera_core::PlanLayer::Lighting];
+        let no_lamp = count(&home);
+        assert!(none < no_lamp && no_lamp < all, "{all} {no_lamp} {none}");
     }
 
     #[test]

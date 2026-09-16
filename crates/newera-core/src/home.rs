@@ -272,6 +272,18 @@ impl Home {
             .or_else(|| self.base_level())
     }
 
+    /// Whether a plan layer is out of sight: hidden itself, or lighting with
+    /// the electrical project hidden — its lamps and fixtures are points of
+    /// that project, and hiding it takes every one of them away, not only
+    /// the outlets.
+    pub fn layer_hidden(&self, layer: crate::layers::PlanLayer) -> bool {
+        self.hidden_layers.contains(&layer)
+            || (layer == crate::layers::PlanLayer::Lighting
+                && self
+                    .hidden_disciplines
+                    .contains(&crate::style::Discipline::Electrical))
+    }
+
     /// Whether a piece, a line or a note of this discipline and layer is
     /// shown in 3D: what the plan shows, unless the 3D is set to show all.
     pub fn shown_in_3d(
@@ -281,7 +293,7 @@ impl Home {
     ) -> bool {
         self.show_all_in_3d
             || (discipline.is_none_or(|d| !self.hidden_disciplines.contains(&d))
-                && layer.is_none_or(|l| !self.hidden_layers.contains(&l)))
+                && layer.is_none_or(|l| !self.layer_hidden(l)))
     }
 
     /// The level currently shown and edited.

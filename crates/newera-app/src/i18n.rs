@@ -299,6 +299,7 @@ fn english(pt: &str) -> Option<&'static str> {
         "Elevação" => "Elevation",
         "Elevação do piso" => "Floor elevation",
         "Elétrica" => "Electrical",
+        "Elétrica (tomadas, luz, cabos)" => "Electrical (outlets, lights, cables)",
         "Encerra paredes · fecha/detecta cômodo · cota parede · modifica" => {
             "Ends walls · closes/detects room · dimensions wall · modifies"
         }
