@@ -162,6 +162,99 @@ cada revisão sem como dizer "visto, está correto".
 
 **Deveria:** `key` em `in_wall` também.
 
+## 28. Limpar a herança de uma importação é trabalho de garimpo
+
+A planta veio de um `.sh3d` e trouxe junto: 14 properties de interface do
+SweetHome3D (posição da janela, divisor de painel, escala do plano, tamanho da
+tela), um `sh3d:id` em cada nível, **73 rótulos `[NN]`** numerando peças à mão,
+**21 rótulos `L1`–`L21`** numerando luminárias, **13 cotas** de ambiente e
+**59 nomes** de peça começando com o número do índice antigo.
+
+Tudo isso o app já resolve nativamente: `references` numera 126 peças por
+cômodo com nome e medidas, e `auto_dimensions` cota os ambientes. Os dois
+estavam ligados — então a planta carregava **duas numerações simultâneas e
+divergentes**, a manual e a nativa, sobrepostas no mesmo desenho. Na cama
+apareciam `[20]` e `4` lado a lado.
+
+Limpar isso levou a sequência inteira abaixo, e cada passo esbarrou em algo:
+
+**Não há ferramenta para properties.** Nenhum tool MCP toca as properties do
+projeto ou dos níveis. Foi preciso ler `crates/newera-core/src/command.rs` para
+descobrir que `/api/commands` existe, que os comandos são tagueados por `op`, e
+que `Element` é tagueado por `kind`. Um agente sem o código-fonte à mão não
+chega lá — e o erro que guia até isso é só `missing field 'op'`.
+
+**O REST não enxerga partes de grupos.** O mesmo `update` que renomeia uma peça
+de topo responde `f935 not found` para uma parte. A operação é uma só, e
+precisa de dois caminhos: REST para o topo, MCP para dentro dos grupos.
+
+**Não há edição em massa.** Os 59 renomes seguiam uma regra de uma linha
+(remover o prefixo `NN — `). Os 53 que estavam dentro de grupos tiveram que
+passar **inteiros pelo contexto do agente**, em três chamadas, porque só o MCP
+os alcança. E no REST o `update` exige o elemento **completo**, não um patch:
+baixar tudo, alterar um campo, devolver tudo.
+
+**Não há busca por padrão.** Para achar os 73 rótulos `[NN]` foi preciso baixar
+o JSON e passar um regex. O `annotations(q=…)` acha texto literal
+(`q="Vidro"` → o rótulo certo), mas `q="[0"` devolve vazio, então não serve
+para varrer uma convenção de nomenclatura.
+
+**Encurtaria:** um `update` que aceite um filtro e uma transformação — ou ao
+menos que alcance partes de grupo pelo REST, onde o lote é possível.
+
+## 29. Ligar um modo de anotação custa 6 mil tokens da mesma lista
+
+`annotations` responde sempre a mesma coisa, independentemente do que se pediu:
+
+```
+annotations(refs=true)    → schedule de 126 itens  (~6k tokens)
+annotations(legend=true)  → o mesmo schedule de 126 itens
+annotations(dims=true)    → o mesmo schedule de 126 itens
+```
+
+Ligar os três modos custou 18 mil tokens da mesma lista repetida, e em nenhuma
+delas apareceu o que se pediu: nem as cadeias de cota (`dims`), nem a legenda
+de símbolos com contagem que a documentação promete para `legend`
+(*"Legend of electrical/plumbing symbols with counts"*).
+
+Para saber se `dims` tinha surtido efeito, o caminho foi renderizar a planta e
+procurar a olho um "345" que aparecia duas vezes no dormitório — a cota manual
+e a automática, sobrepostas.
+
+**Encurtaria:** responder o que foi pedido, e confirmar a mudança de modo com
+uma linha em vez do schedule inteiro.
+
+## 30. As anotações do plano sumiram, uma vez, sem aviso
+
+Depois da sequência de limpeza, `annotations` estava `None` — os 126 números do
+desenho tinham desaparecido, e só percebi porque renderizei a planta para
+conferir o resultado.
+
+Tentei isolar o culpado e **não reproduzi**: `set_properties` (com o mesmo
+conteúdo, adicionando chave e removendo chave), `update` de nível (um e os
+três), `update` de móvel pelo REST — nenhum apaga. A sequência original tinha,
+entre esses, dois `delete` em massa pelo MCP (73 + 21 labels, 13 cotas) e três
+`update` de 19 partes pelo MCP.
+
+Fica registrado como observado uma vez, porque é perda silenciosa de
+configuração: nada no retorno de nenhum comando mencionou as anotações.
+
+**Encurtaria:** qualquer comando que zere `annotations` dizer isso no retorno.
+
+## 31. MCP e JSON usam nomes diferentes para o mesmo campo
+
+Detalhe pequeno que confunde toda inspeção pelo REST:
+
+| no MCP | no JSON |
+|---|---|
+| `dims` | `auto_dimensions` |
+| `refs` | `references` |
+| `details` | `reference_details` |
+| `legend` | `legend` |
+
+Ao conferir pelo `/api/home` se um modo ficou ligado, é preciso traduzir de
+cabeça — e `dims`/`auto_dimensions` é justamente o que não se parece.
+
 ---
 
 ## Sem como reproduzir agora
