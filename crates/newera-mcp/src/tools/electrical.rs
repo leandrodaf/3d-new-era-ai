@@ -1545,6 +1545,51 @@ mod tests {
     }
 
     #[test]
+    fn a_top_named_after_its_appliance_hosts_a_tower_and_update_can_declare_one_fixed() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(r#"{"walls":[{"pts":[[0,0],[600,0],[600,250],[0,250]],"closed":true}],"rooms":[{"name":"Cozinha","at":[300,125]}]}"#).unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"base-cabinet","at":[150,38],"w":200,"d":60,"h":91,"name":"Bancada contínua junto à geladeira"},{"cat":"base-cabinet","at":[450,38],"w":200,"d":60,"h":91,"name":"Geladeira duplex"}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(r#"{"items":[{"cat":"outlet-tower-auto","at":[110,38]}]}"#)
+                .unwrap(),
+        ))
+        .unwrap();
+        let tower = |s: &NewEraMcp| {
+            s.place(Parameters(
+                serde_json::from_str(r#"{"items":[{"cat":"outlet-tower-auto","at":[420,38]}]}"#)
+                    .unwrap(),
+            ))
+        };
+        assert!(tower(&s).is_err(), "a fridge is no host");
+        let fridge = s
+            .document
+            .read()
+            .home()
+            .furniture
+            .iter()
+            .find(|f| f.name == "Geladeira duplex")
+            .unwrap()
+            .id;
+        s.update(Parameters(
+            serde_json::from_str(&format!(
+                r#"{{"items":[{{"id":"{fridge}","fixed":true}}]}}"#
+            ))
+            .unwrap(),
+        ))
+        .unwrap();
+        tower(&s).unwrap();
+    }
+
+    #[test]
     fn a_balcony_railing_and_its_glass_closure_take_no_outlet_and_are_checked_apart() {
         let s = server();
         s.create(Parameters(

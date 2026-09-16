@@ -1057,27 +1057,27 @@ fn built_in_outlets(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
                 .furniture
                 .iter()
                 .flat_map(Furniture::flatten)
-                .filter(|f| f.id != piece.id && f.id != host.id && f.opening.is_none())
+                .filter(|f| {
+                    f.id != piece.id && f.id != host.id && f.opening.is_none() && !f.is_group()
+                })
                 .filter(|f| {
                     let (lo, hi) = f.height_range();
                     hi > top - spec.below_cm && lo < top - 0.5 && f.contains(piece.position)
                 })
                 .find(|f| {
+                    // A drawer anywhere in the name; an appliance only when
+                    // the piece is one, not "Armário junto ao cooktop".
                     let name = crate::annotations::fold(&f.name);
+                    let first = name
+                        .split(|c: char| !c.is_alphanumeric())
+                        .find(|t| !t.is_empty())
+                        .unwrap_or_default();
                     matches!(
                         f.catalog.as_str(),
                         "dishwasher" | "oven" | "microwave" | "cooktop" | "stove" | "sink-bowl"
-                    ) || [
-                        "gaveta",
-                        "forno",
-                        "lava-louca",
-                        "lava louca",
-                        "cuba",
-                        "cooktop",
-                        "micro",
-                    ]
-                    .iter()
-                    .any(|w| name.contains(w))
+                    ) || name.contains("gaveta")
+                        || ["cuba", "cooktop"].contains(&first)
+                        || crate::mounting::is_appliance(f)
                 });
             if let Some(f) = under {
                 say(
@@ -1110,11 +1110,23 @@ fn built_in_outlets(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
             view.furniture
                 .iter()
                 .flat_map(Furniture::flatten)
+                .filter(|f| f.id != piece.id && f.discipline.is_none())
                 .filter(|f| {
+                    // Named for it, not after it: "Cuba …", never "Armário
+                    // junto ao cooktop" or "Gaveteiro pia".
                     let name = crate::annotations::fold(&f.name);
-                    catalogs.contains(&f.catalog.as_str()) || words.iter().any(|w| name.contains(w))
+                    let first = name
+                        .split(|c: char| !c.is_alphanumeric())
+                        .find(|t| !t.is_empty());
+                    catalogs.contains(&f.catalog.as_str())
+                        || first.is_some_and(|t| words.contains(&t))
                 })
-                .map(|f| f.position.distance(piece.position) - f.width.max(f.depth) / 2.0)
+                .map(|f| {
+                    // From the edge of the piece, not its centre.
+                    let (x, y) = f.to_local(piece.position);
+                    ((x.abs() - f.width / 2.0).max(0.0)).hypot((y.abs() - f.depth / 2.0).max(0.0))
+                        - piece.width / 2.0
+                })
                 .fold(f64::MAX, f64::min)
         };
         let sink = near(&["cuba", "pia"], &["sink-bowl", "sink-counter"]);
@@ -2639,6 +2651,37 @@ mod tests {
             ..Furniture::default()
         });
         assert!(keys(&wet).contains(&"elec:tower-wet-heat:f21".to_owned()));
+
+        // Joinery named after the cooktop or the sink it sits by is neither,
+        // and the trim at the ceiling above is no top to seat onto.
+        let mut named = home.clone();
+        for (id, name, elevation, height) in [
+            (24, "Armário de portas junto ao cooktop", 0.0, 90.0),
+            (25, "Gaveteiro pia: lateral", 0.0, 90.0),
+            (26, "Arremate em madeira junto ao teto", 272.0, 8.0),
+        ] {
+            named.furniture.push(Furniture {
+                id: FurnitureId(id),
+                catalog: "box".into(),
+                name: name.into(),
+                position: Point2::new(130.0, 30.0),
+                elevation,
+                width: 60.0,
+                depth: 60.0,
+                height,
+                ..Furniture::default()
+            });
+        }
+        let k = keys(&named);
+        assert!(
+            !k.iter()
+                .any(|k| k.starts_with("elec:tower-wet-heat") || k.starts_with("elec:tower-edge")),
+            "{k:?}"
+        );
+        let mut again = tower.clone();
+        again.elevation = 0.0;
+        crate::mounting::seat(&named, &mut again).unwrap();
+        assert!((again.elevation - 90.0).abs() < 1e-9, "{}", again.elevation);
 
         // Floating, with no counter under it: refused.
         let mut loose = tower.clone();

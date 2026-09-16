@@ -680,6 +680,10 @@ pub(crate) struct UpdateSpec {
     /// Clear gap between a railing's bars, cm.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gap: Option<f64>,
+    /// Furniture: `true` fixed joinery (a top that can host a built-in
+    /// outlet), `false` free-standing, when its name does not say.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fixed: Option<bool>,
     /// Move the element to this level id (e.g. `lv2`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub level: Option<String>,
@@ -812,6 +816,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 "hinge_right",
                 "glass",
                 "gap",
+                "fixed",
                 "level",
                 "light",
                 "brand",
@@ -1022,6 +1027,10 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 if let Some(gap) = spec.gap {
                     f.properties
                         .insert(newera_core::guard::GAP_KEY.into(), gap.to_string());
+                }
+                if let Some(fixed) = spec.fixed {
+                    f.properties
+                        .insert(newera_core::mounting::FIXED_KEY.into(), fixed.to_string());
                 }
                 Element::Furniture(f)
             }

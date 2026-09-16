@@ -108,6 +108,10 @@ pub fn host_of<'a>(view: &'a Home, piece: &Furniture) -> Option<&'a Furniture> {
         .max_by(|a, b| a.height_range().1.total_cmp(&b.height_range().1))
 }
 
+/// The highest top a built-in outlet is set into, cm: a bar counter is
+/// ~110; above that it is a cabinet side, a shelf or trim.
+const MAX_TOP: f64 = 130.0;
+
 /// How far from a wall a point asked for `at` is still taken into it, cm.
 const SNAP: f64 = 60.0;
 /// How far under the ceiling a ceiling point may hang, cm.
@@ -223,6 +227,8 @@ pub fn seat(home: &Home, piece: &mut Furniture) -> Result<(), String> {
                 })
                 .filter(|f| spec.desk || !movable(f) || f.properties.contains_key("joinery:part"))
                 .filter(|f| f.width.min(f.depth) >= 20.0 && f.contains(piece.position))
+                // A top one works at, not the trim under the ceiling above it.
+                .filter(|f| f.height_range().1 <= MAX_TOP)
                 .max_by(|a, b| a.height_range().1.total_cmp(&b.height_range().1))
                 .ok_or_else(|| {
                     format!(
@@ -508,8 +514,47 @@ fn in_appliance(view: &Home, piece: &Furniture) -> Option<String> {
         })
 }
 
+/// Property a piece declares itself fixed (`true`: a countertop, a cabinet)
+/// or free-standing (`false`) with, when its name does not say.
+pub const FIXED_KEY: &str = "piece:fixed";
+
+/// Words that make a piece fixed joinery even when its name also names the
+/// appliance it serves: "Bancada contínua junto à geladeira", "Tampo sobre
+/// lava e seca".
+const FIXED_WORDS: [&str; 13] = [
+    "bancada",
+    "tampo",
+    "peninsula",
+    "gabinete",
+    "balcao",
+    "marcenaria",
+    "armario",
+    "nicho",
+    "prateleira",
+    "aereo",
+    "arremate",
+    "gavet",
+    "separador",
+];
+
+/// What a piece declares or its name says it is: `Some(true)` fixed
+/// joinery, `Some(false)` declared free-standing, `None` when neither.
+fn declared_fixed(f: &Furniture) -> Option<bool> {
+    match f.properties.get(FIXED_KEY).map(String::as_str) {
+        Some("true") => return Some(true),
+        Some("false") => return Some(false),
+        _ => {}
+    }
+    let name = crate::annotations::fold(&f.name);
+    (f.properties.contains_key("joinery:part") || FIXED_WORDS.iter().any(|w| name.contains(w)))
+        .then_some(true)
+}
+
 /// Whether a piece is an appliance, by its catalog or its name.
 pub fn is_appliance(f: &Furniture) -> bool {
+    if declared_fixed(f) == Some(true) {
+        return false;
+    }
     let name = crate::annotations::fold(&f.name);
     matches!(
         f.catalog.as_str(),
@@ -537,6 +582,7 @@ pub fn is_appliance(f: &Furniture) -> bool {
         "micro-ondas",
         "microondas",
         "fogao",
+        "cooktop",
         "coifa",
         "depurador",
         "televis",
@@ -656,6 +702,9 @@ fn built_into<'a>(view: &'a Home, piece: &Furniture) -> Option<&'a Furniture> {
 
 /// Pieces that stand free and are no structure to fix a point to.
 fn movable(f: &Furniture) -> bool {
+    if let Some(fixed) = declared_fixed(f) {
+        return !fixed;
+    }
     let name = crate::annotations::fold(&f.name);
     [
         "geladeira",
@@ -666,6 +715,7 @@ fn movable(f: &Furniture) -> bool {
         "forno",
         "micro",
         "fogao",
+        "cooktop",
         "tv",
         "televis",
         "cama",
@@ -679,38 +729,42 @@ fn movable(f: &Furniture) -> bool {
         "tapete",
     ]
     .iter()
-    .any(|w| name.contains(w))
-        || matches!(
-            f.catalog.as_str(),
-            "fridge"
-                | "washer"
-                | "dryer"
-                | "dishwasher"
-                | "oven"
-                | "microwave"
-                | "stove"
-                | "tv"
-                | "bed-single"
-                | "bed-double"
-                | "bed-queen"
-                | "bed-king"
-                | "sofa-2"
-                | "sofa-3"
-                | "sofa-l"
-                | "armchair"
-                | "chair"
-                | "stool"
-                | "crib"
-                | "coffee-table"
-                | "side-table"
-                | "dining-table-4"
-                | "dining-table-6"
-                | "round-table"
-                | "dining-set-4"
-                | "dining-set-6"
-                | "desk"
-                | "office-chair"
-        )
+    .any(|w| {
+        // Whole words, so "lavanderia" is no "lava" and "bancada" no "banco".
+        name.split(|c: char| !c.is_alphanumeric()).any(|t| {
+            t == *w || t.strip_suffix('s') == Some(w) || (w.len() >= 5 && t.starts_with(w))
+        })
+    }) || matches!(
+        f.catalog.as_str(),
+        "fridge"
+            | "washer"
+            | "dryer"
+            | "dishwasher"
+            | "oven"
+            | "microwave"
+            | "stove"
+            | "tv"
+            | "bed-single"
+            | "bed-double"
+            | "bed-queen"
+            | "bed-king"
+            | "sofa-2"
+            | "sofa-3"
+            | "sofa-l"
+            | "armchair"
+            | "chair"
+            | "stool"
+            | "crib"
+            | "coffee-table"
+            | "side-table"
+            | "dining-table-4"
+            | "dining-table-6"
+            | "round-table"
+            | "dining-set-4"
+            | "dining-set-6"
+            | "desk"
+            | "office-chair"
+    )
 }
 
 /// Why a wall point in its wall is in the way, if so: behind the leaf of a
@@ -810,6 +864,90 @@ mod tests {
             height: 10.0,
             ..Furniture::default()
         }
+    }
+
+    fn top(id: u64, name: &str, catalog: &str, x: f64) -> Furniture {
+        Furniture {
+            id: FurnitureId(id),
+            catalog: catalog.into(),
+            name: name.into(),
+            position: Point2::new(x, 300.0),
+            width: 190.0,
+            depth: 65.0,
+            height: 91.0,
+            ..Furniture::default()
+        }
+    }
+
+    #[test]
+    fn a_countertop_named_after_the_appliance_beside_it_hosts_a_tower() {
+        let mut home = Home::default();
+        home.furniture = vec![
+            top(1, "Bancada contínua junto à geladeira", "box", 500.0),
+            top(
+                2,
+                "Tampo contínuo sobre lava e seca até fachada",
+                "box",
+                800.0,
+            ),
+            top(
+                3,
+                "Península — pedra sobre lava-louças 60,5 cm",
+                "box",
+                1100.0,
+            ),
+            top(4, "Geladeira Electrolux", "box", 1400.0),
+            top(5, "LG WD18GNTS6BA — Lava e Seca 18 kg", "box", 1700.0),
+            top(6, "Forno", "oven", 2000.0),
+            top(7, "Lavanderia — gavetões de roupas e cestos", "box", 2300.0),
+            top(8, "Máquina de lavar", "box", 2600.0),
+            top(9, "Cooktop Brastemp BDS62AE — 4 bocas", "box", 2900.0),
+            top(10, "Gavetões de panelas sob cooktop", "box", 3200.0),
+        ];
+        let tower = |x: f64| Furniture {
+            catalog: "outlet-tower-auto".into(),
+            name: "Torre".into(),
+            position: Point2::new(x, 300.0),
+            elevation: 91.0,
+            width: 10.0,
+            depth: 10.0,
+            height: 5.0,
+            ..Furniture::default()
+        };
+        for (x, host) in [
+            (510.0, 1),
+            (810.0, 2),
+            (1110.0, 3),
+            (2310.0, 7),
+            (3210.0, 10),
+        ] {
+            assert_eq!(
+                host_of(&home, &tower(x)).map(|f| f.id),
+                Some(FurnitureId(host)),
+                "{x}"
+            );
+        }
+        for x in [1410.0, 1710.0, 2010.0, 2610.0, 2910.0] {
+            assert!(host_of(&home, &tower(x)).is_none(), "{x}");
+        }
+        assert!(!is_appliance(&home.furniture[0]));
+        assert!(!is_appliance(&home.furniture[2]));
+        assert!(is_appliance(&home.furniture[3]));
+        assert!(is_appliance(&home.furniture[4]));
+        assert!(is_appliance(&home.furniture[5]));
+
+        // Declared, when the name does not say.
+        home.furniture[3]
+            .properties
+            .insert(FIXED_KEY.into(), "true".into());
+        home.furniture[0]
+            .properties
+            .insert(FIXED_KEY.into(), "false".into());
+        assert_eq!(
+            host_of(&home, &tower(1410.0)).map(|f| f.id),
+            Some(FurnitureId(4))
+        );
+        assert!(host_of(&home, &tower(510.0)).is_none());
     }
 
     #[test]
