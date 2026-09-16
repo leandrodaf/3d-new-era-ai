@@ -412,6 +412,11 @@ impl Review<'_, '_> {
         let scene = self.scene;
         let wheel = self.profile.wheelchair;
         for (i, u) in scene.units.iter().enumerate() {
+            // Above the head nobody walks in front of it: a crown moulding at
+            // 272 cm is passed under, not around.
+            if u.piece.height_range().0 >= HEADROOM {
+                continue;
+            }
             let label = u.label();
             let need = |side: Side, min: f64, span: (f64, f64), severity: Severity, what: Why| {
                 let (free, blocker, tight) = scene.free_along(i, side, min + 1.0, span, min);
@@ -1778,6 +1783,10 @@ fn short_side(points: &[Point2]) -> f64 {
     a.min(b)
 }
 
+/// Height above the floor from which a piece is over a person's head, cm:
+/// what `measure` leaves out of the band a walking person meets.
+const HEADROOM: f64 = 190.0;
+
 /// Reviews the current storey of `home` for the people in `profile`.
 /// The name a finding is accepted by: its rule and its place, so the same
 /// finding keeps the same name from one run to the next, and a different one
@@ -2771,6 +2780,42 @@ mod tests {
             narrow.fix.as_ref().map(|f| f["ids"][0].clone()),
             Some(serde_json::json!("f20")),
             "{narrow:#?}"
+        );
+    }
+
+    #[test]
+    fn a_moulding_over_the_head_has_no_corridor_to_keep() {
+        // A kitchen tower's crown moulding at 272 cm, 82 cm from a sofa.
+        let mut home = Home::default();
+        square(&mut home, "Cozinha", 400.0, 400.0);
+        let mut moulding = piece(20, "base-cabinet", (200.0, 9.0), (80.0, 3.0, 8.0), 0.0);
+        moulding.name = "moldura de roda-teto".into();
+        moulding.elevation = 272.0;
+        home.furniture.push(moulding);
+        let sofa = piece(
+            21,
+            "sofa-3",
+            (200.0, 10.5 + 82.0 + 45.0),
+            (200.0, 90.0, 80.0),
+            180.0,
+        );
+        home.furniture.push(sofa.clone());
+        let report = review(&home, &Profile::default());
+        assert!(
+            !report.findings.iter().any(|f| f.place.contains("f20")),
+            "{report:#?}"
+        );
+
+        // The same piece on the floor is a counter with a corridor to keep.
+        home.furniture[0].elevation = 0.0;
+        home.furniture[0].height = 90.0;
+        let report = review(&home, &Profile::default());
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.place.contains("f20") && f.message.contains("livres à frente")),
+            "{report:#?}"
         );
     }
 
