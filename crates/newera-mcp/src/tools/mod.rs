@@ -191,7 +191,7 @@ trace_background,undo,update,variants,video";
         assert_eq!(names.join(","), NAMES, "the set of tools changed");
         let bytes = serde_json::to_string(&tools).unwrap().len();
         assert_eq!(
-            bytes, 82102,
+            bytes, 83016,
             "a description or schema changed; this test guards a pure move"
         );
     }

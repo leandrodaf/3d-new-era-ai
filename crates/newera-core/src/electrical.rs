@@ -32,8 +32,10 @@ pub const MAX_W_KEY: &str = "elec:max_w";
 /// Wi-Fi and Zigbee modules of the kind usually declare.
 pub fn standby_default(catalog: &str) -> f64 {
     match catalog {
-        "smart-switch" => 0.8,
-        "smart-relay" | "dimmer" | "presence-sensor" => 0.5,
+        // Shelly 1 Gen3 under 1.2 W; Shelly Dimmer 2 and Exatron ceiling
+        // sensors under 1 W.
+        "smart-switch" => 1.2,
+        "smart-relay" | "dimmer" | "presence-sensor" => 1.0,
         _ => 0.0,
     }
 }
@@ -123,6 +125,10 @@ enum Wet {
     Living,
     /// Balconies: at least 1 outlet.
     Balcony,
+    /// Garages: counted like other rooms, and on a DR (NBR 5410 5.1.3.2.2 d).
+    Garage,
+    /// Yards, gardens, outdoor areas: their outlets on a DR (5.1.3.2.2 b).
+    Outdoor,
     Other,
 }
 
@@ -146,6 +152,10 @@ fn room_class(room: &Room) -> Wet {
         Wet::Living
     } else if has(&["varanda", "sacada", "terraco"]) {
         Wet::Balcony
+    } else if has(&["garagem"]) {
+        Wet::Garage
+    } else if has(&["quintal", "jardim", "externa", "piscina", "area de lazer"]) {
+        Wet::Outdoor
     } else {
         Wet::Other
     }
@@ -355,6 +365,8 @@ pub fn cable_lengths(home: &Home) -> Vec<(Cable, f64)> {
         .collect()
 }
 
+/// Where a routed run keeps the length to its farthest point, cm.
+pub const RUN_FAR_KEY: &str = "elec:run_far_cm";
 /// Where a routed data run keeps its cable category.
 pub const CATEGORY_KEY: &str = "elec:cat";
 
@@ -571,6 +583,17 @@ pub fn points(home: &Home) -> Vec<Point> {
     };
     let mut outlets_in: std::collections::BTreeMap<RoomId, usize> =
         std::collections::BTreeMap::new();
+    // NBR 5410 9.5.2.1.2: a room's lighting load is 100 VA up to 6 m² and
+    // 60 VA more per whole 4 m² beyond, shared by its lighting points.
+    let lights_in = |room: RoomId| {
+        view.furniture
+            .iter()
+            .flat_map(Furniture::flatten)
+            .filter(|f| f.discipline == Some(Discipline::Electrical) || f.light.is_some())
+            .filter(|f| point_kind(f) == PointKind::Lighting && !f.properties.contains_key(VA_KEY))
+            .filter(|f| room_of(f.position).is_some_and(|r| r.id == room))
+            .count()
+    };
     let mut out: Vec<Point> = Vec::new();
     let mut pieces: Vec<&Furniture> = view
         .furniture
@@ -590,20 +613,30 @@ pub fn points(home: &Home) -> Vec<Point> {
             .properties
             .get(VA_KEY)
             .and_then(|v| v.parse::<f64>().ok());
+        // Every outlet counts toward its room's first three, written or not.
+        let nth = if kind == PointKind::Outlet {
+            room.map_or(0, |r| {
+                let count = outlets_in.entry(r.id).or_default();
+                *count += 1;
+                *count
+            })
+        } else {
+            0
+        };
         let va = written.unwrap_or_else(|| match kind {
-            PointKind::Lighting => 100.0,
+            PointKind::Lighting => room.map_or(100.0, |r| {
+                lighting_load(r.area() / 10_000.0) / f64::from(u32::try_from(lights_in(r.id).max(1)).unwrap_or(1))
+            }),
             PointKind::Outlet => {
                 let wet =
                     room.is_some_and(|r| matches!(class_in(home, r), Wet::Kitchen | Wet::Bathroom));
-                let n = room.map_or(0, |r| {
-                    let count = outlets_in.entry(r.id).or_default();
-                    *count += 1;
-                    *count
-                });
-                if wet && n <= 3 { 600.0 } else { 100.0 }
+                if wet && nth <= 3 { 600.0 } else { 100.0 }
             }
+            // The norm takes the equipment's rated power (4.2.1.2.1 a); these
+            // stand in until it is written: a shower as the 7500 W ones most
+            // sold, an air conditioner as a 12 000 BTU/h one.
             PointKind::Dedicated => match piece.catalog.as_str() {
-                "shower-point" => 5500.0,
+                "shower-point" => 7500.0,
                 _ => 1500.0,
             },
             PointKind::Automation => piece
@@ -629,6 +662,98 @@ pub fn points(home: &Home) -> Vec<Point> {
     out
 }
 
+/// How many circuits run in the same conduit as `circuit` somewhere: itself
+/// and every other power run with a stretch of 50 cm or more along one of
+/// its segments.
+fn sharing(view: &Home, circuit: &str) -> u32 {
+    let run_of = |l: &crate::style::Polyline| {
+        l.properties
+            .get(RUN_KEY)
+            .and_then(|r| r.strip_prefix("power:"))
+            .map(str::to_owned)
+    };
+    let segments = |name: &str| -> Vec<(Point2, Point2)> {
+        view.polylines
+            .iter()
+            .filter(|l| run_of(l).as_deref() == Some(name))
+            .flat_map(|l| {
+                l.points
+                    .windows(2)
+                    .map(|w| (w[0], w[1]))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    };
+    let mine = segments(circuit);
+    if mine.is_empty() {
+        return 1;
+    }
+    let mut others: Vec<String> = view
+        .polylines
+        .iter()
+        .filter_map(run_of)
+        .filter(|n| n != circuit)
+        .collect();
+    others.sort();
+    others.dedup();
+    let overlap = |(a, b): (Point2, Point2), (c, d): (Point2, Point2)| {
+        let len = a.distance(b);
+        if len < 1e-6 {
+            return 0.0;
+        }
+        let (ux, uy) = ((b.x - a.x) / len, (b.y - a.y) / len);
+        let off = |p: Point2| ((p.x - a.x) * uy - (p.y - a.y) * ux).abs();
+        if off(c) > 2.0 || off(d) > 2.0 {
+            return 0.0;
+        }
+        let t = |p: Point2| (p.x - a.x) * ux + (p.y - a.y) * uy;
+        let (t0, t1) = (t(c).min(t(d)), t(c).max(t(d)));
+        (t1.min(len) - t0.max(0.0)).max(0.0)
+    };
+    let shared = others
+        .iter()
+        .filter(|name| {
+            let theirs = segments(name);
+            mine.iter()
+                .any(|m| theirs.iter().any(|t| overlap(*m, *t) >= 50.0))
+        })
+        .count();
+    1 + u32::try_from(shared).unwrap_or(u32::MAX)
+}
+
+/// A room's lighting load, VA, NBR 5410 9.5.2.1.2: 100 VA for the first
+/// 6 m², 60 VA for each whole 4 m² beyond.
+pub fn lighting_load(area_m2: f64) -> f64 {
+    if area_m2 <= 6.0 {
+        100.0
+    } else {
+        100.0 + 60.0 * ((area_m2 - 6.0) / 4.0).floor()
+    }
+}
+
+/// Where the project keeps how many circuits share a conduit, for the
+/// grouping factor; unwritten, it is read from the laid-out runs.
+pub const GROUPING_KEY: &str = "elec:grouping";
+
+/// NBR 5410 table 42: correction for circuits bundled or in one closed
+/// conduit.
+pub fn grouping_factor(circuits: u32) -> f64 {
+    match circuits {
+        0 | 1 => 1.0,
+        2 => 0.80,
+        3 => 0.70,
+        4 => 0.65,
+        5 => 0.60,
+        6 => 0.57,
+        7 => 0.54,
+        8 => 0.52,
+        9..=11 => 0.50,
+        12..=15 => 0.45,
+        16..=19 => 0.41,
+        _ => 0.38,
+    }
+}
+
 /// One circuit of the load schedule.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Circuit {
@@ -648,6 +773,12 @@ pub struct Circuit {
     /// Needs a residual-current device (DR 30 mA): it serves a bathroom, a
     /// kitchen, a laundry or a balcony.
     pub rcd: bool,
+    /// It feeds outlets of a kitchen, copa, laundry or service area.
+    pub kitchen_outlets: bool,
+    /// It also feeds outlets or lighting outside those rooms.
+    pub beyond_kitchen: bool,
+    /// Voltage drop at its farthest point, %, when its run is laid out.
+    pub drop_pct: Option<f64>,
 }
 
 /// Conductor sections, mm², with what two loaded copper conductors in PVC
@@ -661,7 +792,8 @@ const SECTIONS: [(f64, f64); 7] = [
     (16.0, 76.0),
     (25.0, 101.0),
 ];
-const BREAKERS: [u32; 10] = [10, 16, 20, 25, 32, 40, 50, 63, 80, 100];
+/// NBR NM 60898 5.3.2 preferred ratings, A.
+const BREAKERS: [u32; 13] = [6, 10, 13, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125];
 
 /// The load schedule: every circuit written on a point, sized.
 pub fn circuits(home: &Home) -> Vec<Circuit> {
@@ -672,6 +804,10 @@ pub fn circuits(home: &Home) -> Vec<Circuit> {
         .unwrap_or(127.0);
     let view = home.level_view(home.current_level());
     let all = points(home);
+    let written_grouping = home
+        .properties
+        .get(GROUPING_KEY)
+        .and_then(|v| v.parse::<u32>().ok());
     let mut names: Vec<String> = all.iter().filter_map(|p| p.circuit.clone()).collect();
     names.sort_by_key(|n| natural(n));
     names.dedup();
@@ -702,36 +838,78 @@ pub fn circuits(home: &Home) -> Vec<Circuit> {
                 supply
             };
             let amps = va / volts;
+            // Table 42: as many circuits as share a stretch of its conduit on
+            // the laid-out runs, or what the project writes.
+            let factor = grouping_factor(written_grouping.unwrap_or_else(|| sharing(&view, &name)));
+            // Table 47: 1.5 mm² for lighting, 2.5 for any circuit with outlets.
             let minimum = if kinds.iter().all(|k| *k == PointKind::Lighting) {
                 1.5
             } else {
                 2.5
             };
-            let (wire, capacity) = SECTIONS
+            // The smallest section whose corrected capacity (table 36 × table
+            // 42) admits a standard breaker between the current and it:
+            // IB ≤ In ≤ Iz (5.3.4.1).
+            let (wire, breaker) = SECTIONS
                 .iter()
                 .copied()
-                .find(|(mm2, carries)| *mm2 >= minimum && *carries >= amps * 1.0)
-                .unwrap_or(SECTIONS[SECTIONS.len() - 1]);
-            let breaker = BREAKERS
-                .iter()
-                .copied()
-                .find(|b| f64::from(*b) >= amps && f64::from(*b) <= capacity)
-                .unwrap_or(BREAKERS[BREAKERS.len() - 1]);
-            // DR 30 mA: every circuit reaching a room with a shower or a
-            // bath, and the outlet circuits of kitchens, laundries and
-            // balconies.
-            let rcd = mine.iter().any(|p| {
-                let class = p
-                    .room
+                .filter(|(mm2, _)| *mm2 >= minimum)
+                .find_map(|(mm2, carries)| {
+                    let iz = carries * factor;
+                    BREAKERS
+                        .iter()
+                        .copied()
+                        .find(|b| f64::from(*b) >= amps && f64::from(*b) <= iz)
+                        .map(|b| (mm2, b))
+                })
+                .unwrap_or((SECTIONS[SECTIONS.len() - 1].0, BREAKERS[BREAKERS.len() - 1]));
+            let class_of = |p: &Point| {
+                p.room
                     .and_then(|id| view.rooms.iter().find(|r| r.id == id))
-                    .map(|r| class_in(&view, r));
-                match class {
-                    Some(Wet::Bathroom) => p.kind.loads(),
-                    Some(Wet::Kitchen | Wet::Balcony) => {
-                        matches!(p.kind, PointKind::Outlet | PointKind::Dedicated)
-                    }
-                    _ => false,
+                    .map(|r| class_in(&view, r))
+            };
+            // DR 30 mA, NBR 5410 5.1.3.2.2: every point of a room with a bath
+            // or shower (a); outlets outdoors and on balconies (b, c); in
+            // kitchens, laundries, service areas and garages every point,
+            // lighting fixtures at 2.50 m or higher excepted (d, note 3).
+            let rcd = mine.iter().any(|p| match class_of(p) {
+                Some(Wet::Bathroom) => p.kind.loads(),
+                Some(Wet::Outdoor | Wet::Balcony) => {
+                    matches!(p.kind, PointKind::Outlet | PointKind::Dedicated)
                 }
+                Some(Wet::Kitchen | Wet::Garage) => match p.kind {
+                    PointKind::Lighting => view
+                        .find_piece(p.id)
+                        .is_some_and(|f| f.elevation + f.height / 2.0 < 250.0),
+                    k => k.loads(),
+                },
+                _ => false,
+            });
+            let kitchen_outlets = mine
+                .iter()
+                .any(|p| p.kind == PointKind::Outlet && class_of(p) == Some(Wet::Kitchen));
+            let beyond_kitchen = mine.iter().any(|p| {
+                p.kind == PointKind::Lighting
+                    || (p.kind.loads() && class_of(p) != Some(Wet::Kitchen))
+            });
+            // Voltage drop to the farthest point of its laid-out run, copper at
+            // 70 °C (ρ ≈ 1/46 Ω·mm²/m), the whole load there: on the safe side.
+            let far_cm = view
+                .polylines
+                .iter()
+                .filter(|l| {
+                    l.properties.get(RUN_KEY).map(String::as_str) == Some(&format!("power:{name}"))
+                })
+                .filter_map(|l| {
+                    l.properties
+                        .get(RUN_FAR_KEY)
+                        .or_else(|| l.properties.get(RUN_CM_KEY))
+                        .and_then(|v| v.parse::<f64>().ok())
+                })
+                .fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.max(v))));
+            let drop_pct = far_cm.map(|cm| {
+                let pct = 200.0 * (cm / 100.0) * amps / (46.0 * wire * volts);
+                (pct * 10.0).round() / 10.0
             });
             Circuit {
                 name,
@@ -743,6 +921,9 @@ pub fn circuits(home: &Home) -> Vec<Circuit> {
                 wire_mm2: wire,
                 breaker_a: breaker,
                 rcd,
+                kitchen_outlets,
+                beyond_kitchen,
+                drop_pct,
             }
         })
         .collect()
@@ -782,14 +963,15 @@ fn automation(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
                 severity: Severity::Dica,
                 place,
                 message: "Precisa de neutro na caixa: numa reforma confira, porque a instalação antiga costuma levar só fase e retorno ao interruptor; no projeto, leve o neutro até ela. Aceite quando o neutro estiver garantido.".into(),
-                source: "nbr5410",
+                source: "fabricantes",
             }),
             "dimmer" => {
                 let max = piece
                     .properties
                     .get(MAX_W_KEY)
                     .and_then(|v| v.parse::<f64>().ok())
-                    .unwrap_or(200.0);
+                    // Shelly Dimmer 2: up to 1.1 A of LED, some 140 W at 127 V.
+                    .unwrap_or_else(|| 1.1 * home.properties.get(VOLTAGE_KEY).and_then(|v| v.parse::<f64>().ok()).unwrap_or(127.0));
                 let load: f64 = room.map_or(0.0, |r| {
                     view.furniture
                         .iter()
@@ -811,7 +993,7 @@ fn automation(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
                             decimal(load),
                             decimal(max)
                         ),
-                        source: "nbr5410",
+                        source: "fabricantes",
                     });
                 } else if load < 10.0 {
                     out.push(Finding {
@@ -823,27 +1005,28 @@ fn automation(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
                             "{} W de iluminação para dimerizar: abaixo da carga mínima (em geral 10 W) o LED pisca ou não apaga de todo; confira se as lâmpadas são dimerizáveis.",
                             decimal(load)
                         ),
-                        source: "nbr5410",
+                        source: "fabricantes",
                     });
                 }
             }
             "presence-sensor" => {
                 let height = piece.elevation + piece.height / 2.0;
-                if height < 220.0 {
+                if !(220.0..=300.0).contains(&height) {
                     out.push(Finding {
                         key: format!("elec:sensor-height:{}", piece.id),
                         accepted: None,
                         severity: Severity::Dica,
                         place: place.clone(),
                         message: format!(
-                            "Sensor de teto a {} cm: abaixo de 2,2 m o alcance e o ângulo não fecham; na parede, use o sensor de parede a 1,1 m.",
+                            "Sensor de teto a {} cm: os fabricantes o instalam por volta de 2,4 m (até 2,9 m); fora disso o alcance muda; na parede, use o sensor de parede.",
                             decimal(height)
                         ),
-                        source: "nbr5410",
+                        source: "fabricantes",
                     });
                 }
-                // A 360° ceiling sensor sees about 1.2 × its height around it.
-                let reach = height * 1.2;
+                // A 360° ceiling sensor sees a circle of about 7 m at 2.4 m
+                // (Exatron): some 1.45 × its height around it.
+                let reach = height * 1.45;
                 if let Some(r) = room {
                     let far = r
                         .points
@@ -861,7 +1044,7 @@ fn automation(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
                                 decimal(far / 100.0),
                                 decimal(reach / 100.0)
                             ),
-                            source: "nbr5410",
+                            source: "fabricantes",
                         });
                     }
                 }
@@ -880,7 +1063,7 @@ fn automation(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
                         severity: Severity::Alerta,
                         place,
                         message: "Fechadura eletrônica fora de uma porta: ponha-a na folha que ela tranca.".into(),
-                        source: "nbr5410",
+                        source: "fabricantes",
                     });
                 }
             }
@@ -902,11 +1085,19 @@ pub struct Supply {
     pub va: f64,
 }
 
+/// Main breaker sizes Enel SP fixes at the meter for 127/220 V overhead
+/// supply, A (ET GRI-0017 v02, annex B): single-phase A1–A2, two-phase
+/// B3–B9, three-phase C3–C12.
+const ENEL_SINGLE: [u32; 2] = [50, 63];
+const ENEL_TWO: [u32; 7] = [50, 63, 80, 100, 125, 160, 200];
+const ENEL_THREE: [u32; 10] = [50, 63, 80, 100, 125, 160, 200, 225, 275, 300];
+
 /// The supply and main breaker suggested for the installed load, with no
-/// demand factor — the utility's rules may allow less, never ask for less
-/// protection. One phase up to 8 kVA with no 220 V circuit in a 127 V
-/// supply (a 220 V circuit there is between two phases); two up to 20 kVA;
-/// three above. Each utility sets its own limits: confirm with it.
+/// demand factor (the demand is the engineer's, and never asks for more).
+/// On a 127/220 V supply, Enel SP's categories: single-phase (phase and
+/// neutral, 127 V only) up to 12 kW, two-phase up to 20 kW, three-phase up
+/// to 75 kW — above, medium voltage. A 220 V circuit needs two phases. The
+/// breaker is the smallest of the utility's fixed sizes over the current.
 pub fn main_breaker(home: &Home) -> Option<Supply> {
     let circuits = circuits(home);
     if circuits.is_empty() {
@@ -919,7 +1110,7 @@ pub fn main_breaker(home: &Home) -> Option<Supply> {
         .unwrap_or(127.0);
     let va: f64 = circuits.iter().map(|c| c.va).sum();
     let between_phases = supply < 200.0 && circuits.iter().any(|c| c.volts > supply + 1.0);
-    let phases: u8 = if va <= 8000.0 && !between_phases {
+    let phases: u8 = if va <= 12_000.0 && !between_phases {
         1
     } else if va <= 20_000.0 {
         2
@@ -927,11 +1118,16 @@ pub fn main_breaker(home: &Home) -> Option<Supply> {
         3
     };
     let amps = va / (f64::from(phases) * supply);
-    let breaker = BREAKERS
+    let sizes: &[u32] = match phases {
+        1 => &ENEL_SINGLE,
+        2 => &ENEL_TWO,
+        _ => &ENEL_THREE,
+    };
+    let breaker = sizes
         .iter()
         .copied()
         .find(|b| f64::from(*b) >= amps)
-        .unwrap_or(BREAKERS[BREAKERS.len() - 1]);
+        .unwrap_or(sizes[sizes.len() - 1]);
     Some(Supply {
         phases,
         breaker_a: breaker,
@@ -1061,9 +1257,10 @@ pub fn panel(home: &Home) -> Option<Panel> {
         .properties
         .get(SHORT_KA_KEY)
         .and_then(|v| v.replace(',', ".").parse::<f64>().ok());
-    let icn = [3.0, 4.5, 6.0, 10.0]
+    // NM 60898 steps; Enel SP asks 10 kA of breakers up to 63 A at 127/220 V.
+    let icn = [1.5, 3.0, 4.5, 6.0, 10.0]
         .into_iter()
-        .find(|k| *k >= short.unwrap_or(6.0))
+        .find(|k| *k >= short.unwrap_or(10.0).max(10.0))
         .unwrap_or(10.0);
     Some(Panel {
         devices,
@@ -1072,14 +1269,14 @@ pub fn panel(home: &Home) -> Option<Panel> {
         capacity_written: written.is_some(),
         spare,
         dps: format!(
-            "Classe II (In ≥ 5 kA), {} fase(s) + neutro, junto ao geral",
+            "Classe II, In ≥ 5 kA (8/20) por modo e Up ≤ 1,5 kV, {} fase(s) + neutro (N-PE ≥ 10 kA), junto ao geral",
             supply.phases
         ),
         earthing: home
             .properties
             .get(EARTHING_KEY)
             .cloned()
-            .unwrap_or_else(|| "TN-S".into()),
+            .unwrap_or_else(|| "TN-C-S".into()),
         icn_ka: icn,
         icn_written: short.is_some(),
         largest_partial_a: circuits.iter().map(|c| c.breaker_a).max().unwrap_or(0),
@@ -1158,8 +1355,8 @@ pub fn check(home: &Home) -> Vec<Finding> {
         let needed = match class {
             Wet::Kitchen => per_metres(3.5),
             Wet::Living => per_metres(5.0),
-            Wet::Other if area > 6.0 => per_metres(5.0),
-            Wet::Bathroom | Wet::Balcony | Wet::Other => 1,
+            Wet::Other | Wet::Garage | Wet::Outdoor if area > 6.0 => per_metres(5.0),
+            Wet::Bathroom | Wet::Balcony | Wet::Other | Wet::Garage | Wet::Outdoor => 1,
         };
         let have = count(room.id, PointKind::Outlet);
         if have < needed {
@@ -1396,10 +1593,10 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 severity: Severity::Dica,
                 place: place.clone(),
                 message: format!(
-                    "Geral de {} A e parcial de {} A: com menos de o dobro, uma falta no circuito maior pode desarmar o geral junto. Confira a seletividade nas curvas do fabricante (geral curva C, parciais curva B ajudam).",
+                    "Geral de {} A e parcial de {} A: com menos de o dobro, uma falta no circuito maior pode desarmar o geral junto (regra prática, não da norma). Confira a seletividade nas tabelas do fabricante; geral curva C e parciais curva B ajudam.",
                     panel.main_a, panel.largest_partial_a
                 ),
-                source: "nbr5410",
+                source: "nm60898",
             });
         }
         if !panel.icn_written {
@@ -1409,7 +1606,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 severity: Severity::Dica,
                 place,
                 message: format!(
-                    "Capacidade de interrupção dos disjuntores assumida em {} kA: peça à concessionária a corrente de curto presumida no ponto de entrega e informe elec:short_ka.",
+                    "Capacidade de interrupção dos disjuntores assumida em {} kA, o que a Enel SP pede até 63 A: confirme com a concessionária a corrente de curto presumida no ponto de entrega e informe elec:short_ka.",
                     decimal(panel.icn_ka)
                 ),
                 source: "nbr5410",
@@ -1431,26 +1628,100 @@ pub fn check(home: &Home) -> Vec<Finding> {
             source: "nbr5410",
         });
     }
-    for circuit in circuits(home) {
-        if circuit.kinds.contains(&PointKind::Lighting) && circuit.kinds.len() > 1 {
+    let schedule = circuits(home);
+    let mixed = |c: &Circuit| c.kinds.contains(&PointKind::Lighting) && c.kinds.len() > 1;
+    // 9.5.3.3: in a dwelling lighting and outlets may share a circuit when
+    // it carries up to 16 A and neither all lighting nor all outlets are on
+    // shared circuits.
+    let lights_all_mixed = all
+        .iter()
+        .filter(|p| p.kind == PointKind::Lighting && p.circuit.is_some())
+        .all(|p| {
+            schedule
+                .iter()
+                .any(|c| mixed(c) && c.points.contains(&p.id))
+        });
+    let outlets_all_mixed = all
+        .iter()
+        .filter(|p| p.kind == PointKind::Outlet && p.circuit.is_some())
+        .all(|p| {
+            schedule
+                .iter()
+                .any(|c| mixed(c) && c.points.contains(&p.id))
+        });
+    for circuit in &schedule {
+        let place = format!("Circuito {}", circuit.name);
+        if mixed(circuit) {
+            let why = if circuit.amps > 16.0 {
+                Some(format!(
+                    "carrega {} A, acima dos 16 A",
+                    decimal(circuit.amps)
+                ))
+            } else if lights_all_mixed {
+                Some("toda a iluminação ficou em circuitos mistos".into())
+            } else if outlets_all_mixed {
+                Some("todas as tomadas ficaram em circuitos mistos".into())
+            } else {
+                None
+            };
+            if let Some(why) = why {
+                out.push(Finding {
+                    key: format!("elec:mixed:{}", circuit.name),
+                    accepted: None,
+                    severity: Severity::Erro,
+                    place: place.clone(),
+                    message: format!(
+                        "Iluminação e tomadas no mesmo circuito: a norma só admite em residência até 16 A e sem que toda a iluminação ou todas as tomadas fiquem em circuitos mistos (9.5.3.3); aqui {why}."
+                    ),
+                    source: "nbr5410",
+                });
+            }
+        }
+        if circuit.kitchen_outlets && circuit.beyond_kitchen {
             out.push(Finding {
-                key: format!("elec:mixed:{}", circuit.name),
+                key: format!("elec:kitchen-circuit:{}", circuit.name),
                 accepted: None,
                 severity: Severity::Erro,
-                place: format!("Circuito {}", circuit.name),
-                message:
-                    "Iluminação e tomadas no mesmo circuito: a norma pede circuitos distintos."
-                        .into(),
+                place: place.clone(),
+                message: "Tomadas de cozinha, copa, lavanderia ou área de serviço dividem o circuito com iluminação ou com pontos de outros cômodos: elas pedem circuitos só delas (9.5.3.2).".into(),
                 source: "nbr5410",
             });
         }
-        if circuit.kinds.contains(&PointKind::Dedicated) && circuit.points.len() > 1 {
+        // 9.5.3.1: equipment over 10 A takes a circuit of its own.
+        let big: Vec<&Point> = all
+            .iter()
+            .filter(|p| p.kind == PointKind::Dedicated && circuit.points.contains(&p.id))
+            .filter(|p| p.va / circuit.volts > 10.0)
+            .collect();
+        if !big.is_empty() && circuit.points.len() > 1 {
             out.push(Finding {
                 key: format!("elec:dedicated:{}", circuit.name),
                 accepted: None,
                 severity: Severity::Erro,
-                place: format!("Circuito {}", circuit.name),
-                message: "Um equipamento de uso específico (chuveiro, ar-condicionado) pede circuito exclusivo.".into(),
+                place: place.clone(),
+                message: format!(
+                    "{} passa de 10 A e pede circuito exclusivo (9.5.3.1).",
+                    big.iter()
+                        .map(|p| format!("{} {}", p.name, p.id))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                source: "nbr5410",
+            });
+        }
+        if let Some(pct) = circuit.drop_pct
+            && pct > 4.0
+        {
+            out.push(Finding {
+                key: format!("elec:drop:{}", circuit.name),
+                accepted: None,
+                severity: Severity::Alerta,
+                place,
+                message: format!(
+                    "Queda de tensão de {} % até o ponto mais longe: o circuito terminal pede no máximo 4 % (6.2.7.2); aumente a seção de {} mm² ou divida o circuito.",
+                    decimal(pct),
+                    decimal(circuit.wire_mm2)
+                ),
                 source: "nbr5410",
             });
         }
@@ -1619,20 +1890,28 @@ mod tests {
             c1.wire_mm2 == 1.5 && c1.kinds == [PointKind::Lighting],
             "{c1:?}"
         );
-        assert!(
-            !c1.rcd,
-            "a kitchen's lighting needs no DR, its outlets do: {c1:?}"
-        );
+        // 5.1.3.2.2 d): in a kitchen every point is on a DR, lighting too,
+        // unless the fixture is at 2.50 m or higher (note 3).
+        assert!(c1.rcd, "a kitchen's lighting at the ceiling point: {c1:?}");
         assert!(
             findings.iter().any(|f| f.message.contains("(12,0 m)")),
             "{findings:#?}"
         );
         let shower = schedule.iter().find(|c| c.name == "C4").unwrap();
-        // 5500 W at 220 V: 25 A, 4 mm², 25 A breaker.
+        // A 7500 W shower at 220 V: 34.1 A, 6 mm² (41 A), 40 A breaker.
         assert!(
-            shower.volts == 220.0 && shower.wire_mm2 == 4.0 && shower.breaker_a == 25,
+            shower.volts == 220.0 && shower.wire_mm2 == 6.0 && shower.breaker_a == 40,
             "{shower:?}"
         );
+        // Sharing its conduit with two other circuits (table 42: 0.70), 10 mm²
+        // carries 39.9 A, short of the 40 A breaker: 16 mm².
+        let mut grouped = home.clone();
+        grouped.properties.insert(GROUPING_KEY.into(), "3".into());
+        let shower = circuits(&grouped)
+            .into_iter()
+            .find(|c| c.name == "C4")
+            .unwrap();
+        assert_eq!(shower.wire_mm2, 16.0, "{shower:?}");
 
         // Lighting and an outlet on one circuit is said.
         home.furniture[5]
@@ -1802,9 +2081,12 @@ mod tests {
             .find(|c| c.name == "C1")
             .unwrap();
         assert_eq!(c1.kinds, vec![PointKind::Lighting], "{c1:?}");
+        // A 30 m² room: 100 VA + 6 × 60 VA of lighting (9.5.2.1.2), plus
+        // three devices of 1 W standby.
         assert!(
-            (c1.va - 101.5).abs() < 1e-9,
-            "100 VA of light + 1.5 W standby: {c1:?}"
+            (c1.va - (lighting_load(30.0) + 3.0)).abs() < 1e-9
+                && (lighting_load(30.0) - 460.0).abs() < 1e-9,
+            "{c1:?}"
         );
     }
 
@@ -1856,7 +2138,8 @@ mod tests {
         let keys: Vec<String> = check(&home).into_iter().map(|f| f.key).collect();
         assert!(!keys.contains(&"elec:panel-full".to_owned()), "{keys:?}");
         assert!(!keys.contains(&"elec:short-circuit".to_owned()));
-        assert!((super::panel(&home).unwrap().icn_ka - 4.5).abs() < 1e-9);
+        // Enel SP asks 10 kA of breakers up to 63 A, whatever less is informed.
+        assert!((super::panel(&home).unwrap().icn_ka - 10.0).abs() < 1e-9);
     }
 
     #[test]
@@ -1885,5 +2168,114 @@ mod tests {
                 .iter()
                 .any(|(key, _)| key.starts_with("elec:telecom-power"))
         );
+    }
+
+    #[test]
+    fn nbr_5410_and_enel_sp_figures_hold() {
+        // 9.5.2.1.2
+        assert!((lighting_load(6.0) - 100.0).abs() < 1e-9);
+        assert!((lighting_load(9.9) - 100.0).abs() < 1e-9);
+        assert!((lighting_load(10.0) - 160.0).abs() < 1e-9);
+        assert!((lighting_load(14.0) - 220.0).abs() < 1e-9);
+        // Table 42
+        assert!(
+            (grouping_factor(1) - 1.0).abs() < 1e-9 && (grouping_factor(3) - 0.70).abs() < 1e-9
+        );
+
+        let mut home = Home::default();
+        home.rooms = vec![
+            room(1, "Sala", 0.0, 400.0, 400.0),
+            room(2, "Cozinha", 400.0, 300.0, 400.0),
+        ];
+        home.furniture = vec![
+            point(10, "electrical-panel", (10.0, 10.0), None),
+            point(11, "light-ceiling", (200.0, 200.0), Some("C1")),
+            point(12, "outlet-low", (10.0, 200.0), Some("C1")),
+            point(13, "light-ceiling", (550.0, 200.0), Some("C2")),
+            point(14, "outlet-mid", (690.0, 100.0), Some("C3")),
+            point(15, "outlet-low", (390.0, 300.0), Some("C3")),
+        ];
+        let keys = |home: &Home| check(home).into_iter().map(|f| f.key).collect::<Vec<_>>();
+        let k = keys(&home);
+        // C1 mixes a room's light and outlet under 16 A while C2 keeps lighting
+        // apart: 9.5.3.3 admits it.
+        assert!(!k.contains(&"elec:mixed:C1".to_owned()), "{k:?}");
+        // C3 puts a kitchen outlet with a living room one: 9.5.3.2 forbids.
+        assert!(k.contains(&"elec:kitchen-circuit:C3".to_owned()), "{k:?}");
+        // Every light on mixed circuits: then it is said.
+        home.furniture[3]
+            .properties
+            .insert(CIRCUIT_KEY.into(), "C1".into());
+        assert!(keys(&home).contains(&"elec:mixed:C1".to_owned()));
+
+        // A 1500 VA point (11.8 A) shares a circuit: said; a 1000 VA one is not.
+        let mut shared = Home::default();
+        shared.rooms = vec![room(1, "Quarto", 0.0, 400.0, 400.0)];
+        let mut ac = point(20, "ac-point", (10.0, 100.0), Some("C1"));
+        ac.properties.insert(VA_KEY.into(), "1500".into());
+        shared.furniture = vec![
+            point(10, "electrical-panel", (10.0, 10.0), None),
+            ac,
+            point(21, "outlet-low", (10.0, 300.0), Some("C1")),
+        ];
+        assert!(keys(&shared).contains(&"elec:dedicated:C1".to_owned()));
+        shared.furniture[1]
+            .properties
+            .insert(VA_KEY.into(), "1000".into());
+        assert!(!keys(&shared).contains(&"elec:dedicated:C1".to_owned()));
+
+        // Enel SP: 10 kW stays single-phase at a fixed 63 A breaker... and
+        // 13 kW goes two-phase.
+        let mut load = Home::default();
+        load.rooms = vec![room(1, "Quarto", 0.0, 400.0, 400.0)];
+        // 127 V loads (a dedicated point this big would go to 220 V and two
+        // phases by itself).
+        let mut big = point(30, "outlet-low", (10.0, 100.0), Some("C1"));
+        big.properties.insert(VA_KEY.into(), "7000".into());
+        load.furniture = vec![big];
+        let supply = main_breaker(&load).unwrap();
+        assert_eq!((supply.phases, supply.breaker_a), (1, 63), "{supply:?}");
+        load.furniture[0]
+            .properties
+            .insert(VA_KEY.into(), "13000".into());
+        let supply = main_breaker(&load).unwrap();
+        assert_eq!(supply.phases, 2, "{supply:?}");
+        assert!(
+            [50, 63, 80, 100, 125, 160, 200].contains(&supply.breaker_a),
+            "{supply:?}"
+        );
+    }
+
+    #[test]
+    fn a_long_run_drops_too_much_voltage_and_shared_conduits_derate() {
+        use crate::style::Polyline;
+        let mut home = Home::default();
+        home.rooms = vec![room(1, "Quarto", 0.0, 400.0, 400.0)];
+        let mut heater = point(40, "outlet-low", (10.0, 100.0), Some("C1"));
+        heater.properties.insert(VA_KEY.into(), "1900".into());
+        home.furniture = vec![heater, point(41, "outlet-low", (10.0, 300.0), Some("C2"))];
+        let run = |id: u64, circuit: &str, far: f64| {
+            let mut l = Polyline::new(
+                crate::ids::PolylineId(id),
+                vec![Point2::new(0.0, 0.0), Point2::new(300.0, 0.0)],
+            );
+            l.properties
+                .insert(RUN_KEY.into(), format!("power:{circuit}"));
+            l.properties.insert(RUN_CM_KEY.into(), far.to_string());
+            l.properties.insert(RUN_FAR_KEY.into(), far.to_string());
+            l
+        };
+        home.polylines = vec![run(1, "C1", 3500.0), run(2, "C2", 300.0)];
+        let c1 = circuits(&home)
+            .into_iter()
+            .find(|c| c.name == "C1")
+            .unwrap();
+        // 15 A over 35 m of 2.5 mm² at 127 V: some 9 %.
+        assert!(c1.drop_pct.unwrap() > 4.0, "{c1:?}");
+        assert!(check(&home).iter().any(|f| f.key == "elec:drop:C1"));
+        // The two runs share 3 m of conduit: factor 0.80, and 2.5 mm² (19.2 A)
+        // still takes 16 A.
+        assert_eq!(sharing(&home, "C1"), 2);
+        assert_eq!((c1.wire_mm2, c1.breaker_a), (2.5, 16), "{c1:?}");
     }
 }
