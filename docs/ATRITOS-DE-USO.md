@@ -178,6 +178,18 @@ parede, por banda); o `check` cobrando cabo de dados e alimentação do access
 point como já cobra dos outros pontos; e o cabeamento sabendo distinguir Cat 6
 de Cat 6A, que é o que sustenta as bandas altas.
 
+## Resolvidos no código, a conferir na planta
+
+Com resposta no código e no app reinstalado; falta a conferência em uso, com
+os comandos abaixo, na mesma planta.
+
+| # | Como conferir | O que deve voltar |
+|---|---|---|
+| 40 | `electrical(action="route", kind="data")` — ou `cable(kind="data", ids=[...])` | O percurso traçado do quadro de telecom aos pontos, por dentro das paredes ou pela laje/piso, com `by_premise_m` das três premissas, a escolhida (a mais barata que se constrói) e `materials`: eletroduto, curvas, caixas, cabo Cat 5e/6/6A em estrela (um cabo inteiro por ponto, 3 m de sobra no rack) e keystones. Premissa impossível é recusada nomeando os pontos: pela parede, ponto fora de parede; pelo forro, ponto baixo sem parede onde descer. (`2c91f6e`, `e53b25d`, `3630691`) |
+| 42 | `electrical(action="assign", circuits={"C1": [...], "C2": [...]})` | A divisão inteira numa chamada e num passo de undo. `assign` aceita também `volts: 220` por ponto. (`2ea1219`) |
+| 44 | `plumbing()` e `plumbing(action="route", kind="cold"\|"hot"\|"sewer")` | Numa cópia desta planta o check dá 4 pendências reais: os dois lavatórios sem água quente, a premissa do esgoto (caixa de inspeção ou tubo de queda) e a caixa de gordura. O `route` de água fria sai com tubo, barras, tês, joelhos e registro por ambiente; o de esgoto só por baixo do piso, com caimento, junção 45° (Y) em vez de tê, e com `depth` recusa rebaixo raso dizendo quanto precisa. (`3440f64`, `e96c598`) |
+| 45 (parte) | `electrical(action="circuits")` com o chuveiro | O `main_breaker: {a: 100, load_a: 90,4}` monofásico não sai mais: a carga escolhe o fornecimento, `{a, phases, load_a_per_phase}` — um circuito de 220 V numa rede de 127 V já pede duas fases. (`1f02f28`) |
+
 ---
 
 ## Conferido nesta rodada
