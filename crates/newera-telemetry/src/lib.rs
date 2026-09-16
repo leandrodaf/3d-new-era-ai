@@ -25,12 +25,21 @@ use std::sync::atomic::{AtomicBool, Ordering};
 static ENABLED: AtomicBool = AtomicBool::new(true);
 static LOADED: std::sync::Once = std::sync::Once::new();
 
-#[cfg(test)]
+/// A settings directory set by a test, so it never flips the switch of the
+/// machine it runs on.
 static TEST_DIR: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+
+/// Keeps settings and notes in `dir` for the rest of this process. For tests;
+/// call it before anything reads the switch.
+#[doc(hidden)]
+pub fn use_config_dir(dir: PathBuf) {
+    if let Ok(mut slot) = TEST_DIR.lock() {
+        *slot = Some(dir);
+    }
+}
 
 /// Where this app keeps its settings.
 fn config_dir() -> PathBuf {
-    #[cfg(test)]
     if let Some(dir) = TEST_DIR.lock().ok().and_then(|d| d.clone()) {
         return dir;
     }
@@ -330,7 +339,7 @@ mod tests {
     fn isolated() -> PathBuf {
         let dir = std::env::temp_dir().join(format!("newera-telemetry-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        *TEST_DIR.lock().unwrap() = Some(dir.join("3d-new-era-ai"));
+        use_config_dir(dir.join("3d-new-era-ai"));
         dir
     }
 

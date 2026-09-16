@@ -3122,6 +3122,7 @@ dependencies = [
  "newera-plugins",
  "newera-render",
  "newera-sh3d",
+ "newera-telemetry",
  "rfd",
  "serde",
  "serde_json",

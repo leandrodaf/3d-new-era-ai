@@ -132,6 +132,10 @@ fn english(pt: &str) -> Option<&'static str> {
         "Afastamento" => "Offset",
         "Afastar (Ctrl -)" => "Zoom out (Ctrl -)",
         "Ajuda" => "Help",
+        "Enviar relatórios de erro" => "Send error reports",
+        "Falhas e notas de uso vão para os desenvolvedores, sem o seu projeto, sem IP e sem nome da máquina." => {
+            "Crashes and usage notes go to the developers, without your project, your IP or your machine's name."
+        }
         "Ajustes…" => "Settings…",
         "Alinhamento" => "Alignment",
         "Altura" => "Height",

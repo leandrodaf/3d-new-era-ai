@@ -1547,6 +1547,27 @@ impl NewEraApp {
                         self.plan.invalidate_scene();
                     }
                 });
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    // On by default; one click turns crash reports and the
+                    // notes agents leave off, now and for the next runs.
+                    let mut on = newera_telemetry::enabled();
+                    let label = format!(
+                        "{} {}",
+                        icon::HEARTBEAT,
+                        crate::i18n::tr("Enviar relatórios de erro")
+                    );
+                    if ui
+                        .checkbox(&mut on, label)
+                        .on_hover_text(crate::i18n::tr(
+                            "Falhas e notas de uso vão para os desenvolvedores, sem o seu projeto, sem IP e sem nome da máquina.",
+                        ))
+                        .changed()
+                        && let Err(e) = newera_telemetry::set_enabled(on)
+                    {
+                        tracing::warn!("telemetry setting not saved: {e}");
+                    }
+                }
                 if menu_item(
                     ui,
                     icon::KEYBOARD,
@@ -2187,6 +2208,36 @@ mod tests {
 
     fn walls(h: &Harness<'_, NewEraApp>) -> Vec<Wall> {
         h.state().document.read().home().walls.clone()
+    }
+
+    #[test]
+    fn telemetry_is_on_by_default_and_the_help_menu_turns_it_off() {
+        let dir = std::env::temp_dir().join(format!("newera-app-telemetry-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        // Never the switch of the machine running the tests.
+        newera_telemetry::use_config_dir(dir.clone());
+        let mut h = app_with_wall();
+        assert!(
+            newera_telemetry::enabled(),
+            "on until someone says otherwise"
+        );
+
+        let toggle = |h: &mut Harness<'_, NewEraApp>| {
+            h.get_by_label("Ajuda").click();
+            h.run_steps(3);
+            h.get_by_label_contains("Enviar relatórios de erro").click();
+            h.run_steps(3);
+            h.key_press(Key::Escape);
+            h.run_steps(2);
+        };
+        toggle(&mut h);
+        assert!(!newera_telemetry::enabled(), "one click turns it off");
+        let saved = std::fs::read_to_string(dir.join("telemetry.json")).unwrap();
+        assert!(saved.contains("false"), "and it is kept: {saved}");
+
+        toggle(&mut h);
+        assert!(newera_telemetry::enabled(), "and back on");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
