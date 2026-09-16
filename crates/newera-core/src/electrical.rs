@@ -126,6 +126,28 @@ fn room_class(room: &Room) -> Wet {
     }
 }
 
+/// A room's class by what it holds first, then by its name.
+///
+/// A toilet, a shower, a basin or a bath make a bathroom whatever it is
+/// called: "Banho suíte" has "suíte" in its name and is no bedroom.
+fn class_in(home: &Home, room: &Room) -> Wet {
+    let fixtures = home.furniture.iter().flat_map(Furniture::flatten).any(|f| {
+        let name = crate::annotations::fold(&f.name);
+        let bathroom_piece = matches!(
+            f.catalog.as_str(),
+            "toilet" | "shower" | "shower-glass" | "bathtub" | "basin-cabinet"
+        ) || ["vaso", "box ", "lavatorio", "chuveiro", "banheira", "bide"]
+            .iter()
+            .any(|w| name.contains(w));
+        bathroom_piece && room.points.len() >= 3 && inside(&room.points, f.position)
+    });
+    if fixtures {
+        Wet::Bathroom
+    } else {
+        room_class(room)
+    }
+}
+
 /// Whether a room is one people stay in, where a network point belongs.
 fn long_stay(room: &Room) -> bool {
     let name = crate::annotations::fold(&room.name);
@@ -302,7 +324,7 @@ pub fn points(home: &Home) -> Vec<Point> {
             PointKind::Lighting => 100.0,
             PointKind::Outlet => {
                 let wet =
-                    room.is_some_and(|r| matches!(room_class(r), Wet::Kitchen | Wet::Bathroom));
+                    room.is_some_and(|r| matches!(class_in(home, r), Wet::Kitchen | Wet::Bathroom));
                 let n = room.map_or(0, |r| {
                     let count = outlets_in.entry(r.id).or_default();
                     *count += 1;
@@ -419,7 +441,7 @@ pub fn circuits(home: &Home) -> Vec<Circuit> {
                 let class = p
                     .room
                     .and_then(|id| view.rooms.iter().find(|r| r.id == id))
-                    .map(room_class);
+                    .map(|r| class_in(&view, r));
                 match class {
                     Some(Wet::Bathroom) => p.kind.loads(),
                     Some(Wet::Kitchen | Wet::Balcony) => {
@@ -493,7 +515,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
         } else {
             format!("{} {}", room.name, room.id)
         };
-        let class = room_class(room);
+        let class = class_in(home, room);
         if count(room.id, PointKind::Lighting) == 0 {
             out.push(Finding {
                 severity: Severity::Erro,
@@ -534,6 +556,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
             });
         }
         if long_stay(room)
+            && class != Wet::Bathroom
             && count(room.id, PointKind::Network) == 0
             && count(room.id, PointKind::Wifi) == 0
         {
@@ -545,10 +568,11 @@ pub fn check(home: &Home) -> Vec<Finding> {
             });
         }
         let name = crate::annotations::fold(&room.name);
-        if (name.contains("sala")
-            || name.contains("quarto")
-            || name.contains("dormit")
-            || name.contains("suite"))
+        if class != Wet::Bathroom
+            && (name.contains("sala")
+                || name.contains("quarto")
+                || name.contains("dormit")
+                || name.contains("suite"))
             && count(room.id, PointKind::Tv) == 0
         {
             out.push(Finding {
@@ -697,6 +721,51 @@ mod tests {
                 Point2::new(x, d),
             ],
         )
+    }
+
+    #[test]
+    fn a_bathroom_is_a_bathroom_whatever_its_name_says() {
+        let mut home = Home::default();
+        home.rooms = vec![
+            room(1, "Suíte", 0.0, 300.0, 400.0),
+            room(2, "Banho suíte", 300.0, 200.0, 200.0),
+        ];
+        let mut toilet = Furniture {
+            id: FurnitureId(30),
+            catalog: "imported".into(),
+            name: "Vaso suíte".into(),
+            position: Point2::new(350.0, 50.0),
+            width: 40.0,
+            depth: 60.0,
+            height: 40.0,
+            ..Furniture::default()
+        };
+        toilet.properties.clear();
+        home.furniture = vec![
+            point(10, "electrical-panel", (10.0, 10.0), None),
+            point(11, "light-ceiling", (150.0, 200.0), Some("C1")),
+            point(12, "light-ceiling", (400.0, 100.0), Some("C1")),
+            point(13, "outlet-low", (320.0, 100.0), Some("C2")),
+            toilet,
+        ];
+        let findings = check(&home);
+        let about = |place: &str, text: &str| {
+            findings
+                .iter()
+                .any(|f| f.place.starts_with(place) && f.message.contains(text))
+        };
+        assert!(!about("Banho suíte", "ponto de rede"), "{findings:#?}");
+        assert!(!about("Banho suíte", "ponto de TV"), "{findings:#?}");
+        assert!(
+            about("Suíte r1", "ponto de rede"),
+            "the bedroom still asks: {findings:#?}"
+        );
+        // And its outlet circuit is a wet room's: DR.
+        let c2 = circuits(&home)
+            .into_iter()
+            .find(|c| c.name == "C2")
+            .unwrap();
+        assert!(c2.rcd && (c2.va - 600.0).abs() < 1e-9, "{c2:?}");
     }
 
     #[test]
