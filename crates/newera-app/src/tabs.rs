@@ -156,6 +156,8 @@ pub(crate) fn bar(app: &mut NewEraApp, ui: &mut egui::Ui) {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             levels(app, ui);
             ui.separator();
+            layers(app, ui);
+            ui.separator();
             disciplines(app, ui);
         });
         if compare {
@@ -177,6 +179,70 @@ pub(crate) fn bar(app: &mut NewEraApp, ui: &mut egui::Ui) {
     if let Some(index) = close {
         let name = infos[index].name.clone();
         app.set_dialog(Dialog::ConfirmCloseVariant { index, name });
+    }
+}
+
+/// Layers of the plan — lighting, appliances, joinery — shown or hidden on
+/// the drawing; the 3D keeps showing them.
+fn layers(app: &mut NewEraApp, ui: &mut egui::Ui) {
+    use newera_core::PlanLayer;
+    let (hidden, counts) = {
+        let doc = app.document.read();
+        let home = doc.home();
+        let counts: Vec<usize> = PlanLayer::ALL
+            .iter()
+            .map(|layer| {
+                home.furniture
+                    .iter()
+                    .flat_map(|top| {
+                        top.visible_leaves()
+                            .into_iter()
+                            .map(move |leaf| newera_core::layer_in_group(top, leaf))
+                    })
+                    .filter(|l| *l == Some(*layer))
+                    .count()
+            })
+            .collect();
+        (home.hidden_layers.clone(), counts)
+    };
+    let mut toggle = None;
+    let title = if hidden.is_empty() {
+        format!("{} {}", icon::STACK, crate::i18n::tr("Camadas"))
+    } else {
+        format!(
+            "{} {} ({})",
+            icon::STACK,
+            crate::i18n::tr("Camadas"),
+            PlanLayer::ALL.len() - hidden.len()
+        )
+    };
+    ui.menu_button(title, |ui| {
+        for (layer, count) in PlanLayer::ALL.into_iter().zip(counts) {
+            let label = match layer {
+                PlanLayer::Lighting => {
+                    format!("{} {}", icon::LIGHTBULB, crate::i18n::tr("Iluminação"))
+                }
+                PlanLayer::Appliances => {
+                    format!("{} {}", icon::OVEN, crate::i18n::tr("Eletrodomésticos"))
+                }
+                PlanLayer::Joinery => format!("{} {}", icon::HAMMER, crate::i18n::tr("Marcenaria")),
+            };
+            let mut visible = !hidden.contains(&layer);
+            if ui
+                .checkbox(&mut visible, format!("{label} · {count}"))
+                .changed()
+            {
+                toggle = Some((layer, visible));
+            }
+        }
+    })
+    .response
+    .on_hover_text(crate::i18n::tr(
+        "Mostrar ou esconder na planta; no 3D tudo continua aparecendo",
+    ));
+    if let Some((layer, visible)) = toggle {
+        app.document.write().set_layer_visible(layer, visible);
+        app.plan.invalidate_scene();
     }
 }
 

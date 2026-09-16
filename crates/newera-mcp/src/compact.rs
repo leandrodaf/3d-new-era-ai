@@ -241,6 +241,14 @@ pub(crate) fn piece(
     let (min, max) = newera_core::plan_bounds(f);
     v["bounds"] = json!([point(min), point(max)]);
     v["faces"] = json!(newera_core::facing(f));
+    // The plan layer the piece is in (for a part, its group's when it has none).
+    let layer = home.part_owner(f.id).map_or_else(
+        || newera_core::layer_of(f),
+        |top| newera_core::layer_in_group(top, f),
+    );
+    if let Some(layer) = layer {
+        v["layer"] = json!(layer.key());
+    }
     if default_size != Some([f.width, f.depth, f.height]) {
         v["wdh"] = json!([num(f.width), num(f.depth), num(f.height)]);
     }

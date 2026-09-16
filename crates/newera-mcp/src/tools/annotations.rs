@@ -48,13 +48,14 @@ pub(crate) struct AnnotationParams {
 pub(crate) struct DisciplineParams {
     /// `active` (default), `select`, `show`, `hide`, `quantities`.
     action: Option<String>,
-    /// `electrical`, `plumbing` or `architecture`.
+    /// `electrical`, `plumbing` or `architecture`; for show/hide also a
+    /// plan layer: `lighting`, `appliances` or `joinery`.
     d: Option<String>,
 }
 #[tool_router(router = annotations_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Electrical and plumbing projects over the plan. active (default) reports {active, hidden}. select {d: electrical|plumbing|architecture}: new symbols (catalog cat electrical/plumbing) and lines go there and the rest is dimmed. show/hide {d}. quantities: {electrical:[[name,count]], plumbing:[...], lines_cm:{...}}."
+        description = "Electrical and plumbing projects over the plan. active (default) reports {active, hidden}. select {d: electrical|plumbing|architecture}: new symbols (catalog cat electrical/plumbing) and lines go there and the rest is dimmed. show/hide {d}, where d can also be a layer of the plan — lighting (lamps, spots, LED), appliances (fridge, stove, oven, hood, washer…) or joinery (cabinets, wardrobes, countertops): hidden from the plan and its exports only, the 3D keeps them. Pieces are in a layer by what they are, from the moment they are placed; update(layer=lighting|appliances|joinery|none) overrides it, and an empty layer goes back to the automatic one. active also reports layers {key:{pieces, hidden}}. quantities: {electrical:[[name,count]], plumbing:[...], lines_cm:{...}}."
     )]
     pub(crate) fn disciplines(
         &self,
@@ -67,7 +68,9 @@ impl NewEraMcp {
                 Some("electrical") => Ok(Some(Discipline::Electrical)),
                 Some("plumbing") => Ok(Some(Discipline::Plumbing)),
                 Some("architecture") => Ok(None),
-                _ => Err(invalid("`d` must be electrical, plumbing or architecture")),
+                _ => Err(invalid(
+                    "`d` must be electrical, plumbing or architecture — or, for show/hide, a layer: lighting, appliances or joinery",
+                )),
             }
         };
         match p.action.as_deref().unwrap_or("active") {
@@ -80,9 +83,16 @@ impl NewEraMcp {
                 }
             }
             "show" | "hide" => {
-                let d = parse(p.d.as_deref())?
-                    .ok_or_else(|| invalid("architecture is always shown"))?;
-                doc.set_discipline_visible(d, p.action.as_deref() == Some("show"));
+                let visible = p.action.as_deref() == Some("show");
+                // Layers of the plan — lighting, appliances, joinery — hide
+                // from the drawing only; the 3D keeps them.
+                if let Some(layer) = p.d.as_deref().and_then(newera_core::PlanLayer::parse) {
+                    doc.set_layer_visible(layer, visible);
+                } else {
+                    let d = parse(p.d.as_deref())?
+                        .ok_or_else(|| invalid("architecture is always shown"))?;
+                    doc.set_discipline_visible(d, visible);
+                }
             }
             "quantities" => {
                 let home = doc.home();
@@ -125,7 +135,30 @@ impl NewEraMcp {
             other => return Err(invalid(format!("unknown action `{other}`"))),
         }
         let home = doc.home();
-        Ok(serde_json::json!({"active": home.active_discipline, "hidden": home.hidden_disciplines}).to_string())
+        // What each layer holds, so hiding one is a decision, not a guess.
+        let mut layers = serde_json::Map::new();
+        for layer in newera_core::PlanLayer::ALL {
+            let count = home
+                .furniture
+                .iter()
+                .flat_map(|top| {
+                    top.visible_leaves()
+                        .into_iter()
+                        .map(move |leaf| newera_core::layer_in_group(top, leaf))
+                })
+                .filter(|l| *l == Some(layer))
+                .count();
+            layers.insert(
+                layer.key().to_owned(),
+                serde_json::json!({"pieces": count, "hidden": home.hidden_layers.contains(&layer)}),
+            );
+        }
+        Ok(serde_json::json!({
+            "active": home.active_discipline,
+            "hidden": home.hidden_disciplines,
+            "layers": layers,
+        })
+        .to_string())
     }
     #[tool(
         description = "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first; one whose anchor died with a deleted piece is tied again to what it touches now, or else released (no anchor) instead of staying stale. q=<text> searches label text on every storey; q=re:<pattern> by a regex (`re:^\\[\\d+\\]$` finds index codes). Set any of dims (engineering dimension chains; auto_dimensions in the project JSON), refs (room reference schedule with tags; references — a tag, once given, stays with its piece: new pieces take the next free number and removed ones leave a gap, so a print and the plan a week later agree; renumber=true numbers them again in reading order), details (brand/model/link in refs; reference_details), legend (symbol legend with counts): a switch answers with the modes, changed, and what it shows — chains [[from,to,cm]] for dims, symbols {discipline:[[name,count]]} for legend — not the schedule; refs=true, or no switch at all, returns {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. bake=true turns the automatic chains into editable dimensions (ids returned). Give pieces brand/model/url via update."
@@ -956,6 +989,77 @@ mod tests {
                 .iter()
                 .any(|r| r[0] == "t6"),
             "{stale}"
+        );
+    }
+
+    #[test]
+    fn lighting_appliances_and_joinery_are_layers_born_with_the_piece() {
+        let s = server();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"pendant","at":[0,0]},{"cat":"fridge","at":[100,0]},
+                             {"cat":"base-cabinet","at":[200,0]},{"cat":"sofa-3","at":[400,0]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let disciplines = |json: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.disciplines(Parameters(serde_json::from_str(json).unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        let active = disciplines("{}");
+        assert_eq!(active["layers"]["lighting"]["pieces"], 1, "{active}");
+        assert_eq!(active["layers"]["appliances"]["pieces"], 1, "{active}");
+        assert_eq!(active["layers"]["joinery"]["pieces"], 1, "{active}");
+
+        let hidden = disciplines(r#"{"action":"hide","d":"lighting"}"#);
+        assert_eq!(hidden["layers"]["lighting"]["hidden"], true, "{hidden}");
+        assert!(
+            s.document
+                .read()
+                .home()
+                .hidden_layers
+                .contains(&newera_core::PlanLayer::Lighting)
+        );
+
+        // Read back, each piece says its layer; one moved by hand says the new one.
+        let sofa = s.document.read().home().furniture[3].id.to_string();
+        s.update(Parameters(
+            serde_json::from_str(&format!(
+                r#"{{"items":[{{"id":"{sofa}","layer":"joinery"}}]}}"#
+            ))
+            .unwrap(),
+        ))
+        .unwrap();
+        let home: serde_json::Value = serde_json::from_str(
+            &s.get_home(Parameters(
+                serde_json::from_str(r#"{"kinds":["furniture"]}"#).unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let layers: Vec<&str> = home["furniture"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f["layer"].as_str().unwrap_or("-"))
+            .collect();
+        assert_eq!(
+            layers,
+            ["lighting", "appliances", "joinery", "joinery"],
+            "{home}"
+        );
+        let err = s
+            .disciplines(Parameters(
+                serde_json::from_str(r#"{"action":"hide","d":"kitchen"}"#).unwrap(),
+            ))
+            .unwrap_err();
+        assert!(
+            err.message.contains("lighting"),
+            "the layers are named: {err:?}"
         );
     }
 

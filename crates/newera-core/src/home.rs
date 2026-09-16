@@ -72,6 +72,9 @@ pub struct Home {
     /// Technical projects hidden from the plan and 3D.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hidden_disciplines: Vec<crate::style::Discipline>,
+    /// Layers hidden from the plan drawing; the 3D keeps showing them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hidden_layers: Vec<crate::layers::PlanLayer>,
     #[serde(default, skip_serializing_if = "Properties::is_empty")]
     pub properties: Properties,
     /// Next number handed out for any id. Monotonic, so ids an agent saw
@@ -105,6 +108,7 @@ impl Default for Home {
             base_plan_locked: false,
             active_discipline: None,
             hidden_disciplines: Vec::new(),
+            hidden_layers: Vec::new(),
             annotations: crate::annotations::PlanAnnotations::default(),
             properties: Properties::new(),
             next_id: 1,
@@ -362,6 +366,7 @@ impl Home {
             active_discipline: self.active_discipline,
             annotations: self.annotations,
             hidden_disciplines: self.hidden_disciplines.clone(),
+            hidden_layers: self.hidden_layers.clone(),
             properties: self.properties.clone(),
             next_id: self.next_id,
             polylines: self

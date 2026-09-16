@@ -2211,6 +2211,36 @@ mod tests {
     }
 
     #[test]
+    fn the_layers_menu_hides_lighting_from_the_plan() {
+        let mut h = app_with_wall();
+        {
+            let document = h.state().document.clone();
+            let mut doc = document.write();
+            let id = doc.new_furniture_id();
+            let pendant = newera_catalog::find("pendant")
+                .unwrap()
+                .instantiate(id, Point2::new(200.0, 150.0));
+            doc.execute(Command::insert(pendant)).unwrap();
+        }
+        h.run_steps(3);
+        h.get_by_label_contains("Camadas").click();
+        h.run_steps(3);
+        h.get_by_label_contains("Iluminação · 1").click();
+        h.run_steps(3);
+        let doc = h.state().document.read();
+        assert!(
+            doc.home()
+                .hidden_layers
+                .contains(&newera_core::PlanLayer::Lighting)
+        );
+        assert_eq!(
+            doc.home().furniture.len(),
+            1,
+            "the piece is still there, for the 3D"
+        );
+    }
+
+    #[test]
     fn telemetry_is_on_by_default_and_the_help_menu_turns_it_off() {
         let dir = std::env::temp_dir().join(format!("newera-app-telemetry-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);

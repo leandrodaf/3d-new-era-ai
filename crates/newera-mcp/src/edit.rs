@@ -659,6 +659,10 @@ pub(crate) struct UpdateSpec {
     /// its parts by the same factor.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stretch: Option<Vec<String>>,
+    /// Plan layer of a piece: `lighting`, `appliances`, `joinery`, `none`
+    /// (in no layer), or empty to go back to the layer it is in by itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub layer: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visible: Option<bool>,
     /// Furniture light {lm|w, lamp, k, beam, area, z, on}.
@@ -794,6 +798,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 "mirror",
                 "anchor",
                 "stretch",
+                "layer",
                 "visible",
                 "hinge_right",
                 "level",
@@ -985,6 +990,9 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 f.info.brand = text(spec.brand, f.info.brand.take());
                 f.info.model_name = text(spec.model_name, f.info.model_name.take());
                 f.info.url = text(spec.url, f.info.url.take());
+                if let Some(layer) = &spec.layer {
+                    set_layer(&mut f, layer)?;
+                }
                 if let (Some(right), Some(opening)) = (spec.hinge_right, f.opening.as_mut()) {
                     opening.hinge_right = right;
                 }
@@ -1072,7 +1080,27 @@ pub(crate) fn rename(doc: &mut Document, spec: &RenameSpec) -> EditResult<()> {
 
 /// Fields a part of a group takes on its own: what it is called and what it
 /// is, never where it is or how big — the group owns that and rebuilds it.
-const PART_FIELDS: [&str; 5] = ["id", "name", "brand", "model_name", "url"];
+const PART_FIELDS: [&str; 6] = ["id", "name", "brand", "model_name", "url", "layer"];
+
+/// Puts a piece in a plan layer by hand, or back in the one it is in by itself.
+fn set_layer(piece: &mut newera_core::Furniture, raw: &str) -> EditResult<()> {
+    match raw.trim() {
+        "" => {
+            piece.properties.remove(newera_core::LAYER_KEY);
+        }
+        chosen @ ("none" | "lighting" | "appliances" | "joinery") => {
+            piece
+                .properties
+                .insert(newera_core::LAYER_KEY.to_owned(), chosen.to_owned());
+        }
+        other => {
+            return Err(format!(
+                "layer: lighting, appliances, joinery, none, or empty (not {other})"
+            ));
+        }
+    }
+    Ok(())
+}
 
 /// Renames a part of a group, or says why it cannot be edited alone.
 ///
@@ -1137,6 +1165,9 @@ fn rename_part(
     piece.info.brand = text(spec.brand, piece.info.brand.take());
     piece.info.model_name = text(spec.model_name, piece.info.model_name.take());
     piece.info.url = text(spec.url, piece.info.url.take());
+    if let Some(layer) = &spec.layer {
+        set_layer(piece, layer)?;
+    }
     commands.push(Command::Update {
         element: Element::Furniture(group),
     });

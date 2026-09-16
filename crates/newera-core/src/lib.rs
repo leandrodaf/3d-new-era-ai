@@ -21,6 +21,7 @@ mod geometry;
 mod home;
 mod ids;
 mod joins;
+mod layers;
 mod levels;
 pub mod lighting;
 mod materials;
@@ -59,6 +60,7 @@ pub use ids::{
     DimensionId, ElementId, FurnitureId, LabelId, LevelId, ParseIdError, PolylineId, RoomId, WallId,
 };
 pub use joins::{JOIN_TOLERANCE, TOUCH_TOLERANCE, wall_outlines, weld_ends};
+pub use layers::{LAYER_KEY, PlanLayer, layer_in_group, layer_of};
 pub use levels::{FloorShape, floor_shapes, stair_holes};
 pub use lighting::{LampType, RoomLighting};
 pub use materials::{Material, Pattern, WALL_TYPES, WallFamily, WallType, wall_type};

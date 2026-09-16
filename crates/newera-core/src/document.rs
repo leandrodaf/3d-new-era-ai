@@ -190,6 +190,21 @@ impl Document {
         }
     }
 
+    /// Shows or hides a layer of the plan drawing (lighting, appliances,
+    /// joinery). View state: the 3D is not affected.
+    pub fn set_layer_visible(&mut self, layer: crate::layers::PlanLayer, visible: bool) {
+        let home = &mut self.current_mut().home;
+        let hidden = home.hidden_layers.contains(&layer);
+        if hidden == visible {
+            if visible {
+                home.hidden_layers.retain(|l| *l != layer);
+            } else {
+                home.hidden_layers.push(layer);
+            }
+            self.revision += 1;
+        }
+    }
+
     pub fn can_undo(&self) -> bool {
         !self.current().undo_stack.is_empty()
     }

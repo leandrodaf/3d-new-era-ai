@@ -403,11 +403,19 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
         .iter()
         .flat_map(|top| {
             let selected = options.selected.contains(&top.id.into());
-            top.visible_leaves().into_iter().map(move |leaf| {
-                let mut piece = leaf.clone();
-                piece.id = top.id;
-                (piece, selected)
-            })
+            top.visible_leaves()
+                .into_iter()
+                // A hidden layer leaves the plan only: lamps, appliances or
+                // joinery out of the way of a drawing that is about the rest.
+                .filter(move |leaf| {
+                    newera_core::layer_in_group(top, leaf)
+                        .is_none_or(|layer| !home.hidden_layers.contains(&layer))
+                })
+                .map(move |leaf| {
+                    let mut piece = leaf.clone();
+                    piece.id = top.id;
+                    (piece, selected)
+                })
         })
         .filter(|(f, _)| !f.is_opening() && shown(f.discipline))
         .collect();
@@ -1723,6 +1731,60 @@ mod furniture_tests {
             .filter(|i| i.owner == Some(door_id.into()))
             .count();
         assert!(door_lines >= 3, "leaf, arc and jambs");
+    }
+}
+
+#[cfg(test)]
+mod layer_tests {
+    use super::*;
+    use newera_core::{FurnitureId, PlanLayer};
+
+    fn piece(id: u64, catalog: &str, name: &str, x: f64) -> Furniture {
+        Furniture {
+            id: FurnitureId(id),
+            catalog: catalog.into(),
+            name: name.into(),
+            position: Point2::new(x, 100.0),
+            width: 60.0,
+            depth: 60.0,
+            height: 90.0,
+            ..Furniture::default()
+        }
+    }
+
+    /// Which pieces the plan draws.
+    fn drawn(home: &Home) -> std::collections::BTreeSet<u64> {
+        plan_scene(home, &SceneOptions::default())
+            .items
+            .iter()
+            .filter_map(|i| match i.owner {
+                Some(ElementId::Furniture(f)) => Some(f.0),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_hidden_layer_leaves_the_plan_and_only_the_plan() {
+        let mut home = Home::default();
+        home.furniture = vec![
+            piece(1, "pendant", "Pendente", 0.0),
+            piece(2, "fridge", "Geladeira", 100.0),
+            piece(3, "base-cabinet", "Armário", 200.0),
+            piece(4, "sofa-3", "Sofá", 300.0),
+        ];
+        assert_eq!(drawn(&home), [1, 2, 3, 4].into());
+
+        home.hidden_layers = vec![PlanLayer::Lighting, PlanLayer::Appliances];
+        assert_eq!(drawn(&home), [3, 4].into());
+        home.hidden_layers = vec![PlanLayer::Joinery];
+        assert_eq!(drawn(&home), [1, 2, 4].into());
+
+        // The 3D model of the plan keeps every piece: layers are the drawing's.
+        let mut doc = newera_core::Document::new(home);
+        doc.set_layer_visible(PlanLayer::Lighting, false);
+        assert!(doc.home().hidden_layers.contains(&PlanLayer::Lighting));
+        assert_eq!(doc.home().furniture.len(), 4);
     }
 }
 
