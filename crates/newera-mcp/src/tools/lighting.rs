@@ -94,7 +94,7 @@ impl NewEraMcp {
                 "fixtures": lights.len(),
                 "lm": lumens.round(),
                 "W": watts.round(),
-                "sources": super::sources(&["nbr8995"]),
+                "sources": super::sources(&["nbr5413", "nbr8995"]),
             })
             .to_string());
         };
@@ -219,9 +219,10 @@ mod tests {
             .unwrap()
         };
         let dark = rate("{}");
-        assert_eq!(dark["rooms"][0][6], 300.0, "{dark}");
-        // The reference lux carries the standard it comes from.
-        assert_eq!(dark["sources"]["nbr8995"][1], "A", "{dark}");
+        // A home kitchen: NBR 5413's residential 150 lx (300 at the counter).
+        assert_eq!(dark["rooms"][0][6], 150.0, "{dark}");
+        // The reference lux carries the standards it comes from.
+        assert!(dark["sources"]["nbr5413"].is_array(), "{dark}");
         assert!(
             dark["rooms"][0][9].as_str().unwrap().starts_with("abaixo"),
             "{dark}"
@@ -238,9 +239,9 @@ mod tests {
         let room = home.rooms[0].id.to_string();
         let filled = rate(&format!(r#"{{"room":"{room}","fill":"downlight"}}"#));
         let placed = filled["placed"].as_array().unwrap().len();
-        assert!(placed >= 6, "{filled}");
+        assert!(placed >= 3, "{filled}");
         let after = &filled["after"];
-        assert!(after[3].as_f64().unwrap() >= 299.5, "{filled}");
+        assert!(after[3].as_f64().unwrap() >= 149.5, "{filled}");
         assert_eq!(after[7], placed + 1);
         // The spots hang at the ceiling, recessed.
         let home = s.document.read().home().clone();

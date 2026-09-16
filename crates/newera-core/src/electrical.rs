@@ -625,7 +625,8 @@ pub fn points(home: &Home) -> Vec<Point> {
         };
         let va = written.unwrap_or_else(|| match kind {
             PointKind::Lighting => room.map_or(100.0, |r| {
-                lighting_load(r.area() / 10_000.0) / f64::from(u32::try_from(lights_in(r.id).max(1)).unwrap_or(1))
+                lighting_load(r.area() / 10_000.0)
+                    / f64::from(u32::try_from(lights_in(r.id).max(1)).unwrap_or(1))
             }),
             PointKind::Outlet => {
                 let wet =

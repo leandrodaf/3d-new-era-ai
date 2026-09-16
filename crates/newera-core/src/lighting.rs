@@ -368,8 +368,9 @@ fn inside(points: &[Point2], p: Point2) -> bool {
 }
 
 /// Recommended average illuminance on the work plane for a room, lux, and
-/// what it's for. Residential references in line with ABNT NBR ISO/CIE
-/// 8995-1 and the former NBR 5413.
+/// what it's for. NBR ISO/CIE 8995-1 covers workplaces only; homes take the
+/// residential table of the NBR 5413:1992 it replaced (middle values), and
+/// 8995-1 where 5413 has none (office, laundry, dining).
 pub fn recommended_lux(name: &str) -> (f64, &'static str) {
     let n = name.to_lowercase();
     let has = |words: &[&str]| words.iter().any(|w| n.contains(w));
@@ -382,13 +383,13 @@ pub fn recommended_lux(name: &str) -> (f64, &'static str) {
     ]) {
         (500.0, "leitura e trabalho")
     } else if has(&["cozinha", "kitchen", "gourmet"]) {
-        (300.0, "cozinha (bancada: 500 lx localizado)")
+        (150.0, "cozinha (bancada, fogão e pia: 300 lx localizado)")
     } else if has(&["lavanderia", "serviço", "servico", "laundry"]) {
-        (300.0, "lavanderia")
+        (300.0, "lavanderia (valor de lavanderia da 8995-1)")
     } else if has(&["banheiro", "lavabo", "wc", "bath", "suíte banho"]) {
-        (200.0, "banheiro (espelho: 500 lx localizado)")
+        (150.0, "banheiro (espelho: 300 lx localizado)")
     } else if has(&["jantar", "dining"]) {
-        (200.0, "jantar")
+        (200.0, "jantar (valor de refeitório da 8995-1)")
     } else if has(&[
         "quarto",
         "dormitório",
@@ -397,7 +398,10 @@ pub fn recommended_lux(name: &str) -> (f64, &'static str) {
         "suite",
         "bed",
     ]) {
-        (150.0, "dormitório (leitura na cama: 500 lx localizado)")
+        (
+            150.0,
+            "dormitório (espelho, penteadeira e cama: 300 lx localizado)",
+        )
     } else if has(&["estar", "sala", "living", "tv"]) {
         (150.0, "estar")
     } else if has(&[
@@ -415,7 +419,7 @@ pub fn recommended_lux(name: &str) -> (f64, &'static str) {
         "varanda", "deck", "terraço", "terraco", "quintal", "jardim", "gramado", "piscina",
         "externa",
     ]) {
-        (30.0, "área externa")
+        (30.0, "área externa (prática; sem norma)")
     } else {
         (150.0, "uso geral residencial")
     }
@@ -750,7 +754,8 @@ mod tests {
             ],
         );
         let report = room_lighting(&home, &e, &room, 75.0, Reflectance::default());
-        assert!((report.target - 300.0).abs() < 1e-9);
+        // NBR 5413 residential kitchen: 150 lx general (300 at the counter).
+        assert!((report.target - 150.0).abs() < 1e-9);
         assert_eq!(report.fixtures, 1);
         assert!(report.average > report.min && report.min > 0.0);
         assert!(report.uniformity > 0.0 && report.uniformity < 1.0);

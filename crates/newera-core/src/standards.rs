@@ -113,21 +113,21 @@ pub static STANDARDS: &[Standard] = &[
     // ---- A: obliges ----
     s(
         "nbr15575g",
-        "ABNT NBR 15575-1:2021 — Desempenho, Anexo G",
-        "2021",
+        "ABNT NBR 15575-1:2021 — Desempenho, Anexo F (informativo)",
+        "2013 + Emenda 1:2021",
         Tier::A,
-        "Mobiliário e equipamento mínimo por cômodo e a circulação em torno deles.",
+        "Mobiliário mínimo por cômodo e circulação: 0,85 m diante de pia, fogão e geladeira; 0,50 m entre móveis e paredes e diante de assentos; 0,40 m diante de vaso e lavatório; 0,75 m da mesa; guarda-roupa de 1,60 m no casal.",
         Some(
-            "https://autogestao.unmp.org.br/wp-content/uploads/2014/09/Anexo-G_NBR-15575_1_Requisitos-Gerais.pdf",
+            "https://www.ufsb.edu.br/propa/images/dinfra/coman/Legisla%C3%A7%C3%B5es/NBR15575-1.pdf",
         ),
-        ConfirmBeforeUse,
+        Verified,
     ),
     s(
         "nbr15575",
         "ABNT NBR 15575-1:2021 — Norma de Desempenho",
         "2021",
         Tier::A,
-        "Pé-direito mínimo e desempenho dos sistemas de uma habitação.",
+        "Pé-direito mínimo de 2,50 m, e 2,30 m em halls, corredores, banheiros e despensas (16.1.1).",
         Some("https://cbic.org.br/wp-content/uploads/2017/11/Guia_da_Norma_de_Desempenho_2013.pdf"),
         Verified,
     ),
@@ -145,11 +145,11 @@ pub static STANDARDS: &[Standard] = &[
         "ABNT NBR 13103:2024 — Instalação de aparelhos a gás — Requisitos",
         "2024",
         Tier::A,
-        "Ventilação permanente e exaustão onde há aparelho a gás, até 80 kW somados no mesmo local.",
+        "Volume, ventilação e exaustão por tipo de aparelho (A, B, C), até 75 kW por ambiente; banheiros e ambientes de permanência prolongada só admitem tipo C.",
         Some(
-            "https://gasescombustiveis.com.br/seminario/159/palestras/ABNT%20NBR%2013103%20Bras%C3%ADlia%202024.pdf",
+            "https://gasescombustiveis.com.br/seminario/169/palestras/ABNT%20NBR%2013103%20BELO%20HORIZONTE%202025.pdf",
         ),
-        Verified,
+        ConfirmBeforeUse,
     ),
     s(
         "nbr5410",
@@ -242,11 +242,20 @@ pub static STANDARDS: &[Standard] = &[
         ConfirmBeforeUse,
     ),
     s(
+        "nbr5413",
+        "ABNT NBR 5413:1992 — Iluminância de interiores (cancelada pela NBR ISO/CIE 8995-1)",
+        "1992 (cancelada em 2013)",
+        Tier::C,
+        "A única tabela residencial: sala e dormitório 150 lx (leitura 500), cozinha e banheiro 150 lx com 300 na bancada e no espelho, circulação e garagem 100 lx.",
+        Some("http://ftp.demec.ufpr.br/disciplinas/TM802/NBR5413.pdf"),
+        Verified,
+    ),
+    s(
         "nbr8995",
-        "ABNT NBR ISO/CIE 8995-1:2013 — Iluminação de ambientes de trabalho",
+        "ABNT NBR ISO/CIE 8995-1:2013 — Iluminação de ambientes de trabalho (substituiu a NBR 5413)",
         "2013",
-        Tier::A,
-        "Iluminância mínima em lux por atividade, de 50 lx na circulação a 2.000 lx em tarefa de detalhe.",
+        Tier::B,
+        "Locais de trabalho, não residências: de 20 lx a 2.000 lx conforme a tarefa; circulação 100 lx, escrever e ler 500 lx. Os valores residenciais vêm da NBR 5413:1992 (cancelada): sala e dormitório 150, cozinha e banheiro 150 com 300 na bancada e no espelho.",
         None,
         Verified,
     ),
@@ -288,22 +297,20 @@ pub static STANDARDS: &[Standard] = &[
     ),
     s(
         "caixa-mcmv",
-        "Caixa — Especificações Mínimas da Unidade Habitacional (MCMV)",
+        "Ministério das Cidades — especificações da unidade MCMV/FAR (Portaria MCID 725/2023)",
         "2023",
         Tier::A,
         "Cozinha de 1,80 m de largura mínima, com previsão de pia 120×50, fogão 55×60 e geladeira 70×70 cm.",
-        Some("https://www.gov.br/cidades/pt-br"),
+        Some("https://www.legisweb.com.br/legislacao/?id=446563"),
         ConfirmBeforeUse,
     ),
     s(
         "coe-municipal",
-        "Código de obras municipal e Código Sanitário estadual",
+        "COE-SP (Lei 16.642/2017, Decreto 57.776/2017) e Código Sanitário estadual (Decreto 12.342/1978)",
         "varia por município",
         Tier::A,
-        "Áreas, ventilação e o círculo inscrito no piso mudam de cidade; contra norma, prevalece o mais restritivo.",
-        Some(
-            "https://www.al.sp.gov.br/repositorio/legislacao/decreto/1978/decreto-12342-27.09.1978.html",
-        ),
+        "São Paulo (Decreto 57.776, 5.A.6): permanência 5 m² e círculo de 2,00 m, cozinha 1,50 m e pé-direito 2,50 m, sanitário, lavanderia e circulação 0,90 m; o estadual, subsidiário: iluminação 1/8 do piso (1/5 trabalho, 1/10 demais), ralo no piso de áreas molhadas. Contra norma, prevalece o mais restritivo.",
+        Some("https://www.saopaulo.sp.leg.br/iah/fulltext/decretos/D57776.pdf"),
         Verified,
     ),
     s(
@@ -333,7 +340,7 @@ pub static STANDARDS: &[Standard] = &[
         Tier::B,
         "Larguras nominais de 400, 500, 600 e 900 mm para módulos inferiores, e os nichos de embutir.",
         Some("https://standards.cencenelec.eu/dyn/www/f?p=CEN:110:0::::FSP_PROJECT:41638&cs=1"),
-        Verified,
+        ConfirmBeforeUse,
     ),
     s(
         "nkba",
@@ -368,7 +375,7 @@ pub static STANDARDS: &[Standard] = &[
         "Blum e Hettich — as cinco zonas de trabalho",
         "atual",
         Tier::C,
-        "Mantimentos, armazenagem, lavagem, preparo e cocção na ordem do fluxo; bancada 15–20 cm abaixo do cotovelo.",
+        "Mantimentos, armazenagem, lavagem, preparo e cocção na ordem do fluxo; bancada 10–15 cm abaixo do cotovelo.",
         Some("https://www.blum.com/br/pt/company/dynamic-space/"),
         Verified,
     ),
@@ -395,9 +402,9 @@ pub static STANDARDS: &[Standard] = &[
         "Ernst Neufert — A Arte de Projetar em Arquitetura",
         "desde 1936",
         Tier::C,
-        "Origem da bancada de referência de 90 cm de altura por 60 cm de profundidade.",
+        "Dimensões antropométricas de referência para cozinha e mobiliário.",
         None,
-        Verified,
+        ConfirmBeforeUse,
     ),
     s(
         "panero-zelnik",
@@ -412,10 +419,12 @@ pub static STANDARDS: &[Standard] = &[
     s(
         "lbnl-coifa",
         "Lawrence Berkeley National Laboratory — eficiência de captura de coifas",
-        "2013",
+        "2012",
         Tier::D,
-        "Captura de 15 % a 98 % entre modelos, sem relação com preço; ~80 % nas bocas traseiras contra ~50 % nas frontais.",
-        Some("https://newscenter.lbl.gov/2013/09/24/cooking-up-cleaner-air/"),
+        "Captura de menos de 15 % a mais de 98 % entre modelos de US$ 40 a 650; as que atendem a vazão capturam ≥80 % nas bocas traseiras e ≥50 % nas frontais.",
+        Some(
+            "https://newscenter.lbl.gov/2012/05/30/berkeley-lab-study-assesses-residential-cooking-exhaust-hoods-ability-to-vent-pollutants/",
+        ),
         Verified,
     ),
     // ---- E: describes ----
@@ -426,14 +435,14 @@ pub static STANDARDS: &[Standard] = &[
         Tier::E,
         "1.780 respondentes americanos em reforma de cozinha, campo em julho de 2025. Não transferível ao Brasil.",
         Some(
-            "https://www.houzz.com/magazine/2026-u-s-houzz-kitchen-trends-study-stsetivw-vs~137665428",
+            "https://www.houzz.com/magazine/2026-u-s-houzz-kitchen-trends-study-stsetivw-vs~184213864",
         ),
         Verified,
     ),
     s(
         "abimovel",
         "Abimóvel — Anuário Brasil Móveis",
-        "2024",
+        "2025",
         Tier::E,
         "A indústria moveleira nacional: 22 mil empresas e receita acima de R$ 91,5 bilhões em 2024.",
         None,
@@ -468,14 +477,14 @@ pub static MUNICIPAL_CODES: &[MunicipalCode] = &[
     MunicipalCode {
         city: "sao-paulo",
         label: "São Paulo — SP",
-        source: "COE-SP (Lei 16.642/2017) e Código Sanitário estadual (Decreto 12.342/1978)",
-        kitchen_circle_cm: Some(120.0),
+        source: "Decreto 57.776/2017, tabela 5.A.6",
+        kitchen_circle_cm: Some(150.0),
     },
     MunicipalCode {
         city: "estado-sp",
         label: "Estado de São Paulo (Código Sanitário)",
-        source: "Decreto estadual 12.342/1978",
-        kitchen_circle_cm: Some(120.0),
+        source: "Decreto estadual 12.342/1978 (cozinha de 4 m², sem círculo)",
+        kitchen_circle_cm: None,
     },
 ];
 
@@ -515,7 +524,7 @@ mod tests {
     fn paid_standards_we_did_not_read_ask_to_be_confirmed() {
         // The dossier's own rule: a figure we could not check at the source
         // may advise, never accuse.
-        for code in ["nbr15575g", "caixa-mcmv", "nkba", "bulthaup-b1"] {
+        for code in ["caixa-mcmv", "nkba", "bulthaup-b1", "nbr13103", "en1116"] {
             assert_eq!(
                 standard(code).unwrap().confidence,
                 Confidence::ConfirmBeforeUse,
@@ -527,7 +536,7 @@ mod tests {
     #[test]
     fn cities_are_found_by_slug_or_label() {
         let sp = municipal("sao-paulo").unwrap();
-        assert_eq!(sp.kitchen_circle_cm, Some(120.0));
+        assert_eq!(sp.kitchen_circle_cm, Some(150.0));
         assert_eq!(municipal("São Paulo — SP"), Some(sp));
         assert!(municipal("atlantis").is_none());
         assert!(!cities().is_empty());

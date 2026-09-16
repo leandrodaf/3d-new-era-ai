@@ -170,8 +170,10 @@ pub struct Report {
     pub refs: Vec<&'static Standard>,
 }
 
-/// Wardrobe front per adult, cm (common practice; children count half).
-const WARDROBE_PER_ADULT: f64 = 60.0;
+/// Wardrobe front per adult, cm: NBR 15575-1 annex F gives 1,60 m for a
+/// couple's bedroom and 1,20 m for a single one — some 80 cm a person,
+/// children counting half.
+const WARDROBE_PER_ADULT: f64 = 80.0;
 
 /// Alexander's pattern 184, in centimeters: 12 ft of counter in total, no
 /// stretch under 4 ft, and no pair of the four elements over 10 ft apart.
@@ -396,7 +398,7 @@ impl Review<'_, '_> {
                 Severity::Dica,
                 home,
                 format!(
-                    "{} cm de guarda-roupa nos dormitórios; o usual é {} cm por adulto e metade por criança: {} cm no total.",
+                    "{} cm de guarda-roupa nos dormitórios; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns {} cm por adulto e metade por criança: {} cm no total.",
                     cm(c.wardrobe_cm),
                     cm(WARDROBE_PER_ADULT),
                     cm(needed)
@@ -588,7 +590,7 @@ impl Review<'_, '_> {
                         50.0,
                         whole,
                         Severity::Dica,
-                        "passagem aos pés da cama".into(),
+                        ("passagem aos pés da cama", "nbr15575g").into(),
                     ));
                 }
                 Use::Crib => found.extend(need(
@@ -668,23 +670,29 @@ impl Review<'_, '_> {
                         "circulação em volta da ilha".into(),
                     ));
                 }
+                // NBR 15575-1 annex F: 40 cm in front of basin, toilet and
+                // bidet; NBR 9050 a 0,80 × 1,20 m transfer module.
                 Use::Toilet => found.extend(need(
                     Side::Front,
-                    if wheel { 120.0 } else { 60.0 },
+                    if wheel { 120.0 } else { 40.0 },
                     whole,
                     Severity::Alerta,
                     if wheel {
                         Why("área de transferência", Some("nbr9050"))
                     } else {
-                        Why("uso do vaso", None)
+                        Why("uso do vaso", Some("nbr15575g"))
                     },
                 )),
                 Use::Basin => found.extend(need(
                     Side::Front,
-                    if wheel { 120.0 } else { 60.0 },
+                    if wheel { 120.0 } else { 40.0 },
                     whole,
                     Severity::Alerta,
-                    "uso do lavatório".into(),
+                    if wheel {
+                        Why("aproximação frontal ao lavatório", Some("nbr9050"))
+                    } else {
+                        Why("uso do lavatório", Some("nbr15575g"))
+                    },
                 )),
                 Use::Shower | Use::Bathtub => found.extend(need(
                     Side::Front,
@@ -695,10 +703,10 @@ impl Review<'_, '_> {
                 )),
                 Use::Washer | Use::LaundrySink => found.extend(need(
                     Side::Front,
-                    60.0,
+                    50.0,
                     whole,
                     Severity::Alerta,
-                    "uso da área de serviço".into(),
+                    ("uso do tanque e da máquina de lavar", "nbr15575g").into(),
                 )),
                 Use::Desk => found.extend(need(
                     Side::Front,
@@ -734,29 +742,31 @@ impl Review<'_, '_> {
                                 75.0,
                                 (0.2, 0.8),
                                 Severity::Alerta,
-                                "puxar a cadeira e sentar".into(),
+                                ("puxar a cadeira e sentar", "nbr15575g").into(),
                             ));
                         }
                     }
                 }
                 Use::DiningSet(_) => {
                     for side in [Side::Front, Side::Left, Side::Right] {
+                        // Annex F's 75 cm from the table edge, less the ~35 cm
+                        // of chair the set already includes.
                         found.extend(need(
                             side,
                             40.0,
                             (0.2, 0.8),
                             Severity::Alerta,
-                            "passar atrás das cadeiras".into(),
+                            ("passar atrás das cadeiras", "nbr15575g").into(),
                         ));
                     }
                 }
                 Use::Sofa(_) | Use::Armchair => {
                     found.extend(need(
                         Side::Front,
-                        35.0,
+                        50.0,
                         (0.2, 0.8),
                         Severity::Dica,
-                        "pernas e passagem diante do sofá".into(),
+                        ("sentar, levantar e circular diante do assento", "nbr15575g").into(),
                     ));
                 }
                 _ => {}
@@ -1015,17 +1025,31 @@ impl Review<'_, '_> {
             index: k,
         } in spaces
         {
-            // Minimum areas: typical municipal codes, which vary by city.
+            // Minimum areas and narrow sides: São Paulo's decree 57.776 table
+            // (rooms to stay 5 m² and a 2 m circle; kitchen 1,50 m; bathroom,
+            // laundry and circulation 0,90 m), the state sanitary code's
+            // kitchen of 4 m², and NBR 15575-1 annex F's widths (living 2,40 m,
+            // kitchen 1,50 m, bathroom 1,10 m). A wheelchair corridor: 0,90 m
+            // up to 4 m long, 1,20 m up to 10 m (NBR 9050 6.11.1).
+            let long_side = if short > 0.0 { area / short } else { 0.0 };
             let minimum = match what {
-                RoomUse::Bedroom => Some((70_000.0, 240.0)),
-                RoomUse::Living => Some((100_000.0, 260.0)),
-                RoomUse::Kitchen => Some((40_000.0, 150.0)),
-                RoomUse::Bathroom => Some((22_000.0, 110.0)),
-                RoomUse::Laundry => Some((20_000.0, 100.0)),
-                RoomUse::Corridor => Some((0.0, if wheel { 120.0 } else { 90.0 })),
+                RoomUse::Bedroom => Some((50_000.0, 200.0, "coe-municipal")),
+                RoomUse::Living => Some((50_000.0, 240.0, "nbr15575g")),
+                RoomUse::Kitchen => Some((40_000.0, 150.0, "nbr15575g")),
+                RoomUse::Bathroom => Some((0.0, 110.0, "nbr15575g")),
+                RoomUse::Laundry => Some((0.0, 90.0, "coe-municipal")),
+                RoomUse::Corridor => Some((
+                    0.0,
+                    if wheel && long_side > 400.0 {
+                        120.0
+                    } else {
+                        90.0
+                    },
+                    if wheel { "nbr9050" } else { "coe-municipal" },
+                )),
                 _ => None,
             };
-            if let Some((min_area, min_side)) = minimum {
+            if let Some((min_area, min_side, side_source)) = minimum {
                 if area + 1.0 < min_area {
                     self.push_ref(
                         Severity::Dica,
@@ -1049,18 +1073,22 @@ impl Review<'_, '_> {
                         severity,
                         &label,
                         format!(
-                            "Menor lado de {} cm; o usual para {} é pelo menos {} cm.",
+                            "Menor lado de {} cm; para {} a referência é pelo menos {} cm.",
                             cm(short),
                             what.name(),
                             cm(min_side)
                         ),
-                        "coe-municipal",
+                        side_source,
                     );
                 }
             }
-            // NBR 15575-1: 2,50 m in rooms for staying, 2,30 m in bathrooms,
-            // kitchens, laundries and corridors.
-            let min_ceiling = if what.long_stay() { 250.0 } else { 230.0 };
+            // NBR 15575-1 16.1.1: 2,50 m everywhere but halls, corridors,
+            // bathrooms and pantries, which may have 2,30 m.
+            let min_ceiling = if matches!(what, RoomUse::Bathroom | RoomUse::Corridor) {
+                230.0
+            } else {
+                250.0
+            };
             if what != RoomUse::Other && ceiling + 0.5 < min_ceiling {
                 self.push_ref(
                     Severity::Alerta,
@@ -1074,9 +1102,15 @@ impl Review<'_, '_> {
                     "nbr15575",
                 );
             }
-            // Daylight: 1/6 of the floor for rooms to stay, 1/8 elsewhere (codes vary).
+            // Daylight, state sanitary code (Decreto 12.342/78 art. 44): 1/5
+            // of the floor to work or study, 1/8 to sleep, live, cook, eat
+            // and wash, 1/10 elsewhere.
             if what != RoomUse::Other && what != RoomUse::Corridor {
-                let ratio = if what.long_stay() { 6.0 } else { 8.0 };
+                let ratio = match what {
+                    RoomUse::Office => 5.0,
+                    RoomUse::Laundry => 10.0,
+                    _ => 8.0,
+                };
                 if glass <= 0.0 {
                     let severity = if what.long_stay() {
                         Severity::Alerta
@@ -1094,7 +1128,7 @@ impl Review<'_, '_> {
                         Severity::Dica,
                         &label,
                         format!(
-                            "Janelas somam {} m² para {} m² de piso; o usual é 1/{ratio:.0} do piso: {} m² (confira o código de obras).",
+                            "Janelas somam {} m² para {} m² de piso; o Código Sanitário de SP pede 1/{ratio:.0} do piso: {} m², com metade abrindo para ventilar.",
                             m2(glass),
                             m2(area),
                             m2(area / ratio)
@@ -1127,7 +1161,9 @@ impl Review<'_, '_> {
                     (has(&|u| matches!(u, Use::Toilet)), "vaso sanitário"),
                     (has(&|u| matches!(u, Use::Basin)), "lavatório"),
                     (
-                        has(&|u| matches!(u, Use::Shower | Use::Bathtub)),
+                        // A lavabo takes no shower.
+                        label.to_lowercase().contains("lavabo")
+                            || has(&|u| matches!(u, Use::Shower | Use::Bathtub)),
                         "box ou banheira",
                     ),
                 ]
@@ -1233,33 +1269,37 @@ impl Review<'_, '_> {
                     stove.distance(fridge),
                 ];
                 let total: f64 = legs.iter().sum();
-                if total > 700.0 {
+                // NKBA guideline 3: the three legs sum to no more than 26 ft
+                // (792 cm), each between 4 and 9 ft (122–274 cm).
+                let short_leg = legs.iter().copied().fold(f64::MAX, f64::min);
+                let long_leg = legs.iter().copied().fold(0.0, f64::max);
+                if total > 792.0 || long_leg > 274.0 {
                     self.push_ref(
                         Severity::Dica,
                         &label,
                         format!(
-                            "Triângulo geladeira–pia–fogão de {} cm; acima de ~660 cm cozinhar vira caminhada: aproxime os três.",
-                            cm(total)
+                            "Triângulo geladeira–pia–fogão de {} cm, lado maior {} cm: a referência é até 792 cm no total e 274 cm por lado; aproxime os três.",
+                            cm(total),
+                            cm(long_leg)
                         ),
-                        "gilbreth-triangulo",
+                        "nkba",
                     );
-                } else if total < 330.0 {
+                } else if short_leg < 122.0 {
                     self.push_ref(
                         Severity::Dica,
                         &label,
                         format!(
-                            "Triângulo geladeira–pia–fogão de só {} cm: falta bancada entre eles para apoiar e preparar.",
-                            cm(total)
+                            "Triângulo geladeira–pia–fogão com um lado de só {} cm: a referência é ao menos 122 cm, para haver bancada de apoio entre eles.",
+                            cm(short_leg)
                         ),
-                        "gilbreth-triangulo",
+                        "nkba",
                     );
                 }
                 if sink.distance(stove) < 60.0 {
-                    self.push_ref(
+                    self.push(
                         Severity::Alerta,
                         &label,
-                        "Pia e fogão colados: deixe ao menos 60 cm de bancada entre eles para preparo e segurança.",
-                        "nkba",
+                        "Pia e fogão colados: deixe bancada entre eles para preparo e segurança (a NKBA soma 90 cm de apoio entre os dois).",
                     );
                 }
             }
@@ -1310,14 +1350,13 @@ impl Review<'_, '_> {
                 }
                 let (lo, hi) = u.piece.height_range();
                 if lo < 135.0 {
-                    self.push_ref(
+                    self.push(
                         Severity::Alerta,
                         u.label(),
                         format!(
-                            "Aéreo a {} cm do chão: abaixo de ~135 cm (45 cm sobre a bancada) a cabeça bate ao trabalhar.",
+                            "Aéreo a {} cm do chão: abaixo de ~135 cm (45 cm sobre a bancada, prática de marcenaria) a cabeça bate ao trabalhar.",
                             cm(lo)
                         ),
-                        "nkba",
                     );
                 }
                 if hi > reach + 30.0 {
@@ -1453,20 +1492,30 @@ impl Review<'_, '_> {
                         "nbr5410",
                     );
                 }
-                let above = space
+                // 9.5.2.2.1 b): two sockets over the sink worktop, "no mesmo
+                // ponto ou em pontos distintos" — a double outlet is two.
+                let above: u32 = space
                     .units
                     .iter()
                     .filter(|&&i| {
                         let u = &scene.units[i];
                         u.what == Use::Outlet && u.piece.elevation >= 90.0
                     })
-                    .count();
+                    .map(|&i| {
+                        scene.units[i]
+                            .piece
+                            .properties
+                            .get("elec:sockets")
+                            .and_then(|v| v.parse::<u32>().ok())
+                            .unwrap_or(1)
+                    })
+                    .sum();
                 if above < 2 {
                     self.push_ref(
                         Severity::Erro,
                         &label,
                         format!(
-                            "{above} tomada(s) acima da bancada: são exigidas pelo menos 2, e forno, cooktop elétrico e lava-louças pedem circuito próprio."
+                            "{above} tomada(s) acima da bancada: são exigidas pelo menos 2, no mesmo ponto (tomada dupla: elec:sockets = 2) ou em pontos distintos; forno, cooktop elétrico e lava-louças acima de 10 A pedem circuito próprio."
                         ),
                         "nbr5410",
                     );
@@ -1481,14 +1530,14 @@ impl Review<'_, '_> {
                         self.push_ref(
                             Severity::Erro,
                             &label,
-                            "Aparelho a gás em ambiente sem janela nem abertura permanente: a ventilação é obrigatória, e aqui é segurança, não conforto.",
-                            "nbr13103",
+                            "Aparelho a gás em ambiente sem janela nem abertura permanente: a ventilação permanente para o exterior é obrigatória (em São Paulo, Decreto 57.776, 3.M), e aqui é segurança, não conforto.",
+                            "coe-municipal",
                         );
                     } else {
                         self.push_ref(
-                            Severity::Dica,
+                            Severity::Alerta,
                             &label,
-                            "Aparelho a gás: confira a área de ventilação útil e as aberturas inferior e superior na edição vigente da norma — os valores mudaram entre edições.",
+                            "Aparelho a gás: janela que fecha não é ventilação permanente. Preveja abertura permanente direta para o exterior (veneziana ou grelha, inferior e superior), como pedem a norma de aparelhos a gás e, em São Paulo, o Decreto 57.776 (3.M).",
                             "nbr13103",
                         );
                     }
@@ -1519,10 +1568,10 @@ impl Review<'_, '_> {
                 let short = short_side(&space.room.points);
                 if short + 0.5 < MCMV_KITCHEN_WIDTH {
                     self.push_ref(
-                        Severity::Erro,
+                        Severity::Dica,
                         &label,
                         format!(
-                            "Cozinha de {} cm de largura; a unidade financiada mais modesta entrega {} cm, com previsão de pia 120×50, fogão 55×60 e geladeira 70×70 cm.",
+                            "Cozinha de {} cm de largura; para comparar, a unidade do Minha Casa Minha Vida (regra só para ela) entrega {} cm, com previsão de pia 120×50, fogão 55×60 e geladeira 70×70 cm.",
                             cm(short),
                             cm(MCMV_KITCHEN_WIDTH)
                         ),
@@ -1612,8 +1661,14 @@ impl Review<'_, '_> {
             if !matches!(u.what, Use::Switch | Use::Outlet) {
                 continue;
             }
+            // NBR 9050 4.6.9 fig. 26: switches 0,60–1,00 m, outlets 0,40–1,00 m.
             let center = u.piece.elevation + u.piece.height / 2.0;
-            if !(40.0..=120.0).contains(&center) {
+            let band = if u.what == Use::Switch {
+                60.0..=100.0
+            } else {
+                40.0..=100.0
+            };
+            if !band.contains(&center) {
                 wrong += 1;
             }
         }
@@ -1622,7 +1677,7 @@ impl Review<'_, '_> {
                 Severity::Alerta,
                 "Casa",
                 format!(
-                    "{wrong} interruptor(es)/tomada(s) fora da faixa de 40 a 120 cm de alcance de quem usa cadeira de rodas."
+                    "{wrong} interruptor(es)/tomada(s) fora do alcance de quem usa cadeira de rodas: interruptores entre 60 e 100 cm, tomadas entre 40 e 100 cm."
                 ),
                 "nbr9050",
             );
@@ -2307,6 +2362,66 @@ mod tests {
     }
 
     #[test]
+    fn heights_and_clearances_follow_the_norm_texts() {
+        // NBR 15575-1 16.1.1: a kitchen takes 2,50 m, a bathroom 2,30 m.
+        let mut kitchen = Home::default();
+        square(&mut kitchen, "Cozinha", 300.0, 300.0);
+        for w in &mut kitchen.walls {
+            w.height = 240.0;
+        }
+        let r = review(&kitchen, &Profile::default());
+        assert!(says(&r, Severity::Alerta, "o mínimo é 250 cm"), "{r:#?}");
+        let mut bath = Home::default();
+        square(&mut bath, "Banheiro", 200.0, 250.0);
+        for w in &mut bath.walls {
+            w.height = 240.0;
+        }
+        let r = review(&bath, &Profile::default());
+        assert!(!says(&r, Severity::Alerta, "Pé-direito"), "{r:#?}");
+
+        // NBR 9050 fig. 26: a switch at 110 cm is out of reach, an outlet at 90 is not.
+        let mut room = Home::default();
+        square(&mut room, "Sala", 400.0, 400.0);
+        let mut switch = piece(30, "switch", (10.0, 100.0), (8.0, 4.0, 12.0), 0.0);
+        switch.elevation = 104.0;
+        let mut outlet = piece(31, "outlet-mid", (10.0, 200.0), (8.0, 4.0, 12.0), 0.0);
+        outlet.elevation = 84.0;
+        room.furniture = vec![switch, outlet];
+        let wheel = Profile {
+            wheelchair: true,
+            ..Profile::default()
+        };
+        let r = review(&room, &wheel);
+        assert!(
+            says(&r, Severity::Alerta, "1 interruptor(es)/tomada(s)"),
+            "{r:#?}"
+        );
+
+        // NBR 15575-1 annex F: 40 cm in front of a toilet is enough.
+        let mut wc = Home::default();
+        square(&mut wc, "Banheiro", 200.0, 250.0);
+        wc.furniture.push(piece(
+            40,
+            "toilet",
+            (100.0, 7.5 + 31.5),
+            (40.0, 63.0, 40.0),
+            0.0,
+        ));
+        wc.furniture.push(piece(
+            41,
+            "base-cabinet",
+            (100.0, 7.5 + 63.0 + 45.0 + 30.0),
+            (60.0, 60.0, 90.0),
+            180.0,
+        ));
+        let r = review(&wc, &Profile::default());
+        assert!(
+            !r.findings.iter().any(|f| f.message.contains("uso do vaso")),
+            "45 cm free: {r:#?}"
+        );
+    }
+
+    #[test]
     fn a_project_point_named_after_the_fixture_it_serves_is_not_that_fixture() {
         let mut home = Home::default();
         square(&mut home, "Banho social", 200.0, 250.0);
@@ -2476,18 +2591,17 @@ mod tests {
             "{report:#?}"
         );
         // A gas appliance with no window at all is a safety problem.
-        assert!(cites(&report, Severity::Erro, "nbr13103"), "{report:#?}");
+        assert!(
+            cites(&report, Severity::Erro, "coe-municipal"),
+            "{report:#?}"
+        );
         // Cooking with nothing to capture what it releases.
         assert!(
             cites(&report, Severity::Alerta, "lbnl-coifa"),
             "{report:#?}"
         );
-        // The narrow kitchen: the figure comes from secondary material, so it
-        // warns instead of accusing, even though the rule asked for an error.
-        assert!(
-            cites(&report, Severity::Alerta, "caixa-mcmv"),
-            "{report:#?}"
-        );
+        // The narrow kitchen: MCMV binds only its own units, so it compares.
+        assert!(cites(&report, Severity::Dica, "caixa-mcmv"), "{report:#?}");
         // No city: the municipal circle is advice, not a verdict.
         assert!(
             cites(&report, Severity::Dica, "coe-municipal"),
@@ -2500,8 +2614,10 @@ mod tests {
         };
         let judged = review(&home, &paulista);
         assert!(
-            cites(&judged, Severity::Erro, "coe-municipal"),
-            "a kitchen 170 cm wide holds no 120 cm circle: {judged:#?}"
+            judged.findings.iter().any(|f| f.severity == Severity::Erro
+                && f.reference == Some("coe-municipal")
+                && f.message.contains("pede 150 cm")),
+            "a kitchen 170 cm wide holds no 150 cm circle: {judged:#?}"
         );
         assert!(
             judged.refs.iter().any(|r| r.code == "coe-municipal"),
@@ -2612,7 +2728,7 @@ mod tests {
         assert_eq!(
             got,
             vec![
-                (Severity::Erro, Some("nbr13103")),
+                (Severity::Alerta, Some("nbr13103")),
                 (Severity::Alerta, Some("caixa-mcmv")),
                 (Severity::Dica, Some("alexander184")),
             ],
@@ -2903,10 +3019,14 @@ mod tests {
             !says(&report, Severity::Alerta, "Cocção sem coifa"),
             "{report:#?}"
         );
-        // With an opening, the gas standard advises instead of accusing.
+        // With a window it still asks for a permanent opening, without
+        // accusing: a window that closes is not ventilation.
         assert!(
-            cites(&report, Severity::Dica, "nbr13103")
-                && !cites(&report, Severity::Erro, "nbr13103"),
+            cites(&report, Severity::Alerta, "nbr13103")
+                && !report
+                    .findings
+                    .iter()
+                    .any(|f| f.severity == Severity::Erro && f.message.contains("gás")),
             "{report:#?}"
         );
     }
