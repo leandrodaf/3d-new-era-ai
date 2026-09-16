@@ -59,7 +59,7 @@ pub(crate) struct ArrangeParams {
 #[tool_router(router = furniture_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Place catalog items: at=[x,y] center (doors/windows near a wall snap into it; into=[x,y] picks the swing side), or wall=id (+along cm) to put doors/windows in a wall or furniture against it. Sizes w/d/h override defaults; pitch/roll tilt; angle clockwise degrees (0: front faces +y, down the plan; back/headboard toward -y); mat finish (wood, marble, img:…; 'img:facade.png fit' stretches one image: a reference board to compare with render_3d view=front) and opacity (glass 0.3); defaults {…} fills every item; px=true reads coordinates as background pixels. cat=beam with a,b=[x,y,z] (z above the floor) and w×h section makes rafters, posts and braces; a beam reaching into a roof stops under it. Pools: pool or pool-oval. dry=true answers what it would do — what it would add, the clearances around it, the findings it would settle or create — without writing; dry=\"summary\" answers short."
+        description = "Place catalog items, or copy=<id> of a piece already in the project (its model — even one embedded from an old import —, finish and parts, the id catalog(scope=project) gives): at=[x,y] center (doors/windows near a wall snap into it; into=[x,y] picks the swing side), or wall=id (+along cm) to put doors/windows in a wall or furniture against it. Sizes w/d/h override defaults; pitch/roll tilt; angle clockwise degrees (0: front faces +y, down the plan; back/headboard toward -y); mat finish (wood, marble, img:…; 'img:facade.png fit' stretches one image: a reference board to compare with render_3d view=front) and opacity (glass 0.3); defaults {…} fills every item; px=true reads coordinates as background pixels. cat=beam with a,b=[x,y,z] (z above the floor) and w×h section makes rafters, posts and braces; a beam reaching into a roof stops under it. Pools: pool or pool-oval. dry=true answers what it would do — what it would add, the clearances around it, the findings it would settle or create — without writing; dry=\"summary\" answers short."
     )]
     pub(crate) fn place(
         &self,
@@ -247,6 +247,77 @@ mod tests {
 
     use crate::edit::CreateParams;
     use crate::tools::server;
+
+    #[test]
+    fn a_piece_in_the_project_is_copied_with_its_model_finish_and_parts() {
+        let s = server();
+        {
+            let mut doc = s.document.write();
+            // A crown moulding imported long ago: its file is no longer on disk.
+            let crown = newera_core::Furniture {
+                id: newera_core::FurnitureId(1),
+                catalog: "imported".into(),
+                name: "arremate de madeira".into(),
+                model: Some("51/crown.obj".into()),
+                texture: Some(newera_core::Material {
+                    color: Some([150, 110, 70]),
+                    ..newera_core::Material::default()
+                }),
+                position: newera_core::Point2::new(100.0, 10.0),
+                width: 200.0,
+                depth: 4.0,
+                height: 8.0,
+                elevation: 272.0,
+                ..newera_core::Furniture::default()
+            };
+            let part = |id: u64, x: f64| newera_core::Furniture {
+                id: newera_core::FurnitureId(id),
+                catalog: "box".into(),
+                name: format!("lateral {id}"),
+                position: newera_core::Point2::new(x, 100.0),
+                width: 2.0,
+                depth: 60.0,
+                height: 220.0,
+                ..newera_core::Furniture::default()
+            };
+            let mut tower = part(2, 30.0);
+            tower.name = "torre".into();
+            tower.width = 60.0;
+            tower.children = vec![part(3, 1.0), part(4, 59.0)];
+            doc.execute(newera_core::Command::Batch {
+                commands: vec![
+                    newera_core::Command::insert(crown),
+                    newera_core::Command::insert(tower),
+                ],
+            })
+            .unwrap();
+        }
+        let place = |json: &str| {
+            s.place(Parameters(serde_json::from_str(json).unwrap()))
+                .unwrap()
+        };
+        place(r#"{"items":[{"copy":"f1","at":[400,10],"w":120},{"copy":"f2","at":[330,100]}]}"#);
+        let doc = s.document.read();
+        let home = doc.home();
+        assert_eq!(home.furniture.len(), 4);
+        let crown = &home.furniture[2];
+        assert_ne!(crown.id.0, 1, "a new id");
+        assert_eq!(crown.model.as_deref(), Some("51/crown.obj"));
+        assert_eq!(crown.texture, home.furniture[0].texture, "the same finish");
+        assert!((crown.width - 120.0).abs() < 1e-9 && (crown.elevation - 272.0).abs() < 1e-9);
+        assert!((crown.position.x - 400.0).abs() < 1e-9);
+        let tower = &home.furniture[3];
+        let xs: Vec<f64> = tower.children.iter().map(|c| c.position.x).collect();
+        assert_eq!(xs, vec![301.0, 359.0], "the parts came along");
+        assert!(
+            tower.children.iter().all(|c| c.id.0 > 4),
+            "parts renumbered"
+        );
+        assert!(
+            (home.furniture[1].children[0].position.x - 1.0).abs() < 1e-9,
+            "original untouched"
+        );
+    }
 
     #[test]
     fn arrange_defaults_finishes_and_pixels() {

@@ -135,7 +135,9 @@ pub fn transformed(element: Element, t: Transform) -> Element {
     }
 }
 
-fn renumber_piece(doc: &mut Document, piece: &mut Furniture) {
+/// Gives a piece, and every piece inside it, fresh ids: what a copy needs
+/// before it can live next to its original.
+pub fn renumber_piece(doc: &mut Document, piece: &mut Furniture) {
     piece.id = doc.new_furniture_id();
     for child in &mut piece.children {
         renumber_piece(doc, child);

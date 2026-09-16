@@ -1496,6 +1496,11 @@ pub(crate) struct PlaceSpec {
     pub cat: String,
     /// Instead of `cat`: path of an .obj/.gltf/.glb model to import.
     pub model: Option<String>,
+    /// Instead of `cat`: id of a piece already in the project to copy —
+    /// its model (even one embedded from an old import), finish, size and
+    /// parts — to `at` or `wall`, with any size, angle or name given here
+    /// on top.
+    pub copy: Option<String>,
     /// Center on the plan. Optional when `wall` is given; a door or window
     /// placed `at` a point near a wall snaps into it.
     pub at: Option<Point2>,
@@ -1960,7 +1965,26 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
             commands.push(Command::insert(piece));
             continue;
         }
-        let mut piece = if let Some(model) = &spec.model {
+        let copied = match &spec.copy {
+            Some(raw) => {
+                let id: newera_core::FurnitureId = raw.parse().map_err(|e| format!("copy: {e}"))?;
+                let mut piece = doc
+                    .home()
+                    .find_piece(id)
+                    .ok_or_else(|| format!("copy: {raw} not found"))?
+                    .clone();
+                newera_core::arrange::renumber_piece(doc, &mut piece);
+                piece.level = None;
+                Some(piece)
+            }
+            None => None,
+        };
+        // The copy as it was, with its new ids: what its parts follow from.
+        let source = copied.clone();
+        let mut piece = if let Some(mut piece) = copied {
+            piece.position = spec.at.unwrap_or(piece.position);
+            piece
+        } else if let Some(model) = &spec.model {
             let path = doc.resolve_asset(model);
             let loaded = newera_catalog::load_model(&path)
                 .map_err(|e| format!("{}: {e}", path.display()))?;
@@ -2005,7 +2029,9 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
         if let Some(o) = spec.opacity {
             piece.opacity = (o < 1.0).then_some(o.clamp(0.0, 1.0));
         }
-        piece.mirrored = spec.mirror.unwrap_or(false);
+        piece.mirrored = spec
+            .mirror
+            .unwrap_or(source.as_ref().is_some_and(|s| s.mirrored));
         // Fixtures resized keep their panel matching the new size.
         if piece.light.is_some()
             && newera_catalog::find(&piece.catalog).is_some_and(|i| i.light.is_some())
@@ -2047,13 +2073,24 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
                     }
                 }
             }
-            (None, None) => return Err(format!("`{}` needs `at` or `wall`", spec.cat)),
+            (None, None) => {
+                return Err(format!(
+                    "`{}` needs `at` or `wall`",
+                    spec.copy.as_deref().unwrap_or(&spec.cat)
+                ));
+            }
         }
         if let Some(into) = spec.into {
             swing_into(&mut piece, into);
         }
         if let Some(angle) = spec.angle {
             piece.angle = angle;
+        }
+        // A copied group's parts follow its box to the new place and size.
+        if let Some(source) = &source
+            && piece.is_group()
+        {
+            piece.follow_group_change(source);
         }
         ids.push(piece.id.to_string());
         commands.push(Command::insert(piece));
