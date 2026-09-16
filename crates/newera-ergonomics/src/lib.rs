@@ -405,6 +405,39 @@ impl Review<'_, '_> {
         }
     }
 
+    /// What NBR 5410 asks of each room, brought into the score: a flat with
+    /// no outlet anywhere scored the same 99 as one fully wired, and
+    /// starting the project made the score drop before it rose. Only rooms of
+    /// a plan that is furnished are held to it, so a sketch is not; an
+    /// absence on purpose is accepted with its reason, by the same key the
+    /// electrical tool uses.
+    fn electrical(&mut self) {
+        let furnished = self
+            .scene
+            .home
+            .furniture
+            .iter()
+            .any(|f| !f.is_opening() && f.discipline.is_none());
+        if !furnished {
+            return;
+        }
+        for f in newera_core::electrical::check(self.scene.home) {
+            let severity = match f.severity {
+                newera_core::electrical::Severity::Erro => Severity::Alerta,
+                newera_core::electrical::Severity::Alerta
+                | newera_core::electrical::Severity::Dica => Severity::Dica,
+            };
+            self.findings.push(Finding {
+                severity,
+                place: f.place,
+                message: f.message,
+                reference: Some(f.source),
+                key: f.key,
+                ..Finding::default()
+            });
+        }
+    }
+
     /// Circulation around pieces: the informative annex of NBR 15575-1 (50 cm
     /// between furniture and walls, 85 cm in front of kitchen equipment) and
     /// common practice for the rest.
@@ -1976,6 +2009,7 @@ pub fn review(home: &Home, profile: &Profile) -> Report {
     review.kitchen();
     review.screens();
     review.reach();
+    review.electrical();
     // The same finding on a row of modules is one finding about all of them.
     let mut findings: Vec<Finding> = Vec::new();
     for f in review.findings {
@@ -1997,7 +2031,11 @@ pub fn review(home: &Home, profile: &Profile) -> Report {
     // Each finding gets the name it is accepted by, and the ones already
     // looked at carry the reason instead of the cost.
     for finding in &mut findings {
-        finding.key = key_of(finding);
+        // Findings brought from another check keep the key they are
+        // accepted by there.
+        if finding.key.is_empty() {
+            finding.key = key_of(finding);
+        }
         finding.accepted = home.accepted.get(&finding.key).cloned();
     }
     // Errors weigh fully; many alerts or tips of a crowded plan level off.
@@ -2433,14 +2471,25 @@ mod tests {
             (60.0, 62.0, 90.0),
             0.0,
         ));
+        // No outlet at all is the worst case, not a quiet one: the norm's
+        // outlets per metre are asked of a furnished kitchen anyway.
         let quiet = review(&home, &Profile::default());
+        let missing = quiet
+            .findings
+            .iter()
+            .find(|f| f.key.starts_with("elec:outlets:"))
+            .unwrap_or_else(|| panic!("{quiet:#?}"));
         assert!(
-            !quiet
-                .findings
-                .iter()
-                .any(|f| f.reference == Some("nbr5410")),
-            "{quiet:#?}"
+            missing.message.starts_with("0 de 4 tomadas"),
+            "{missing:#?}"
         );
+        // Accepted with its reason, it stops costing score.
+        let mut accepted = home.clone();
+        accepted.accepted.insert(
+            missing.key.clone(),
+            "projeto elétrico a cargo do condomínio".into(),
+        );
+        assert!(review(&accepted, &Profile::default()).score > quiet.score);
 
         let mut wired = home.clone();
         let mut socket = piece(22, "outlet-low", (40.0, 7.5), (10.0, 5.0, 10.0), 0.0);

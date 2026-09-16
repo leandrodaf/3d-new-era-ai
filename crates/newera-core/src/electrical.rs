@@ -520,10 +520,8 @@ pub fn check(home: &Home) -> Vec<Finding> {
             .filter(|p| p.room == Some(room) && p.kind == kind)
             .count()
     };
-    let any_electrical = !all.is_empty();
-    if !any_electrical {
-        return out;
-    }
+    // No point at all is the worst case, not a neutral one: every room is
+    // held to the norm whether its project was started or not.
     for room in view.rooms.iter().filter(|r| r.points.len() >= 3) {
         let place = if room.name.trim().is_empty() {
             room.id.to_string()
@@ -537,7 +535,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Erro,
                 place: place.clone(),
-                message: "Sem ponto de luz: a NBR 5410 pede ao menos um ponto de iluminação no teto de cada cômodo, comandado por interruptor.".into(),
+                message: "Sem ponto de luz: a norma pede ao menos um ponto de iluminação no teto de cada cômodo, comandado por interruptor.".into(),
                 source: "nbr5410",
             });
         }
@@ -570,7 +568,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Erro,
                 place: place.clone(),
-                message: format!("{have} de {needed} tomadas de uso geral: a NBR 5410 pede {why}."),
+                message: format!("{have} de {needed} tomadas de uso geral: a norma pede {why}."),
                 source: "nbr5410",
             });
         }
@@ -703,7 +701,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 severity: Severity::Erro,
                 place: format!("Circuito {}", circuit.name),
                 message:
-                    "Iluminação e tomadas no mesmo circuito: a NBR 5410 pede circuitos distintos."
+                    "Iluminação e tomadas no mesmo circuito: a norma pede circuitos distintos."
                         .into(),
                 source: "nbr5410",
             });
