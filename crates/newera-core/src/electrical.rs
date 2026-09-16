@@ -660,11 +660,25 @@ pub fn orphaned(home: &Home) -> Vec<(String, String)> {
         .collect()
 }
 
-/// The panel's main breaker suggested for the installed load, A, and that
-/// load's current: the smallest standard size over the total current at the
-/// supply voltage, with no demand factor — the utility's rules may allow a
-/// smaller one, never ask for less protection.
-pub fn main_breaker(home: &Home) -> Option<(u32, f64)> {
+/// The supply a panel asks the utility for.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct Supply {
+    /// 1 (monofásico), 2 (bifásico) or 3 (trifásico).
+    pub phases: u8,
+    /// The main breaker, A, per phase.
+    pub breaker_a: u32,
+    /// The installed load's current on each phase, balanced, A.
+    pub amps_per_phase: f64,
+    /// The installed load, VA.
+    pub va: f64,
+}
+
+/// The supply and main breaker suggested for the installed load, with no
+/// demand factor — the utility's rules may allow less, never ask for less
+/// protection. One phase up to 8 kVA with no 220 V circuit in a 127 V
+/// supply (a 220 V circuit there is between two phases); two up to 20 kVA;
+/// three above. Each utility sets its own limits: confirm with it.
+pub fn main_breaker(home: &Home) -> Option<Supply> {
     let circuits = circuits(home);
     if circuits.is_empty() {
         return None;
@@ -674,13 +688,27 @@ pub fn main_breaker(home: &Home) -> Option<(u32, f64)> {
         .get(VOLTAGE_KEY)
         .and_then(|v| v.parse::<f64>().ok())
         .unwrap_or(127.0);
-    let amps: f64 = circuits.iter().map(|c| c.va / supply.max(c.volts)).sum();
+    let va: f64 = circuits.iter().map(|c| c.va).sum();
+    let between_phases = supply < 200.0 && circuits.iter().any(|c| c.volts > supply + 1.0);
+    let phases: u8 = if va <= 8000.0 && !between_phases {
+        1
+    } else if va <= 20_000.0 {
+        2
+    } else {
+        3
+    };
+    let amps = va / (f64::from(phases) * supply);
     let breaker = BREAKERS
         .iter()
         .copied()
         .find(|b| f64::from(*b) >= amps)
         .unwrap_or(BREAKERS[BREAKERS.len() - 1]);
-    Some((breaker, (amps * 10.0).round() / 10.0))
+    Some(Supply {
+        phases,
+        breaker_a: breaker,
+        amps_per_phase: (amps * 10.0).round() / 10.0,
+        va,
+    })
 }
 
 /// Sorts `C2` before `C10`.
@@ -1195,9 +1223,25 @@ mod tests {
         assert_eq!(c2.volts, 220.0, "{all:#?}");
         let c1 = all.iter().find(|c| c.name == "C1").unwrap();
         assert_eq!(c1.volts, 127.0);
-        let (breaker, amps) = main_breaker(&home).unwrap();
-        assert!(amps > 4000.0 / 220.0, "{amps}");
-        assert!(f64::from(breaker) >= amps, "{breaker} A for {amps} A");
+        let supply = main_breaker(&home).unwrap();
+        assert_eq!(
+            supply.phases, 2,
+            "a 220 V circuit in a 127 V flat takes two phases: {supply:?}"
+        );
+        assert!(
+            f64::from(supply.breaker_a) >= supply.amps_per_phase,
+            "{supply:?}"
+        );
+        // A big load spreads over more phases instead of one huge breaker.
+        let mut big = home.clone();
+        for (k, f) in big.furniture.iter_mut().enumerate() {
+            if f.properties.contains_key(CIRCUIT_KEY) {
+                f.properties.insert(VA_KEY.into(), (12_000 + k).to_string());
+            }
+        }
+        let three = main_breaker(&big).unwrap();
+        assert_eq!(three.phases, 3, "{three:?}");
+        assert!(three.breaker_a <= 100, "{three:?}");
         assert!(main_breaker(&Home::default()).is_none());
     }
 }
