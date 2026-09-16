@@ -26,11 +26,14 @@ pub(crate) struct AnnotationParams {
     anchor: Option<bool>,
     /// Search label text, accent- and case-insensitive, e.g. `porta`.
     q: Option<String>,
-    /// Show engineering dimension chains.
+    /// Show engineering dimension chains (`auto_dimensions` in the project JSON).
+    #[serde(alias = "auto_dimensions")]
     dims: Option<bool>,
-    /// Show the room reference schedule and tags.
+    /// Show the room reference schedule and tags (`references` in the JSON).
+    #[serde(alias = "references")]
     refs: Option<bool>,
-    /// Include brand, model and link in references.
+    /// Include brand, model and link in references (`reference_details`).
+    #[serde(alias = "reference_details")]
     details: Option<bool>,
     /// Convert the automatic dimension chains into editable dimensions.
     bake: Option<bool>,
@@ -121,7 +124,7 @@ impl NewEraMcp {
         Ok(serde_json::json!({"active": home.active_discipline, "hidden": home.hidden_disciplines}).to_string())
     }
     #[tool(
-        description = "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first; one whose anchor died with a deleted piece is tied again to what it touches now, or else released (no anchor) instead of staying stale. q=<text> searches label text. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs), legend (symbol legend with counts); bake=true turns the automatic chains into editable dimensions (ids returned). Otherwise returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
+        description = "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first; one whose anchor died with a deleted piece is tied again to what it touches now, or else released (no anchor) instead of staying stale. q=<text> searches label text. Set any of dims (engineering dimension chains; auto_dimensions in the project JSON), refs (room reference schedule with tags; references), details (brand/model/link in refs; reference_details), legend (symbol legend with counts): a switch answers with the modes, changed, and what it shows — chains [[from,to,cm]] for dims, symbols {discipline:[[name,count]]} for legend — not the schedule; refs=true, or no switch at all, returns {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. bake=true turns the automatic chains into editable dimensions (ids returned). Give pieces brand/model/url via update."
     )]
     pub(crate) fn annotations(
         &self,
@@ -238,14 +241,81 @@ impl NewEraMcp {
             doc.execute(Command::Batch { commands }).map_err(core)?;
             return Ok(ok(&doc, &ids));
         }
-        let mut next = doc.home().annotations;
+        let was = doc.home().annotations;
+        let mut next = was;
         next.auto_dimensions = p.dims.unwrap_or(next.auto_dimensions);
         next.references = p.refs.unwrap_or(next.references);
         next.reference_details = p.details.unwrap_or(next.reference_details);
         next.legend = p.legend.unwrap_or(next.legend);
-        if next != doc.home().annotations {
+        if next != was {
             doc.execute(Command::SetAnnotations { annotations: next })
                 .map_err(core)?;
+        }
+        let modes = serde_json::json!({
+            "rev": doc.revision(),
+            "dims": next.auto_dimensions,
+            "refs": next.references,
+            "details": next.reference_details,
+            "legend": next.legend,
+        });
+        // Switching a mode answers with the switch and what that mode shows,
+        // not with the whole schedule every time: three switches used to cost
+        // the same 126-row list three times, and none showed what was asked.
+        let switched = p.dims.is_some() || p.legend.is_some() || p.details.is_some();
+        if switched && p.refs != Some(true) {
+            let mut out = modes;
+            let changed: Vec<&str> = [
+                ("dims", was.auto_dimensions != next.auto_dimensions),
+                ("refs", was.references != next.references),
+                ("details", was.reference_details != next.reference_details),
+                ("legend", was.legend != next.legend),
+            ]
+            .into_iter()
+            .filter_map(|(name, moved)| moved.then_some(name))
+            .collect();
+            out["changed"] = serde_json::json!(changed);
+            let view = doc.home().level_view(doc.home().current_level());
+            if p.dims == Some(true) {
+                // The chains the plan now draws: [from, to, cm].
+                let chains: Vec<serde_json::Value> = newera_core::auto_dimensions(&view)
+                    .iter()
+                    .map(|d| {
+                        serde_json::json!([
+                            compact::point(d.start),
+                            compact::point(d.end),
+                            compact::num(d.length())
+                        ])
+                    })
+                    .collect();
+                out["chains"] = serde_json::json!(chains);
+            }
+            if p.legend == Some(true) {
+                // The symbols the legend counts: [name, count] per discipline.
+                let mut legend = serde_json::Map::new();
+                for d in newera_core::Discipline::ALL {
+                    let mut counts: std::collections::BTreeMap<String, usize> =
+                        std::collections::BTreeMap::new();
+                    for top in &view.furniture {
+                        for piece in top.flatten() {
+                            if piece.discipline.or(top.discipline) == Some(d) {
+                                *counts.entry(piece.name.clone()).or_default() += 1;
+                            }
+                        }
+                    }
+                    if !counts.is_empty() {
+                        let key = serde_json::to_value(d)
+                            .ok()
+                            .and_then(|v| v.as_str().map(str::to_owned))
+                            .unwrap_or_default();
+                        legend.insert(
+                            key,
+                            serde_json::json!(counts.into_iter().collect::<Vec<_>>()),
+                        );
+                    }
+                }
+                out["symbols"] = serde_json::Value::Object(legend);
+            }
+            return Ok(out.to_string());
         }
         let view = doc.home().level_view(doc.home().current_level());
         let rooms: Vec<serde_json::Value> = newera_core::room_references(&view)
@@ -275,15 +345,9 @@ impl NewEraMcp {
                 serde_json::json!([g.name, items])
             })
             .collect();
-        Ok(serde_json::json!({
-            "rev": doc.revision(),
-            "dims": next.auto_dimensions,
-            "refs": next.references,
-            "details": next.reference_details,
-            "legend": next.legend,
-            "rooms": rooms,
-        })
-        .to_string())
+        let mut out = modes;
+        out["rooms"] = serde_json::json!(rooms);
+        Ok(out.to_string())
     }
 }
 
@@ -864,6 +928,69 @@ mod tests {
                 .iter()
                 .any(|r| r[0] == "t6"),
             "{stale}"
+        );
+    }
+
+    #[test]
+    fn a_mode_switch_answers_with_what_it_shows_not_the_schedule() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}],"rooms":[{"name":"Sala","at":[200,150]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(r#"{"items":[{"cat":"sofa-3","at":[200,200]}]}"#).unwrap(),
+        ))
+        .unwrap();
+        s.disciplines(Parameters(DisciplineParams {
+            action: Some("select".into()),
+            d: Some("electrical".into()),
+        }))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"outlet-low","at":[10,10]},{"cat":"outlet-low","at":[60,10]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let annotations = |json: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.annotations(Parameters(serde_json::from_str(json).unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+
+        let legend = annotations(r#"{"legend":true}"#);
+        assert!(legend.get("rooms").is_none(), "no schedule: {legend}");
+        assert_eq!(legend["changed"], serde_json::json!(["legend"]), "{legend}");
+        assert_eq!(
+            legend["symbols"]["electrical"],
+            serde_json::json!([["Tomada baixa (30 cm)", 2]]),
+            "{legend}"
+        );
+
+        // The project JSON's name works as well as the MCP's.
+        let dims = annotations(r#"{"auto_dimensions":true}"#);
+        assert!(dims.get("rooms").is_none(), "{dims}");
+        assert_eq!(dims["dims"], true, "{dims}");
+        assert!(
+            !dims["chains"].as_array().unwrap().is_empty(),
+            "the chains drawn: {dims}"
+        );
+
+        // Asked for, the schedule comes.
+        let refs = annotations(r#"{"references":true}"#);
+        assert!(refs["rooms"].is_array(), "{refs}");
+        let again = annotations(r#"{"legend":true}"#);
+        assert_eq!(
+            again["changed"],
+            serde_json::json!([]),
+            "nothing moved: {again}"
         );
     }
 
