@@ -9,159 +9,17 @@ antes de levar à certa, o caso é anotado aqui com o que aconteceu de fato.
 
 Não é uma lista de desejos. Cada entrada traz o que se tentou, o que voltou, e
 o que teria encurtado o caminho — com o caso concreto que o produziu, para que
-se possa reproduzir.
+se possa reproduzir. Tudo é anotado aqui, à mão.
 
-Este arquivo é o registro: tudo é anotado aqui, à mão, com o caso inteiro.
+O banco de provas é a mesma planta desde o começo: um apartamento de 65 m² com
+marcenaria desenhada módulo a módulo, hoje com projeto elétrico e hidráulico
+completos, nota 99 e zero colisões.
 
 ## Rodada em aberto
 
-Projeto elétrico e hidráulico montados do zero na mesma planta: 22 tomadas,
-21 pontos de luz dimensionados, 4 de rede, 3 de TV, dois quadros, 7 circuitos
-pela NBR 5410 e 58 m de cabo; depois 27 pontos hidráulicos e 8 ramais. Os casos
-abaixo saíram do que foi preciso fazer para chegar lá.
-
-## 36. O cômodo é classificado pelo nome, e "Banho suíte" vira dormitório
-
-Com o projeto elétrico completo, sobravam dois findings, os dois no banheiro da
-suíte — 3,12 m², com box, vaso e lavatório:
-
-```
-["alerta","Banho suíte r41","Sem ponto de rede: um cômodo de permanência
-  pede ao menos uma tomada RJ45 …","nbr14565"]
-["dica","Banho suíte r41","Sem ponto de TV: salas e dormitórios costumam
-  ter um ponto coaxial junto ao rack ou à parede da cama.","nbr14565"]
-```
-
-O `Banho social`, mesma função e mobiliário, nunca recebeu nenhum dos dois. A
-diferença entre os dois cômodos é a palavra "suíte" no nome. Provado trocando
-só isso:
-
-```
-update(items=[{"id": "r41", "name": "Banheiro 2"}])
-electrical(check) → findings: []
-```
-
-Nada mais mudou — nem geometria, nem ponto, nem peça. O nome voltou a ser
-"Banho suíte", que é o certo e é o que aparece no schedule e nas cotas, e os
-dois findings voltaram com ele.
-
-**Reproduzir:** os dois comandos acima, num banheiro cujo nome contenha
-"suíte".
-
-**Deveria:** classificar pela função — vaso, box ou lavatório fazem um
-banheiro, mesmo com "suíte" no nome. Mantendo que a suíte de dormir (`r39`,
-"Suíte") continue pedindo rede e TV, que é o caso certo.
-
-## 37. Planta sem tomada nenhuma tira a mesma nota da planta completa
-
-Acompanhando o score enquanto o projeto elétrico era montado:
-
-| estado | tomadas | score |
-|---|---|---|
-| como estava | 0 em 10 cômodos | **99** |
-| meio caminho | 10, cozinha ainda vazia | **75** |
-| completo | 22 | **99** |
-
-O pior estado dos três — nenhuma tomada em lugar nenhum — empata com o melhor.
-E a etapa intermediária, que já tinha metade do trabalho feito, é a única
-punida: começar o projeto elétrico **piora** a nota antes de melhorar.
-
-As regras de tomada só acordam quando existe ao menos uma no projeto; com
-contagem zero o cômodo passa em branco. A planta atravessou várias rodadas de
-revisão com 99 e sem uma tomada sequer, e nada no `ergonomics` levantou a mão —
-quem apontava era o `electrical(check)`, que é preciso saber que existe.
-
-**Reproduzir:** `ergonomics` numa planta sem pontos de tomada; depois
-acrescentar tomadas em parte dos cômodos e rodar de novo.
-
-**Deveria:** a contagem zero valer como o caso pior, não como neutro. Quando a
-ausência for proposital, o caminho é o `accept` com o motivo, como nos demais.
-
-
-<!--
-  Modelo de uma entrada:
-
-  ## N. Título que diz o que dói
-
-  O caso, com os números e a resposta que voltou.
-
-  ```
-  a resposta literal, quando ela é a prova
-  ```
-
-  Por que custou caro, e o que se fez para contornar.
-
-  **Reproduzir:** o comando.
-  **Deveria:** a mudança que teria evitado o contorno.
--->
-
-## 38. O quantitativo não agrupa: 31 linhas de "1"
-
-Com o projeto elétrico pronto, o levantamento para a lista de compras:
-
-```
-disciplines(action="quantities")
-→ ["Tomada — cozinha, sobre a bancada (centro)", 1]
-  ["Tomada — cozinha, sobre a bancada (direita)", 1]
-  ["Tomada — dormitório, cabeceira", 1]
-  …  31 linhas, todas com contagem 1
-```
-
-O agrupamento é pelo **nome** da peça. Como cada ponto tem nome descritivo do
-lugar onde fica — que é o que serve ao eletricista na obra —, nada agrupa. O
-mesmo acontece em `annotations(legend=true)`, que repete as 31 linhas.
-
-O dado certo existe e sai no mesmo instante, da outra ferramenta:
-
-```
-electrical(check) → points: {"Iluminação":21, "TUG":22, "Rede":4, "TV":3}
-```
-
-O incentivo fica invertido: para o `quantities` funcionar seria preciso dar o
-mesmo nome genérico a todas as tomadas, perdendo a indicação de onde cada uma
-vai.
-
-**Reproduzir:** `disciplines(action="quantities")` numa planta cujos pontos
-tenham nomes próprios.
-
-**Deveria:** agrupar por catálogo (`outlet-low`, `outlet-mid`,
-`network-outlet`…), com o nome como detalhe da linha.
-
-## 39. As luminárias vieram sem fluxo, e só a photometria conta
-
-As 21 luminárias da planta — as mesmas que o `electrical` conta como pontos de
-iluminação e distribui nos circuitos C1 e C2 — estavam **sem potência nenhuma**:
-
-```
-f870  Cozinha — geral        light: {lm: None, w: None, lamp: None}
-f865  Escritório — geral     light: {lm: None, w: None, lamp: None}
-…  todas as 21
-```
-
-O resultado, pela NBR ISO/CIE 8995-1:
-
-```
-lighting() → Escritório  24 lx (referência 500)  "abaixo: faltam 476 lx"
-             Cozinha     19 lx (referência 300)  "abaixo: faltam 281 lx"
-             Dormitório  15 lx (referência 150)  "abaixo: faltam 135 lx"
-```
-
-Dez cômodos, dez vezes "abaixo". A casa inteira com 5.184 lm, quando precisa de
-uns 34.000.
-
-E o `ergonomics` dava 99 o tempo todo. É o mesmo padrão do caso 37 com as
-tomadas: a ferramenta específica aponta, o score não reflete, e quem não sabe
-que `lighting` existe entrega a planta assim. Aqui é pior que no 37, porque
-lá o buraco era não ter ponto nenhum; aqui os pontos existem, estão desenhados,
-contados e distribuídos em circuito — só não iluminam.
-
-**Reproduzir:** `lighting()` numa planta cujas luminárias não tenham `lm` nem
-`w` definidos.
-
-**Deveria:** luminária sem fluxo entrar no relatório como pendência, no mesmo
-lugar em que o cômodo sem porta agora entra (`no_door`). Ou o catálogo trazer
-um fluxo padrão por tipo de peça, para que um ponto de luz recém-colocado já
-ilumine algo plausível.
+Três casos, todos da montagem do elétrico e do hidráulico. São de esforço, não
+de resultado: o que se pediu saiu certo, mas custou mais chamadas do que a
+intenção tinha.
 
 ## 40. Cabear é digitar coordenada por coordenada
 
@@ -196,25 +54,6 @@ o percurso com a folga das descidas.
 um ao seu quadro. Mantendo a polilinha à mão para quando o percurso é imposto
 por shaft, viga ou forro.
 
-## 41. `electrical` não tem `accept`, e o projeto não fecha
-
-`ergonomics` e `check_layout` têm `accept=[[key, motivo]]`: o achado continua
-visível com a razão escrita, para de custar nota, e `orphaned` avisa quando a
-razão deixa de valer. Foi assim que esta planta chegou a 99 honestamente.
-
-`electrical` não tem. Os dois findings do Banho suíte — que são o caso 36, um
-banheiro classificado como cômodo de permanência por causa da palavra "suíte"
-no nome — voltam em toda chamada, sem `key` e sem onde registrar que já foram
-analisados.
-
-O projeto elétrico não fecha limpo, e quem abrir a planta daqui a seis meses
-reinvestiga do zero: não há onde dizer que o motivo é um bug de classificação,
-nem que a alternativa seria renomear um cômodo cujo nome está certo.
-
-**Reproduzir:** qualquer finding do `electrical` que não se queira corrigir.
-
-**Deveria:** `accept` com `key` e `orphaned`, igual às outras duas.
-
 ## 42. Um circuito por chamada
 
 `electrical(action="assign")` recebe `ids` e um `circuit`. Os 7 circuitos do
@@ -227,40 +66,6 @@ Ninguém atribui um circuito hoje e outro semana que vem.
 
 **Deveria:** aceitar um mapa — `{"C1": [...], "C2": [...]}` — numa chamada, um
 passo de undo.
-
-## 43. Ponto de projeto é avaliado como a louça que ele serve
-
-Lançando os 27 pontos hidráulicos com o nome do aparelho que cada um serve,
-como se faz em projeto:
-
-```
-place(cat="sewer", at=[126,468], name="Esgoto — vaso banho social")
-→ ["alerta","Esgoto — vaso banho social f1589",
-   "17 cm livres à frente (uso do vaso: mínimo 60 cm); afaste 43 cm."]
-```
-
-Seis findings desses de uma vez, e o score de 99 para 69. Um ponto de esgoto de
-10 × 10 × 5 cm sendo cobrado por circulação de vaso sanitário — ele fica
-justamente atrás do aparelho, que é onde deve ficar.
-
-Provado trocando só o nome, mesma peça e mesmo lugar:
-
-```
-place(cat="sewer", at=[126,468], name="ES-01")   → nenhum finding
-```
-
-É o mesmo mecanismo do "Banho suíte" que vira dormitório: a regra lê o nome. O
-catálogo (`sewer`, `cold-water`, `floor-drain`) já diz o que a peça é.
-
-**O custo foi a nomenclatura.** Tive que abandonar os nomes descritivos e usar
-código e ambiente — `AF-01 — banho social`, `ES-05 — cozinha`. Num banheiro com
-três pontos de água fria, "AF-04, AF-05, AF-06 — banho suíte" não diz qual é do
-vaso, qual do lavatório e qual do chuveiro. É o que o instalador lê na obra.
-
-**Reproduzir:** qualquer ponto de disciplina cujo nome cite a louça que serve.
-
-**Deveria:** peça de catálogo de disciplina não entrar nas regras de circulação
-e uso de móvel. O catálogo tem precedência sobre o nome.
 
 ## 44. A hidráulica não tem quem confira
 
@@ -287,33 +92,33 @@ citada pelo `ergonomics`.
 
 ---
 
-## Conferidos na planta real
+## Conferido nesta rodada
 
-Os dois que restavam foram conferidos com o app instalado, sobre uma cópia da
-planta de 65 m² tirada da sessão aberta, com os mesmos comandos do relato:
+Cada um testado na planta, com o comando que o reproduzia.
 
-| # | O que doía | Resultado |
+| # | O que doía | Como está agora |
 |---|---|---|
-| 32 | Cômodo sem porta não entrava em relatório nenhum | Com as portas: `no_door` vazio, nota 99. `delete` da porta do dormitório (`f1546`): `no_door: Dormitório`, `ergonomics` com erro "Sem acesso", nota 87. (`3f63d0e`) |
-| 34 | `hinge_right` respondia ok e parecia não fazer nada | A porta já tinha `hinge_right: true`. Pedir o mesmo valor agora responde `unchanged` com o valor atual, no dry e aplicado; pedir o oposto mostra `true → false`. (`e82752e`, e o `false` explícito no diff) |
+| 36 | "Banho suíte" virava dormitório e pedia rede e TV num banheiro de 3 m² | `electrical(check)` → `findings: []`, com o cômodo ainda chamado "Banho suíte" |
+| 37 | Planta sem tomada nenhuma tirava 99, a mesma nota da completa | Apagadas as 22 tomadas: score **67** e nove findings, um por cômodo. Restaurado por checkpoint: 99 |
+| 38 | Quantitativo agrupava por nome: 31 linhas de "1" | Agrupa por tipo **e** lista os nomes: `["Tomada baixa (30 cm)", 13, [...]]`, `["Ponto de água fria", 10, [...]]` |
+| 39 | Luminária nascia sem `lm`, `w` nem `lamp` | `place(cat="light-ceiling")` já vem com `{lumens: 1000, lamp: "led", kelvin: 3000, watts: 10}` |
+| 41 | `electrical` não tinha `accept`, e o projeto não fechava | Os findings trazem chave (`elec:outlets:r46`), e o check reporta `pending` e `orphaned` |
+| 43 | Ponto de projeto era cobrado como a louça que servia | `place(cat="sewer", name="Esgoto — vaso banho social")` → nenhum finding. Os 27 pontos voltaram a ter nome descritivo |
 
-Os que não se reproduziam também têm resposta no código: o `fix` que tirava a
-lava-louças do nicho não é mais oferecido quando a peça perde o encosto do
-nicho (`187cf25`); e toda escrita, dry run, undo e lote pelo REST nomeiam
-mudanças nas anotações e nas properties (`afc3d42`).
-
-Nenhum caso aberto. A próxima rodada começa em "Rodada em aberto".
+O 43 tinha um custo que também foi desfeito: a nomenclatura da hidráulica havia
+sido reduzida a código e ambiente para calar os findings. Agora cada ponto diz o
+aparelho que serve — `AF-05 — lavatório, banho suíte`, `ES-06 — lava-louças,
+cozinha` —, que é o que o instalador lê na obra.
 
 ## O que já caiu
 
-Trinta e dois casos, todos verificados em uso na mesma planta de 65 m², não no
-changelog. A lista com o que doía em cada um e onde foi resolvido está em
-`git show 87083ec:docs/ATRITOS-DE-USO.md`.
+Quarenta casos, todos verificados em uso na mesma planta, não no changelog. A
+lista com o que doía em cada um e onde foi resolvido está no histórico do git.
 
 Os que mais mudaram o trabalho: a folga negativa no lugar do `0` ambíguo; a
 extensão junto da folga (`"54 cm em 34,5 dos 185 cm"`), que separa um móvel
 inutilizável de um canto apertado; o `ergonomics` medindo pelo lado em que a
 peça abre; o `cut_list` alcançando o que foi desenhado à mão e declarando o que
-pulou; o grupo que mantém a espessura das chapas e faz crescer o vão; e o
-número da peça preso à peça, que era o mais sério para quem recebe a prancha na
-obra.
+pulou; o grupo que mantém a espessura das chapas e faz crescer o vão; o número
+da peça preso à peça; o `no_door` para cômodo sem acesso; e agora o quantitativo
+agrupado por tipo e o ponto de disciplina que deixou de ser lido como móvel.
