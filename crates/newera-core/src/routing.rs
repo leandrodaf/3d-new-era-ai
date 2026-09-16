@@ -94,6 +94,9 @@ impl Route {
     }
 }
 
+/// How close under the slab a point is on the ceiling, cm.
+const ON_CEILING: f64 = 50.0;
+
 /// How far a point may be from a wall and still be in it, cm.
 const IN_WALL: f64 = 60.0;
 
@@ -378,16 +381,19 @@ pub fn lay_out(home: &Home, source: Terminal, points: &[Terminal], via: Via, sto
     }
     // A point passed on the way to another is a branch; so is a split.
     let branches: usize = degrees.iter().map(|d| d.saturating_sub(1)).sum();
-    let impossible = if via == Via::Wall {
-        terminals
-            .iter()
-            .zip(&graph.in_wall)
-            .filter(|(_, meets)| !**meets)
-            .map(|(t, _)| *t)
-            .collect()
-    } else {
-        Vec::new()
-    };
+    // Inside a wall every point must be in one; from the ceiling a point
+    // drops inside a wall unless it is on the ceiling itself (a light). Under
+    // the floor a point rises anywhere: an island's sink, a floor outlet.
+    let impossible = terminals
+        .iter()
+        .zip(&graph.in_wall)
+        .filter(|(t, meets)| match via {
+            Via::Wall => !**meets,
+            Via::Ceiling => !**meets && t.z < storey - ON_CEILING,
+            Via::Floor => false,
+        })
+        .map(|(t, _)| *t)
+        .collect();
     Route {
         impossible,
         paths,
@@ -501,6 +507,30 @@ mod tests {
         let star: f64 = points.iter().map(|p| p.at.distance(source.at)).sum();
         assert!(route.horizontal < star, "{route:?}");
         assert_eq!(route.degrees.iter().sum::<usize>(), 6);
+    }
+
+    #[test]
+    fn from_the_ceiling_a_low_point_in_no_wall_cannot_be_reached_but_a_light_can() {
+        let home = room();
+        let source = t(1, 0.0, 150.0, 150.0);
+        let island_sink = t(2, 200.0, 150.0, 60.0);
+        let ceiling = lay_out(&home, source, &[island_sink], Via::Ceiling, 280.0);
+        assert_eq!(
+            ceiling.impossible.len(),
+            1,
+            "no wall to drop in: {ceiling:?}"
+        );
+        let floor = lay_out(&home, source, &[island_sink], Via::Floor, 280.0);
+        assert!(
+            floor.impossible.is_empty(),
+            "it rises from the floor: {floor:?}"
+        );
+        let light = t(3, 200.0, 150.0, 270.0);
+        assert!(
+            lay_out(&home, source, &[light], Via::Ceiling, 280.0)
+                .impossible
+                .is_empty()
+        );
     }
 
     #[test]
