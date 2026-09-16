@@ -77,6 +77,10 @@ pub struct Route {
     pub terminals: Vec<Terminal>,
     /// How many links each terminal has in the tree.
     pub degrees: Vec<usize>,
+    /// The length from the source to each terminal along the tree, drops
+    /// and stubs included, cm (0 for the source): what a cable run in star
+    /// — network, TV, one cable from the rack to each point — takes.
+    pub reach: Vec<f64>,
     /// Terminals the premise cannot reach as asked: a point to be run along
     /// the walls that stands in no wall. A run through them would be drawn
     /// across a room — not a run anyone can build — so it is said instead.
@@ -321,8 +325,10 @@ pub fn lay_out(home: &Home, source: Terminal, points: &[Terminal], via: Via, sto
     let mut in_tree = vec![false; n];
     in_tree[0] = true;
     let mut degrees: Vec<usize> = vec![0; n];
+    let mut along = vec![0.0; n];
     let mut paths = Vec::new();
     let mut horizontal = 0.0;
+    let mut wall_rise = 0.0;
     let mut bends = 0;
     for _ in 1..n {
         let Some((i, j)) = (0..n)
@@ -333,6 +339,12 @@ pub fn lay_out(home: &Home, source: Terminal, points: &[Terminal], via: Via, sto
             break;
         };
         in_tree[j] = true;
+        along[j] = along[i] + cost[i][j].0;
+        if via == Via::Wall {
+            // Inside the wall the run climbs or drops between the boxes' heights.
+            along[j] += (terminals[i].z - terminals[j].z).abs();
+            wall_rise += (terminals[i].z - terminals[j].z).abs();
+        }
         degrees[i] += 1;
         degrees[j] += 1;
         horizontal += cost[i][j].0;
@@ -343,14 +355,23 @@ pub fn lay_out(home: &Home, source: Terminal, points: &[Terminal], via: Via, sto
     for (k, t) in terminals.iter().enumerate() {
         horizontal += graph.nodes[graph.attach[k]].distance(t.at);
     }
-    let vertical: f64 = terminals
-        .iter()
-        .map(|t| match via {
-            Via::Ceiling => (storey - t.z).max(0.0),
-            Via::Floor => t.z.max(0.0),
-            Via::Wall => 0.0,
+    let drop = |t: &Terminal| match via {
+        Via::Ceiling => (storey - t.z).max(0.0),
+        Via::Floor => t.z.max(0.0),
+        Via::Wall => 0.0,
+    };
+    let vertical: f64 = terminals.iter().map(drop).sum::<f64>() + wall_rise;
+    let stub = |k: usize| graph.nodes[graph.attach[k]].distance(terminals[k].at);
+    let reach: Vec<f64> = (0..n)
+        .map(|k| {
+            if k == 0 {
+                0.0
+            } else {
+                let cm = along[k] + stub(0) + stub(k) + drop(&terminals[0]) + drop(&terminals[k]);
+                (cm * 10.0).round() / 10.0
+            }
         })
-        .sum();
+        .collect();
     // Every drop or rise turns from the slab or the floor into the wall.
     if via != Via::Wall {
         bends += terminals.len();
@@ -376,6 +397,7 @@ pub fn lay_out(home: &Home, source: Terminal, points: &[Terminal], via: Via, sto
         branches,
         terminals,
         degrees,
+        reach,
     }
 }
 
@@ -417,7 +439,10 @@ mod tests {
         // Down the left wall: 50 + 300 + 50 = 400 cm, never the 300 cm across.
         assert!((wall.horizontal - 400.0).abs() < 0.5, "{wall:?}");
         assert!(wall.bends >= 2, "two corners: {wall:?}");
-        assert!(wall.vertical.abs() < 1e-9);
+        assert!(
+            (wall.vertical - 120.0).abs() < 1e-9,
+            "inside the wall it drops from the panel to the outlet: {wall:?}"
+        );
 
         // Through the ceiling: straight 300 cm, and the drops to both boxes.
         let ceiling = lay_out(&home, source, &[outlet], Via::Ceiling, 280.0);
@@ -476,5 +501,36 @@ mod tests {
         let star: f64 = points.iter().map(|p| p.at.distance(source.at)).sum();
         assert!(route.horizontal < star, "{route:?}");
         assert_eq!(route.degrees.iter().sum::<usize>(), 6);
+    }
+
+    #[test]
+    fn a_star_cable_runs_whole_to_each_point_and_a_wall_run_climbs_between_boxes() {
+        let home = room();
+        let source = t(1, 0.0, 150.0, 150.0);
+        let near = t(2, 100.0, 0.0, 30.0);
+        let far = t(3, 300.0, 0.0, 30.0);
+        let route = lay_out(&home, source, &[near, far], Via::Ceiling, 280.0);
+        assert!(route.reach[0].abs() < 1e-9);
+        // The far point is reached through the near one: its cable is longer
+        // than the tree's link to it, and than the near point's cable.
+        assert!(route.reach[2] > route.reach[1], "{route:?}");
+        let tree = route.length();
+        let star: f64 = route.reach.iter().sum();
+        assert!(
+            star > tree,
+            "two whole cables take more than the shared trunk: {route:?}"
+        );
+
+        let wall = lay_out(
+            &home,
+            t(1, 0.0, 150.0, 150.0),
+            &[t(2, 0.0, 250.0, 30.0)],
+            Via::Wall,
+            280.0,
+        );
+        assert!(
+            (wall.vertical - 120.0).abs() < 1e-9,
+            "from 150 cm down to 30 cm: {wall:?}"
+        );
     }
 }

@@ -20,6 +20,9 @@ use crate::style::Discipline;
 pub const CIRCUIT_KEY: &str = "elec:circuit";
 /// Where a point keeps its power, VA, when it is not the default.
 pub const VA_KEY: &str = "elec:va";
+/// Where a point keeps its voltage, V, when it is not the supply's: a 220 V
+/// outlet in a 127 V flat.
+pub const VOLTS_KEY: &str = "elec:volts";
 /// Where the project keeps its supply voltage, V (default 127).
 pub const VOLTAGE_KEY: &str = "elec:voltage";
 
@@ -239,28 +242,197 @@ pub fn cable_of(line: &crate::style::Polyline) -> Option<Cable> {
     line.properties.get(CABLE_KEY).and_then(|k| Cable::parse(k))
 }
 
+/// Where a laid-out run keeps its full length, cm — horizontal and vertical,
+/// stubs and drops — on the polylines that draw it, and the name that groups
+/// them.
+pub const RUN_KEY: &str = "elec:run";
+pub const RUN_CM_KEY: &str = "elec:run_cm";
+
 /// Length of every run by what it carries, m — the list that goes to the
-/// purchase, with a tenth added for the drops into the boxes.
+/// purchase. A laid-out run counts its real length, drops to every box
+/// included; a line drawn by hand counts its plan length with a tenth added
+/// for the drops.
 pub fn cable_lengths(home: &Home) -> Vec<(Cable, f64)> {
     let view = home.level_view(home.current_level());
     Cable::ALL
         .into_iter()
         .map(|cable| {
-            let cm: f64 = view
-                .polylines
-                .iter()
-                .filter(|l| cable_of(l) == Some(cable))
-                .map(|l| {
-                    l.points
-                        .windows(2)
-                        .map(|w| w[0].distance(w[1]))
-                        .sum::<f64>()
-                })
-                .sum();
-            (cable, (cm / 100.0 * 1.1 * 10.0).round() / 10.0)
+            let mut routed: std::collections::BTreeMap<String, f64> =
+                std::collections::BTreeMap::new();
+            let mut drawn = 0.0;
+            for line in view.polylines.iter().filter(|l| cable_of(l) == Some(cable)) {
+                match (
+                    line.properties.get(RUN_KEY),
+                    line.properties
+                        .get(RUN_CM_KEY)
+                        .and_then(|v| v.parse::<f64>().ok()),
+                ) {
+                    (Some(run), Some(cm)) => {
+                        routed.insert(run.clone(), cm);
+                    }
+                    _ => {
+                        drawn += line
+                            .points
+                            .windows(2)
+                            .map(|w| w[0].distance(w[1]))
+                            .sum::<f64>()
+                            * 1.1;
+                    }
+                }
+            }
+            let cm = drawn + routed.values().sum::<f64>();
+            (cable, (cm / 100.0 * 10.0).round() / 10.0)
         })
         .filter(|(_, m)| *m > 0.0)
         .collect()
+}
+
+/// Cable for data points: category of twisted pair.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum Category {
+    Cat5e,
+    Cat6,
+    Cat6a,
+}
+
+impl Category {
+    pub fn parse(raw: &str) -> Option<Self> {
+        match crate::annotations::fold(raw)
+            .replace([' ', '-'], "")
+            .as_str()
+        {
+            "cat5e" | "cat5" => Some(Self::Cat5e),
+            "cat6" => Some(Self::Cat6),
+            "cat6a" => Some(Self::Cat6a),
+            _ => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Cat5e => "Cabo de rede U/UTP Cat 5e (até 1 Gbps)",
+            Self::Cat6 => "Cabo de rede U/UTP Cat 6 (1 Gbps; 10 Gbps até 55 m)",
+            Self::Cat6a => "Cabo de rede F/UTP Cat 6A (10 Gbps até 100 m)",
+        }
+    }
+}
+
+/// One line of a bill of materials.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Material {
+    pub item: String,
+    pub quantity: f64,
+    pub unit: &'static str,
+}
+
+fn metres(cm: f64) -> f64 {
+    (cm / 100.0 * 10.0).round() / 10.0
+}
+
+/// What a laid-out run takes to build.
+///
+/// Power: flexible corrugated conduit (25 mm, rolls of 50 m), three
+/// conductors (phase, neutral, earth) of the circuit's section with 30 cm
+/// left in every box, a box per point — octagonal in the ceiling, 4×2 in
+/// the walls — and a bend at each turn. Data: its own conduit, never shared
+/// with power, the cable with 3 m left at the rack and 30 cm at each point,
+/// an RJ45 keystone per point and as many patch panel ports — one whole
+/// cable from the rack to each point, never spliced along the trunk. TV: coaxial
+/// RG6 with F connectors at both ends of each point's cable.
+#[allow(clippy::cast_precision_loss)] // counts of boxes and bends, far below 2^52
+pub fn materials(
+    route: &crate::routing::Route,
+    cable: Cable,
+    section_mm2: f64,
+    category: Category,
+    kinds: &[PointKind],
+) -> Vec<Material> {
+    let points = route.terminals.len().saturating_sub(1);
+    let length = route.length();
+    let conduit = metres(length * 1.05);
+    // Network and TV go in star: a whole cable from the panel to each point.
+    let star: f64 = route.reach.iter().sum();
+    let mut out = vec![Material {
+        item: "Eletroduto corrugado flexível 25 mm (3/4\")".into(),
+        quantity: conduit,
+        unit: "m",
+    }];
+    out.push(Material {
+        item: "Rolos de eletroduto (50 m)".into(),
+        quantity: (conduit / 50.0).ceil(),
+        unit: "un",
+    });
+    out.push(Material {
+        item: "Curva 90° para eletroduto 25 mm".into(),
+        quantity: route.bends as f64,
+        unit: "un",
+    });
+    match cable {
+        Cable::Power => {
+            let per_conductor = length + 30.0 * route.terminals.len() as f64;
+            for colour in ["fase", "neutro", "terra"] {
+                out.push(Material {
+                    item: format!(
+                        "Cabo flexível {} mm² 750 V ({colour})",
+                        format!("{section_mm2}").replace('.', ",")
+                    ),
+                    quantity: metres(per_conductor),
+                    unit: "m",
+                });
+            }
+            let ceiling = kinds.iter().filter(|k| **k == PointKind::Lighting).count();
+            out.push(Material {
+                item: "Caixa octogonal 4×4 de teto".into(),
+                quantity: ceiling as f64,
+                unit: "un",
+            });
+            out.push(Material {
+                item: "Caixa 4×2 de embutir".into(),
+                quantity: (points - ceiling.min(points)) as f64,
+                unit: "un",
+            });
+        }
+        Cable::Data => {
+            out.push(Material {
+                item: category.name().into(),
+                quantity: metres(star + 300.0 + 30.0 * points as f64),
+                unit: "m",
+            });
+            out.push(Material {
+                item: "Conector fêmea RJ45 (keystone)".into(),
+                quantity: points as f64,
+                unit: "un",
+            });
+            out.push(Material {
+                item: "Portas de patch panel".into(),
+                quantity: points as f64,
+                unit: "un",
+            });
+            out.push(Material {
+                item: "Caixa 4×2 de embutir".into(),
+                quantity: points as f64,
+                unit: "un",
+            });
+        }
+        Cable::Tv => {
+            out.push(Material {
+                item: "Cabo coaxial RG6 (75 Ω)".into(),
+                quantity: metres(star + 100.0 + 30.0 * points as f64),
+                unit: "m",
+            });
+            out.push(Material {
+                item: "Conector F de compressão".into(),
+                quantity: (2 * points) as f64,
+                unit: "un",
+            });
+            out.push(Material {
+                item: "Caixa 4×2 de embutir".into(),
+                quantity: points as f64,
+                unit: "un",
+            });
+        }
+    }
+    out
 }
 
 /// Whether a run touches a point: an end or a vertex within reach of it.
@@ -412,8 +584,16 @@ pub fn circuits(home: &Home) -> Vec<Circuit> {
             kinds.sort();
             kinds.dedup();
             let va: f64 = mine.iter().map(|p| p.va).sum();
-            // A dedicated load over 4.4 kVA (a shower) runs on 220 V.
-            let volts = if supply < 200.0 && kinds == [PointKind::Dedicated] && va > 4400.0 {
+            // A point written for 220 V sets its circuit; otherwise a dedicated
+            // load over 4.4 kVA (a shower) runs on 220 V.
+            let written = mine.iter().find_map(|p| {
+                view.find_piece(p.id)
+                    .and_then(|f| f.properties.get(VOLTS_KEY))
+                    .and_then(|v| v.parse::<f64>().ok())
+            });
+            let volts = if let Some(v) = written {
+                v
+            } else if supply < 200.0 && kinds == [PointKind::Dedicated] && va > 4400.0 {
                 220.0
             } else {
                 supply
@@ -478,6 +658,29 @@ pub fn orphaned(home: &Home) -> Vec<(String, String)> {
         .filter(|(key, _)| key.starts_with("elec:") && !live.contains(*key))
         .map(|(key, why)| (key.clone(), why.clone()))
         .collect()
+}
+
+/// The panel's main breaker suggested for the installed load, A, and that
+/// load's current: the smallest standard size over the total current at the
+/// supply voltage, with no demand factor — the utility's rules may allow a
+/// smaller one, never ask for less protection.
+pub fn main_breaker(home: &Home) -> Option<(u32, f64)> {
+    let circuits = circuits(home);
+    if circuits.is_empty() {
+        return None;
+    }
+    let supply = home
+        .properties
+        .get(VOLTAGE_KEY)
+        .and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(127.0);
+    let amps: f64 = circuits.iter().map(|c| c.va / supply.max(c.volts)).sum();
+    let breaker = BREAKERS
+        .iter()
+        .copied()
+        .find(|b| f64::from(*b) >= amps)
+        .unwrap_or(BREAKERS[BREAKERS.len() - 1]);
+    Some((breaker, (amps * 10.0).round() / 10.0))
 }
 
 /// Sorts `C2` before `C10`.
@@ -902,5 +1105,99 @@ mod tests {
                 .iter()
                 .any(|f| f.message.contains("Iluminação e tomadas no mesmo circuito"))
         );
+    }
+
+    #[test]
+    fn a_routed_run_lists_what_to_buy() {
+        use crate::routing::{Terminal, Via, lay_out};
+        let mut home = Home::default();
+        let pts = [(0.0, 0.0), (400.0, 0.0), (400.0, 300.0), (0.0, 300.0)];
+        for k in 0..4 {
+            let (a, b) = (pts[k], pts[(k + 1) % 4]);
+            home.walls.push(crate::elements::Wall::new(
+                crate::ids::WallId(k as u64 + 1),
+                Point2::new(a.0, a.1),
+                Point2::new(b.0, b.1),
+            ));
+        }
+        let at = |id: u64, x: f64, y: f64, z: f64| Terminal {
+            id: Some(FurnitureId(id)),
+            at: Point2::new(x, y),
+            z,
+        };
+        let panel = at(1, 0.0, 150.0, 150.0);
+        let points = [at(2, 100.0, 0.0, 30.0), at(3, 300.0, 0.0, 30.0)];
+        let route = lay_out(&home, panel, &points, Via::Ceiling, 280.0);
+        let find = |bill: &[Material], item: &str| -> f64 {
+            bill.iter()
+                .find(|m| m.item.contains(item))
+                .unwrap_or_else(|| panic!("{item} in {bill:#?}"))
+                .quantity
+        };
+
+        let power = materials(
+            &route,
+            Cable::Power,
+            2.5,
+            Category::Cat6,
+            &[PointKind::Outlet; 2],
+        );
+        let conduit = find(&power, "Eletroduto");
+        assert!(conduit >= route.length() / 100.0, "{power:#?}");
+        // Three conductors, each the run plus what is left in the three boxes.
+        let phase = find(&power, "2,5 mm² 750 V (fase)");
+        assert!(
+            (phase - (route.length() + 90.0) / 100.0).abs() < 0.11,
+            "{power:#?}"
+        );
+        assert_eq!(find(&power, "(terra)"), phase);
+        assert_eq!(find(&power, "Caixa 4×2"), 2.0);
+        assert_eq!(find(&power, "octogonal"), 0.0);
+        assert!(
+            (find(&power, "Curva 90°") - f64::from(u32::try_from(route.bends).unwrap())).abs()
+                < 1e-9
+        );
+
+        let data = materials(
+            &route,
+            Cable::Data,
+            0.0,
+            Category::Cat6,
+            &[PointKind::Network; 2],
+        );
+        let star: f64 = route.reach.iter().sum();
+        let cable = find(&data, "Cat 6 (");
+        assert!(
+            cable * 100.0 >= star + 300.0,
+            "a whole cable to each point and 3 m at the rack: {data:#?}"
+        );
+        assert_eq!(find(&data, "RJ45"), 2.0);
+        assert!(!data.iter().any(|m| m.item.contains("750 V")), "{data:#?}");
+
+        let tv = materials(&route, Cable::Tv, 0.0, Category::Cat6, &[PointKind::Tv; 2]);
+        assert_eq!(find(&tv, "Conector F"), 4.0);
+    }
+
+    #[test]
+    fn a_220_volt_point_sets_its_circuit_and_the_main_breaker_covers_the_load() {
+        let mut home = Home::default();
+        home.rooms = vec![room(1, "Cozinha", 0.0, 300.0, 300.0)];
+        let mut cooktop = point(12, "outlet-high", (100.0, 10.0), Some("C2"));
+        cooktop.properties.insert(VA_KEY.into(), "4000".into());
+        cooktop.properties.insert(VOLTS_KEY.into(), "220".into());
+        home.furniture = vec![
+            point(10, "electrical-panel", (10.0, 10.0), None),
+            point(11, "light-ceiling", (150.0, 150.0), Some("C1")),
+            cooktop,
+        ];
+        let all = circuits(&home);
+        let c2 = all.iter().find(|c| c.name == "C2").unwrap();
+        assert_eq!(c2.volts, 220.0, "{all:#?}");
+        let c1 = all.iter().find(|c| c.name == "C1").unwrap();
+        assert_eq!(c1.volts, 127.0);
+        let (breaker, amps) = main_breaker(&home).unwrap();
+        assert!(amps > 4000.0 / 220.0, "{amps}");
+        assert!(f64::from(breaker) >= amps, "{breaker} A for {amps} A");
+        assert!(main_breaker(&Home::default()).is_none());
     }
 }
