@@ -324,6 +324,13 @@ pub fn light_for(piece: &Furniture) -> Option<newera_core::Light> {
     Some(light)
 }
 
+/// What a piece counts as in a bill of quantities: its catalog entry's name
+/// when it has one — every "Tomada — cozinha, bancada (centro)" is a low
+/// outlet — and its own name otherwise.
+pub fn quantity_name(piece: &newera_core::Furniture) -> String {
+    find(&piece.catalog).map_or_else(|| piece.name.clone(), |item| item.name.to_owned())
+}
+
 const fn item(
     id: &'static str,
     name: &'static str,

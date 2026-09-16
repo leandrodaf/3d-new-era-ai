@@ -247,7 +247,7 @@ pub(crate) fn piece(
         |top| newera_core::layer_in_group(top, f),
     );
     if let Some(layer) = layer {
-        v["layer"] = json!(layer.key());
+        v["plan_layer"] = json!(layer.key());
     }
     if default_size != Some([f.width, f.depth, f.height]) {
         v["wdh"] = json!([num(f.width), num(f.depth), num(f.height)]);

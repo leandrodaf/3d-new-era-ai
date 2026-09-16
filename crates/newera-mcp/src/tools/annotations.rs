@@ -58,7 +58,7 @@ pub(crate) struct DisciplineParams {
 #[tool_router(router = annotations_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Electrical and plumbing projects over the plan. active (default) reports {active, hidden}. select {d: electrical|plumbing|architecture}: new symbols (catalog cat electrical/plumbing) and lines go there and the rest is dimmed. select architecture shows architecture: it hides the electrical and plumbing projects (show brings one back); select a project shows it with the architecture dimmed. The 3D follows the plan — hidden projects and layers leave it too — unless show_all_3d=true, which makes the 3D show everything. show/hide {d}, where d can also be a layer of the plan — lighting (lamps, spots, LED), appliances (fridge, stove, oven, hood, washer…) or joinery (cabinets, wardrobes, countertops): hidden from the plan, its exports and the 3D. Pieces are in a layer by what they are, from the moment they are placed; update(layer=lighting|appliances|joinery|none) overrides it, and an empty layer goes back to the automatic one. active also reports layers {key:{pieces, hidden}}. quantities: {electrical:[[name,count]], plumbing:[...], lines_cm:{...}}."
+        description = "Electrical and plumbing projects over the plan. active (default) reports {active, hidden}. select {d: electrical|plumbing|architecture}: new symbols (catalog cat electrical/plumbing) and lines go there and the rest is dimmed. select architecture shows architecture: it hides the electrical and plumbing projects (show brings one back); select a project shows it with the architecture dimmed. The 3D follows the plan — hidden projects and layers leave it too — unless show_all_3d=true, which makes the 3D show everything. show/hide {d}, where d can also be a layer of the plan — lighting (lamps, spots, LED), appliances (fridge, stove, oven, hood, washer…) or joinery (cabinets, wardrobes, countertops): hidden from the plan, its exports and the 3D. Pieces are in a layer by what they are, from the moment they are placed; update(layer=lighting|appliances|joinery|none) overrides it, and an empty layer goes back to the automatic one. active also reports layers {key:{pieces, hidden}}; get_home gives each piece its plan_layer. quantities: {electrical:[[kind,count,names?]], plumbing:[...], lines_cm:{...}} — grouped by catalog kind (every low outlet together), with the names of the points as the detail."
     )]
     pub(crate) fn disciplines(
         &self,
@@ -106,18 +106,34 @@ impl NewEraMcp {
                         .ok()
                         .and_then(|v| v.as_str().map(str::to_owned))
                         .unwrap_or_default();
-                    let mut counts: std::collections::BTreeMap<String, usize> =
+                    // By what each point is, with the names — where each one
+                    // goes — as the detail: 31 lines of "1" help nobody buy.
+                    let mut counts: std::collections::BTreeMap<String, (usize, Vec<String>)> =
                         std::collections::BTreeMap::new();
                     for top in &home.furniture {
                         for piece in top.flatten() {
                             if piece.discipline.or(top.discipline) == Some(d) {
-                                *counts.entry(piece.name.clone()).or_default() += 1;
+                                let kind = newera_catalog::quantity_name(piece);
+                                let row = counts.entry(kind.clone()).or_default();
+                                row.0 += 1;
+                                if piece.name != kind {
+                                    row.1.push(piece.name.clone());
+                                }
                             }
                         }
                     }
                     out.insert(
                         key.clone(),
-                        serde_json::json!(counts.into_iter().collect::<Vec<_>>()),
+                        serde_json::json!(
+                            counts
+                                .into_iter()
+                                .map(|(kind, (count, names))| if names.is_empty() {
+                                    serde_json::json!([kind, count])
+                                } else {
+                                    serde_json::json!([kind, count, names])
+                                })
+                                .collect::<Vec<_>>()
+                        ),
                     );
                     let length: f64 = home
                         .polylines
@@ -358,7 +374,9 @@ impl NewEraMcp {
                     for top in &view.furniture {
                         for piece in top.flatten() {
                             if piece.discipline.or(top.discipline) == Some(d) {
-                                *counts.entry(piece.name.clone()).or_default() += 1;
+                                *counts
+                                    .entry(newera_catalog::quantity_name(piece))
+                                    .or_default() += 1;
                             }
                         }
                     }
@@ -914,6 +932,24 @@ mod tests {
             }))
             .unwrap();
         assert!(q.contains(r#"["Tomada baixa (30 cm)",2]"#), "{q}");
+        // Points named for where they go still count together, names as detail.
+        {
+            let mut doc = s.document.write();
+            let mut named = doc.home().furniture[0].clone();
+            named.name = "Tomada — cozinha, bancada (centro)".into();
+            doc.execute(Command::update(named)).unwrap();
+        }
+        let q = s
+            .disciplines(Parameters(DisciplineParams {
+                action: Some("quantities".into()),
+                d: None,
+                show_all_3d: None,
+            }))
+            .unwrap();
+        assert!(
+            q.contains(r#"["Tomada baixa (30 cm)",2,["Tomada — cozinha, bancada (centro)"]]"#),
+            "{q}"
+        );
         assert!(q.contains(r#""electrical":100"#), "{q}");
         let png = s
             .render_plan(Parameters(RenderParams {
@@ -1074,7 +1110,7 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .map(|f| f["layer"].as_str().unwrap_or("-"))
+            .map(|f| f["plan_layer"].as_str().unwrap_or("-"))
             .collect();
         assert_eq!(
             layers,

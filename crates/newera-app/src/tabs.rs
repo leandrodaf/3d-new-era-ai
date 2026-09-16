@@ -366,7 +366,9 @@ pub(crate) fn quantity_rows(home: &Home) -> Vec<QuantityRow> {
     for top in &home.furniture {
         for piece in top.flatten() {
             if let Some(d) = piece.discipline.or(top.discipline) {
-                *counts.entry((d, piece.name.clone())).or_default() += 1;
+                *counts
+                    .entry((d, newera_catalog::quantity_name(piece)))
+                    .or_default() += 1;
             }
         }
     }
