@@ -2100,6 +2100,62 @@ pub fn orphaned(home: &Home, profile: &Profile) -> Vec<(String, String)> {
 }
 
 pub fn review(home: &Home, profile: &Profile) -> Report {
+    review_with(home, profile, true)
+}
+
+/// Whether moving as `fix` says creates a finding at least as heavy as the
+/// one it solves: the two cannot both fit, and the fix would walk in circles.
+fn fix_creates(
+    home: &Home,
+    profile: &Profile,
+    before: &[Finding],
+    finding: &Finding,
+) -> Option<Finding> {
+    let fix = finding.fix.as_ref()?;
+    if fix["tool"] != "move" {
+        return None;
+    }
+    let ids: Vec<newera_core::ElementId> = fix["ids"]
+        .as_array()?
+        .iter()
+        .filter_map(|v| v.as_str()?.parse().ok())
+        .collect();
+    let (dx, dy) = (fix["dx"].as_f64()?, fix["dy"].as_f64()?);
+    let mut doc = newera_core::Document::new(home.clone());
+    newera_core::ops::translate(&mut doc, &ids, dx, dy, false).ok()?;
+    let after = review_with(doc.home(), profile, false);
+    let rank = |s: Severity| match s {
+        Severity::Erro => 3,
+        Severity::Alerta => 2,
+        Severity::Dica => 1,
+    };
+    let moved: Vec<String> = ids.iter().map(ToString::to_string).collect();
+    after
+        .findings
+        .into_iter()
+        .filter(|f| f.accepted.is_none() && !before.iter().any(|b| b.key == f.key))
+        .filter(|f| {
+            moved
+                .iter()
+                .any(|id| f.place.contains(id.as_str()) || f.message.contains(id.as_str()))
+        })
+        .max_by_key(|f| rank(f.severity))
+        .map(|f| {
+            let heavier = rank(f.severity) >= rank(finding.severity);
+            (f, heavier)
+        })
+        .map(|(f, _)| f)
+}
+
+fn severity_rank(s: Severity) -> u8 {
+    match s {
+        Severity::Erro => 3,
+        Severity::Alerta => 2,
+        Severity::Dica => 1,
+    }
+}
+
+fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
     let view = home.level_view(home.current_level());
     let scene = Scene::new(&view);
     // The city is the project's, so every caller weighs the same rules; one
@@ -2161,6 +2217,34 @@ pub fn review(home: &Home, profile: &Profile) -> Report {
         {
             finding.accepted = Some(why.clone());
             finding.accepted_as = Some(old.clone());
+        }
+    }
+    // A fix that would open another finding as heavy is no fix: the two do
+    // not fit together, and the message says so instead of walking in circles.
+    if weigh_fixes {
+        let snapshot = findings.clone();
+        for finding in &mut findings {
+            if finding.accepted.is_some() {
+                continue;
+            }
+            if let Some(other) = fix_creates(home, profile, &snapshot, finding) {
+                if severity_rank(other.severity) >= severity_rank(finding.severity) {
+                    finding.fix = None;
+                    finding.message = format!(
+                        "{} Não cabem os dois: afastar isso cria «{}» em {}; a posição atual é a melhor das duas — aceite o que ficar com o motivo.",
+                        finding.message.trim_end(),
+                        other.message.trim_end_matches('.'),
+                        other.place
+                    );
+                } else {
+                    finding.message = format!(
+                        "{} Isso deixa «{}» em {}, mais leve.",
+                        finding.message.trim_end(),
+                        other.message.trim_end_matches('.'),
+                        other.place
+                    );
+                }
+            }
         }
     }
     // Errors weigh fully; many alerts or tips of a crowded plan level off.
@@ -2402,6 +2486,45 @@ mod tests {
         named_again(&mut home);
         let scene = Scene::new(&home);
         assert_eq!(scene.overlaps().len(), 1);
+    }
+
+    #[test]
+    fn a_fix_that_opens_a_finding_as_heavy_says_the_two_do_not_fit() {
+        let mut home = Home::default();
+        square(&mut home, "Sala e cozinha", 600.0, 326.0);
+        // A counter facing the room, a sofa with its back to it and a rack in
+        // front of the sofa: 71 cm behind the sofa, 50 in front.
+        home.furniture.push(piece(
+            20,
+            "base-cabinet",
+            (300.0, 7.5 + 30.0),
+            (240.0, 60.0, 90.0),
+            0.0,
+        ));
+        home.furniture.push(piece(
+            21,
+            "sofa-3",
+            (300.0, 67.5 + 71.0 + 45.0),
+            (210.0, 90.0, 85.0),
+            0.0,
+        ));
+        home.furniture.push(piece(
+            22,
+            "tv-stand",
+            (300.0, 228.5 + 50.0 + 20.0),
+            (180.0, 40.0, 50.0),
+            180.0,
+        ));
+        let report = review(&home, &Profile::default());
+        // The counter's fix pushes the sofa into the rack's clearance: it
+        // says what it leaves behind, instead of the agent finding out.
+        let counter = report
+            .findings
+            .iter()
+            .find(|f| f.place.contains("f20") && f.message.contains("livres à frente"))
+            .unwrap_or_else(|| panic!("{report:#?}"));
+        assert!(counter.message.contains("f21"), "{counter:#?}");
+        assert!(counter.message.contains("Isso deixa"), "{counter:#?}");
     }
 
     #[test]
