@@ -213,7 +213,7 @@ pub fn translate(
                         nearest_wall(&home.level_view(f.level), f.position, OPENING_REACH)
                     && let Some(wall) = home.wall(wall_id)
                 {
-                    crate::furniture::align_to_wall(&mut f, wall, along);
+                    crate::furniture::reseat_in_wall(&mut f, wall, along);
                 }
                 Element::Furniture(f)
             }
@@ -540,7 +540,7 @@ pub fn snap_openings(doc: &mut Document, ids: &[ElementId], max_distance: f64) -
             let (wall_id, along) =
                 nearest_wall(&home.level_view(f.level), f.position, max_distance)?;
             let wall = home.wall(wall_id)?;
-            crate::furniture::align_to_wall(&mut f, wall, along);
+            crate::furniture::reseat_in_wall(&mut f, wall, along);
             Some(Command::update(f))
         })
         .collect();

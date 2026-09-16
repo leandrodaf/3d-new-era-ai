@@ -926,6 +926,23 @@ pub fn align_to_wall(piece: &mut Furniture, wall: &Wall, along: f64) {
     }
 }
 
+/// Seats a door or window already in place in `wall` again, at `along`,
+/// keeping the side it opens to.
+///
+/// [`align_to_wall`] takes the angle from the wall's direction, which is the
+/// right thing for a new piece and the wrong one for a piece being nudged: a
+/// bathroom door moved 4 cm along its own wall came out turned 180°, opening
+/// onto the kitchen. Whichever of the two wall directions is nearer the angle
+/// the piece had is kept.
+pub(crate) fn reseat_in_wall(piece: &mut Furniture, wall: &Wall, along: f64) {
+    let before = piece.angle;
+    align_to_wall(piece, wall, along);
+    let turned = (piece.angle - before).rem_euclid(360.0);
+    if turned > 90.0 && turned < 270.0 {
+        piece.angle = (piece.angle + 180.0).rem_euclid(360.0);
+    }
+}
+
 /// One axis of a group, in the group's own frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Along {

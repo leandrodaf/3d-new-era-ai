@@ -274,6 +274,55 @@ mod tests {
         assert_eq!(diff["changed"][0]["from"]["wdh"][1], 60.0, "{reply}");
     }
     #[test]
+    fn a_door_nudged_along_its_wall_keeps_the_side_it_opens_to() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(r#"{"walls":[{"pts":[[300,0],[300,400]]}]}"#).unwrap(),
+        ))
+        .unwrap();
+        // A bathroom door opening into the bathroom, on the +x side.
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"door","wall":"w1","along":200,"w":70,"into":[400,200]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let door = || {
+            let doc = s.document.read();
+            let f = doc.home().furniture[0].clone();
+            (
+                f.id.to_string(),
+                f.angle,
+                newera_core::facing(&f).to_owned(),
+                newera_core::door_swing(&f).unwrap(),
+            )
+        };
+        let (id, angle, faces, _) = door();
+        let swings_into_bathroom =
+            |swing: &[newera_core::Point2]| swing.iter().all(|p| p.x >= 299.0);
+        assert!(
+            swings_into_bathroom(&door().3),
+            "placed swinging into the bathroom"
+        );
+
+        s.move_elements(Parameters(
+            serde_json::from_str(&format!(r#"{{"ids":["{id}"],"dx":0,"dy":-4}}"#)).unwrap(),
+        ))
+        .unwrap();
+        let (_, moved_angle, moved_faces, swing) = door();
+        assert!(
+            (moved_angle - angle).abs() < 1e-6,
+            "{angle} → {moved_angle}"
+        );
+        assert_eq!(moved_faces, faces);
+        assert!(
+            swings_into_bathroom(&swing),
+            "still swings into the bathroom: {swing:?}"
+        );
+    }
+
+    #[test]
     fn a_group_resize_says_what_stretches() {
         let s = server();
         let part = |id: u64, x0: f64, x1: f64| newera_core::Furniture {
