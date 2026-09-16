@@ -50,3 +50,43 @@ pub fn http_service(
         config,
     )
 }
+
+/// The analyses an agent asks the MCP tools for, without an MCP session:
+/// `check_layout`, `ergonomics`, `measure` and `annotations`, with the same
+/// arguments and the same answer.
+///
+/// A script that edits the plan over REST could not ask whether the edit
+/// was any good — the questions lived only behind the MCP handshake — so it
+/// had to hand the question back to the agent. Unknown names and arguments
+/// that do not fit answer `Err` with the reason.
+pub fn analysis(
+    document: SharedDocument,
+    name: &str,
+    args: serde_json::Value,
+) -> Result<String, String> {
+    use rmcp::handler::server::wrapper::Parameters;
+
+    fn params<T: serde::de::DeserializeOwned>(args: serde_json::Value) -> Result<T, String> {
+        let args = if args.is_null() {
+            serde_json::json!({})
+        } else {
+            args
+        };
+        serde_json::from_value(args).map_err(|e| format!("arguments: {e}"))
+    }
+    let reason = |e: rmcp::ErrorData| e.message.to_string();
+    let server = NewEraMcp::new(document);
+    match name {
+        "check_layout" => server
+            .check_layout(Parameters(params(args)?))
+            .map_err(reason),
+        "ergonomics" => Ok(server.ergonomics(Parameters(params(args)?))),
+        "measure" => server.measure(Parameters(params(args)?)).map_err(reason),
+        "annotations" => server
+            .annotations(Parameters(params(args)?))
+            .map_err(reason),
+        other => Err(format!(
+            "no analysis {other}: check_layout, ergonomics, measure or annotations"
+        )),
+    }
+}

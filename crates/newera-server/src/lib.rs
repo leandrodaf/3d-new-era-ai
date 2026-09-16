@@ -2,7 +2,11 @@
 //!
 //! Routes:
 //! - `GET /health` — liveness probe
-//! - `GET /api/home` — current home as JSON
+//! - `GET /api/home` — current home as JSON; every piece also carries
+//!   `bounds` `[[min_x, min_y], [max_x, max_y]]`, its box with `angle` applied
+//! - `GET|POST /api/check`, `/api/ergonomics`, `/api/measure`,
+//!   `/api/annotations` — the MCP analyses of the same name, same arguments
+//!   (query string or JSON body) and same answer, without an MCP session
 //! - `GET /api/plan.png?w=&h=` — floor plan image
 //! - `GET /api/plan.svg` — floor plan at true scale
 //! - `GET /api/view.png?w=&h=&cam=&yaw=&pitch=` — 3D view (software render)
@@ -86,6 +90,10 @@ pub fn router_with(
     Router::new()
         .route("/health", get(|| async { "ok" }))
         .route("/api/home", get(get_home))
+        .route("/api/check", get(analysis_query).post(analysis_body))
+        .route("/api/ergonomics", get(analysis_query).post(analysis_body))
+        .route("/api/measure", get(analysis_query).post(analysis_body))
+        .route("/api/annotations", get(analysis_query).post(analysis_body))
         .route("/api/plan.png", get(plan_png))
         .route("/api/plan.svg", get(plan_svg))
         .route("/api/view.png", get(view_png))
@@ -516,12 +524,92 @@ async fn plan_svg(
     )
 }
 
-async fn get_home(State(document): State<SharedDocument>) -> Json<HomeResponse> {
+/// Adds `bounds` to every piece and part, the box on the plan that every MCP
+/// read gives: `width` and `depth` are the piece before `angle`, and a
+/// wardrobe turned a quarter turn computed by hand lands 60 cm from where it
+/// stands.
+fn with_bounds(pieces: &mut serde_json::Value, home: &Home) {
+    for piece in pieces.as_array_mut().into_iter().flatten() {
+        let found = piece["id"]
+            .as_str()
+            .and_then(|id| id.parse().ok())
+            .and_then(|id| home.find_piece(id));
+        if let Some(found) = found {
+            let (min, max) = newera_core::plan_bounds(found);
+            let round = |v: f64| (v * 10.0).round() / 10.0;
+            piece["bounds"] =
+                serde_json::json!([[round(min.x), round(min.y)], [round(max.x), round(max.y)]]);
+        }
+        if let Some(children) = piece.get_mut("children") {
+            with_bounds(children, home);
+        }
+    }
+}
+
+async fn get_home(State(document): State<SharedDocument>) -> Json<serde_json::Value> {
     let doc = document.read();
-    Json(HomeResponse {
+    let mut json = serde_json::to_value(HomeResponse {
         revision: doc.revision(),
         home: doc.home().clone(),
     })
+    .unwrap_or_default();
+    with_bounds(&mut json["home"]["furniture"], doc.home());
+    Json(json)
+}
+
+/// Which analysis a route answers.
+fn analysis_name(uri: &axum::http::Uri) -> &'static str {
+    match uri.path().rsplit('/').next() {
+        Some("check") => "check_layout",
+        Some("ergonomics") => "ergonomics",
+        Some("measure") => "measure",
+        _ => "annotations",
+    }
+}
+
+fn run_analysis(
+    document: SharedDocument,
+    name: &str,
+    args: serde_json::Value,
+) -> Result<axum::response::Response, ApiError> {
+    let answer = newera_mcp::analysis(document, name, args)
+        .map_err(|e| (axum::http::StatusCode::UNPROCESSABLE_ENTITY, e))?;
+    Ok(axum::response::IntoResponse::into_response((
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        answer,
+    )))
+}
+
+/// An analysis with its arguments in the query string: `?occupants=3`.
+/// Values that read as JSON (numbers, `true`, `[…]`) are taken as such.
+async fn analysis_query(
+    State(document): State<SharedDocument>,
+    uri: axum::http::Uri,
+    axum::extract::Query(query): axum::extract::Query<Vec<(String, String)>>,
+) -> Result<axum::response::Response, ApiError> {
+    let args: serde_json::Map<String, serde_json::Value> = query
+        .into_iter()
+        .filter(|(key, _)| key != "token")
+        .map(|(key, raw)| {
+            let value = serde_json::from_str(&raw).unwrap_or(serde_json::Value::String(raw));
+            (key, value)
+        })
+        .collect();
+    run_analysis(
+        document,
+        analysis_name(&uri),
+        serde_json::Value::Object(args),
+    )
+}
+
+/// An analysis with its arguments as a JSON body.
+async fn analysis_body(
+    State(document): State<SharedDocument>,
+    uri: axum::http::Uri,
+    body: Option<Json<serde_json::Value>>,
+) -> Result<axum::response::Response, ApiError> {
+    let args = body.map_or(serde_json::Value::Null, |b| b.0);
+    run_analysis(document, analysis_name(&uri), args)
 }
 
 #[cfg(test)]
@@ -561,6 +649,88 @@ mod tests {
             json["home"]["walls"][0]["end"],
             serde_json::json!([300.0, 0.0])
         );
+    }
+
+    #[tokio::test]
+    async fn a_script_can_ask_the_analyses_and_read_turned_boxes() {
+        let document = SharedDocument::new(Document::default());
+        {
+            let mut doc = document.write();
+            let piece = |id: u64, x: f64, angle: f64| newera_core::Furniture {
+                id: newera_core::FurnitureId(id),
+                catalog: "box".into(),
+                name: format!("armário {id}"),
+                position: Point2::new(x, 221.0),
+                width: 185.0,
+                depth: 58.0,
+                height: 220.0,
+                angle,
+                ..newera_core::Furniture::default()
+            };
+            // A wardrobe turned a quarter turn, and another pushed into it.
+            doc.execute(Command::insert(piece(1, 221.0, 90.0))).unwrap();
+            doc.execute(Command::insert(piece(2, 250.0, 90.0))).unwrap();
+        }
+        let app = router(document, DEFAULT_ADDR, CancellationToken::new());
+        let call = |request: Request<Body>| {
+            let app = app.clone();
+            async move {
+                let response = app.oneshot(request).await.unwrap();
+                let status = response.status();
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                (
+                    status,
+                    serde_json::from_slice::<serde_json::Value>(&body).ok(),
+                    body,
+                )
+            }
+        };
+
+        // The box on the plan, not width and depth before the turn.
+        let (status, home, _) = call(Request::get("/api/home").body(Body::empty()).unwrap()).await;
+        assert_eq!(status, StatusCode::OK);
+        let home = home.unwrap();
+        assert_eq!(
+            home["home"]["furniture"][0]["bounds"],
+            serde_json::json!([[192.0, 128.5], [250.0, 313.5]]),
+            "{}",
+            home["home"]["furniture"][0]
+        );
+
+        let (status, check, _) =
+            call(Request::get("/api/check").body(Body::empty()).unwrap()).await;
+        assert_eq!(status, StatusCode::OK);
+        let check = check.unwrap();
+        assert_eq!(check["overlap"][0]["kind"], "collision", "{check}");
+
+        let (status, review, _) = call(
+            Request::get("/api/ergonomics?occupants=3&wheelchair=false")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(review.unwrap()["score"].is_u64());
+
+        let (status, tape, _) = call(
+            Request::post("/api/measure")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"from":"f1","to":"f2","axis":"x"}"#))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(tape.unwrap()["cm"], -29.0);
+
+        // Arguments that do not fit say why.
+        let (status, _, body) = call(
+            Request::get("/api/check?level=nowhere")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert!(String::from_utf8_lossy(&body).contains("level"));
     }
 
     #[tokio::test]
