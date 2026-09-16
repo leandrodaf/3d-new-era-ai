@@ -83,3 +83,26 @@ tampo como fixo, para quando o nome não ajudar.
 continuar recusados como anfitriões — o achado *"está dentro de LG WD18GNTS6BA
 — Lava e Seca 18 kg (f825)"*, que apareceu nesta mesma rodada e pegou um erro
 real meu, depende disso.
+
+## Resolvido no código, a conferir na planta
+
+**59** (commit `1e4d646`). `movable()` e `is_appliance()` em `mounting.rs`
+agora dão prioridade à palavra de marcenaria (bancada, tampo, península,
+gabinete, balcão, armário, nicho, prateleira, aéreo, arremate, gavet…,
+separador) e casam palavras inteiras, então "Lavanderia — gavetões" também
+deixou de ser "lava". Novo campo `update(fixed=true|false)` grava
+`piece:fixed` para quando o nome não ajuda. Na cópia da planta:
+
+- `place(cat="outlet-tower-auto", at=[510,300])` → assenta a 91 cm na `f847`,
+  sem achado (antes subia para o topo do arremate junto ao teto, 280 cm, e
+  dava "0,0 cm da borda");
+- `at=[800,300]` → 101 cm na `f846`, sem achado;
+- `at=[505,452]` → aceita na península; resta a dica real "25,5 cm da cuba";
+- `at=[575,300]`, sobre o cooktop real `f826` → `tower-below` e
+  `tower-wet-heat` (corretos);
+- `outlet-mid` em `[735,305]` elev 50 continua recusada: "está dentro de LG
+  WD18GNTS6BA — Lava e Seca 18 kg (f825)".
+
+De quebra: `tower-wet-heat` e `tower-below` só leem cuba/cocção de peça que é
+uma ("Cooktop Brastemp…", catálogo), não de "Armário de portas junto ao
+cooktop" nem "Gaveteiro pia", e medem da borda da peça, não do centro.
