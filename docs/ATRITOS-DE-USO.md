@@ -200,6 +200,13 @@ girado; o REST não, e nada avisa.
 **Encurtaria:** expor as análises como `GET /api/check`, `GET /api/ergonomics`,
 e mandar `bounds` junto no JSON.
 
+> **Resolvido** em `94cdd11`, ainda durante esta revisão: `/api/check`,
+> `/api/ergonomics`, `/api/measure` e `/api/annotations` respondem com os
+> mesmos argumentos, por query string ou corpo JSON, e `/api/home` passou a
+> mandar `bounds` com o ângulo aplicado. Vale para editores abertos a partir
+> dessa versão — o desta revisão ainda rodava a anterior, e os endpoints
+> respondiam 404.
+
 ## 9. `check_layout` não tem como aceitar um caso analisado
 
 `ergonomics` tem `accept=[[key, motivo]]`: o achado continua no relatório, com a
