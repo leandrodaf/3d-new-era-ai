@@ -333,6 +333,41 @@ sugeria.
 **Encurtaria:** ou `hinge_right` faz efeito em abertura, ou o texto para de
 recomendá-lo.
 
+## 35. O número que vai para a marcenaria muda sozinho
+
+O `references` numera as peças de 1 a N, por cômodo. É esse número que aparece
+no desenho, no schedule e, portanto, no orçamento que chega ao marceneiro.
+
+Ele é derivado da lista, e a lista se renumera inteira a cada peça que entra ou
+sai. Convertendo quatro vãos em portas — oito peças removidas, quatro criadas —
+tudo que vinha depois deslizou:
+
+| peça | antes | depois |
+|---|---|---|
+| Mesa Dover | 79 | 75 |
+| Aéreo da cozinha | 92 | 88 |
+| Arremate da cozinha | 93 | 89 |
+| último item | 126 | 118 |
+
+Nada mudou nessas peças. Mudou o que veio antes delas na fila.
+
+Duas impressões da mesma planta, feitas com uma semana de diferença, têm
+numerações incompatíveis — e nada no desenho diz qual versão é qual. Quem
+recebeu "item 92, aéreo da cozinha" e volta à obra encontra o 92 apontando
+para outra coisa.
+
+**Isto reenquadra o atrito 28.** Os 73 rótulos `[NN]` que limpamos da planta,
+herdados da importação, não eram teimosia de quem desenhou: eram um número
+**estável**, escrito à mão justamente porque o número derivado não para
+quieto. Ao remover a duplicação, ficamos com a numeração automática — mais
+limpa, mais completa e que se atualiza sozinha — e perdemos a única coisa que
+os rótulos manuais tinham de bom.
+
+**Encurtaria:** o número ficar preso à peça uma vez atribuído — novas peças
+pegam o próximo livre, e as que saem deixam o buraco. Ou, ao menos, o
+schedule declarar a revisão a que pertence, para que duas impressões não se
+confundam em silêncio.
+
 ---
 
 ## Sem como reproduzir agora
