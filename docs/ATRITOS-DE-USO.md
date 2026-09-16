@@ -13,75 +13,22 @@ teria encurtado o caminho. Tudo é anotado aqui, à mão.
 
 O banco de provas é a mesma planta desde o começo: um apartamento de 65 m² com
 marcenaria desenhada módulo a módulo. Nesta rodada ele fechou com **nota 100**,
-zero colisões e `pending: 0` nas três disciplinas — elétrica (22 tomadas, 13
-pontos de rede, 7 circuitos, quadro de 24 módulos com 3 de reserva, 3 peças de
-automação e um access point com cobertura calculada), hidráulica (28 pontos, 3
-colunas de ventilação, 57 m de tubo traçados pelo `route`) e arquitetura.
+zero achados com peso, `loose: 0` e `pending: 0` nas três disciplinas —
+elétrica (22 tomadas, 13 pontos de rede, 7 circuitos, quadro de 24 módulos com
+3 de reserva, 3 peças de automação, um access point com cobertura calculada e
+158 m de cabo traçados pelo `route`), hidráulica (30 pontos, 3 colunas e 20 m
+de ramal de ventilação, 2 grelhas de ventilação permanente, 78 m de tubo) e
+arquitetura.
 
 ## Rodada em aberto
 
-Dez casos novos, todos nascidos das ações desta rodada: fechar a hidráulica,
-completar o cabeamento estruturado, dimensionar o quadro, reaceitar o que a
-versão nova reabriu e, depois que o usuário desconfiou, auditar a planta peça
-por peça atrás do que estava solto no ar ou na camada errada. Nenhum deles
-impediu o trabalho; todos custaram chamadas, leitura de código-fonte, scripts
-auxiliares ou um passo desfeito.
-
-## 48. A aceitação some quando a chave do achado muda de prefixo
-
-Duas passagens de cama estavam aceitas há rodadas, com motivo escrito. Na
-versão nova elas voltaram como achados abertos, e as aceitações apareceram
-assim:
-
-```
-ergonomics(city="sao-paulo")
-→ "orphaned": [["-:f807:livres-frente-passagem-cama", "13 cm em 50 dos 86 cm …"],
-               ["-:f810:livres-frente-passagem-cama", "Mesma situacao: …"]]
-   findings:  {"key": "nbr15575g:f807:livres-frente-passagem-cama", …}
-              {"key": "nbr15575g:f810:livres-frente-passagem-cama", …}
-```
-
-A regra passou a citar a fonte, e a chave ganhou o prefixo `nbr15575g:`. É a
-mesma regra, sobre a mesma peça, com o mesmo sufixo — e a aceitação virou órfã.
-`orphaned` listou as duas, os achados novos apareceram do lado, e nada disse
-que um era o outro. Quem não estivesse relendo o arquivo inteiro atrás disso
-veria só a nota cair.
-
-**Reproduzir:** aceitar um achado, mudar a fonte da regra, rodar o check.
-
-**Deveria:** casar órfã e achado novo pelo sufixo (peça + regra) e reaproveitar
-o motivo, dizendo que a chave mudou — ou, no mínimo, apontar no `orphaned` o
-achado que provavelmente o sucedeu. A chave é identidade; se ela carrega a
-fonte, ela muda quando a fonte muda.
-
-## 49. `update` aceitou um campo que não existe e respondeu "nada mudou"
-
-Para escrever a capacidade do quadro e o curto presumido, o caminho óbvio era o
-`update`:
-
-```
-update(items=[{"id": "f1576", "props": {"elec:modules": 24, "elec:short_ka": 10}}])
-→ ok rev=14 {"unchanged": [{"id": "f1576", "now": {…}}],
-   "unchanged_note": "these already had the values asked for; nothing was changed on them"}
-```
-
-Nada foi escrito. O `props` foi descartado em silêncio e a resposta afirmou o
-contrário do que aconteceu: *"these already had the values asked for"*. A peça
-nunca teve essas propriedades — nem tem como ter por aí.
-
-O caminho certo estava na descrição do `electrical`, num parágrafo de 3.000
-caracteres: `assign(ids=[…], modules=24)` e `voltage(short_ka=10,
-earthing="TN-C-S")`. Achei lendo `crates/newera-mcp/src/tools/electrical.rs`.
-
-**Custou:** duas chamadas erradas (uma delas com uma afirmação falsa como
-resposta) e uma ida ao código-fonte.
-
-**Deveria:** recusar campo desconhecido — `update: no field "props"; panel
-properties are written by electrical(assign modules=…) and
-electrical(voltage short_ka=…)`. Um "nada mudou" precisa ser verdade; quando a
-chamada não escreveu porque nem entendeu o pedido, isso é erro, não igualdade.
+Dois casos. Dos dez abertos na rodada passada, oito caíram na versão nova,
+conferidos um a um na planta com o comando que os produziu. O que sobrou é um
+achado que anda em círculo e um traçado que a própria ferramenta não reconhece.
 
 ## 50. Dois achados que se anulam, e o `fix` que anda em círculo
+
+*Conferido de novo nesta versão: continua igual.*
 
 Restava uma dica de peso 1 no sofá:
 
@@ -90,7 +37,7 @@ Restava uma dica de peso 1 no sofá:
  mínimo 50 cm); afaste 14 cm."   f933, peso 1
 ```
 
-Afastei os 14 cm pedidos. Na volta:
+Afastados os 14 cm pedidos, volta:
 
 ```
 "71 cm livres à frente (circulação diante de bancada e equipamentos:
@@ -98,312 +45,116 @@ Afastei os 14 cm pedidos. Na volta:
  "fix": {"tool": "move", "ids": ["f933"], "dx": 0.0, "dy": 14.0}
 ```
 
-O `fix` que veio é exatamente o movimento inverso do que eu acabara de fazer.
-Os dois achados disputam o mesmo vão entre a península da cozinha e o rack da
-sala: 50 cm na frente do sofá mais 85 cm na frente da bancada dão 135 cm, e o
-vão não tem. Não existe posição que satisfaça os dois, e nenhuma das duas
-mensagens diz isso.
+O `fix` é exatamente o movimento inverso do que acabou de ser feito, e a nota
+vai de 99 a 94. Os dois achados disputam o mesmo vão entre a península da
+cozinha e o rack da sala: 50 cm na frente do sofá mais 85 cm na frente da
+bancada dão 135 cm, e o vão não tem. Não existe posição que satisfaça os dois,
+e nenhuma das duas mensagens diz isso.
 
-**Custou:** um `move`, um check, um `move` de volta, e a nota oscilando entre
-87 e 99 no caminho.
+**Reproduzir:** `move(ids=["f933"], dx=0, dy=-14)` e rodar `ergonomics`.
 
 **Deveria:** quando o `fix` de um achado criaria outro de peso igual ou maior,
 dizer na própria mensagem — *"não cabem os dois: as duas folgas somam 135 cm e
 o vão não tem; a posição atual é a melhor das duas"*. Um achado que só pode ser
 aceito deveria nascer sabendo disso.
 
-## 51. O `route` redesenha, mas o traçado anterior fica na planta
+## 58. O `route` de ventilação desenha um ramal que o próprio `check` recusa
 
-A hidráulica tinha 8 polilinhas traçadas à mão em rodadas anteriores. O `route`
-novo traçou tudo sozinho:
-
-```
-plumbing(action="route", kind="cold",  via="floor") → 21,8 m, rev=4
-plumbing(action="route", kind="hot",   via="floor", from="f801") → 17,3 m, rev=5
-plumbing(action="route", kind="sewer", via="floor") → 18,1 m, rev=6
-plumbing(check) → "pipes_m": {"cold": 21.8, "hot": 17.3, "sewer": 18.1},
-                  "orphaned": []
-```
-
-`pipes_m` conta só os traçados novos — mas os 8 antigos continuam desenhados,
-por cima, no mesmo layer `plumbing`. Não aparecem no `pipes_m`, não aparecem no
-`orphaned`, não aparecem em finding nenhum. Quem imprimir a planta aí recebe
-dois ramais paralelos para cada ponto.
-
-Descobri comparando `polylines` do `/api/home` com os metros do check, e limpei
-com `delete(ids=["pl1615", …, "pl1622"])`.
-
-**E aconteceu de novo na elétrica, pior.** Depois de reassentar os pontos,
-rodei `route` de força, dados e TV. As 9 polilinhas `elec:cable` desenhadas à
-mão continuaram lá, agora apontando para coordenadas onde não há mais ponto
-nenhum — `[135,620]`, `[100,350]`, `[600,244]`. Cabos fantasmas para pontos que
-foram embora, invisíveis para o `check`, que só contou os 36,7 m do run novo.
-
-**Reproduzir:** desenhar um ramal com `cable`/polilinha, depois rodar `route`
-da mesma espécie.
-
-**Deveria:** o `route` substituir o traçado anterior da mesma espécie (é o que
-a descrição do `electrical route` promete — *"drawing it replacing the earlier
-run of the same circuit"* —, e no `plumbing` não aconteceu), ou dizer na
-resposta quantas polilinhas da disciplina ficaram fora do run, com os ids.
-
-## 52. `move` só anda por delta
-
-Toda leitura devolve posição absoluta: `{"id": "f933", "at": [515, 630]}`. Para
-mover, não:
+Caso novo, e ele nasceu de uma correção: o `plumb:vent-far` agora ensina o
+caminho — *"trace o ramal com route kind=vent e ele passa a contar"*. Traçado:
 
 ```
-move(ids=["f933"], to=[515, 616])
-→ failed to deserialize parameters: missing field `dx`
+plumbing(action="route", kind="vent",
+         ids=["f1591","f1598","f1589","f1596","f1594","f1601"], via="wall")
+→ {"via":"wall", "length_m":{"total":20.4}, "branches":5,
+   "run":"vent:f1589+f1591+f1594+f1596+f1598+f1601",
+   "materials":[["Tubo PVC esgoto série normal 50 mm (ramal de ventilação)",21.4,"m"], …]}
 ```
 
-O jeito é `move(ids=["f933"], dx=0, dy=-14)`. Numa peça só é subtração de
-cabeça; em cinco peças que precisam ir cada uma para um lugar lido antes, são
-cinco subtrações feitas por fora, e um sinal trocado move o móvel para o lado
-errado sem erro nenhum.
-
-**Deveria:** aceitar `to` como alternativa a `dx`/`dy` — a mesma unidade e o
-mesmo sistema que toda leitura devolve. E a mensagem de erro dizer o que
-existe (`move takes dx/dy, or to`), não só o campo que faltou.
-
-## 53. Achado que desenho nenhum fecha
-
-Seis achados desta rodada só puderam ser encerrados com `accept`, porque não há
-peça que os represente.
-
-**Ventilação permanente de gás.** O achado é correto e sério:
+O ramal foi desenhado, e `pipes_m` passou a contar `"vent": 20.4`. O check, no
+passo seguinte, sem nenhuma edição no meio:
 
 ```
-"Aparelho a gás: janela que fecha não é ventilação permanente. Preveja abertura
- permanente direta para o exterior (veneziana ou grelha, inferior e superior)"
+plumbing(check)
+→ ["alerta","Ventilação","Pontos sem tubulação chegando:
+    f1601, f1596, f1598, f1611, f1609, f1612, f1629, f1594, f1606, f1604."]
 ```
 
-Só que a grelha não existe:
+Os seis que ele acabou de traçar estão na lista. Medindo as polilinhas que ele
+mesmo escreveu contra os pontos que ele mesmo escolheu:
 
-```
-catalog(q="grelha veneziana ventilação") → {"items": [["vent-pipe", …]]}
-catalog(q="air vent grille louver abertura permanente")
-  → poltrona, cadeira, escada, ponto de ar-condicionado, tubo de ventilação
-```
-
-Em `crates/newera-ergonomics/src/lib.rs:1524` a regra dispara sempre que há
-aparelho a gás e `glass > 0`. Não há estado do desenho que a apague.
-
-**Ramal ventilador de esgoto.** Depois de plantar as três colunas
-(`vent-pipe`), sobraram cinco `plumb:vent-far` medindo distância em linha reta
-até a coluna mais próxima — 139 cm no lavatório da suíte, 312 cm na pia da
-cozinha. Todos se resolvem na obra com ramal ventilador de 40/50 mm correndo
-dentro da parede ou por cima dos armários, que é o que a NBR 8160 manda. Só que
-a única peça de ventilação é a coluna: não há como desenhar o ramal, e não há
-como abrir furo novo na laje de um apartamento para satisfazer a distância.
-
-**Custou:** seis `accept` com motivo escrito à mão, para achados que eu
-preferiria ter fechado desenhando.
-
-**Deveria:** uma peça de abertura permanente (grelha/veneziana, com área útil)
-que a regra de gás reconheça; e um ramal ventilador — uma polilinha da
-disciplina, como os ramais de água — que o `plumb:vent-far` aceite como
-percurso, já que a própria mensagem diz *"em linha reta; confira pelo
-percurso"*. A ferramenta sabe que a medida dela é uma aproximação, e não dá o
-caminho de dar a medida certa.
-
-## 54. `check_layout` afoga três casos reais em 49 aninhamentos esperados
-
-Depois de plantar 10 pontos de rede, 3 de automação, 1 de Wi-Fi e 3 colunas de
-ventilação:
-
-```
-check_layout() → "overlap_kinds": {"nesting": 49}
-```
-
-Dos 49, 46 são por construção: o ponto de água fria está dentro do lavatório
-que ele serve, o de esgoto dentro do vaso, o de gás dentro do gaveteiro sob o
-cooktop, a coluna de ventilação dentro do shaft. Um ponto de disciplina fora da
-peça que ele serve é que seria erro.
-
-Os 3 que importavam estavam no meio da lista, com o mesmo `kind` e o mesmo peso
-visual:
-
-- `f1660`, RJ45 da suíte, dentro da cama;
-- `f1665` e `f1666`, RJ45 da lavanderia, dentro da lava-e-seca e do gavetão,
-  porque `network-outlet` nasce com elevação baixa e a bancada está a 87 cm.
-
-Achei lendo a lista inteira de 49 linhas, uma a uma.
-
-**Deveria:** não reportar como aninhamento o ponto de disciplina contido na
-peça que ele serve — ou separá-los em `nesting: {expected, unexpected}`. E o
-ponto de rede sobre bancada nascer na altura de quem o usa, como o
-`outlet-mid` já faz.
-
-## 55. `route hot` pede a origem e não diz que ela é um id
-
-```
-plumbing(action="route", kind="hot", via="floor")
-→ route hot: where does hot water come from? name the heater (aquecedor) or give from
-plumbing(action="route", kind="hot", via="floor", from=[665, 266])
-→ from: [665, 266] is not a piece of this storey
-```
-
-A primeira mensagem diz "name the heater **or give from**", o que se lê como
-"dê o ponto de onde vem". `from` é o id de uma peça. A segunda mensagem só diz
-o que aquilo não é.
-
-**Custou:** uma chamada.
-
-**Deveria:** a primeira mensagem já dizer o formato — *"give `from` as the id
-of the piece it starts from (a heater, a shaft, the column)"* —, como o `route`
-do `electrical` faz na descrição.
-
-## 56. Nada avisa que um ponto ficou solto no ar
-
-O usuário desconfiou que havia peças flutuando. Havia, e nenhuma ferramenta
-disse.
-
-Sonda: uma tomada pedida a 30 cm de qualquer parede.
-
-```
-place(cat="outlet-low", at=[400,40], name="PROBE")     → ok rev=39
-/api/home → {"id":"f1706","position":[400,40],"bounds":[[395,38],[405,42]]}
-```
-
-Ela ficou exatamente onde foi pedida, boiando. O `electrical(check)` contou-a
-como ponto existente, o `check_layout` não a listou, e a nota não se moveu.
-Medindo os 79 pontos de disciplina contra a face da parede mais próxima, com
-um script escrito para isso:
-
-| Situação | Pontos |
+| ponto | distância à polilinha |
 |---|---|
-| a 4–7 cm da face da parede (toda a elétrica e a hidráulica de parede) | 45 |
-| sem nenhuma parede ao alcance, soltos no meio do cômodo | 4 |
-| dentro de um armário ou móvel, no ar | 3 |
-| pendurados abaixo do teto (Wi-Fi, sensor, relé) | 3 |
+| f1591 · lavatório social | 25,5 cm |
+| f1589 · vaso social | 27,5 cm |
+| f1596 · vaso suíte | 33,0 cm |
+| f1598 · lavatório suíte | 33,0 cm |
+| f1594 · ralo box social | 49,0 cm |
+| f1601 · ralo box suíte | 50,0 cm |
 
-Três exemplos do que isso significa na obra: a `Tomada — sala, parede oeste`
-estava a 96 cm da parede mais próxima, numa divisa que é vidro do escritório;
-o `Rede RJ45 — escritório` a 119 cm, no meio do cômodo; o relé inteligente
-dentro do armário aéreo da varanda, a 250 cm do piso.
+O traçado corre no eixo da parede (`[[30,496],[126,496],[200,496]]`), que é
+onde um ramal embutido corre de verdade, e a verificação de alcance não aceita
+essa distância. Nas outras espécies isso não acontece: depois de
+`route kind=data`, `kind=power` e `kind=cold`, os `unreached` correspondentes
+esvaziam.
 
-O `check_layout` tem `outside_rooms`, `in_wall`, `overlap` e `turned` — quatro
-relações — e nenhuma chamada "não está apoiado em nada". As 49 sobreposições
-que ele reporta são todas `nesting` esperado (o ponto de água dentro do
-lavatório, o cooktop dentro da bancada), o que torna a lista o lugar errado
-para procurar.
+**Custou:** duas chamadas de `route`, um script para medir ponto a polilinha, e
+um aceite escrito à mão para um achado que é da ferramenta, não do projeto.
 
-**Custou:** um script de 40 linhas para medir ponto a ponto contra as paredes,
-outro para procurar apoio em piso, teto, parede ou peça, e 24 chamadas de
-`move`/`update` para assentar tudo.
+**Efeito colateral encontrado no caminho:** duas chamadas de `route vent` com
+subconjuntos diferentes de `ids` criam dois runs que se empilham
+(`vent:a+b+c` e `vent:b+c`), somando 27,6 m de tubo onde há 20,4, e nenhum
+`replaced_drawn` avisa — porque o nome do run vem dos ids. Quando o segundo
+conjunto está contido no primeiro, deveria substituir.
 
-**Reproduzir:** `place` de qualquer ponto de parede com um `at` que não esteja
-exatamente na face.
-
-**Deveria:** o `place` assentar o ponto na estrutura — é o que
-`crates/newera-core/src/mounting.rs` faz no repositório (`seat`, commit
-`6b9f021`), e o app instalado aqui ainda não tem. Até chegar, o `check_layout`
-poderia ter uma relação `loose`: peça que não toca piso, teto, parede nem
-outra peça. Foi a pergunta que eu precisei responder, e a única forma foi por
-fora.
-
-## 57. A camada automática segue a primeira palavra do nome, não a peça
-
-O usuário apontou dois casos, e os dois eram o mesmo defeito.
-
-**O aéreo da geladeira não virou marcenaria.** `Aéreo geladeira — 79,9 cm;
-ventilação inferior preservada` é um armário planejado, e saiu em
-`plan_layer: "appliances"`. Em `crates/newera-core/src/layers.rs:166` as
-palavras de eletrodoméstico são testadas antes das de marcenaria, e
-"geladeira" ganha de "aereo".
-
-**O armário da coifa perde as laterais.** O grupo `f1067` — o caixote de
-madeira oliva que embute a coifa, com molduras iguais às dos aéreos — está em
-`joinery`, certo. Mas 14 das suas peças estão em `appliances`, porque o nome
-de cada uma começa com "Coifa —":
-
-```
-f1049 "Coifa — lateral oliva"          → appliances
-f1051 "Coifa — painel oliva rebaixado" → appliances
-f1063 "Coifa — veneziana superior oliva" → appliances
-f1056 "Coifa — puxador pequeno dourado" → appliances
-…
-f1052 "Coifa — moldura vertical oliva" → joinery   (só porque tem "moldura")
-```
-
-O efeito é visível: esconder a camada de eletrodomésticos tira as laterais, os
-painéis e a veneziana, e deixa as molduras penduradas no ar em volta da coifa.
-Um armário que some pela metade.
-
-A regra em `layer_in_group` diz que a peça com camada própria vence a do grupo
-— boa ideia para o forno embutido na torre. Mas a camada própria aqui foi
-adivinhada pelo nome, e o nome descreve *o que a peça embute*, não o que ela é.
-
-**Custou:** replicar `layer_of` num script para varrer as 213 peças, e um
-`update(layer=...)` com 19 ids.
-
-**Deveria:** dentro de um grupo, a peça só sair da camada do grupo quando a
-camada dela for escrita à mão (`plan:layer`), não quando for adivinhada pelo
-nome; e, fora de grupo, as palavras de marcenaria pesarem mais que as de
-eletrodoméstico quando as duas aparecem ("aéreo geladeira", "nicho do forno",
-"torre da lava-louças" são todos marcenaria).
-
-## Resolvidos no código, a conferir na planta (48 a 57 e o que veio junto)
-
-Tudo abaixo está no app reinstalado. A suíte do workspace passa inteira (421
-testes) e o clippy está limpo. Uma cópia desta planta, tirada da sessão
-aberta, foi rodada antes do commit: a nota ficou em **77**. As regras novas
-acharam 4 casos reais, todos listados em `check_layout` → `loose`:
-
-- `f1571`, tomada da cozinha, e `f1664`, RJ45 da cozinha, dentro do vão da
-  porta do banho social;
-- `f1610`, água fria da lava e seca, e `f1613`, registro geral, sobre o
-  fechamento de vidro da varanda.
-
-Há ainda três pontos atrás da folha de porta, pelo lado da dobradiça, só como
-dica.
-
-| # | Como conferir | O que deve voltar |
-|---|---|---|
-| 48 | `ergonomics` com uma aceitação antiga `-:f807:…` | O achado `nbr15575g:f807:…` vem aceito com o mesmo motivo, com `accepted_as` apontando a chave antiga. A antiga não aparece mais em `orphaned`. (`e4d58b4`) |
-| 49 | `update(items=[{"id":"f1576","props":{…}}])` | Erro `unknown field props`, nunca "nada mudou". (`df75a6a`) |
-| 50 | O sofá entre a península e o rack | O `fix` que moveria o sofá para dentro de outro achado igual ou pior some, e a mensagem diz *"Não cabem os dois: afastar isso cria «…» em …"*. Quando o outro achado é mais leve, a mensagem avisa *"Isso deixa «…»"*. (`f59adf2`) |
-| 51 | `plumbing(action="route", kind="cold")` com traçados antigos à mão | `replaced_drawn` lista as polilinhas trocadas: as da mesma espécie que chegam aos pontos, e as sem espécie que começam e terminam neles. O `electrical route` faz o mesmo. O `plumbing()` avisa linhas sem espécie em `plumb:untyped-lines`. (`5cf2f3b`) |
-| 52 | `move(ids=["f933"], to=[515,616])` | O primeiro id vai para lá e os outros acompanham. Parede como primeiro id diz *"move takes dx/dy"*. (`6a60091`) |
-| 53 | `catalog(q="grelha ventilação")`; `plumbing(action="route", kind="vent")` | Peça nova `vent-grille`: duas grelhas no ambiente do gás fecham o alerta, uma só vira dica. O ramal de ventilação é traçado da coluna aos desconectores, pela parede ou pelo forro, nunca pelo piso, com materiais. Um ramal traçado que chega ao desconector conta no `plumb:vent-far`. (`d2cc8eb`) |
-| 54 | `check_layout()` | `overlap_kinds` separa `served` (ponto dentro da peça a que serve, de propósito) de `nesting`. Ponto de rede ou tomada pedido atrás de uma bancada nasce 15 cm acima do tampo. (`bdb59df`, `dac8049`) |
-| 55 | `plumbing(action="route", kind="hot")` sem aquecedor | A mensagem já diz que `from` é o id de uma peça, com exemplo. (`d331846`) |
-| 56 | `place(cat="outlet-low", at=[400,40])` longe de parede | Recusado com a distância da parede mais próxima. Perto de uma parede, o ponto vai para a face dela. Ponto de teto vai ao teto. `check_layout` ganhou `loose` com o motivo: solto, no vidro, no vão, no ar. Ponto atrás de móvel ou embutido em móvel **não** é defeito. (`ddc8deb`, `bdb59df`, `b729946`) |
-| 57 | `plan_layer` do "Aéreo geladeira" e das peças "Coifa — …" | Marcenaria. Peça de grupo só sai da camada do grupo quando a dela é certa: escrita à mão, luminária ou eletrodoméstico de catálogo. (`e650c05`) |
-| Camada elétrica | Menu Camadas → "Elétrica (tomadas, luz, cabos)" | Esconder a elétrica tira tomadas, luminárias, cabos e números de circuito, na planta e no 3D. (`ce75ef3`) |
-| Ralos | `catalog(q="ralo")`; `plumbing()` | Ralo agora é o modelo que ele é, pelas fichas Tigre/Wavin/Krona: caixa sifonada 150×150×50, 100×150×50 e 150×185×75, ralo sifonado pequeno, ralo seco, linear com e sem sifão, ralo pluvial. Cada um tem fecho, saída, UHC e profundidade. O ralo vai rente ao piso do cômodo, nunca na parede, no vão ou embaixo de gabinete. O check cobra, por cômodo: um desconector de verdade (fecho de 50 mm), a carga que a saída aguenta, o ralo dentro do box e ralo pluvial em área descoberta. O `route` de esgoto compra cada ralo pelo modelo e soma a profundidade do corpo. (`4290312`) |
-| Fita elétrica | `electrical(action="route", kind="power", ids=[…], via="tape")` | Escolhe o modelo Eletrofitas pela carga; tomada exige a EF18.9.18, que tem terra. Recusa acima de 20 A, em banheiro ou área externa, e para rede ou TV. Compra os kits da Leroy com código, preço e emendas, e traz as notas: coberta por malha e massa, disjuntor até a corrente da fita, fora da NBR 5410 e sem Inmetro. (`5be63f2`) |
-| Tomadas embutidas | `place(cat="outlet-tower", at=[…])` sobre uma bancada | Torre retrátil de 60 mm, automática de 85 mm, de 4 tomadas de 100 mm, caixa de mesa e tomada de embutir em móvel, com símbolo e modelo 3D. A torre assenta no tampo, e bancada e torre podem vir na mesma chamada. O check cobra: nada embaixo (gaveta, forno, lava-louças, cuba, cooktop), 2,5 cm da borda, 30 cm da cuba e do cooktop, nada de banheiro, e tomada no gabinete para a torre de plugue. (`659715b`) |
-| Lacunas de norma | `route`/`circuits`/`plumbing`/`ergonomics`/`wifi` | Elétrica: caixas de passagem a cada 15 m menos 3 m por curva, DR agrupado admitido. Esgoto: caixa de inspeção de 60 cm, nota da curva do vaso e o teto de 5 % nos subcoletores. Wi-Fi: access point de outro andar atravessando a laje (10/13 dB), vidro low-e, bandas por AP. Ergonomia: 60 cm entre camas de solteiro, tampo acessível a 85 cm e cama a 46 cm, aquecedor a gás no banheiro (tipo C), cocção a gás onde se dorme (8,14 kW). O quadro de cargas do app agora rola a lista de achados. (`779d461`, `05344a7`, `71ffc3e`, `dac8049`, `70e3132`) |
+**Deveria:** a verificação de alcance da ventilação medir contra o run, com a
+mesma folga que as outras espécies usam — ou o `route` recusar traçar o que o
+`check` não vai aceitar, em vez de entregar um traçado e cobrá-lo em seguida.
 
 ---
 
 ## Conferido nesta rodada
 
-Os seis casos que estavam em aberto foram testados na planta, não no changelog.
-Todos caíram.
+Oito dos dez casos abertos caíram. Cada um testado na planta, com o comando que
+o produziu — não no changelog.
 
 | # | O que doía | O comando desta rodada | O que voltou |
 |---|---|---|---|
-| 40 | Cabear era digitar coordenada por coordenada: 9 chamadas de `cable` guiadas pelo alerta do check | `electrical(action="route", kind="data")` e `kind="tv"` | Uma chamada por espécie. 34,2 m de percurso, `by_premise_m` das três premissas (parede e forro recusados nomeando os pontos), e a lista de material: 35,9 m de eletroduto, 15 curvas, 149,6 m de Cat 6, 14 keystones, 14 portas de patch panel, 14 caixas 4×2 |
-| 42 | Um circuito por chamada, 7 chamadas para uma decisão só | `electrical(action="assign", ids=[…], circuit="C2")` com os 3 ids de automação | Aceita o mapa `{"C1": […], "C2": […]}` inteiro num passo de undo; `assign` também escreve `modules`, `standby_w`, `max_w`, `volts` e `va` |
-| 44 | A hidráulica não tinha quem conferisse: 27 pontos decididos na mão | `plumbing(check)` e `plumbing(route)` das três espécies | O check achou 6 problemas reais que eu não tinha visto — os dois lavatórios sem água quente, a cozinha sem ralo (COE-SP), o esgoto sem ventilação, sem caixa de inspeção e sem caixa de gordura. Corrigidos com 4 peças novas e 2 aceites motivados. O `route` de esgoto sai com caimento de 1 %, tronco de 100 mm, Y de 45° no lugar de tê, `needs_depth_cm: 31` e 16 linhas de material |
-| 45 | Automação não existia no projeto elétrico | `place` de `dimmer`, `presence-sensor` e `smart-relay`, depois `electrical(check)` e `circuits` | As três peças entraram, contadas como `"Automação": 3`. O check cobrou neutro na caixa do relé citando fabricante (Shelly, Exatron, Qualitronix), não a 5410, e cobrou circuito para as três. Nenhum falso positivo de altura no sensor nem de carga no dimmer |
-| 46 | O ponto de Wi-Fi era um símbolo: nem cobertura, nem banda, nem alimentação | `electrical(action="wifi")`, depois com `ids`, `standard`, `poe`, `uplink` | Sugeriu sozinho o lugar: `[[447, 374.5, 270, "Cozinha"]]`, Wi-Fi 6, 5 GHz. Plantado ali, devolveu cobertura por cômodo e banda em dBm — mediana, pior caso, fração acima de −67 e nota em português. Só o banho da suíte fica fraco em 5 GHz, e o 2,4 cobre. O check passou a cobrar cabo de dados e alimentação do AP |
-| 47 | O quadro não tinha capacidade, e a proteção parava no disjuntor | `electrical(assign, modules=24)`, `voltage(short_ka=10, earthing="TN-C-S")`, `circuits` | `panel` com os dispositivos e os módulos DIN de cada um, `modules: {capacity: 24, capacity_written: true, used: 21, spare: 3}`, DPS classe II com Up ≤ 1,5 kV e N-PE ≥ 10 kA, aterramento TN-C-S, `icn_ka: 10`, `selective: true` e `main_breaker: {a: 63, phases: 1, load_a_per_phase: 57.6}` |
+| 48 | A aceitação virava órfã quando a chave do achado ganhava a fonte como prefixo | Subida de versão inteira, depois `ergonomics(prune=true)` e `plumbing(check)` | Nenhuma aceitação se perdeu nesta subida: os 20 motivos escritos continuaram colados aos achados. O mecanismo que o caso pedia — casar a órfã com o achado sucessor — não existe: `orphaned` ainda devolve só `[chave, motivo]`, testado com uma aceitação inventada (`plumb:vent-far:f9999`). Sem sintoma, e sem rede de proteção para a próxima vez |
+| 49 | `update` aceitava um campo inexistente e respondia "nada mudou" | `update(items=[{"id":"f1576","props":{…}}])` | `unknown field 'props', expected one of id, a, b, t, h, arc, name, pts, …` — recusa na cara, com a lista do que existe |
+| 51 | O `route` redesenhava e o traçado à mão ficava por cima | `cable(kind="tv", pts=[[170,750],[340,750],[340,700]])` e depois `route(kind="tv")` | `"replaced_drawn": ["pl1877"]` — apagou o traçado antigo e disse qual |
+| 52 | `move` só andava por delta | `move(ids=["f933"], to=[515,630])` | `ok` |
+| 53 | Achado que desenho nenhum fechava | `catalog(q="grelha veneziana ventilação")` e `plumbing(route, kind="vent")` | Existem os dois: `vent-grille` "Grelha de ventilação permanente (gás)" 20 × 4 × 15, e `route kind=vent`, que recusa o piso com a razão certa (*"enterrado ele enche de água e não ventila"*). A grelha zera o alerta de gás quando está no cômodo do aparelho — aqui a cozinha não tem parede externa e a envoltória é o fechamento da varanda, então o achado segue aceito, agora apontando para uma peça desenhada |
+| 54 | `check_layout` afogava os casos reais em 49 aninhamentos esperados | `check_layout()` | `overlap_kinds: {nesting: 20, served: 31}` — o ponto dentro da peça que ele serve virou relação própria — e uma relação nova, `loose`, com a razão escrita: *"está no vão da porta Porta do banho social (f1512): não há parede ali para a caixa"* |
+| 55 | `route hot` pedia a origem e não dizia que era um id | `plumbing(route, kind="hot")` sem `from` | *"name the heater (aquecedor), or give from as the id of the piece it starts from (a heater, a shaft, a column), e.g. from=\"f801\""* |
+| 56 | Nada avisava que um ponto ficou solto no ar | `place(cat="outlet-low", at=[400,40])` e `place(cat="network-outlet", at=[135,620])` | A primeira foi assentada sozinha: pedida em `y=40`, ficou em `y=12`, com as costas na face da parede. A segunda foi recusada: *"fica embutido em parede, e a parede mais próxima (w20) está a 119 cm: dê at junto a uma parede ou wall=<id>"* |
+| 57 | A camada automática seguia a primeira palavra do nome | `update(items=[{"id":"f831","layer":""}])` e o mesmo nas 14 peças do armário da coifa | Tirados os overrides manuais, "Aéreo geladeira" continua `joinery`, e as 14 peças de madeira do armário da coifa também — a peça de um grupo só sai da camada do grupo quando a camada dela foi escrita à mão |
 
-A auditoria das normas anunciada na rodada anterior também bateu na planta, com
-os efeitos que ela previa: o círculo da cozinha passou de 1,20 m para 1,50 m
-(COE-SP, tabela 5.A.6) e reabriu como erro; a carga de iluminação virou carga
-de cômodo; a NBR 16264 entrou por cômodo e gerou as dicas de rede e TV que
-levaram aos 10 pontos novos; a ventilação de esgoto e o ralo seco da cozinha
-apareceram como a tabela prometia. Nada disso virou caso aqui — foi mudança
-anunciada, e o único atrito que sobrou dela está no **48**.
+### O que as regras novas encontraram na planta
+
+Duas verificações que não existiam antes acharam **nove erros reais**, seis
+deles introduzidos por mim na rodada passada, quando assentei os pontos à mão
+sem saber de vão de porta nem de vidro:
+
+- `loose` — a tomada e o RJ45 da cozinha **dentro do vão da porta do banho
+  social**; o registro geral **sobre o vidro do fechamento da varanda**; o ponto
+  de água da lava-e-seca solto no meio da lavanderia;
+- `elec:hidden` — cinco pontos **atrás da folha aberta de uma porta**
+  (*"ponha-o do lado da maçaneta"*): a tomada do dormitório atrás da porta da
+  suíte, os dois pontos da cozinha atrás da porta do banheiro, a tomada e o
+  RJ45 do escritório atrás da porta de entrada.
+
+Todos corrigidos. A tomada da cozinha foi para junto da geladeira, o RJ45 para
+o extremo da bancada, o registro geral desceu para 90 cm (abaixo do peitoril do
+vidro) e o ponto da lava-e-seca subiu para a parede atrás da máquina.
+
+Estado final: **nota 100**, zero achados com peso, `loose: 0`, `pending: 0` nas
+três disciplinas, 213 peças e **nenhuma sem apoio** em piso, teto, parede ou
+outra peça — medido peça a peça, não por amostragem.
 
 ## O que já caiu
 
-Quarenta e seis casos, todos verificados em uso na mesma planta, não no
+Cinquenta e seis casos, todos verificados em uso na mesma planta, não no
 changelog. A lista com o que doía em cada um e onde foi resolvido está no
 histórico do git.
 
@@ -414,5 +165,8 @@ peça abre; o `cut_list` alcançando o que foi desenhado à mão e declarando o 
 pulou; o grupo que mantém a espessura das chapas e faz crescer o vão; o número
 da peça preso à peça; o `no_door` para cômodo sem acesso; o quantitativo
 agrupado por tipo; o ponto de disciplina que deixou de ser lido como móvel; e
-agora as três disciplinas com o mesmo par `check` + `route`, que é o que
-transformou a hidráulica de adivinhação em trabalho conferido.
+as três disciplinas com o mesmo par `check` + `route`, que é o que transformou
+a hidráulica de adivinhação em trabalho conferido; e, nesta rodada, o `place`
+que assenta o ponto na parede sozinho e as duas relações que dizem quando uma
+peça não está apoiada em nada ou ficou atrás da folha de uma porta — as três
+coisas que faziam a planta parecer certa no número e errada no desenho.
