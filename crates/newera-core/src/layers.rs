@@ -179,9 +179,11 @@ pub fn layer_of(piece: &Furniture) -> Option<PlanLayer> {
     if has(&JOINERY_STRONG) {
         return Some(PlanLayer::Joinery);
     }
-    if APPLIANCE_CATALOG.contains(&catalog) || has(&APPLIANCE_WORDS) {
+    if APPLIANCE_CATALOG.contains(&catalog) {
         return Some(PlanLayer::Appliances);
     }
+    // A name with both kinds of word is the cabinet around the appliance:
+    // "Aéreo geladeira", "Torre da lava-louças".
     if piece.properties.contains_key("joinery:params")
         || piece.properties.contains_key("joinery:part")
         || JOINERY_CATALOG.contains(&catalog)
@@ -189,16 +191,30 @@ pub fn layer_of(piece: &Furniture) -> Option<PlanLayer> {
     {
         return Some(PlanLayer::Joinery);
     }
+    if has(&APPLIANCE_WORDS) {
+        return Some(PlanLayer::Appliances);
+    }
     None
 }
 
-/// The layer a piece of a group is drawn in: its own when it has one — the
-/// oven built into a tower is an appliance, the spot in a shelf lighting —
-/// else its group's.
+/// Whether a piece's layer is known rather than read from its name: written
+/// by hand, a lamp that lights, or an appliance by its catalog.
+fn layer_is_certain(piece: &Furniture) -> bool {
+    piece.properties.contains_key(LAYER_KEY)
+        || piece.light.is_some()
+        || LIGHTING_CATALOG.contains(&piece.catalog.as_str())
+        || APPLIANCE_CATALOG.contains(&piece.catalog.as_str())
+}
+
+/// The layer a piece of a group is drawn in: its own when it is known — the
+/// oven from the catalog built into a tower is an appliance, the spot in a
+/// shelf lighting, a layer written by hand — else its group's. A part only
+/// named after what it holds ("Coifa — lateral oliva") is part of the
+/// cabinet, and goes with it.
 pub fn layer_in_group(top: &Furniture, part: &Furniture) -> Option<PlanLayer> {
     if part.id != top.id
+        && layer_is_certain(part)
         && let Some(own) = layer_of(part)
-        && (part.properties.contains_key(LAYER_KEY) || own != PlanLayer::Joinery)
     {
         return Some(own);
     }
@@ -220,6 +236,50 @@ mod tests {
             height: 90.0,
             ..Furniture::default()
         }
+    }
+
+    #[test]
+    fn a_cabinet_named_after_its_appliance_is_joinery_and_keeps_its_parts() {
+        assert_eq!(
+            layer_of(&piece(
+                1,
+                "imported",
+                "Aéreo geladeira — 79,9 cm; ventilação inferior preservada"
+            )),
+            Some(PlanLayer::Joinery)
+        );
+        assert_eq!(
+            layer_of(&piece(2, "imported", "Torre da lava-louças")),
+            Some(PlanLayer::Joinery)
+        );
+        assert_eq!(
+            layer_of(&piece(3, "imported", "Geladeira Electrolux IM7B")),
+            Some(PlanLayer::Appliances)
+        );
+        // The hood's box: every part named "Coifa — …" stays with the box.
+        let mut box_ = piece(10, "group", "Armário da coifa");
+        box_.children = vec![
+            piece(11, "box", "Coifa — lateral oliva"),
+            piece(12, "box", "Coifa — veneziana superior oliva"),
+            piece(13, "box", "Coifa — moldura vertical oliva"),
+        ];
+        for part in &box_.children {
+            assert_eq!(
+                layer_in_group(&box_, part),
+                Some(PlanLayer::Joinery),
+                "{}",
+                part.name
+            );
+        }
+        // An oven from the catalog built into a tower is still an appliance,
+        // and a layer written by hand wins.
+        let oven = piece(14, "oven", "Forno");
+        assert_eq!(layer_in_group(&box_, &oven), Some(PlanLayer::Appliances));
+        let mut written = piece(15, "box", "Coifa — lateral oliva");
+        written
+            .properties
+            .insert(LAYER_KEY.into(), "appliances".into());
+        assert_eq!(layer_in_group(&box_, &written), Some(PlanLayer::Appliances));
     }
 
     #[test]
