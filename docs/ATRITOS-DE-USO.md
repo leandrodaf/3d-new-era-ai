@@ -217,16 +217,88 @@ está correto".
 
 **Encurtaria:** `accept` em `check_layout`, igual ao do `ergonomics`.
 
+## 10. A cota que vira mentira não é detectada, e a proteção só serve antes
+
+Recuar a bancada da cozinha de 84 para 65 cm deixou a cota do corredor dizendo
+`66,5` sobre um vão que passara a ter 88. É o erro mais caro que uma planta de
+obra pode ter: quem for executar lê a cota.
+
+`annotations(stale=true)` respondeu `{"stale": []}` **depois** da mudança.
+
+A razão está na própria ferramenta: uma cota só é reconferida se tiver sido
+ancorada antes, com `anchor=true` — *"run it while the numbers are still
+right"*. Nesta planta nenhuma cota estava ancorada, então não havia o que
+conferir, e a resposta vazia foi indistinguível de "tudo certo".
+
+Pior: a proteção não é aplicável depois. Rodar `anchor=true` com a cota já
+errada **congela o erro** — ela passa a seguir o desenho a partir de um número
+que já não corresponde. É preciso corrigir à mão primeiro (foram quatro cotas:
+`d95`, `d102`, `d103`, `d105`) e só então ancorar, que foi o que se fez: 20
+cotas ancoradas, e daqui em diante elas se remedem sozinhas.
+
+**Encurtaria:** `stale` dizer quantas cotas conferiu e quantas estão sem
+âncora — "0 de 29 ancoradas" é uma resposta muito diferente de `[]`. E o
+`anchor` recusar, ou ao menos avisar, quando a cota que vai ancorar já não bate
+com o que ela mede.
+
+## 11. Um `accept` sobrevive ao problema que o justificava
+
+Oito achados de circulação da cozinha foram aceitos com a medida do corredor de
+69 cm escrita como razão. Depois, a bancada foi recuada e **os oito
+desapareceram de verdade** — o corredor passou a ter 88 cm.
+
+As oito justificativas continuaram gravadas no projeto, agora órfãs. Não
+aparecem em lugar nenhum do relatório (o achado não existe mais), e nada avisa
+que estão lá. Se um dia alguém reaproximar a bancada, o problema volta **já
+silenciado**, com peso 0 e uma razão de 2026 explicando um corredor que não
+existe mais.
+
+Foi preciso limpá-las à mão, uma a uma, com `accept=[[key, ""]]` — e só porque
+se sabia quais tinham sido aceitas.
+
+**Encurtaria:** listar os aceites órfãos ("8 aceites não correspondem a nenhum
+achado atual"), ou expirá-los quando o achado some.
+
+## 12. Dois atritos pequenos que custam caro em tokens
+
+**`catalog(scope=project)` ignora o `q`.** Pedir `q="janela"` com
+`scope="project"` devolveu as 200 e poucas entradas do projeto inteiro, da
+pétala de flor ao puxador de latão. O parâmetro existe na mesma chamada e é
+silenciosamente descartado.
+
+**O `score` do dry run não usa os parâmetros da revisão.** A planta estava em
+91 com `occupants=3, children=1`; os dry runs relatavam `"score": [92, 87]` —
+87 é a nota com os defaults (2 ocupantes). Não há onde informar a ocupação num
+dry, então o número que ele devolve não é comparável com o da revisão que se
+está conduzindo. Dá para usar o *sinal* (subiu/desceu), nunca o valor.
+
 ---
+
+## O que a revisão fez na planta
+
+De 50 para 97 de nota, sem esconder nada — cada aceite carrega a medida que o
+justifica, e os que deixaram de fazer sentido foram removidos.
+
+- **Choque real na bancada** (o único `collision` da planta): era a caixa do
+  modelo da cuba, não a peça. Caixa ajustada ao vão que ela ocupa.
+- **Cozinha corredor**: a bancada norte tinha 84-85 cm de profundidade e
+  deixava 69 cm de passagem. Recuada para 65 cm — armários, pedra, cooktop,
+  coifa e arremates —, o corredor passou a 88 cm e **oito alertas de circulação
+  deixaram de existir**. A geladeira, que tem 74,5 cm e não encolhe, foi
+  encostada a 5 cm da parede (o mínimo do fabricante): 66,5 → 75,2 cm.
+- **Escritório**: janela de 100 × 110 cm na fachada oeste, peitoril a 100 cm
+  acima da bancada. 1,1 m² de vão para 3 m² de piso.
+- **Cotas**: quatro corrigidas e 20 ancoradas — de agora em diante elas seguem
+  o desenho.
+- **Camada de referência**: a planta antiga estava na mesma elevação da nova e
+  entrava nos checks.
 
 ## O que ficou por decidir (não é atrito, é do morador)
 
-- **Escritório sem janela** (peso 5, o maior aberto): 3 m² fechados em vidro
-  canelado, com uma parede externa à esquerda. Abrir janela ali é obra de
-  fachada.
-- **Corredor da cozinha, 69 cm**: as bancadas norte foram desenhadas com 84-85
-  cm de profundidade. Recuá-las para 65 cm levaria o corredor a ~88 cm e
-  resolveria oito alertas de uma vez, ao custo da bancada e de reposicionar
-  cooktop, coifa e gavetões.
-- **Cidade**: sem ela, o código de obras municipal só aconselha. `set_home(city=...)`.
-- **Sala**: 2 lugares para 3 moradores.
+- **Cidade**: não há pista dela em lugar nenhum do projeto, e chutar faria o
+  código de obras errado julgar a planta. `set_home(city=...)`.
+- **Terceiro lugar na sala**: 10,2 m² não comportam uma poltrona solta —
+  testada em três posições, todas estrangulam a passagem diante do sofá. O
+  caminho é trocar o retrátil de 2 lugares por um de 3 no mesmo vão de 200 cm.
+- **Ventilação do aparelho a gás**: conferir contra a edição vigente da
+  NBR 13103, cujos valores mudaram entre edições.

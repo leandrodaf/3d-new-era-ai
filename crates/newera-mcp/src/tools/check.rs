@@ -242,6 +242,67 @@ mod tests {
         assert!(!bg.visible && (bg.opacity - 0.2).abs() < 1e-9);
     }
     #[test]
+    fn a_blind_in_its_wall_and_a_shaft_outside_rooms_can_be_accepted() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}],
+                    "rooms":[{"name":"Sala","at":[200,150]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"box","name":"persiana integrada","at":[200,0],"w":120,"d":10,"h":30},
+                             {"cat":"box","name":"shaft","at":[600,150],"w":40,"d":40,"h":250}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let check = |json: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.check_layout(Parameters(serde_json::from_str(json).unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        let (blind, shaft) = {
+            let doc = s.document.read();
+            let f = &doc.home().furniture;
+            (f[0].id.to_string(), f[1].id.to_string())
+        };
+        let report = check("{}");
+        let wall = report["in_wall"][0][1]["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("{report}"));
+        assert_eq!(report["in_wall"][0][0]["id"], blind.as_str(), "{report}");
+        assert_eq!(report["outside_rooms"][0]["id"], shaft.as_str(), "{report}");
+
+        let report = check(&format!(
+            r#"{{"accept":[["in_wall:{blind}+{wall}","persiana de rolo embutida na parede"],
+                          ["outside_rooms:{shaft}","shaft fora dos cômodos, correto"]]}}"#
+        ));
+        assert!(report.get("in_wall").is_none(), "{report}");
+        assert!(report.get("outside_rooms").is_none(), "{report}");
+        let accepted = report["accepted"].as_array().unwrap();
+        assert_eq!(accepted.len(), 2, "{report}");
+        assert!(
+            accepted.iter().any(
+                |a| a["kind"] == "in_wall" && a["why"] == "persiana de rolo embutida na parede"
+            ),
+            "{report}"
+        );
+        let doc = s.document.read();
+        assert!(
+            newera_core::check_layout(doc.home())
+                .iter()
+                .all(|i| !i.is_pending(doc.home())),
+            "nothing left to fix"
+        );
+    }
+
+    #[test]
     fn a_clash_looked_at_can_be_accepted_with_its_reason() {
         let s = server();
         // A 70 cm sink model whose box is a whole stone, 5.4 cm over the
