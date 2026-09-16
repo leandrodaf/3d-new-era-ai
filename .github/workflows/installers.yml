@@ -31,8 +31,12 @@ jobs:
           codesign --verify --deep "$app"
           "$HOME/.local/bin/newera" --version
           ls "${TMPDIR:-/tmp}" | grep -q newera-install && { echo "temporary folder left behind"; exit 1; } || true
+      # The runner is an English machine, so the script answers in English:
+      # the language is pinned here to read the answer in one of them.
       - name: Run again (nothing to download)
         working-directory: ${{ runner.temp }}
+        env:
+          NEWERA_LANG: pt_BR
         run: bash "$GITHUB_WORKSPACE/scripts/install-macos.sh" < /dev/null | tee out.txt && grep -q "já instalado" out.txt
       - name: Uninstall
         working-directory: ${{ runner.temp }}
@@ -67,6 +71,8 @@ jobs:
           }
       - name: Run again (nothing to download)
         shell: powershell
+        env:
+          NEWERA_LANG: pt_BR
         run: |
           $out = Get-Content -Raw -Encoding UTF8 scripts/install-windows.ps1 | Invoke-Expression 6>&1 | Out-String
           if ($out -notmatch 'instalado nesta') { throw "expected no download: $out" }

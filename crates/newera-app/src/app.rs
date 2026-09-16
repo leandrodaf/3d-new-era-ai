@@ -2258,7 +2258,17 @@ mod tests {
                 Box::new(|app: &mut NewEraApp| app.set_status("Aberto: casa.newera"))
             },
         );
-        h.run_steps(3);
+        // The work reports from a thread of its own, which may not have run a
+        // single line by the time the first frames are drawn: the window is
+        // read once what the work says has reached it, not a fixed three
+        // frames later.
+        for _ in 0..400 {
+            h.run_steps(1);
+            if h.query_by_label_contains("30%").is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
         // The window says what is happening, to what, and how far along.
         h.get_by_label_contains("Abrindo projeto");
         h.get_by_label_contains("casa.newera");
