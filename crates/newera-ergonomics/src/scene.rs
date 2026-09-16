@@ -800,6 +800,57 @@ impl<'a> Scene<'a> {
         })
     }
 
+    /// Centimeters of unit `i`'s sides (moved by `dx`, `dy`) held against
+    /// walls and standing pieces at its own height: the two cabinets a
+    /// dishwasher sits between, the tower beside an oven.
+    ///
+    /// A piece built into a run is not glued to it — it is a separate piece
+    /// in a niche — so the only trace of the niche is this contact. A move
+    /// that loses it takes the appliance out of its joinery, whatever it
+    /// gains in the corridor.
+    pub fn held(&self, i: usize, dx: f64, dy: f64) -> f64 {
+        const BAND: f64 = 2.0;
+        let piece = self.units[i].piece;
+        let (hw, hd) = (piece.width / 2.0, piece.depth / 2.0);
+        let (z0, z1) = piece.height_range();
+        let bands = [
+            (-hw, hw, hd, hd + BAND),
+            (-hw, hw, -hd - BAND, -hd),
+            (-hw - BAND, -hw, -hd, hd),
+            (hw, hw + BAND, -hd, hd),
+        ];
+        let others: Vec<&Polygon<f64>> = self
+            .walls
+            .iter()
+            .chain((0..self.units.len()).filter_map(|j| {
+                let (b0, b1) = self.units[j].piece.height_range();
+                (j != i && self.solid(j) && b0 < z1 - 1.0 && z0 < b1 - 1.0)
+                    // Resting on it or built into it is not beside it.
+                    .then_some(&self.footprints[j])
+                    .filter(|f| Self::shared(f, &self.footprints[i]) <= 25.0)
+            }))
+            .collect();
+        bands
+            .iter()
+            .map(|&(x0, x1, y0, y1)| {
+                let band: Vec<Point2> = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+                    .into_iter()
+                    .map(|p| {
+                        let at = piece.to_plan(p);
+                        Point2::new(at.x + dx, at.y + dy)
+                    })
+                    .collect();
+                let band = polygon(&band);
+                others
+                    .iter()
+                    .map(|o| Self::shared(&band, o))
+                    .sum::<f64>()
+                    .min(band.unsigned_area())
+                    / BAND
+            })
+            .sum()
+    }
+
     /// How many sides of unit `i` (moved by `dx`, `dy`) rest against a wall.
     pub fn contacts(&self, i: usize, dx: f64, dy: f64) -> usize {
         let piece = self.units[i].piece;

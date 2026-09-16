@@ -1478,6 +1478,7 @@ fn nudge(scene: &Scene<'_>, i: usize) -> Option<serde_json::Value> {
     }
     let room = scene.room_at(piece.position);
     let on_walls = scene.contacts(i, 0.0, 0.0);
+    let held = scene.held(i, 0.0, 0.0);
     let mut step = 5.0;
     while step <= 150.0 {
         for (lx, ly) in [(step, 0.0), (-step, 0.0), (0.0, step), (0.0, -step)] {
@@ -1485,6 +1486,7 @@ fn nudge(scene: &Scene<'_>, i: usize) -> Option<serde_json::Value> {
             let (dx, dy) = (to.x - piece.position.x, to.y - piece.position.y);
             if scene.room_at(to) == room
                 && scene.contacts(i, dx, dy) >= on_walls
+                && scene.held(i, dx, dy) + 1.0 >= held
                 && scene.conflicts(i, dx, dy) == 0
             {
                 let round = |v: f64| (v * 10.0).round() / 10.0;
@@ -1503,7 +1505,7 @@ fn nudge(scene: &Scene<'_>, i: usize) -> Option<serde_json::Value> {
 }
 
 /// Moves unit `i` `dist` cm along `dir` if that adds no problem, keeps it in
-/// its room and on its walls: move arguments.
+/// its room, on its walls and in its niche: move arguments.
 fn push_away(scene: &Scene<'_>, i: usize, dir: (f64, f64), dist: f64) -> Option<serde_json::Value> {
     let piece = scene.units[i].piece;
     if piece.is_opening() || !piece.locks.movable {
@@ -1515,6 +1517,8 @@ fn push_away(scene: &Scene<'_>, i: usize, dir: (f64, f64), dist: f64) -> Option<
     let round = |v: f64| (v * 10.0).round() / 10.0;
     (scene.room_at(to) == scene.room_at(piece.position)
         && scene.contacts(i, dx, dy) >= scene.contacts(i, 0.0, 0.0)
+        // Not out of the niche it is built into.
+        && scene.held(i, dx, dy) + 1.0 >= scene.held(i, 0.0, 0.0)
         && scene.conflicts(i, dx, dy) <= scene.conflicts(i, 0.0, 0.0))
     .then(|| {
         serde_json::json!({
@@ -2654,6 +2658,57 @@ mod tests {
                 .iter()
                 .any(|f| f.place.contains("f20") && f.message.contains("15 cm livres à frente")),
             "{report:#?}"
+        );
+    }
+
+    #[test]
+    fn a_fix_does_not_pull_an_appliance_out_of_its_niche() {
+        // A sink run on the top wall, 68 cm from a peninsula whose middle
+        // module is a dishwasher in a 60 cm niche between two cabinets.
+        let mut home = Home::default();
+        square(&mut home, "Cozinha", 400.0, 400.0);
+        let peninsula = |id, catalog, x| piece(id, catalog, (x, 165.5), (60.0, 60.0, 85.0), 180.0);
+        home.furniture.push(peninsula(20, "dishwasher", 190.0));
+        home.furniture.push(peninsula(21, "base-cabinet", 130.0));
+        home.furniture.push(peninsula(22, "base-cabinet", 250.0));
+        home.furniture.push(piece(
+            23,
+            "sink-counter",
+            (190.0, 37.5),
+            (180.0, 60.0, 90.0),
+            0.0,
+        ));
+        let report = review(&home, &Profile::default());
+        let narrow = report
+            .findings
+            .iter()
+            .find(|f| f.place.contains("f23") && f.message.contains("68 cm livres à frente"))
+            .unwrap_or_else(|| panic!("{report:#?}"));
+        assert!(
+            narrow.fix.is_none(),
+            "17 cm into the corridor takes the dishwasher out of its niche: {narrow:#?}"
+        );
+        assert!(
+            report
+                .findings
+                .iter()
+                .filter_map(|f| f.fix.as_ref())
+                .all(|fix| fix["ids"][0] != "f20"),
+            "{report:#?}"
+        );
+
+        // Standing on its own, the same appliance may still be moved.
+        home.furniture.retain(|f| f.id.0 != 21 && f.id.0 != 22);
+        let report = review(&home, &Profile::default());
+        let narrow = report
+            .findings
+            .iter()
+            .find(|f| f.place.contains("f23") && f.message.contains("livres à frente"))
+            .unwrap_or_else(|| panic!("{report:#?}"));
+        assert_eq!(
+            narrow.fix.as_ref().map(|f| f["ids"][0].clone()),
+            Some(serde_json::json!("f20")),
+            "{narrow:#?}"
         );
     }
 
