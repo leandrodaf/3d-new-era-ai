@@ -23,6 +23,7 @@
 //! | [`project`] | `save_home`, `open_home`, `new_home`, `set_home`, `undo`, `redo`, `checkpoint`, `sessions`, `plugins`, `variants` |
 //! | [`feedback`] | `feedback` |
 //! | [`electrical`] | `electrical` |
+//! | [`plumbing`] | `plumbing` |
 //! | [`reply`] | no tools: what every write needs to answer |
 //!
 //! A new tool goes in the domain it belongs to, and its router joins
@@ -49,6 +50,7 @@ mod joinery;
 mod levels;
 mod lighting;
 mod measure;
+mod plumbing;
 mod project;
 mod read;
 mod render;
@@ -102,6 +104,7 @@ impl NewEraMcp {
             Self::elements_router(),
             Self::feedback_router(),
             Self::electrical_router(),
+            Self::plumbing_router(),
         ];
         let expected: usize = parts.iter().map(|r| r.map.len()).sum();
         let mut tool_router = parts
@@ -179,7 +182,7 @@ mod tests {
     fn tool_surface_is_unchanged() {
         const NAMES: &str = "annotations,arrange,cabinet_run,cameras,catalog,check_layout,\
 checkpoint,create,cut_list,delete,disciplines,electrical,embed,ergonomics,export_plan,feedback,fit_roof,get_home,\
-joinery,levels,lighting,materials,measure,merge_walls,move,new_home,open_home,place,plugins,\
+joinery,levels,lighting,materials,measure,merge_walls,move,new_home,open_home,place,plugins,plumbing,\
 redo,render_3d,render_photo,render_plan,save_home,sessions,set_background,set_home,split_wall,\
 trace_background,undo,update,variants,video";
 
@@ -188,7 +191,7 @@ trace_background,undo,update,variants,video";
         assert_eq!(names.join(","), NAMES, "the set of tools changed");
         let bytes = serde_json::to_string(&tools).unwrap().len();
         assert_eq!(
-            bytes, 75290,
+            bytes, 78534,
             "a description or schema changed; this test guards a pure move"
         );
     }

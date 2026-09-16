@@ -176,7 +176,7 @@ fn perimeter(room: &Room) -> f64 {
         .sum()
 }
 
-fn inside(points: &[Point2], p: Point2) -> bool {
+pub(crate) fn inside(points: &[Point2], p: Point2) -> bool {
     let mut inside = false;
     let n = points.len();
     for i in 0..n {
@@ -325,7 +325,7 @@ pub struct Material {
     pub unit: &'static str,
 }
 
-fn metres(cm: f64) -> f64 {
+pub(crate) fn metres(cm: f64) -> f64 {
     (cm / 100.0 * 10.0).round() / 10.0
 }
 
@@ -436,7 +436,7 @@ pub fn materials(
 }
 
 /// Whether a run touches a point: an end or a vertex within reach of it.
-fn reaches(line: &crate::style::Polyline, at: Point2) -> bool {
+pub(crate) fn reaches(line: &crate::style::Polyline, at: Point2) -> bool {
     const REACH: f64 = 30.0;
     line.points.windows(2).any(|w| {
         let (a, b) = (w[0], w[1]);

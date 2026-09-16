@@ -438,6 +438,28 @@ impl Review<'_, '_> {
         }
     }
 
+    /// What each fixture needs of the plumbing project, brought into the
+    /// score like the electrical one: a toilet with no water or no sewer
+    /// point is a bathroom that does not work. Only plans with a fixture are
+    /// looked at, and an absence on purpose is accepted by the plumbing key.
+    fn plumbing(&mut self) {
+        for f in newera_core::plumbing::check(self.scene.home) {
+            let severity = match f.severity {
+                newera_core::electrical::Severity::Erro => Severity::Alerta,
+                newera_core::electrical::Severity::Alerta
+                | newera_core::electrical::Severity::Dica => Severity::Dica,
+            };
+            self.findings.push(Finding {
+                severity,
+                place: f.place,
+                message: f.message,
+                reference: Some(f.source),
+                key: f.key,
+                ..Finding::default()
+            });
+        }
+    }
+
     /// Circulation around pieces: the informative annex of NBR 15575-1 (50 cm
     /// between furniture and walls, 85 cm in front of kitchen equipment) and
     /// common practice for the rest.
@@ -1964,7 +1986,11 @@ pub fn orphaned(home: &Home, profile: &Profile) -> Vec<(String, String)> {
     let mine: Vec<(&String, &String)> = home
         .accepted
         .iter()
-        .filter(|(key, _)| !newera_core::Issue::is_layout_key(key) && !key.starts_with("elec:"))
+        .filter(|(key, _)| {
+            !newera_core::Issue::is_layout_key(key)
+                && !key.starts_with("elec:")
+                && !key.starts_with("plumb:")
+        })
         .collect();
     if mine.is_empty() {
         return Vec::new();
@@ -2010,6 +2036,7 @@ pub fn review(home: &Home, profile: &Profile) -> Report {
     review.screens();
     review.reach();
     review.electrical();
+    review.plumbing();
     // The same finding on a row of modules is one finding about all of them.
     let mut findings: Vec<Finding> = Vec::new();
     for f in review.findings {
@@ -2313,14 +2340,19 @@ mod tests {
         }
         let after = review(&home, &Profile::default());
         assert!(
-            !after
-                .findings
-                .iter()
-                .any(|f| f.place.contains("Esgoto") || f.place.contains("Água fria")),
+            !after.findings.iter().any(|f| !f.key.starts_with("plumb:")
+                && (f.place.contains("Esgoto") || f.place.contains("Água fria"))),
             "{:#?}",
             after.findings
         );
-        assert_eq!(after.score, before.score, "{:#?}", after.findings);
+        // Its points only ever take plumbing findings away.
+        assert!(after.score >= before.score, "{:#?}", after.findings);
+        assert!(
+            before.findings.iter().any(|f| f.key == "plumb:sewer:f20")
+                && !after.findings.iter().any(|f| f.key == "plumb:sewer:f20"),
+            "the toilet had no sewer and now has: {:#?}",
+            after.findings
+        );
     }
 
     #[test]
