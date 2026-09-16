@@ -677,7 +677,40 @@ pub(crate) fn diff(before: &Home, after: &Home) -> Value {
             out.insert(key.to_owned(), Value::Array(list));
         }
     }
+    // Settings of the plan itself change as silently as a piece moves, and a
+    // lost one is worse: 126 reference numbers vanished from a drawing and
+    // nothing in any reply said so. Whatever a write does to them is named.
+    if before.annotations != after.annotations {
+        out.insert(
+            "annotations".to_owned(),
+            project_change(before.annotations, after.annotations),
+        );
+    }
+    if before.properties != after.properties {
+        let keys: Vec<&String> = before
+            .properties
+            .keys()
+            .chain(after.properties.keys())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .filter(|k| before.properties.get(*k) != after.properties.get(*k))
+            .collect();
+        out.insert("properties".to_owned(), json!(keys));
+    }
     Value::Object(out)
+}
+
+/// A plan setting before and after, as the MCP names its switches.
+fn project_change(was: newera_core::PlanAnnotations, now: newera_core::PlanAnnotations) -> Value {
+    let view = |a: newera_core::PlanAnnotations| {
+        json!({
+            "dims": a.auto_dimensions,
+            "refs": a.references,
+            "details": a.reference_details,
+            "legend": a.legend,
+        })
+    };
+    json!({"from": view(was), "to": view(now)})
 }
 
 /// Variant rows `[i, name, active, walls, rooms, m2, furniture, issues]`.

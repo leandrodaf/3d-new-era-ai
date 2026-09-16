@@ -246,6 +246,7 @@ async fn post_commands(
             ),
         ));
     }
+    let annotations = doc.home().annotations;
     doc.execute(newera_core::Command::Batch {
         commands: body.commands,
     })
@@ -255,7 +256,24 @@ async fn post_commands(
         doc.sessions_mut()
             .record_edit(session, revision, newera_core::collab::now_ms());
     }
-    Ok(Json(serde_json::json!({ "revision": revision })))
+    let mut reply = serde_json::json!({ "revision": revision });
+    // A batch that switches the plan's annotations says so: losing the
+    // reference numbers of a whole drawing must not be silent.
+    if doc.home().annotations != annotations {
+        let view = |a: newera_core::PlanAnnotations| {
+            serde_json::json!({
+                "auto_dimensions": a.auto_dimensions,
+                "references": a.references,
+                "reference_details": a.reference_details,
+                "legend": a.legend,
+            })
+        };
+        reply["annotations"] = serde_json::json!({
+            "from": view(annotations),
+            "to": view(doc.home().annotations),
+        });
+    }
+    Ok(Json(reply))
 }
 
 async fn get_sessions(State(document): State<SharedDocument>) -> Json<serde_json::Value> {
@@ -731,6 +749,43 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
         assert!(String::from_utf8_lossy(&body).contains("level"));
+    }
+
+    #[tokio::test]
+    async fn a_batch_that_switches_annotations_off_says_so() {
+        let document = SharedDocument::new(Document::default());
+        document
+            .write()
+            .execute(Command::SetAnnotations {
+                annotations: newera_core::PlanAnnotations {
+                    references: true,
+                    ..Default::default()
+                },
+            })
+            .unwrap();
+        let app = router(document, DEFAULT_ADDR, CancellationToken::new());
+        let post = |body: &'static str| {
+            let app = app.clone();
+            async move {
+                let response = app
+                    .oneshot(
+                        Request::post("/api/commands")
+                            .header("content-type", "application/json")
+                            .body(Body::from(body))
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap()
+            }
+        };
+        let reply = post(r#"{"commands":[{"op":"set_annotations","annotations":{}}]}"#).await;
+        assert_eq!(reply["annotations"]["from"]["references"], true, "{reply}");
+        assert_eq!(reply["annotations"]["to"]["references"], false, "{reply}");
+        // A batch that leaves them alone says nothing about them.
+        let reply = post(r#"{"commands":[{"op":"rename_home","name":"Apto"}]}"#).await;
+        assert!(reply.get("annotations").is_none(), "{reply}");
     }
 
     #[tokio::test]

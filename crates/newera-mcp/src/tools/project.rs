@@ -291,14 +291,18 @@ impl NewEraMcp {
     #[tool(description = "Undo the last change, whoever made it.")]
     pub(crate) fn undo(&self) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
+        let before = doc.home().clone();
         doc.undo().map_err(core)?;
-        Ok(ok(&doc, &[]))
+        // What was undone, named: an undo that takes the plan's reference
+        // numbers with it is otherwise found only in a render.
+        Ok(super::reply::applied(&doc, &before))
     }
     #[tool(description = "Redo the last undone change.")]
     pub(crate) fn redo(&self) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
+        let before = doc.home().clone();
         doc.redo().map_err(core)?;
-        Ok(ok(&doc, &[]))
+        Ok(super::reply::applied(&doc, &before))
     }
 }
 
@@ -307,6 +311,25 @@ mod tests {
     use super::*;
     use crate::edit::CreateParams;
     use crate::tools::server;
+
+    #[test]
+    fn an_undo_that_switches_the_plans_annotations_off_says_so() {
+        let s = server();
+        s.annotations(Parameters(
+            serde_json::from_str(r#"{"refs":true}"#).unwrap(),
+        ))
+        .unwrap();
+        let reply = s.undo().unwrap();
+        let diff: serde_json::Value =
+            serde_json::from_str(&reply[reply.find('{').expect(&reply)..]).unwrap();
+        assert_eq!(diff["annotations"]["from"]["refs"], true, "{reply}");
+        assert_eq!(diff["annotations"]["to"]["refs"], false, "{reply}");
+        let reply = s.redo().unwrap();
+        assert!(
+            reply.contains(r#""to":{"details":false,"dims":false,"legend":false,"refs":true}"#),
+            "{reply}"
+        );
+    }
 
     #[test]
     fn variants_duplicate_switch_and_list() {
