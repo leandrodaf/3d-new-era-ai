@@ -251,15 +251,55 @@ where
 
 /// A note about what could work better, from whoever is using the program —
 /// an agent through MCP, typically.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+///
+/// Shaped like a written report of a friction, because a one-line complaint
+/// gets fixed in a way that breaks something else: the fix needs the case
+/// that produced it, the literal answer, what was true, and what already
+/// works and has to stay working.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Note {
     /// `friction` (it worked, at a cost), `bug` (it answered wrong), `idea`.
     pub kind: String,
-    /// What happened and what would have shortened it.
-    pub text: String,
     /// The tool it is about, when there is one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool: Option<String>,
+    /// What the task was, and the situation in the plan.
+    pub goal: String,
+    /// The call made, with its arguments.
+    pub tried: String,
+    /// What came back, literally.
+    pub got: String,
+    /// What was true instead, and how that was found out.
+    #[serde(default)]
+    pub expected: String,
+    /// What it cost: the detour, the extra calls, the wrong conclusion.
+    #[serde(default)]
+    pub cost: String,
+    /// The change that would have shortened the way.
+    pub would_help: String,
+    /// What works today and must keep working with that change.
+    #[serde(default)]
+    pub must_keep: String,
+}
+
+impl Note {
+    /// The report as text, one titled paragraph per part.
+    pub fn text(&self) -> String {
+        [
+            ("Objetivo", &self.goal),
+            ("Chamada", &self.tried),
+            ("Resposta", &self.got),
+            ("O que era verdade", &self.expected),
+            ("Custo", &self.cost),
+            ("Encurtaria", &self.would_help),
+            ("Não pode piorar", &self.must_keep),
+        ]
+        .iter()
+        .filter(|(_, v)| !v.trim().is_empty())
+        .map(|(k, v)| format!("{k}: {}", v.trim()))
+        .collect::<Vec<_>>()
+        .join("\n\n")
+    }
 }
 
 /// Where a note ended up.
@@ -305,7 +345,7 @@ fn send(note: &Note) -> Delivery {
     if !client.is_enabled() {
         return Delivery::Kept;
     }
-    let first_line = note.text.lines().next().unwrap_or_default();
+    let first_line = note.would_help.lines().next().unwrap_or_default();
     let title: String = first_line.chars().take(120).collect();
     sentry::with_scope(
         |scope| {
@@ -313,7 +353,17 @@ fn send(note: &Note) -> Delivery {
             if let Some(tool) = &note.tool {
                 scope.set_tag("note.tool", tool);
             }
-            scope.set_extra("text", note.text.clone().into());
+            for (key, value) in [
+                ("goal", &note.goal),
+                ("tried", &note.tried),
+                ("got", &note.got),
+                ("expected", &note.expected),
+                ("cost", &note.cost),
+                ("would_help", &note.would_help),
+                ("must_keep", &note.must_keep),
+            ] {
+                scope.set_extra(key, value.clone().into());
+            }
             scope.set_fingerprint(Some(&[
                 "note",
                 &note.kind,
@@ -321,7 +371,12 @@ fn send(note: &Note) -> Delivery {
                 &title,
             ]));
         },
-        || sentry::capture_message(&format!("[{}] {title}", note.kind), sentry::Level::Info),
+        || {
+            sentry::capture_message(
+                &format!("[{}] {title}\n\n{}", note.kind, note.text()),
+                sentry::Level::Info,
+            )
+        },
     );
     Delivery::Sent
 }
@@ -356,8 +411,12 @@ mod tests {
         // Off, a note is kept here and not sent.
         let delivery = note(&Note {
             kind: "friction".into(),
-            text: "measure não enxerga o vassoureiro".into(),
             tool: Some("measure".into()),
+            goal: "medir a passagem da lavanderia".into(),
+            tried: "measure(axis=x, at=450)".into(),
+            got: "[613,650,null] — livre".into(),
+            would_help: "a sonda ler as chapas do vassoureiro".into(),
+            ..Note::default()
         })
         .unwrap();
         assert_eq!(delivery, Delivery::Kept);
@@ -373,8 +432,11 @@ mod tests {
         // the honest answer.
         let delivery = note(&Note {
             kind: "idea".into(),
-            text: "copiar peça".into(),
-            tool: None,
+            goal: "repetir o arremate".into(),
+            tried: "place(model=…)".into(),
+            got: "arquivo não existe".into(),
+            would_help: "copiar peça".into(),
+            ..Note::default()
         })
         .unwrap();
         assert_eq!(delivery, Delivery::Kept);

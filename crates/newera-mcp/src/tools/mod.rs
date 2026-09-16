@@ -21,6 +21,7 @@
 //! | [`background`] | `set_background`, `trace_background` |
 //! | [`levels`] | `levels` |
 //! | [`project`] | `save_home`, `open_home`, `new_home`, `set_home`, `undo`, `redo`, `checkpoint`, `sessions`, `plugins`, `variants` |
+//! | [`feedback`] | `feedback` |
 //! | [`reply`] | no tools: what every write needs to answer |
 //!
 //! A new tool goes in the domain it belongs to, and its router joins
@@ -40,6 +41,7 @@ mod cabinets;
 mod cameras;
 mod check;
 mod elements;
+mod feedback;
 mod furniture;
 mod joinery;
 mod levels;
@@ -60,7 +62,10 @@ Reads omit defaults (wall t=15 h=250). Writes reply `ok rev=N [ids=...]`; don't 
 unless needed. Every change is one undoable step. Use render_plan to check visually. \
 A project can hold several plan versions (variants tool); tools act on the active one. \
 Finishes are short strings: `#rrggbb` paint, a pattern like `tiles #ffffff 60x60 r45` \
-(tint, tile cm, rotation) or `img:path 90x90`; `none` clears. Wall types and patterns: materials tool.";
+(tint, tile cm, rotation) or `img:path 90x90`; `none` clears. Wall types and patterns: materials tool. \
+When a tool answers less than you asked, makes you take a detour, or leads you to a wrong conclusion \
+before the right one, report it with the feedback tool as it happens, with the whole case (the call, the literal \
+reply, what was true, what it cost, the change that would help and what must not get worse) — then carry on.";
 
 /// The MCP server. Cheap to clone: it only holds a handle to the document.
 #[derive(Debug, Clone)]
@@ -93,6 +98,7 @@ impl NewEraMcp {
             Self::cabinets_router(),
             Self::furniture_router(),
             Self::elements_router(),
+            Self::feedback_router(),
         ];
         let expected: usize = parts.iter().map(|r| r.map.len()).sum();
         let mut tool_router = parts
@@ -169,7 +175,7 @@ mod tests {
     #[test]
     fn tool_surface_is_unchanged() {
         const NAMES: &str = "annotations,arrange,cabinet_run,cameras,catalog,check_layout,\
-checkpoint,create,cut_list,delete,disciplines,embed,ergonomics,export_plan,fit_roof,get_home,\
+checkpoint,create,cut_list,delete,disciplines,embed,ergonomics,export_plan,feedback,fit_roof,get_home,\
 joinery,levels,lighting,materials,measure,merge_walls,move,new_home,open_home,place,plugins,\
 redo,render_3d,render_photo,render_plan,save_home,sessions,set_background,set_home,split_wall,\
 trace_background,undo,update,variants,video";
@@ -179,7 +185,7 @@ trace_background,undo,update,variants,video";
         assert_eq!(names.join(","), NAMES, "the set of tools changed");
         let bytes = serde_json::to_string(&tools).unwrap().len();
         assert_eq!(
-            bytes, 63439,
+            bytes, 65725,
             "a description or schema changed; this test guards a pure move"
         );
     }

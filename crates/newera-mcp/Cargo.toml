@@ -19,6 +19,7 @@ newera-joinery.workspace = true
 newera-ergonomics.workspace = true
 newera-plugins.workspace = true
 newera-render.workspace = true
+newera-telemetry.workspace = true
 rmcp = { workspace = true, features = [
     "server",
     "macros",

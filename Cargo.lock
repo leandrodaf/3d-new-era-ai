@@ -3218,6 +3218,7 @@ dependencies = [
  "newera-plugins",
  "newera-render",
  "newera-sh3d",
+ "newera-telemetry",
  "rmcp",
  "schemars",
  "serde",
