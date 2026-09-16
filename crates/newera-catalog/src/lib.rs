@@ -219,6 +219,11 @@ pub enum PointSymbol {
     WifiPoint,
     TelecomPanel,
     Doorbell,
+    SmartRelay,
+    SmartSwitch,
+    Dimmer,
+    PresenceSensor,
+    SmartLock,
     ColdWater,
     HotWater,
     Sewer,
@@ -1464,6 +1469,67 @@ pub static CATALOG: &[CatalogItem] = &[
         ),
         140.0,
     ),
+    // --- Automação ----------------------------------------------------------
+    raised(
+        item(
+            "smart-relay",
+            "Relé de automação (atrás do interruptor ou da luminária)",
+            C::Electrical,
+            [5.0, 5.0, 2.0],
+            ELECTRIC,
+            Model::Point(PointSymbol::SmartRelay),
+            "rele automacao sonoff shelly modulo wi-fi zigbee smart relay",
+        ),
+        104.0,
+    ),
+    raised(
+        item(
+            "smart-switch",
+            "Interruptor inteligente",
+            C::Electrical,
+            [8.0, 4.0, 12.0],
+            ELECTRIC,
+            Model::Point(PointSymbol::SmartSwitch),
+            "interruptor inteligente touch wi-fi zigbee automacao smart switch",
+        ),
+        104.0,
+    ),
+    raised(
+        item(
+            "dimmer",
+            "Dimmer",
+            C::Electrical,
+            [8.0, 4.0, 12.0],
+            ELECTRIC,
+            Model::Point(PointSymbol::Dimmer),
+            "dimmer variador luminosidade automacao",
+        ),
+        104.0,
+    ),
+    raised(
+        item(
+            "presence-sensor",
+            "Sensor de presença de teto",
+            C::Electrical,
+            [10.0, 10.0, 4.0],
+            ELECTRIC,
+            Model::Point(PointSymbol::PresenceSensor),
+            "sensor presenca movimento teto automacao iluminacao",
+        ),
+        270.0,
+    ),
+    raised(
+        item(
+            "smart-lock",
+            "Fechadura eletrônica",
+            C::Electrical,
+            [8.0, 4.0, 30.0],
+            ELECTRIC,
+            Model::Point(PointSymbol::SmartLock),
+            "fechadura eletronica digital biometria senha automacao smart lock",
+        ),
+        90.0,
+    ),
     // --- Hidráulica ---------------------------------------------------------
     raised(
         item(
@@ -1737,6 +1803,16 @@ mod tests {
         assert_eq!(ids("wifi teto").first(), Some(&"wifi-point"));
         assert!(ids("rack telecom").contains(&"telecom-panel"));
         assert!(ids("antena tv coaxial").contains(&"tv-outlet"));
+        // Automation, as the friction log searched for it.
+        let automation = ids("rele automacao sonoff dimmer sensor");
+        for id in ["smart-relay", "dimmer", "presence-sensor"] {
+            assert!(automation.contains(&id), "{id} in {automation:?}");
+        }
+        assert_eq!(ids("fechadura eletronica").first(), Some(&"smart-lock"));
+        assert_eq!(
+            ids("interruptor inteligente").first(),
+            Some(&"smart-switch")
+        );
         for id in ["network-outlet", "tv-outlet", "wifi-point", "telecom-panel"] {
             assert_eq!(
                 find(id).unwrap().category.discipline(),

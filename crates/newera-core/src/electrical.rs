@@ -23,6 +23,21 @@ pub const VA_KEY: &str = "elec:va";
 /// Where a point keeps its voltage, V, when it is not the supply's: a 220 V
 /// outlet in a 127 V flat.
 pub const VOLTS_KEY: &str = "elec:volts";
+/// Where an automation point keeps its standby consumption, W.
+pub const STANDBY_KEY: &str = "elec:standby_w";
+/// Where a dimmer keeps the most lighting it can take, W.
+pub const MAX_W_KEY: &str = "elec:max_w";
+
+/// Standby a device of the catalog draws when none is written, W: what
+/// Wi-Fi and Zigbee modules of the kind usually declare.
+pub fn standby_default(catalog: &str) -> f64 {
+    match catalog {
+        "smart-switch" => 0.8,
+        "smart-relay" | "dimmer" | "presence-sensor" => 0.5,
+        _ => 0.0,
+    }
+}
+
 /// Where the project keeps its supply voltage, V (default 127).
 pub const VOLTAGE_KEY: &str = "elec:voltage";
 
@@ -46,6 +61,9 @@ pub enum PointKind {
     Wifi,
     /// Telecom panel / rack.
     TelecomPanel,
+    /// A relay, smart switch, dimmer, presence sensor or electronic lock:
+    /// draws only its standby.
+    Automation,
     Other,
 }
 
@@ -66,6 +84,7 @@ impl PointKind {
             Self::Tv => "TV",
             Self::Wifi => "Wi-Fi",
             Self::TelecomPanel => "Quadro de telecom",
+            Self::Automation => "Automação",
             Self::Other => "Outro",
         }
     }
@@ -85,6 +104,9 @@ pub fn point_kind(piece: &Furniture) -> PointKind {
         "tv-outlet" => PointKind::Tv,
         "wifi-point" => PointKind::Wifi,
         "telecom-panel" => PointKind::TelecomPanel,
+        "smart-relay" | "smart-switch" | "dimmer" | "presence-sensor" | "smart-lock" => {
+            PointKind::Automation
+        }
         _ if piece.light.is_some() => PointKind::Lighting,
         _ => PointKind::Other,
     }
@@ -536,6 +558,11 @@ pub fn points(home: &Home) -> Vec<Point> {
                 "shower-point" => 5500.0,
                 _ => 1500.0,
             },
+            PointKind::Automation => piece
+                .properties
+                .get(STANDBY_KEY)
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or_else(|| standby_default(&piece.catalog)),
             _ => 0.0,
         });
         out.push(Point {
@@ -686,6 +713,132 @@ pub fn orphaned(home: &Home) -> Vec<(String, String)> {
         .filter(|(key, _)| key.starts_with("elec:") && !live.contains(*key))
         .map(|(key, why)| (key.clone(), why.clone()))
         .collect()
+}
+
+/// What each automation device asks of the installation.
+#[allow(clippy::too_many_lines)]
+fn automation(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
+    let view = home.level_view(home.current_level());
+    for point in all.iter().filter(|p| p.kind == PointKind::Automation) {
+        let Some(piece) = view.find_piece(point.id) else {
+            continue;
+        };
+        let place = format!("{} {}", piece.name, piece.id);
+        let room = point
+            .room
+            .and_then(|id| view.rooms.iter().find(|r| r.id == id));
+        match piece.catalog.as_str() {
+            "smart-relay" | "smart-switch" => out.push(Finding {
+                key: format!("elec:neutral:{}", piece.id),
+                accepted: None,
+                severity: Severity::Dica,
+                place,
+                message: "Precisa de neutro na caixa: numa reforma confira, porque a instalação antiga costuma levar só fase e retorno ao interruptor; no projeto, leve o neutro até ela. Aceite quando o neutro estiver garantido.".into(),
+                source: "nbr5410",
+            }),
+            "dimmer" => {
+                let max = piece
+                    .properties
+                    .get(MAX_W_KEY)
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .unwrap_or(200.0);
+                let load: f64 = room.map_or(0.0, |r| {
+                    view.furniture
+                        .iter()
+                        .flat_map(Furniture::flatten)
+                        .filter(|f| inside(&r.points, f.position))
+                        .filter_map(|f| f.light.as_ref())
+                        .map(crate::Light::electrical_watts)
+                        .sum()
+                });
+                let load = (load * 10.0).round() / 10.0;
+                if load > max {
+                    out.push(Finding {
+                        key: format!("elec:dimmer-max:{}", piece.id),
+                        accepted: None,
+                        severity: Severity::Alerta,
+                        place,
+                        message: format!(
+                            "{} W de iluminação no cômodo e o dimmer aguenta {} W: divida as luminárias em dois dimmers ou use um de maior capacidade.",
+                            decimal(load),
+                            decimal(max)
+                        ),
+                        source: "nbr5410",
+                    });
+                } else if load < 10.0 {
+                    out.push(Finding {
+                        key: format!("elec:dimmer-min:{}", piece.id),
+                        accepted: None,
+                        severity: Severity::Dica,
+                        place,
+                        message: format!(
+                            "{} W de iluminação para dimerizar: abaixo da carga mínima (em geral 10 W) o LED pisca ou não apaga de todo; confira se as lâmpadas são dimerizáveis.",
+                            decimal(load)
+                        ),
+                        source: "nbr5410",
+                    });
+                }
+            }
+            "presence-sensor" => {
+                let height = piece.elevation + piece.height / 2.0;
+                if height < 220.0 {
+                    out.push(Finding {
+                        key: format!("elec:sensor-height:{}", piece.id),
+                        accepted: None,
+                        severity: Severity::Dica,
+                        place: place.clone(),
+                        message: format!(
+                            "Sensor de teto a {} cm: abaixo de 2,2 m o alcance e o ângulo não fecham; na parede, use o sensor de parede a 1,1 m.",
+                            decimal(height)
+                        ),
+                        source: "nbr5410",
+                    });
+                }
+                // A 360° ceiling sensor sees about 1.2 × its height around it.
+                let reach = height * 1.2;
+                if let Some(r) = room {
+                    let far = r
+                        .points
+                        .iter()
+                        .map(|c| c.distance(piece.position))
+                        .fold(0.0, f64::max);
+                    if far > reach {
+                        out.push(Finding {
+                            key: format!("elec:sensor-reach:{}", piece.id),
+                            accepted: None,
+                            severity: Severity::Dica,
+                            place,
+                            message: format!(
+                                "Não vê o cômodo inteiro: {} m até o canto mais longe e alcance de uns {} m; centralize-o ou ponha um segundo sensor.",
+                                decimal(far / 100.0),
+                                decimal(reach / 100.0)
+                            ),
+                            source: "nbr5410",
+                        });
+                    }
+                }
+            }
+            "smart-lock" => {
+                let on_door = view.furniture.iter().flat_map(Furniture::flatten).any(|f| {
+                    f.opening
+                        .as_ref()
+                        .is_some_and(|o| o.kind == crate::furniture::OpeningKind::Door)
+                        && f.position.distance(piece.position) <= f.width / 2.0 + 30.0
+                });
+                if !on_door {
+                    out.push(Finding {
+                        key: format!("elec:lock-door:{}", piece.id),
+                        accepted: None,
+                        severity: Severity::Alerta,
+                        place,
+                        message: "Fechadura eletrônica fora de uma porta: ponha-a na folha que ela tranca.".into(),
+                        source: "nbr5410",
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// The supply a panel asks the utility for.
@@ -999,9 +1152,10 @@ pub fn check(home: &Home) -> Vec<Finding> {
             });
         }
     }
+    automation(home, &all, &mut out);
     let loose: Vec<String> = all
         .iter()
-        .filter(|p| p.kind.loads() && p.circuit.is_none())
+        .filter(|p| (p.kind.loads() || p.kind == PointKind::Automation) && p.circuit.is_none())
         .map(|p| p.id.to_string())
         .collect();
     if !loose.is_empty() {
@@ -1333,5 +1487,58 @@ mod tests {
         assert_eq!(three.phases, 3, "{three:?}");
         assert!(three.breaker_a <= 100, "{three:?}");
         assert!(main_breaker(&Home::default()).is_none());
+    }
+
+    #[test]
+    fn automation_asks_for_neutral_load_height_and_a_door_and_draws_its_standby() {
+        let mut home = Home::default();
+        home.rooms = vec![room(1, "Sala", 0.0, 600.0, 500.0)];
+        let mut lamp = point(11, "light-ceiling", (300.0, 250.0), Some("C1"));
+        lamp.light = Some(crate::Light::led(3000.0, 3000.0, (0.0, 0.0, 0.0)));
+        let mut dimmer = point(12, "dimmer", (10.0, 100.0), Some("C1"));
+        dimmer.elevation = 104.0;
+        let relay = point(13, "smart-relay", (10.0, 120.0), Some("C1"));
+        let mut sensor = point(14, "presence-sensor", (100.0, 100.0), Some("C1"));
+        sensor.elevation = 180.0;
+        let lock = point(15, "smart-lock", (590.0, 400.0), None);
+        home.furniture = vec![
+            point(10, "electrical-panel", (10.0, 10.0), None),
+            lamp,
+            dimmer,
+            relay,
+            sensor,
+            lock,
+        ];
+        let keys: Vec<String> = check(&home).into_iter().map(|f| f.key).collect();
+        let has = |k: &str| keys.iter().any(|x| x == k);
+        assert!(has("elec:neutral:f13"), "{keys:?}");
+        assert!(!has("elec:neutral:f12"), "{keys:?}");
+        assert!(has("elec:sensor-height:f14"), "{keys:?}");
+        assert!(
+            has("elec:sensor-reach:f14"),
+            "5 m to the far corner at 1.8 m high: {keys:?}"
+        );
+        assert!(has("elec:lock-door:f15"), "{keys:?}");
+        assert!(
+            keys.iter().any(|k| k == "elec:no-circuit"),
+            "the lock has no circuit: {keys:?}"
+        );
+        // 3000 lm of LED is some 30 W: within a 200 W dimmer.
+        assert!(!has("elec:dimmer-max:f12"), "{keys:?}");
+        home.furniture[2]
+            .properties
+            .insert(MAX_W_KEY.into(), "20".into());
+        assert!(check(&home).iter().any(|f| f.key == "elec:dimmer-max:f12"));
+
+        // Standby rides on the circuit, never as a kind of its own.
+        let c1 = circuits(&home)
+            .into_iter()
+            .find(|c| c.name == "C1")
+            .unwrap();
+        assert_eq!(c1.kinds, vec![PointKind::Lighting], "{c1:?}");
+        assert!(
+            (c1.va - 101.5).abs() < 1e-9,
+            "100 VA of light + 1.5 W standby: {c1:?}"
+        );
     }
 }

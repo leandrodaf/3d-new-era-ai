@@ -222,6 +222,74 @@ fn point_symbol(s: &mut Sym, symbol: crate::PointSymbol, size: f64) {
             s.line(small, true, true);
             s.fill(circle(0.0, 0.0, r * 0.3), true);
         }
+        P::SmartRelay => {
+            // A small box with a zigzag: the relay hidden in a box.
+            let small = rect(-r * 0.6, -r * 0.6, r * 0.6, r * 0.6);
+            s.fill(small.clone(), false);
+            s.line(small, true, true);
+            s.line(
+                vec![
+                    (-r * 0.4, r * 0.3),
+                    (-r * 0.1, -r * 0.3),
+                    (r * 0.1, r * 0.3),
+                    (r * 0.4, -r * 0.3),
+                ],
+                false,
+                true,
+            );
+        }
+        P::SmartSwitch => {
+            // A switch with a signal arc over it.
+            s.fill(circle(0.0, r * 0.2, r * 0.4), true);
+            s.line(circle(0.0, r * 0.2, r * 0.4), true, true);
+            s.line(
+                ellipse(
+                    0.0,
+                    r * 0.2,
+                    r * 0.8,
+                    r * 0.8,
+                    std::f64::consts::PI * 1.2,
+                    std::f64::consts::PI * 1.8,
+                    10,
+                ),
+                false,
+                true,
+            );
+        }
+        P::Dimmer => {
+            // A switch crossed by a rising arrow.
+            s.fill(circle(0.0, 0.0, r * 0.45), false);
+            s.line(circle(0.0, 0.0, r * 0.45), true, true);
+            s.line(vec![(-r * 0.8, r * 0.8), (r * 0.8, -r * 0.8)], false, true);
+            s.fill(
+                vec![
+                    (r * 0.8, -r * 0.8),
+                    (r * 0.35, -r * 0.65),
+                    (r * 0.65, -r * 0.35),
+                ],
+                true,
+            );
+        }
+        P::PresenceSensor => {
+            // A disc with an eye: the ceiling sensor.
+            s.fill(circle(0.0, 0.0, r * 0.8), false);
+            s.line(circle(0.0, 0.0, r * 0.8), true, true);
+            s.line(
+                ellipse(0.0, 0.0, r * 0.55, r * 0.3, 0.0, std::f64::consts::TAU, 20),
+                true,
+                true,
+            );
+            s.fill(circle(0.0, 0.0, r * 0.15), true);
+        }
+        P::SmartLock => {
+            // A plate with a keypad.
+            let plate = rect(-r * 0.45, -r, r * 0.45, r);
+            s.fill(plate.clone(), false);
+            s.line(plate, true, true);
+            for y in [-r * 0.5, 0.0, r * 0.5] {
+                s.fill(circle(0.0, y, r * 0.12), true);
+            }
+        }
         P::ColdWater => {
             s.fill(circle(0.0, 0.0, r * 0.6), true);
             s.line(circle(0.0, 0.0, r), true, true);
