@@ -769,6 +769,24 @@ pub fn check(home: &Home) -> Vec<Finding> {
         .iter()
         .filter(|p| p.kind == PointKind::InspectionBox)
         .collect();
+    // An inspection box is at least 60 cm across (NBR 8160 5.1.5.3).
+    for b in &boxes {
+        if let Some(f) = view.find_piece(b.id)
+            && f.width.min(f.depth) + 0.5 < 60.0
+        {
+            out.push(Finding {
+                key: format!("plumb:inspection-size:{}", b.id),
+                accepted: None,
+                severity: Severity::Alerta,
+                place: format!("{} {}", b.name, b.id),
+                message: format!(
+                    "Caixa de inspeção de {} cm: a norma pede ao menos 60 cm de lado ou diâmetro, e até 1 m de profundidade (mais funda é poço de visita).",
+                    f.width.min(f.depth).round()
+                ),
+                source: "nbr8160",
+            });
+        }
+    }
     if !boxes.is_empty() {
         for p in all.iter().filter(|p| {
             matches!(p.kind, PointKind::Drain | PointKind::GreaseTrap)
@@ -1210,7 +1228,7 @@ pub fn materials(
                 .count();
             if toilets > 0 {
                 out.push(item(
-                    "Anel de vedação para bacia sanitária".into(),
+                    "Anel de vedação para bacia sanitária (nenhum outro ramal entra pela inspeção da curva do vaso, NBR 8160 4.2.3.5)".into(),
                     toilets as f64,
                     "un",
                 ));
@@ -1637,6 +1655,16 @@ mod tests {
             .unwrap();
         assert_eq!(sewer_mm(&home, &drain), 75);
         assert!(!keys(&home).contains(&"plumb:drain-load:r9".to_owned()));
+
+        // An inspection box is 60 cm across at least.
+        let mut small = home.clone();
+        small.furniture.push({
+            let mut b = point(70, "inspection-box", "CI pequena", (100.0, 100.0), 0.0);
+            b.width = 40.0;
+            b.depth = 40.0;
+            b
+        });
+        assert!(keys(&small).contains(&"plumb:inspection-size:f70".to_owned()));
 
         // Inspection within 10 m.
         home.furniture.retain(|f| f.id != FurnitureId(36));

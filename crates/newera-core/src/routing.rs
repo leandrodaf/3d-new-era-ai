@@ -258,7 +258,8 @@ impl WallGraph {
     }
 }
 
-fn bends_along(path: &[Point2]) -> usize {
+/// Turns of 30° or more along a plan path.
+pub fn bends_along(path: &[Point2]) -> usize {
     path.windows(3)
         .filter(|w| {
             let (a, b, c) = (w[0], w[1], w[2]);

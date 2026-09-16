@@ -521,6 +521,29 @@ pub fn materials(
         quantity: route.bends as f64,
         unit: "un",
     });
+    // NBR 5410 6.2.11.1.6 b and 6.2.11.1.7: a pull box every 15 m of conduit,
+    // 3 m less for each 90° bend, and no more than three bends between boxes.
+    let pull_boxes: usize = route
+        .paths
+        .iter()
+        .map(|path| {
+            let metres = path.windows(2).map(|w| w[0].distance(w[1])).sum::<f64>() / 100.0;
+            let bends = crate::routing::bends_along(path);
+            let by_bends = bends.div_ceil(3).saturating_sub(1);
+            #[allow(clippy::cast_precision_loss)]
+            let reach = (15.0 - 3.0 * bends.min(3) as f64).max(6.0);
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let by_length = ((metres / reach).ceil() as usize).saturating_sub(1);
+            by_bends.max(by_length)
+        })
+        .sum();
+    if pull_boxes > 0 {
+        out.push(Material {
+            item: "Caixa de passagem 4×4 (a cada 15 m, 3 m a menos por curva, até 3 curvas entre caixas)".into(),
+            quantity: pull_boxes as f64,
+            unit: "un",
+        });
+    }
     match cable {
         Cable::Power => {
             let per_conductor = length + 30.0 * route.terminals.len() as f64;
@@ -1266,7 +1289,13 @@ pub fn panel(home: &Home) -> Option<Panel> {
         count(&between_phases),
         2,
     );
-    add("DR bipolar 30 mA".into(), count(&|c| c.rcd), 2);
+    // One per circuit, the safe count; 5.1.3.2.2 note 5 allows one DR for a
+    // group of circuits, which takes fewer modules.
+    add(
+        "DR bipolar 30 mA (um por circuito; um DR por grupo também é admitido)".into(),
+        count(&|c| c.rcd),
+        2,
+    );
     add(
         format!("Disjuntor geral {}P {} A", supply.phases, supply.breaker_a),
         1,
@@ -2350,5 +2379,49 @@ mod tests {
         // still takes 16 A.
         assert_eq!(sharing(&home, "C1"), 2);
         assert_eq!((c1.wire_mm2, c1.breaker_a), (2.5, 16), "{c1:?}");
+    }
+
+    #[test]
+    fn a_long_conduit_takes_pull_boxes() {
+        use crate::routing::{Terminal, Via, lay_out};
+        let mut home = Home::default();
+        home.walls.push(crate::elements::Wall::new(
+            crate::ids::WallId(1),
+            Point2::new(0.0, 0.0),
+            Point2::new(3000.0, 0.0),
+        ));
+        let at = |id: u64, x: f64| Terminal {
+            id: Some(FurnitureId(id)),
+            at: Point2::new(x, 0.0),
+            z: 30.0,
+        };
+        let short = lay_out(&home, at(1, 0.0), &[at(2, 1000.0)], Via::Wall, 280.0);
+        let bill = materials(
+            &short,
+            Cable::Power,
+            2.5,
+            Category::Cat6,
+            &[PointKind::Outlet],
+        );
+        assert!(
+            !bill.iter().any(|m| m.item.starts_with("Caixa de passagem")),
+            "10 m straight: {bill:#?}"
+        );
+        let long = lay_out(&home, at(1, 0.0), &[at(2, 2500.0)], Via::Wall, 280.0);
+        let bill = materials(
+            &long,
+            Cable::Power,
+            2.5,
+            Category::Cat6,
+            &[PointKind::Outlet],
+        );
+        let boxes = bill
+            .iter()
+            .find(|m| m.item.starts_with("Caixa de passagem"))
+            .unwrap_or_else(|| panic!("{bill:#?}"));
+        assert!(
+            (boxes.quantity - 1.0).abs() < 1e-9,
+            "25 m straight: one box: {bill:#?}"
+        );
     }
 }
