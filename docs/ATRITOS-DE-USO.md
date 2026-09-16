@@ -189,6 +189,38 @@ combinam com o resto da cozinha não sobrevivem à troca.
 **Encurtaria:** o `cut_list` aceitar um grupo qualquer, tratando cada sólido
 como uma peça — as medidas estão todas lá.
 
+> **Confirmado pelo outro lado.** O buffet da varanda foi refeito com
+> `cabinet_run` + `joinery`, e o `cut_list` respondeu na hora: 28 linhas de
+> peças com material, quantidade, medidas e fita de borda (`"2+2"`), mais a
+> ferragem separada por módulo — corrediças, dobradiças de caneco, suportes de
+> prateleira, puxadores —, tudo apoiado em NBR 15316 e NBR 14810. É uma
+> ferramenta excelente atrás de uma porta fechada: quem desenhou a planta com
+> modelos importados não a alcança, e o custo de alcançá-la é refazer o móvel.
+
+## 22. O erro de tipo não diz qual campo
+
+`cabinet_run` com dez parâmetros em `p` e um deles errado:
+
+```
+{"row": "base", "h": 87, "d": 65, "top": true, "drawers": true, …}
+→ "invalid parameters: invalid type: boolean `true`, expected u32"
+```
+
+Qual deles? `top` também é booleano e está certo; `drawers` é que esperava um
+número. A mensagem não nomeia o campo, e num `p` de dez chaves sobra tentativa
+e erro.
+
+O contraste está na chamada seguinte, que errou o tipo de `room`:
+
+```
+→ "invalid id `Varanda` (expected e.g. `r12`)"
+```
+
+Essa diz o que veio, o que se esperava e dá um exemplo. É o padrão que a outra
+deveria seguir.
+
+**Encurtaria:** nomear o campo no erro de tipo dentro de `p`.
+
 ## 21. `accept` no `check_layout` só vale para `overlap`
 
 O `accept` chegou (era o atrito 9), e funciona: aceitar um par de sobreposição
