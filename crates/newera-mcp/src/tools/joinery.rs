@@ -32,6 +32,11 @@ pub(crate) struct JoineryParams {
     /// `cove`/`shadow_gap`: room id whose outline to follow.
     room: Option<String>,
     /// Only check and report, create nothing.
+    /// Changing a build's size: the face that stays where it is — `back`
+    /// (default: joinery stands against a wall), `front`, `left`, `right`,
+    /// `bottom`, `top` or a plan side `+x` `-x` `+y` `-y`; `center` grows
+    /// around the middle.
+    anchor: Option<String>,
     #[serde(default)]
     dry: bool,
 }
@@ -49,7 +54,7 @@ const DRAWN_BOARD_MM: f64 = 50.0;
 #[tool_router(router = joinery_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Parametric joinery and interiors; the server computes every board, clearance and rule and replies {id,name,size,parts,hardware,notes}. What a workshop would say — a board nobody stocks, a shelf that will sag, a drawer front too short to grip, a niche shallower than the cooktop standard wants — comes back in notes and is built anyway: the rules advise, they never refuse. Only what has no geometry at all fails, and says why. kind + p: cabinet {w,h,d cm; t 15|18|25 mm; back mm; door hinged|sliding|drawers|none; doors; shelves; drawers; dividers; plinth; cooktop; color; front finish} · slats {w,h cm; slat, thickness, gap mm; orientation vertical|horizontal; backing; finish} · countertop {length,depth,height,thickness cm; material; support none|legs|brackets; cutouts [{kind sink|cooktop|grommet, x, w?, d?}]} · cove {room or pts; type open|closed|inverted; ceiling, width, drop, slot cm; led} · shadow_gap {room or pts; ceiling, gap, depth cm; led} · sofa {length,depth,seat,back cm; arms straight|rounded|none; modules; color}. Place with at|wall(+along), angle, elev. Change a build: id + p with only new values (e.g. {\"shelves\":3}). dry=true validates only."
+        description = "Parametric joinery and interiors; the server computes every board, clearance and rule and replies {id,name,size,parts,hardware,notes}. What a workshop would say — a board nobody stocks, a shelf that will sag, a drawer front too short to grip, a niche shallower than the cooktop standard wants — comes back in notes and is built anyway: the rules advise, they never refuse. Only what has no geometry at all fails, and says why. kind + p: cabinet {w,h,d cm; t 15|18|25 mm; back mm; door hinged|sliding|drawers|none; doors; shelves; drawers; dividers; plinth; cooktop; color; front finish} · slats {w,h cm; slat, thickness, gap mm; orientation vertical|horizontal; backing; finish} · countertop {length,depth,height,thickness cm; material; support none|legs|brackets; cutouts [{kind sink|cooktop|grommet, x, w?, d?}]} · cove {room or pts; type open|closed|inverted; ceiling, width, drop, slot cm; led} · shadow_gap {room or pts; ceiling, gap, depth cm; led} · sofa {length,depth,seat,back cm; arms straight|rounded|none; modules; color}. Place with at|wall(+along), angle, elev. Change a build: id + p with only new values (e.g. {\"shelves\":3}); a new size keeps its back where it was (anchor back|front|left|right|bottom|top|+x|-x|+y|-y|center). dry=true validates only."
     )]
     pub(crate) fn joinery(
         &self,
@@ -158,6 +163,19 @@ impl NewEraMcp {
             place.position = group.position;
             place.angle = group.angle;
             place.elevation = group.elevation;
+            // A change of size keeps one face where it was — the back, unless
+            // told otherwise — instead of shrinking from both sides and
+            // leaving a gap behind a cabinet that stood on its wall.
+            let anchor = p.anchor.as_deref().unwrap_or("back");
+            if p.at.is_none() && p.wall.is_none() && anchor != "center" {
+                place.mirrored = group.mirrored;
+                edit::hold_face(
+                    &mut place,
+                    anchor,
+                    (group.width, group.depth, group.height, group.elevation),
+                )
+                .map_err(invalid)?;
+            }
         }
         if let Some(o) = origin {
             place.position = Point2::new(o.x + w / 2.0, o.y + d / 2.0);
@@ -451,6 +469,56 @@ mod tests {
             skipped.contains("puxador de latão") && skipped.contains("moldura 3D"),
             "a model and a 12 cm block are not boards: {reply}"
         );
+    }
+
+    #[test]
+    fn a_build_made_shallower_keeps_its_back_on_the_wall() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[500,0],[500,400],[0,400]],"closed":true}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let joinery = |json: &str| {
+            s.joinery(Parameters(serde_json::from_str(json).unwrap()))
+                .unwrap()
+        };
+        let reply: serde_json::Value = serde_json::from_str(&joinery(
+            r#"{"kind":"cabinet","p":{"w":80,"h":90,"d":57},"wall":"w1"}"#,
+        ))
+        .unwrap();
+        let id = reply["id"].as_str().unwrap().to_owned();
+        let bounds = || {
+            let doc = s.document.read();
+            let group = doc
+                .home()
+                .furniture
+                .iter()
+                .find(|f| f.id.to_string() == id)
+                .unwrap()
+                .clone();
+            newera_core::plan_bounds(&group)
+        };
+        let (back, _) = bounds();
+        assert!((back.y - 7.5).abs() < 0.5, "on the wall: {back:?}");
+
+        joinery(&format!(r#"{{"id":"{id}","p":{{"d":55}}}}"#));
+        let (min, max) = bounds();
+        assert!(
+            (min.y - back.y).abs() < 0.01,
+            "the back did not leave the wall: {min:?}"
+        );
+        assert!((max.y - min.y - 55.0).abs() < 0.5, "{min:?} {max:?}");
+
+        // Told to, the front holds instead.
+        joinery(&format!(
+            r#"{{"id":"{id}","p":{{"d":45}},"anchor":"front"}}"#
+        ));
+        let (min2, max2) = bounds();
+        assert!((max2.y - max.y).abs() < 0.01, "{max:?} {max2:?}");
+        assert!((min2.y - min.y - 10.0).abs() < 0.5, "{min2:?}");
     }
 
     #[test]

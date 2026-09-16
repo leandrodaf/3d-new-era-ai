@@ -1088,7 +1088,7 @@ fn rename_part(
 /// `update(d=…)` alone keeps the center, so every change of depth means
 /// recalculating `at` — the commonest source of a run of cabinets drifting
 /// off the wall it was aligned to.
-fn hold_face(
+pub(crate) fn hold_face(
     piece: &mut newera_core::Furniture,
     anchor: &str,
     was: (f64, f64, f64, f64),
