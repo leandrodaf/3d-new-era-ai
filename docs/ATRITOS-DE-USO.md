@@ -241,6 +241,57 @@ uma delas devolve `orphaned` — a chave inventada não corresponde a nada.
 
 **Encurtaria:** `key` também em `in_wall` e `outside_rooms`.
 
+## 23. Não há como reusar um modelo que já está no projeto
+
+O arremate de madeira da cozinha é um modelo importado. Para repetir a mesma
+peça — e a mesma textura — na lavanderia, na varanda, na torre e no
+vassoureiro, o caminho natural seria referenciá-lo:
+
+```
+place(model="51/crown.obj", …)
+→ "51/crown.obj: could not read the file: No such file or directory"
+```
+
+O caminho existe: é exatamente o que `catalog(scope="project")` devolve para
+aquela peça. Só que ele nomeia um modelo **embutido no projeto**, não um
+arquivo em disco, e `place` só sabe ler do disco. O original pode ter vindo de
+um `.sh3d` importado meses atrás, de um arquivo que não existe mais na máquina.
+
+O `catalog(scope="project")` chega a anunciar a intenção certa — *"how many
+there are and one id to copy from"* —, mas não existe um "copie esta peça". O
+contorno foi `arrange array` com um deslocamento qualquer (`dy: 1000`, para
+jogar as cópias fora da casa) e depois `update` em cada uma, trazendo-a para o
+lugar e redimensionando. Oito peças de roda-teto nasceram assim.
+
+**Encurtaria:** `place` aceitar o id de uma peça existente como fonte — ou um
+`copy` explícito em `arrange`, sem precisar arremessar as cópias para longe
+primeiro.
+
+## 24. Uma peça a 2,72 m de altura é avaliada como obstáculo de circulação
+
+A moldura de roda-teto da torre, 3 cm de saliência a **272 cm do piso**,
+recebeu:
+
+```
+"82 cm livres à frente (circulação diante de bancada e equipamentos:
+ mínimo 85 cm); afaste Sofá Milano … 4 cm."
+```
+
+A folga é medida contra o sofá, lá no chão. Ninguém circula diante de uma
+moldura que está acima da cabeça; o que passa por ali passa por baixo dela.
+
+O `fix` oferecido era mover o sofá 4 cm. Rodado em dry, isso de fato resolvia o
+alerta e subia a nota de 94 para 98 — criando, em troca, uma dica nova: 33 cm
+entre o sofá e o rack, abaixo dos 35 de mínimo. Um aperto real no lugar de um
+falso positivo.
+
+`measure` já sabe fazer isso direito: tem `z`, a banda de altura que conta,
+`[0, 200]` por padrão — "o que uma pessoa andando encontra". A regra de
+circulação não usa a mesma ideia.
+
+**Encurtaria:** a checagem de circulação ignorar o que está acima da cabeça, ou
+medir a folga na altura em que a peça realmente estorva.
+
 ---
 
 ## O que a rodada anterior deixou para verificar
