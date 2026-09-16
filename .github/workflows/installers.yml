@@ -88,3 +88,48 @@ jobs:
         run: |
           & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/install-windows.ps1))) -Uninstall
           if (Test-Path (Join-Path $env:LOCALAPPDATA 'Programs\3D New Era AI')) { throw 'still installed' }
+
+  linux:
+    name: Linux
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      # The Linux installer travels inside the release tarball, next to the
+      # binary it installs, so there is nothing to check out: what is tested
+      # is the package as it reaches a machine.
+      - name: Install
+        run: |
+          # /releases/latest redirects to the newest tag, with no per-IP limit.
+          tag=$(curl -fsSI -o /dev/null -w '%{redirect_url}' \
+                "https://github.com/$GITHUB_REPOSITORY/releases/latest")
+          tag=${tag##*/releases/tag/}
+          curl -fsSL -o newera.tar.gz \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/newera-linux-x64.tar.gz"
+          tar -xzf newera.tar.gz
+          (cd newera && ./install-desktop.sh)
+      - name: Check
+        run: |
+          sudo apt-get install -y -qq --no-install-recommends desktop-file-utils
+          data="${XDG_DATA_HOME:-$HOME/.local/share}"
+          "$HOME/.local/bin/newera" --version
+          for f in "$data/applications/newera.desktop" \
+                   "$data/mime/packages/newera.xml" \
+                   "$data/metainfo/io.github.leandrodaf.newera.metainfo.xml" \
+                   "$data/icons/hicolor/256x256/apps/newera.png"; do
+            test -f "$f" || { echo "missing $f"; exit 1; }
+          done
+          # The menu entry runs the binary wherever the session's PATH points.
+          grep -q "^Exec=$HOME/.local/bin/newera" "$data/applications/newera.desktop"
+          desktop-file-validate "$data/applications/newera.desktop"
+      - name: Run again (installing over itself)
+        run: |
+          cd newera && ./install-desktop.sh
+          "$HOME/.local/bin/newera" --version
+      - name: Uninstall
+        run: |
+          data="${XDG_DATA_HOME:-$HOME/.local/share}"
+          (cd newera && ./install-desktop.sh --uninstall)
+          test ! -e "$HOME/.local/bin/newera"
+          test ! -e "$data/applications/newera.desktop"
+          test ! -e "$data/mime/packages/newera.xml"
+          test -z "$(find "$data/icons/hicolor" -name 'newera.*' -o -name 'application-x-newera.*')"
