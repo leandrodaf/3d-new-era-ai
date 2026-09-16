@@ -163,6 +163,96 @@ fn inside(points: &[Point2], p: Point2) -> bool {
     inside
 }
 
+/// Where a cable run keeps what it carries.
+pub const CABLE_KEY: &str = "elec:cable";
+
+/// What a cable run carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Cable {
+    /// Power conduit: phase, neutral and earth.
+    Power,
+    /// Network cable (Cat 6), from a network point to the telecom panel.
+    Data,
+    /// Coaxial TV cable.
+    Tv,
+}
+
+impl Cable {
+    pub const ALL: [Self; 3] = [Self::Power, Self::Data, Self::Tv];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Power => "power",
+            Self::Data => "data",
+            Self::Tv => "tv",
+        }
+    }
+
+    pub fn parse(raw: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.key() == raw.trim())
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Power => "Eletroduto de força",
+            Self::Data => "Cabo de rede (Cat 6)",
+            Self::Tv => "Cabo coaxial de TV",
+        }
+    }
+
+    /// How the run is drawn, so the three read apart on one plan: power
+    /// solid, network dashed, TV dash-dot.
+    pub fn style(self) -> (crate::style::DashStyle, [u8; 3]) {
+        match self {
+            Self::Power => (crate::style::DashStyle::Solid, [200, 90, 30]),
+            Self::Data => (crate::style::DashStyle::Dash, [40, 120, 200]),
+            Self::Tv => (crate::style::DashStyle::DashDot, [120, 70, 170]),
+        }
+    }
+}
+
+/// A cable run: what it carries and how long it is, cm.
+pub fn cable_of(line: &crate::style::Polyline) -> Option<Cable> {
+    line.properties.get(CABLE_KEY).and_then(|k| Cable::parse(k))
+}
+
+/// Length of every run by what it carries, m — the list that goes to the
+/// purchase, with a tenth added for the drops into the boxes.
+pub fn cable_lengths(home: &Home) -> Vec<(Cable, f64)> {
+    let view = home.level_view(home.current_level());
+    Cable::ALL
+        .into_iter()
+        .map(|cable| {
+            let cm: f64 = view
+                .polylines
+                .iter()
+                .filter(|l| cable_of(l) == Some(cable))
+                .map(|l| {
+                    l.points
+                        .windows(2)
+                        .map(|w| w[0].distance(w[1]))
+                        .sum::<f64>()
+                })
+                .sum();
+            (cable, (cm / 100.0 * 1.1 * 10.0).round() / 10.0)
+        })
+        .filter(|(_, m)| *m > 0.0)
+        .collect()
+}
+
+/// Whether a run touches a point: an end or a vertex within reach of it.
+fn reaches(line: &crate::style::Polyline, at: Point2) -> bool {
+    const REACH: f64 = 30.0;
+    line.points.windows(2).any(|w| {
+        let (a, b) = (w[0], w[1]);
+        let (dx, dy) = (b.x - a.x, b.y - a.y);
+        let len2 = (dx * dx + dy * dy).max(1e-9);
+        let t = (((at.x - a.x) * dx + (at.y - a.y) * dy) / len2).clamp(0.0, 1.0);
+        Point2::new(a.x + t * dx, a.y + t * dy).distance(at) <= REACH
+    })
+}
+
 /// One point of the project, located and loaded.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Point {
@@ -488,6 +578,53 @@ pub fn check(home: &Home) -> Vec<Finding> {
             source: "nbr5410",
         });
     }
+    // Where cables are drawn, each network and TV point needs one reaching
+    // it, and the telecom panel one reaching it too.
+    let view_lines = &view.polylines;
+    for (kind, cable) in [
+        (PointKind::Network, Cable::Data),
+        (PointKind::Tv, Cable::Tv),
+    ] {
+        let runs: Vec<&crate::style::Polyline> = view_lines
+            .iter()
+            .filter(|l| cable_of(l) == Some(cable))
+            .collect();
+        if runs.is_empty() {
+            continue;
+        }
+        let unreached: Vec<String> = all
+            .iter()
+            .filter(|p| p.kind == kind)
+            .filter(|p| {
+                home.find_piece(p.id)
+                    .is_some_and(|f| !runs.iter().any(|l| reaches(l, f.position)))
+            })
+            .map(|p| p.id.to_string())
+            .collect();
+        if !unreached.is_empty() {
+            out.push(Finding {
+                severity: Severity::Alerta,
+                place: cable.name().into(),
+                message: format!("Pontos sem cabo chegando: {}.", unreached.join(", ")),
+                source: "nbr14565",
+            });
+        }
+        let panel_reached = all
+            .iter()
+            .filter(|p| p.kind == PointKind::TelecomPanel)
+            .any(|p| {
+                home.find_piece(p.id)
+                    .is_some_and(|f| runs.iter().any(|l| reaches(l, f.position)))
+            });
+        if !panel_reached {
+            out.push(Finding {
+                severity: Severity::Alerta,
+                place: cable.name().into(),
+                message: "Nenhum cabo chega ao quadro de telecom: os pontos precisam ser levados até ele.".into(),
+                source: "nbr14565",
+            });
+        }
+    }
     let loose: Vec<String> = all
         .iter()
         .filter(|p| p.kind.loads() && p.circuit.is_none())
@@ -560,6 +697,37 @@ mod tests {
                 Point2::new(x, d),
             ],
         )
+    }
+
+    #[test]
+    fn network_cables_are_measured_and_their_points_reached() {
+        let mut home = Home::default();
+        home.furniture = vec![
+            point(1, "telecom-panel", (0.0, 0.0), None),
+            point(2, "network-outlet", (400.0, 0.0), None),
+            point(3, "network-outlet", (400.0, 300.0), None),
+        ];
+        let mut run = crate::style::Polyline::new(
+            crate::ids::PolylineId(9),
+            vec![Point2::new(0.0, 0.0), Point2::new(400.0, 0.0)],
+        );
+        run.properties.insert(CABLE_KEY.into(), "data".into());
+        home.polylines.push(run);
+        // 4 m drawn, a tenth more for the drops.
+        assert_eq!(cable_lengths(&home), vec![(Cable::Data, 4.4)]);
+        let findings = check(&home);
+        assert!(
+            findings
+                .iter()
+                .any(|f| f.message.contains("sem cabo chegando: f3")),
+            "the second point has no cable: {findings:#?}"
+        );
+        assert!(
+            !findings
+                .iter()
+                .any(|f| f.message.contains("Nenhum cabo chega")),
+            "{findings:#?}"
+        );
     }
 
     #[test]
