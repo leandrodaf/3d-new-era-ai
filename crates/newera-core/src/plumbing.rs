@@ -158,23 +158,32 @@ impl Fixture {
         if by_catalog.is_some() {
             return by_catalog;
         }
-        let name = crate::annotations::fold(&piece.name);
-        let has = |words: &[&str]| words.iter().any(|w| name.contains(w));
-        if has(&["vaso sanit", "bacia sanit", "vaso "]) || name == "vaso" {
+        // By name only a piece of a fixture's size whose name starts with it:
+        // "Pia centralizada", "10 — Vaso suíte" — never "Gavetão pia —
+        // moldura", a part of the cabinet under it.
+        if piece.width.min(piece.depth) < 25.0 {
+            return None;
+        }
+        let folded = crate::annotations::fold(&piece.name);
+        let name = folded.trim_start_matches(|c: char| {
+            c.is_ascii_digit() || c.is_whitespace() || matches!(c, '-' | '.' | ':' | '—' | '–')
+        });
+        let starts = |words: &[&str]| words.iter().any(|w| name.starts_with(w));
+        if starts(&["vaso", "bacia sanitaria"]) {
             Some(Self::Toilet)
-        } else if has(&["lavatorio", "cuba"]) {
+        } else if starts(&["lavatorio", "cuba"]) {
             Some(Self::Basin)
-        } else if has(&["pia"]) {
+        } else if starts(&["pia"]) {
             Some(Self::KitchenSink)
-        } else if has(&["chuveiro", "ducha"]) {
+        } else if starts(&["chuveiro", "ducha", "box"]) {
             Some(Self::Shower)
-        } else if has(&["banheira"]) {
+        } else if starts(&["banheira"]) {
             Some(Self::Bathtub)
-        } else if has(&["lava-loucas", "lava loucas"]) {
+        } else if starts(&["lava-loucas", "lava loucas", "lava louca"]) {
             Some(Self::Dishwasher)
-        } else if has(&["maquina de lavar", "lava e seca", "lavadora"]) {
+        } else if starts(&["maquina de lavar", "lava e seca", "lava-e-seca", "lavadora"]) {
             Some(Self::Washer)
-        } else if has(&["tanque"]) {
+        } else if starts(&["tanque"]) {
             Some(Self::LaundrySink)
         } else {
             None
@@ -281,14 +290,34 @@ pub fn points(home: &Home) -> Vec<Point> {
     out
 }
 
+/// A group that is a fixture is one; its parts are looked at only when it
+/// is not. Two pieces of one fixture — the sink and its cabinet — count once.
+fn walk(piece: &Furniture, out: &mut Vec<(Fixture, Furniture)>) {
+    match Fixture::of(piece) {
+        Some(x) => {
+            let twin = out
+                .iter()
+                .any(|(y, f)| *y == x && f.position.distance(piece.position) <= 40.0);
+            if !twin {
+                out.push((x, piece.clone()));
+            }
+        }
+        None => {
+            for child in &piece.children {
+                walk(child, out);
+            }
+        }
+    }
+}
+
 /// Every fixture on the storey shown, with the piece it is.
 pub fn fixtures(home: &Home) -> Vec<(Fixture, Furniture)> {
     let view = home.level_view(home.current_level());
-    view.furniture
-        .iter()
-        .flat_map(Furniture::flatten)
-        .filter_map(|f| Fixture::of(f).map(|x| (x, f.clone())))
-        .collect()
+    let mut out = Vec::new();
+    for piece in &view.furniture {
+        walk(piece, &mut out);
+    }
+    out
 }
 
 /// How far from a fixture's centre its points may stand: half its size and
@@ -896,6 +925,59 @@ mod tests {
         assert_eq!(sewer_mm(&home, sewer), 100);
         let drain = points.iter().find(|p| p.id == FurnitureId(34)).unwrap();
         assert_eq!(sewer_mm(&home, drain), 50);
+    }
+
+    #[test]
+    fn a_cabinet_part_named_after_the_sink_is_not_a_sink_and_a_sink_counts_once() {
+        let mut home = Home::default();
+        let mut run = piece(
+            40,
+            "joinery",
+            "Bancada da cozinha",
+            (100.0, 30.0),
+            (200.0, 60.0, 90.0),
+        );
+        run.children = vec![
+            piece(
+                41,
+                "joinery",
+                "Gavetão pia com recorte hidráulico — moldura vertical",
+                (80.0, 58.0),
+                (2.0, 2.0, 70.0),
+            ),
+            piece(
+                42,
+                "joinery",
+                "Gavetão pia com recorte hidráulico — puxador pequeno dourado",
+                (90.0, 60.0),
+                (12.0, 2.0, 2.0),
+            ),
+            piece(
+                43,
+                "joinery",
+                "10 — Pia: dois gavetões em U — módulo 70 cm",
+                (100.0, 30.0),
+                (70.0, 60.0, 87.0),
+            ),
+        ];
+        home.furniture = vec![
+            run,
+            piece(
+                44,
+                "imported",
+                "Pia centralizada na bancada",
+                (105.0, 30.0),
+                (60.0, 40.0, 20.0),
+            ),
+        ];
+        let found = fixtures(&home);
+        assert_eq!(
+            found.len(),
+            1,
+            "{:?}",
+            found.iter().map(|(x, f)| (x, f.id)).collect::<Vec<_>>()
+        );
+        assert_eq!(found[0].0, Fixture::KitchenSink);
     }
 
     #[test]
