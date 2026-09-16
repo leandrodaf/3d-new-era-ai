@@ -214,6 +214,10 @@ pub enum PointSymbol {
     AirConditioner,
     ShowerPoint,
     DataOutlet,
+    NetworkOutlet,
+    TvOutlet,
+    WifiPoint,
+    TelecomPanel,
     Doorbell,
     ColdWater,
     HotWater,
@@ -1392,6 +1396,55 @@ pub static CATALOG: &[CatalogItem] = &[
         ),
         30.0,
     ),
+    // --- Telecomunicações (NBR 14565, cabeamento estruturado) ----------------
+    raised(
+        item(
+            "network-outlet",
+            "Ponto de rede RJ45 (Cat 6)",
+            C::Electrical,
+            [10.0, 4.0, 10.0],
+            [60, 120, 70],
+            Model::Point(PointSymbol::NetworkOutlet),
+            "ponto rede internet dados rj45 cat6 cabo lan ethernet network",
+        ),
+        30.0,
+    ),
+    raised(
+        item(
+            "tv-outlet",
+            "Ponto de TV (coaxial)",
+            C::Electrical,
+            [10.0, 4.0, 10.0],
+            [60, 120, 70],
+            Model::Point(PointSymbol::TvOutlet),
+            "ponto tv antena coaxial cabo televisao tv",
+        ),
+        30.0,
+    ),
+    raised(
+        item(
+            "wifi-point",
+            "Ponto de Wi-Fi no teto (access point)",
+            C::Electrical,
+            [16.0, 16.0, 4.0],
+            [60, 120, 70],
+            Model::Point(PointSymbol::WifiPoint),
+            "wifi wi-fi access point roteador teto internet sem fio",
+        ),
+        250.0,
+    ),
+    raised(
+        item(
+            "telecom-panel",
+            "Quadro de telecomunicações (rack / DG)",
+            C::Electrical,
+            [40.0, 12.0, 50.0],
+            [60, 120, 70],
+            Model::Point(PointSymbol::TelecomPanel),
+            "quadro telecom rack dg distribuidor geral rede internet switch roteador modem",
+        ),
+        150.0,
+    ),
     raised(
         item(
             "doorbell",
@@ -1672,6 +1725,18 @@ mod tests {
         assert!(ids("sofa").contains(&"sofa-3"));
         assert!(ids("Sofá 2").contains(&"sofa-2"));
         assert_eq!(ids("geladeira").first(), Some(&"fridge"));
+        // Telecom points are found by what an agent or a client calls them.
+        assert_eq!(ids("ponto de rede rj45").first(), Some(&"network-outlet"));
+        assert_eq!(ids("wifi teto").first(), Some(&"wifi-point"));
+        assert!(ids("rack telecom").contains(&"telecom-panel"));
+        assert!(ids("antena tv coaxial").contains(&"tv-outlet"));
+        for id in ["network-outlet", "tv-outlet", "wifi-point", "telecom-panel"] {
+            assert_eq!(
+                find(id).unwrap().category.discipline(),
+                Some(newera_core::Discipline::Electrical),
+                "{id} goes to the electrical project"
+            );
+        }
         // Several words: any of them, best match first.
         assert_eq!(ids("box vidro chuveiro").first(), Some(&"shower-glass"));
         assert!(ids("cama casal").contains(&"bed-double"));

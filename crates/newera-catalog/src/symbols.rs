@@ -93,6 +93,64 @@ fn point_symbol(s: &mut Sym, symbol: crate::PointSymbol, size: f64) {
             s.line(triangle, true, true);
             s.line(vec![(-r * 0.5, r * 0.1), (r * 0.5, r * 0.1)], false, true);
         }
+        P::NetworkOutlet => {
+            // A triangle with "R" strokes inside: the network point.
+            s.fill(triangle.clone(), false);
+            s.line(triangle, true, true);
+            s.line(
+                vec![
+                    (-r * 0.25, r * 0.45),
+                    (-r * 0.25, -r * 0.2),
+                    (r * 0.2, -r * 0.2),
+                    (r * 0.2, r * 0.1),
+                    (-r * 0.25, r * 0.1),
+                    (r * 0.25, r * 0.45),
+                ],
+                false,
+                true,
+            );
+        }
+        P::TvOutlet => {
+            // A triangle with a coaxial ring.
+            s.fill(triangle.clone(), false);
+            s.line(triangle, true, true);
+            s.line(circle(0.0, r * 0.1, r * 0.3), true, true);
+            s.fill(circle(0.0, r * 0.1, r * 0.1), true);
+        }
+        P::WifiPoint => {
+            // A ceiling disc with two arcs of a signal.
+            s.fill(circle(0.0, 0.0, r), false);
+            s.line(circle(0.0, 0.0, r), true, true);
+            for k in [0.35, 0.65] {
+                s.line(
+                    ellipse(
+                        0.0,
+                        r * 0.35,
+                        r * k,
+                        r * k,
+                        std::f64::consts::PI * 1.2,
+                        std::f64::consts::PI * 1.8,
+                        10,
+                    ),
+                    false,
+                    true,
+                );
+            }
+            s.fill(circle(0.0, r * 0.35, r * 0.1), true);
+        }
+        P::TelecomPanel => {
+            // A panel with a grid of ports.
+            let panel = rect(-r * 1.2, -r * 0.45, r * 1.2, r * 0.45);
+            s.fill(panel.clone(), false);
+            s.line(panel.clone(), true, true);
+            for x in [-r * 0.6, 0.0, r * 0.6] {
+                s.line(
+                    rect(x - r * 0.18, -r * 0.18, x + r * 0.18, r * 0.18),
+                    true,
+                    false,
+                );
+            }
+        }
         P::Switch1 => {
             s.fill(circle(0.0, 0.0, r * 0.45), true);
             s.line(circle(0.0, 0.0, r * 0.45), true, true);
