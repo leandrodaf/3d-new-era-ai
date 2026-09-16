@@ -184,6 +184,10 @@ fn snap(angle_degrees: f64) -> Dir {
 /// How thin a part has to be, in cm, to be a panel and not a body.
 const PANEL: f64 = 6.0;
 
+/// How wide a panel has to be, at least, to be a door, a front or a back and
+/// not a post, in cm.
+const PANEL_WIDE: f64 = 10.0;
+
 /// How close to a face of the group a panel has to sit to be on it, in cm.
 const AT_FACE: f64 = 4.0;
 
@@ -231,15 +235,18 @@ fn built_front(group: &Furniture) -> Option<&'static str> {
         }
         let (lo, hi) = plan_bounds(part);
         let (across_x, across_y) = (hi.x - lo.x, hi.y - lo.y);
-        // A panel lies flat against one face: thin one way, wide the other.
-        if across_y <= PANEL && across_x > across_y {
+        // A panel lies flat against one face: thin one way and clearly wide
+        // the other. A 3 × 3 cm post is neither, and counting it as soon as a
+        // resize made it 3.25 × 3 turned a whole table around.
+        let flat = |thin: f64, wide: f64| thin <= PANEL && wide >= (3.0 * thin).max(PANEL_WIDE);
+        if flat(across_y, across_x) {
             if (lo.y - min.y).abs() <= AT_FACE {
                 score[2] += weight;
             }
             if (hi.y - max.y).abs() <= AT_FACE {
                 score[3] += weight;
             }
-        } else if across_x <= PANEL && across_y > across_x {
+        } else if flat(across_x, across_y) {
             if (lo.x - min.x).abs() <= AT_FACE {
                 score[0] += weight;
             }
@@ -938,6 +945,32 @@ mod tests {
         );
         assert!((gap(a, b, Axis::X) + 5.5).abs() < 1e-9, "the tape agrees");
         assert!((gap(b, a, Axis::X) + 5.5).abs() < 1e-9, "from either side");
+    }
+
+    #[test]
+    fn resizing_a_group_does_not_turn_it_around() {
+        // A folding table: its top reaches +y, two 3 × 3 cm posts hold it on
+        // the -y edge, and angle 0 says it faces +y.
+        let table = |w: f64| {
+            let s = w / 110.0;
+            let mut group = piece(1, (465.0, 497.0), (w, 36.0, 29.0), 0.0);
+            let part = |id: u64, x: f64, y: f64, pw: f64, d: f64| {
+                piece(id, (465.0 + (x - 465.0) * s, y), (pw * s, d, 28.0), 0.0)
+            };
+            group.children = vec![
+                part(2, 465.0, 500.0, 110.0, 30.0),
+                part(3, 432.0, 480.5, 3.0, 3.0),
+                part(4, 498.0, 480.5, 3.0, 3.0),
+                part(5, 432.0, 497.0, 3.0, 24.0),
+                part(6, 498.0, 497.0, 3.0, 24.0),
+            ];
+            group
+        };
+        let narrow = table(110.0);
+        let wide = table(119.0);
+        assert_eq!(facing(&narrow), "+y");
+        assert_eq!(facing(&wide), "+y", "posts are not fronts");
+        assert_eq!(facing_disagrees(&wide), None);
     }
 
     #[test]
