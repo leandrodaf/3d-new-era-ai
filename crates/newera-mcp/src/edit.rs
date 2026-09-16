@@ -2215,6 +2215,10 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
         {
             piece.follow_group_change(source);
         }
+        // A point set into a wall never goes into glass or an opening's span.
+        if let Some(why) = newera_core::mounting::blocked(doc.home(), &piece) {
+            return Err(why);
+        }
         ids.push(piece.id.to_string());
         commands.push(Command::insert(piece));
     }

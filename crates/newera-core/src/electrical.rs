@@ -1568,6 +1568,22 @@ pub fn check(home: &Home) -> Vec<Finding> {
             });
         }
     }
+    // A point set in glass or in an opening's span has no wall to hold it.
+    for point in &all {
+        if let Some(why) = view
+            .find_piece(point.id)
+            .and_then(|f| crate::mounting::blocked(home, f))
+        {
+            out.push(Finding {
+                key: format!("elec:mount:{}", point.id),
+                accepted: None,
+                severity: Severity::Erro,
+                place: format!("{} {}", point.name, point.id),
+                message: why,
+                source: "nbr5410",
+            });
+        }
+    }
     automation(home, &all, &mut out);
     if let Some(panel) = panel(home) {
         let place = "Quadro de distribuição".to_owned();

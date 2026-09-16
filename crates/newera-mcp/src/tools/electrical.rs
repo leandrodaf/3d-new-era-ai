@@ -1233,4 +1233,30 @@ mod tests {
             "{text}"
         );
     }
+
+    #[test]
+    fn an_outlet_is_never_placed_on_a_window_pane_or_in_a_door() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"window","at":[100,0],"w":120,"elev":110,"h":100},{"cat":"door","at":[300,0]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let place = |json: &str| s.place(Parameters(serde_json::from_str(json).unwrap()));
+        let pane = place(r#"{"items":[{"cat":"outlet-mid","at":[100,3]}]}"#).unwrap_err();
+        assert!(pane.message.contains("vidro da janela"), "{pane:?}");
+        let door = place(r#"{"items":[{"cat":"switch","at":[300,3],"elev":30}]}"#).unwrap_err();
+        assert!(door.message.contains("vão da porta"), "{door:?}");
+        place(r#"{"items":[{"cat":"outlet-low","at":[100,3]}]}"#)
+            .expect("under the sill is a wall");
+    }
 }

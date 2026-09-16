@@ -27,6 +27,7 @@ mod levels;
 pub mod lighting;
 mod materials;
 pub mod measure;
+pub mod mounting;
 pub mod ops;
 pub mod plumbing;
 pub mod progress;

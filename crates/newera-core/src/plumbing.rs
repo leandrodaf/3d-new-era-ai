@@ -616,6 +616,22 @@ pub fn check(home: &Home) -> Vec<Finding> {
             }
         }
     }
+    // A water or gas point set in glass or in an opening's span.
+    for point in &all {
+        if let Some(why) = view
+            .find_piece(point.id)
+            .and_then(|f| crate::mounting::blocked(home, f))
+        {
+            out.push(Finding {
+                key: format!("plumb:mount:{}", point.id),
+                accepted: None,
+                severity: Severity::Erro,
+                place: format!("{} {}", point.name, point.id),
+                message: why,
+                source: "nbr5626",
+            });
+        }
+    }
     // The premises: where the water comes from and where the sewer goes.
     if all
         .iter()
