@@ -736,7 +736,7 @@ pub(crate) fn missing(home: &newera_core::Home, id: ElementId) -> String {
             .find(|p| p.id == piece)
             .map_or_else(String::new, |p| format!(" ({})", p.name));
         return format!(
-            "{id}{part} is a part of {}; edit {} instead — changing the group rebuilds its parts",
+            "{id}{part} is a part of {}; edit {} instead — changing the group rebuilds its parts (a part takes only name, brand, model_name and url on its own)",
             owner.id, owner.id
         );
     }
@@ -748,10 +748,10 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
     let mut reshaped: Vec<Wall> = Vec::new();
     for spec in items {
         let id: ElementId = spec.id.parse().map_err(|e| format!("{e}"))?;
-        let element = doc
-            .home()
-            .element(id)
-            .ok_or_else(|| missing(doc.home(), id))?;
+        let Some(element) = doc.home().element(id) else {
+            rename_part(doc.home(), id, spec, &mut commands)?;
+            continue;
+        };
         let allowed: &[&str] = match element {
             Element::Polyline(_) => &["pts", "t", "color", "level", "divider"],
             Element::Wall(_) => &[
@@ -991,6 +991,79 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
         }
     }
     doc.execute(Command::Batch { commands }).map_err(core)
+}
+
+/// Fields a part of a group takes on its own: what it is called and what it
+/// is, never where it is or how big — the group owns that and rebuilds it.
+const PART_FIELDS: [&str; 5] = ["id", "name", "brand", "model_name", "url"];
+
+/// Renames a part of a group, or says why it cannot be edited alone.
+///
+/// A part's name is where a joiner writes its size ("tampo aberto 110 × 30"),
+/// and after the group is resized it is the part's name that is wrong — the
+/// one thing `stale` rightly reports and nobody could fix.
+fn rename_part(
+    home: &newera_core::Home,
+    id: ElementId,
+    spec: UpdateSpec,
+    commands: &mut Vec<Command>,
+) -> EditResult<()> {
+    fn find(
+        piece: &mut newera_core::Furniture,
+        id: newera_core::FurnitureId,
+    ) -> Option<&mut newera_core::Furniture> {
+        if piece.id == id {
+            return Some(piece);
+        }
+        piece.children.iter_mut().find_map(|c| find(c, id))
+    }
+    let (ElementId::Furniture(part), Some(owner)) = (
+        id,
+        match id {
+            ElementId::Furniture(part) => home.part_owner(part),
+            _ => None,
+        },
+    ) else {
+        return Err(missing(home, id));
+    };
+    if let Some(bad) = spec
+        .fields()
+        .into_iter()
+        .find(|f| !PART_FIELDS.contains(&f.as_str()))
+    {
+        return Err(format!(
+            "{}; a part takes only {} on its own (`{bad}` belongs to the group)",
+            missing(home, id),
+            PART_FIELDS[1..].join(", ")
+        ));
+    }
+    // Two parts of one group in one call edit the same copy of the group.
+    let at = commands.iter().position(
+        |c| matches!(c, Command::Update { element: Element::Furniture(f) } if f.id == owner.id),
+    );
+    let mut group = match at {
+        Some(k) => match commands.remove(k) {
+            Command::Update {
+                element: Element::Furniture(f),
+            } => f,
+            _ => unreachable!("matched above"),
+        },
+        None => owner.clone(),
+    };
+    let piece = find(&mut group, part).ok_or_else(|| missing(home, id))?;
+    let text = |v: Option<String>, old: Option<String>| match v {
+        Some(v) if v.is_empty() => None,
+        Some(v) => Some(v),
+        None => old,
+    };
+    piece.name = spec.name.unwrap_or_else(|| piece.name.clone());
+    piece.info.brand = text(spec.brand, piece.info.brand.take());
+    piece.info.model_name = text(spec.model_name, piece.info.model_name.take());
+    piece.info.url = text(spec.url, piece.info.url.take());
+    commands.push(Command::Update {
+        element: Element::Furniture(group),
+    });
+    Ok(())
 }
 
 /// Moves a resized piece so that one of its faces stays where it was.

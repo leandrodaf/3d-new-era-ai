@@ -70,7 +70,7 @@ impl NewEraMcp {
         Ok(ok(&doc, &ids))
     }
     #[tool(
-        description = "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto, polyline divider). anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. dry=true answers what it would do — changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), findings resolved and created as issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the same kind check_layout gives (only real defects: a piece resting or built in is never listed), and issues_changed for a clash that stays but grows or shrinks (extent_was) — without writing anything, so a size can be tried before it is applied; dry=\"summary\" answers the same decision without listing the parts a group rebuilds. Otherwise the reply names what changed."
+        description = "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto, polyline divider); a part of a group takes name, brand, model_name and url on its own — its size and place belong to the group. anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. dry=true answers what it would do — changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), findings resolved and created as issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the same kind check_layout gives (only real defects: a piece resting or built in is never listed), and issues_changed for a clash that stays but grows or shrinks (extent_was) — without writing anything, so a size can be tried before it is applied; dry=\"summary\" answers the same decision without listing the parts a group rebuilds. Otherwise the reply names what changed."
     )]
     pub(crate) fn update(
         &self,
@@ -273,6 +273,71 @@ mod tests {
         assert_eq!(diff["changed"][0]["id"], "f6", "{reply}");
         assert_eq!(diff["changed"][0]["from"]["wdh"][1], 60.0, "{reply}");
     }
+    #[test]
+    fn a_part_of_a_group_can_be_renamed_but_not_resized_alone() {
+        let s = server();
+        let part = |id: u64, name: &str, x: f64, w: f64| newera_core::Furniture {
+            id: newera_core::FurnitureId(id),
+            catalog: "box".into(),
+            name: name.to_owned(),
+            position: newera_core::Point2::new(x, 30.0),
+            width: w,
+            depth: 30.0,
+            height: 3.0,
+            elevation: 75.0,
+            ..newera_core::Furniture::default()
+        };
+        {
+            let mut doc = s.document.write();
+            let mut group = part(1, "mesa basculante", 60.0, 119.0);
+            group.height = 78.0;
+            group.elevation = 0.0;
+            group.children = vec![
+                part(2, "tampo aberto 110 × 30", 60.0, 119.0),
+                part(3, "montante 5,8", 3.0, 5.8),
+            ];
+            doc.execute(newera_core::Command::insert(group)).unwrap();
+        }
+        let update = |json: &str| {
+            s.update(Parameters(UpdateParams {
+                items: serde_json::from_str(json).unwrap(),
+                v: None,
+                dry: None,
+            }))
+        };
+        update(r#"[{"id":"f2","name":"tampo aberto 119 × 30"},{"id":"f3","brand":"Blum"}]"#)
+            .unwrap();
+        {
+            let doc = s.document.read();
+            let home = doc.home();
+            assert_eq!(
+                home.find_piece("f2".parse().unwrap()).unwrap().name,
+                "tampo aberto 119 × 30"
+            );
+            let post = home.find_piece("f3".parse().unwrap()).unwrap();
+            assert_eq!(post.info.brand.as_deref(), Some("Blum"), "both edits kept");
+            assert_eq!(
+                home.furniture[0].name, "mesa basculante",
+                "the group keeps its name"
+            );
+            let stale = newera_core::check_annotations(home);
+            assert!(stale.stale.is_empty(), "{stale:?}");
+        }
+        let err = update(r#"[{"id":"f2","w":80}]"#).unwrap_err();
+        assert!(err.message.contains("belongs to the group"), "{err:?}");
+        s.document.write().undo().unwrap();
+        assert_eq!(
+            s.document
+                .read()
+                .home()
+                .find_piece("f2".parse().unwrap())
+                .unwrap()
+                .name,
+            "tampo aberto 110 × 30",
+            "one undoable step"
+        );
+    }
+
     #[test]
     fn a_dry_move_says_what_kind_of_clash_it_trades_for() {
         let s = server();
