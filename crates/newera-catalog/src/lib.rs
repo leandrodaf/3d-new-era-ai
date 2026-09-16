@@ -196,6 +196,11 @@ pub enum Model {
     Planter,
     /// A technical point drawn with a conventional plan symbol.
     Point(PointSymbol),
+    /// Pop-up outlet tower set into a countertop: the flange on the stone,
+    /// the raised body with its sockets, the body hanging under the top.
+    OutletTower,
+    /// Outlet box set into a desk or table: a collar with a hinged lid.
+    DeskBox,
 }
 
 /// Plan symbols of electrical and plumbing points, after the usual
@@ -1473,6 +1478,67 @@ pub static CATALOG: &[CatalogItem] = &[
             "campainha doorbell",
         ),
         140.0,
+    ),
+    // --- Tomadas embutidas em móveis -----------------------------------------
+    raised(
+        item(
+            "outlet-tower",
+            "Torre de tomadas retrátil de embutir (furo 60 mm, 3 tomadas, plugue)",
+            C::Electrical,
+            [8.4, 8.4, 19.0],
+            [60, 60, 64],
+            Model::OutletTower,
+            "torre tomada retratil embutir bancada ilha pia multiplug elevor renna bmax",
+        ),
+        90.0,
+    ),
+    raised(
+        item(
+            "outlet-tower-auto",
+            "Torre de tomadas automática com indução (furo 85 mm, ligada à instalação)",
+            C::Electrical,
+            [10.0, 10.0, 20.0],
+            [60, 60, 64],
+            Model::OutletTower,
+            "torre tomada automatica inducao carregador embutir bancada caixatomada tr03aw",
+        ),
+        90.0,
+    ),
+    raised(
+        item(
+            "outlet-tower-4",
+            "Torre de 4 tomadas + USB e indução (furo 100 mm)",
+            C::Electrical,
+            [11.0, 11.0, 22.0],
+            [40, 40, 44],
+            Model::OutletTower,
+            "torre 4 tomadas usb inducao powerdock hafele h5 embutir bancada",
+        ),
+        90.0,
+    ),
+    raised(
+        item(
+            "desk-outlet-box",
+            "Caixa de tomadas de mesa (4 tomadas, RJ45, USB, HDMI; recorte 120×335 mm)",
+            C::Electrical,
+            [34.4, 13.6, 1.5],
+            [150, 152, 156],
+            Model::DeskBox,
+            "caixa tomada mesa reuniao escritorio embutir rj45 hdmi usb cx44",
+        ),
+        75.0,
+    ),
+    raised(
+        item(
+            "furniture-outlet",
+            "Tomada de embutir em móvel (furo 35 mm)",
+            C::Electrical,
+            [4.5, 2.0, 4.5],
+            ELECTRIC,
+            Model::Point(PointSymbol::OutletMid),
+            "tomada embutir movel marcenaria painel gabinete furo 35 mm",
+        ),
+        100.0,
     ),
     // --- Automação ----------------------------------------------------------
     raised(

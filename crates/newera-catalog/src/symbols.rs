@@ -504,6 +504,31 @@ pub fn plan_symbol(piece: &Furniture) -> Vec<SymbolShape> {
         point_symbol(&mut s, symbol, w.max(d));
         return s.shapes;
     }
+    if model == Model::OutletTower {
+        // A circle with the outlet triangle: a socket set into the top.
+        let r = hw.max(16.0);
+        let circle = ellipse(0.0, 0.0, r, r, 0.0, std::f64::consts::TAU, 28);
+        s.fill(circle.clone(), false);
+        s.line(circle, true, true);
+        let t = vec![(0.0, -r * 0.6), (r * 0.55, r * 0.4), (-r * 0.55, r * 0.4)];
+        s.fill(t.clone(), true);
+        s.line(t, true, true);
+        return s.shapes;
+    }
+    if model == Model::DeskBox {
+        let plate = rect(-hw, -hd, hw, hd);
+        s.fill(plate.clone(), false);
+        s.line(plate, true, true);
+        for x in [-hw * 0.5, 0.0, hw * 0.5] {
+            let t = vec![
+                (x, -hd * 0.5),
+                (x + hd * 0.35, hd * 0.4),
+                (x - hd * 0.35, hd * 0.4),
+            ];
+            s.line(t, true, false);
+        }
+        return s.shapes;
+    }
 
     let round = matches!(
         model,

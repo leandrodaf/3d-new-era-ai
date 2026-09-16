@@ -2052,6 +2052,7 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
     }
     let mut commands = Vec::with_capacity(items.len());
     let mut ids = Vec::with_capacity(items.len());
+    let mut placed_here: Vec<newera_core::Furniture> = Vec::new();
     for spec in items {
         if spec.cat == "beam" && (spec.a.is_some() || spec.b.is_some()) {
             let (Some(a), Some(b)) = (spec.a, spec.b) else {
@@ -2229,12 +2230,24 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
         // A fixed point goes onto its structure: a wall point onto a wall's
         // face, a ceiling point up to the ceiling — never loose, never into
         // glass or an opening's span.
+        // Against the plan with the pieces this same call placed before it:
+        // a counter and the tower set into it can come together.
+        let staged;
+        let context: &newera_core::Home = if placed_here.is_empty() {
+            doc.home()
+        } else {
+            let mut home = doc.home().clone();
+            home.furniture.extend(placed_here.iter().cloned());
+            staged = home;
+            &staged
+        };
         if spec.wall.is_none() && source.is_none() {
-            newera_core::mounting::seat(doc.home(), &mut piece)?;
+            newera_core::mounting::seat(context, &mut piece)?;
         }
-        if let Some(why) = newera_core::mounting::blocked(doc.home(), &piece) {
+        if let Some(why) = newera_core::mounting::blocked(context, &piece) {
             return Err(why);
         }
+        placed_here.push(piece.clone());
         ids.push(piece.id.to_string());
         commands.push(Command::insert(piece));
     }

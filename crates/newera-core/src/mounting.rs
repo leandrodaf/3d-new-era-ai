@@ -23,6 +23,89 @@ pub enum Mount {
     Ceiling,
     /// Set into the floor: drains and trap boxes.
     Floor,
+    /// Set into furniture: outlet towers in a countertop, a desk box.
+    Furniture,
+}
+
+/// What an outlet set into furniture takes.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BuiltIn {
+    /// Hole or cutout width, mm.
+    pub hole_mm: f64,
+    /// Body under the top, cm (0: set into a panel).
+    pub below_cm: f64,
+    /// A cord with a plug to an outlet (else wired to the circuit).
+    pub plug: bool,
+    /// Also goes in a desk or table, not only a fixed piece.
+    pub desk: bool,
+}
+
+/// The built-in outlets of the catalog: NEO Avant/Renna 60 mm towers with a
+/// plug, Caixa Tomada automatic 85 mm wired ones, a Häfele-type 100 mm tower,
+/// a desk box (cutout 120 × 335 mm) and a 35 mm furniture outlet.
+pub fn built_in_spec(catalog: &str) -> Option<BuiltIn> {
+    Some(match catalog {
+        "outlet-tower" => BuiltIn {
+            hole_mm: 60.0,
+            below_cm: 30.0,
+            plug: true,
+            desk: false,
+        },
+        "outlet-tower-auto" => BuiltIn {
+            hole_mm: 85.0,
+            below_cm: 30.0,
+            plug: false,
+            desk: false,
+        },
+        "outlet-tower-4" => BuiltIn {
+            hole_mm: 100.0,
+            below_cm: 36.0,
+            plug: true,
+            desk: false,
+        },
+        "desk-outlet-box" => BuiltIn {
+            hole_mm: 120.0,
+            below_cm: 8.0,
+            plug: false,
+            desk: true,
+        },
+        "furniture-outlet" => BuiltIn {
+            hole_mm: 35.0,
+            below_cm: 0.0,
+            plug: false,
+            desk: true,
+        },
+        _ => return None,
+    })
+}
+
+/// The piece a built-in outlet is set into: the one under it whose top it
+/// sits on, or whose panel it is in.
+pub fn host_of<'a>(view: &'a Home, piece: &Furniture) -> Option<&'a Furniture> {
+    let spec = built_in_spec(&piece.catalog)?;
+    view.furniture
+        .iter()
+        .flat_map(Furniture::flatten)
+        .filter(|f| {
+            f.id != piece.id && f.opening.is_none() && f.discipline.is_none() && !f.is_group()
+        })
+        .filter(|f| spec.desk || !movable(f) || f.properties.contains_key("joinery:part"))
+        .filter(|f| f.width.min(f.depth) >= 20.0)
+        .filter(|f| {
+            let mut near = (*f).clone();
+            near.width += 2.0;
+            near.depth += 2.0;
+            if !near.contains(piece.position) {
+                return false;
+            }
+            let (_, top) = f.height_range();
+            if spec.below_cm > 0.0 {
+                (top - piece.elevation).abs() <= 3.0
+            } else {
+                piece.elevation >= f.elevation - 1.0 && piece.elevation <= top
+            }
+        })
+        .max_by(|a, b| a.height_range().1.total_cmp(&b.height_range().1))
 }
 
 /// How far from a wall a point asked for `at` is still taken into it, cm.
@@ -39,6 +122,8 @@ pub fn mount_of(catalog: &str) -> Option<Mount> {
         "light-ceiling" | "downlight" | "led-panel" | "wifi-point" | "presence-sensor"
     ) {
         Some(Mount::Ceiling)
+    } else if built_in_spec(catalog).is_some() {
+        Some(Mount::Furniture)
     } else if crate::plumbing::drain_spec(catalog).is_some() || catalog == "rain-drain" {
         Some(Mount::Floor)
     } else {
@@ -121,6 +206,41 @@ pub fn seat(home: &Home, piece: &mut Furniture) -> Result<(), String> {
             piece.angle = (-n.0).atan2(n.1).to_degrees();
             Ok(())
         }
+        Mount::Furniture => {
+            // Onto the top of the piece under it (or into its panel).
+            let Some(spec) = built_in_spec(&piece.catalog) else {
+                return Ok(());
+            };
+            let host = view
+                .furniture
+                .iter()
+                .flat_map(Furniture::flatten)
+                .filter(|f| {
+                    f.id != piece.id
+                        && f.opening.is_none()
+                        && f.discipline.is_none()
+                        && !f.is_group()
+                })
+                .filter(|f| spec.desk || !movable(f) || f.properties.contains_key("joinery:part"))
+                .filter(|f| f.width.min(f.depth) >= 20.0 && f.contains(piece.position))
+                .max_by(|a, b| a.height_range().1.total_cmp(&b.height_range().1))
+                .ok_or_else(|| {
+                    format!(
+                        "{} vai embutida {}: não há um sob {:?}",
+                        piece.name,
+                        if spec.desk {
+                            "numa bancada, móvel fixo ou mesa"
+                        } else {
+                            "numa bancada, ilha ou móvel fixo"
+                        },
+                        [piece.position.x.round(), piece.position.y.round()]
+                    )
+                })?;
+            if spec.below_cm > 0.0 {
+                piece.elevation = host.height_range().1;
+            }
+            Ok(())
+        }
         Mount::Floor => {
             // Flush with the finished floor.
             piece.elevation = 0.0;
@@ -189,6 +309,14 @@ pub fn blocked(home: &Home, piece: &Furniture) -> Option<String> {
     let view = home.level_view(home.current_level());
     if mount_of(&piece.catalog) == Some(Mount::Floor) {
         return floor_blocked(&view, piece);
+    }
+    if mount_of(&piece.catalog) == Some(Mount::Furniture) {
+        return host_of(&view, piece).is_none().then(|| {
+            format!(
+                "{} {} está solta: vai embutida no tampo de uma bancada, ilha ou móvel (ou numa mesa, a caixa de mesa).",
+                piece.name, piece.id
+            )
+        });
     }
     if mount_of(&piece.catalog) == Some(Mount::Ceiling) {
         if !in_a_room(&view, piece.position) {

@@ -98,7 +98,8 @@ pub fn point_kind(piece: &Furniture) -> PointKind {
         "light-ceiling" | "light-wall" | "downlight" | "pendant" | "led-panel" | "led-strip" => {
             PointKind::Lighting
         }
-        "outlet-low" | "outlet-mid" | "outlet-high" => PointKind::Outlet,
+        "outlet-low" | "outlet-mid" | "outlet-high" | "outlet-tower" | "outlet-tower-auto"
+        | "outlet-tower-4" | "desk-outlet-box" | "furniture-outlet" => PointKind::Outlet,
         "ac-point" | "shower-point" => PointKind::Dedicated,
         "switch" | "switch-double" | "switch-3way" => PointKind::Switch,
         "electrical-panel" => PointKind::Panel,
@@ -1012,6 +1013,147 @@ pub fn orphaned(home: &Home) -> Vec<(String, String)> {
         .collect()
 }
 
+/// What an outlet set into furniture asks, from its makers' manuals (NEO
+/// Avant, Renna, Caixa Tomada, Häfele) and the UK guidance they follow: room
+/// under the top for its body — no drawer, oven, dishwasher, bowl or
+/// cooktop there —, 2,5 cm from the edge, 30 cm from the sink and the hob,
+/// never in a bathroom, and a plug-in tower an outlet to plug into.
+fn built_in_outlets(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
+    let view = home.level_view(home.current_level());
+    for point in all {
+        let Some(piece) = view.find_piece(point.id) else {
+            continue;
+        };
+        let Some(spec) = crate::mounting::built_in_spec(&piece.catalog) else {
+            continue;
+        };
+        let place = format!("{} {}", piece.name, piece.id);
+        let mut say = |key: &str, severity: Severity, message: String| {
+            out.push(Finding {
+                key: format!("elec:{key}:{}", piece.id),
+                accepted: None,
+                severity,
+                place: place.clone(),
+                message,
+                source: "fabricantes",
+            });
+        };
+        if in_wet_room(home, point) {
+            say(
+                "tower-wet",
+                Severity::Erro,
+                "Tomada embutida em móvel no banheiro: as torres são IPX3 no máximo (respingo leve) e nenhuma é para área molhada.".into(),
+            );
+        }
+        let Some(host) = crate::mounting::host_of(&view, piece) else {
+            continue;
+        };
+        if spec.below_cm > 0.0 {
+            // What is under the top where the body hangs.
+            let top = piece.elevation;
+            let under = view
+                .furniture
+                .iter()
+                .flat_map(Furniture::flatten)
+                .filter(|f| f.id != piece.id && f.id != host.id && f.opening.is_none())
+                .filter(|f| {
+                    let (lo, hi) = f.height_range();
+                    hi > top - spec.below_cm && lo < top - 0.5 && f.contains(piece.position)
+                })
+                .find(|f| {
+                    let name = crate::annotations::fold(&f.name);
+                    matches!(
+                        f.catalog.as_str(),
+                        "dishwasher" | "oven" | "microwave" | "cooktop" | "stove" | "sink-bowl"
+                    ) || [
+                        "gaveta",
+                        "forno",
+                        "lava-louca",
+                        "lava louca",
+                        "cuba",
+                        "cooktop",
+                        "micro",
+                    ]
+                    .iter()
+                    .any(|w| name.contains(w))
+                });
+            if let Some(f) = under {
+                say(
+                    "tower-below",
+                    Severity::Erro,
+                    format!(
+                        "Sem espaço embaixo: o corpo da torre desce uns {} cm sob o tampo e cai sobre {} ({}); mova-a para cima de um vão livre do gabinete.",
+                        spec.below_cm.round(),
+                        f.name,
+                        f.id
+                    ),
+                );
+            }
+            let (x, y) = host.to_local(piece.position);
+            let edge =
+                (host.width / 2.0 - x.abs()).min(host.depth / 2.0 - y.abs()) - piece.width / 2.0;
+            if edge < 2.5 {
+                say(
+                    "tower-edge",
+                    Severity::Alerta,
+                    format!(
+                        "A {} cm da borda do tampo: os fabricantes pedem ao menos 2,5 cm entre o furo e a borda.",
+                        decimal(edge.max(0.0))
+                    ),
+                );
+            }
+        }
+        // Water and heat on the same top.
+        let near = |words: &[&str], catalogs: &[&str]| {
+            view.furniture
+                .iter()
+                .flat_map(Furniture::flatten)
+                .filter(|f| {
+                    let name = crate::annotations::fold(&f.name);
+                    catalogs.contains(&f.catalog.as_str()) || words.iter().any(|w| name.contains(w))
+                })
+                .map(|f| f.position.distance(piece.position) - f.width.max(f.depth) / 2.0)
+                .fold(f64::MAX, f64::min)
+        };
+        let sink = near(&["cuba", "pia"], &["sink-bowl", "sink-counter"]);
+        let hob = near(&["cooktop", "fogao"], &["cooktop", "stove"]);
+        if sink < 30.0 || hob < 30.0 {
+            say(
+                "tower-wet-heat",
+                Severity::Alerta,
+                format!(
+                    "A {} cm da {}: mantenha a torre a 30 cm da cuba e do cooktop, fora da área de respingo e de calor.",
+                    decimal(sink.min(hob).max(0.0)),
+                    if sink < hob { "cuba" } else { "cocção" }
+                ),
+            );
+        }
+        if spec.plug {
+            let socket = all.iter().any(|p| {
+                p.kind == PointKind::Outlet
+                    && p.id != point.id
+                    && crate::mounting::built_in_spec(
+                        &view
+                            .find_piece(p.id)
+                            .map(|f| f.catalog.clone())
+                            .unwrap_or_default(),
+                    )
+                    .is_none()
+                    && view
+                        .find_piece(p.id)
+                        .is_some_and(|f| f.position.distance(piece.position) <= 150.0)
+            });
+            if !socket {
+                say(
+                    "tower-plug",
+                    Severity::Dica,
+                    "Torre de plugue (cabo de 1,5 m): preveja uma tomada dentro do gabinete, num circuito com DR, para ligá-la sem extensão.".into(),
+                );
+            }
+        }
+    }
+}
+
 /// What each automation device asks of the installation.
 #[allow(clippy::too_many_lines)]
 fn automation(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
@@ -1669,6 +1811,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
             });
         }
     }
+    built_in_outlets(home, &all, &mut out);
     automation(home, &all, &mut out);
     if let Some(panel) = panel(home) {
         let place = "Quadro de distribuição".to_owned();
@@ -2423,5 +2566,76 @@ mod tests {
             (boxes.quantity - 1.0).abs() < 1e-9,
             "25 m straight: one box: {bill:#?}"
         );
+    }
+
+    #[test]
+    fn a_tower_goes_into_a_counter_with_room_below_away_from_water_and_heat() {
+        let mut home = Home::default();
+        home.rooms = vec![room(1, "Cozinha", 0.0, 400.0, 300.0)];
+        let counter = Furniture {
+            id: FurnitureId(20),
+            catalog: "base-cabinet".into(),
+            name: "Balcão".into(),
+            position: Point2::new(200.0, 30.0),
+            width: 240.0,
+            depth: 60.0,
+            height: 90.0,
+            ..Furniture::default()
+        };
+        let mut tower = point(21, "outlet-tower", (120.0, 30.0), Some("C1"));
+        tower.width = 8.4;
+        tower.depth = 8.4;
+        tower.height = 19.0;
+        home.furniture = vec![counter, tower.clone()];
+        // Seated onto the top.
+        crate::mounting::seat(&home, &mut tower).unwrap();
+        assert!((tower.elevation - 90.0).abs() < 1e-9);
+        home.furniture[1] = tower.clone();
+        let keys = |home: &Home| check(home).into_iter().map(|f| f.key).collect::<Vec<_>>();
+        let k = keys(&home);
+        assert!(
+            !k.iter()
+                .any(|k| k.starts_with("elec:tower-below") || k.starts_with("elec:mount")),
+            "{k:?}"
+        );
+        assert!(
+            k.contains(&"elec:tower-plug:f21".to_owned()),
+            "a plug-in tower wants a socket: {k:?}"
+        );
+
+        // A dishwasher under it: no room for the body.
+        let mut under = home.clone();
+        under.furniture.push(Furniture {
+            id: FurnitureId(22),
+            catalog: "dishwasher".into(),
+            name: "Lava-louças".into(),
+            position: Point2::new(120.0, 30.0),
+            width: 60.0,
+            depth: 58.0,
+            height: 82.0,
+            ..Furniture::default()
+        });
+        assert!(keys(&under).contains(&"elec:tower-below:f21".to_owned()));
+
+        // Next to the sink bowl: too close to water.
+        let mut wet = home.clone();
+        wet.furniture.push(Furniture {
+            id: FurnitureId(23),
+            catalog: "sink-bowl".into(),
+            name: "Cuba".into(),
+            position: Point2::new(145.0, 30.0),
+            elevation: 70.0,
+            width: 40.0,
+            depth: 40.0,
+            height: 20.0,
+            ..Furniture::default()
+        });
+        assert!(keys(&wet).contains(&"elec:tower-wet-heat:f21".to_owned()));
+
+        // Floating, with no counter under it: refused.
+        let mut loose = tower.clone();
+        loose.position = Point2::new(350.0, 200.0);
+        assert!(crate::mounting::seat(&home, &mut loose).is_err());
+        assert!(crate::mounting::blocked(&home, &loose).is_some());
     }
 }

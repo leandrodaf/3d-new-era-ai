@@ -1471,4 +1471,38 @@ mod tests {
         .unwrap_err();
         assert!(heavy.message.contains("fio"), "{heavy:?}");
     }
+
+    #[test]
+    fn a_counter_and_its_outlet_tower_are_placed_in_one_call() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(r#"{"walls":[{"pts":[[0,0],[300,0],[300,250],[0,250]],"closed":true}],"rooms":[{"name":"Cozinha","at":[150,125]}]}"#).unwrap(),
+        ))
+        .unwrap();
+        let reply = s
+            .place(Parameters(
+                serde_json::from_str(
+                    r#"{"items":[{"cat":"base-cabinet","at":[150,38],"w":200,"d":60,"h":90},{"cat":"outlet-tower","at":[90,38]}]}"#,
+                )
+                .unwrap(),
+            ))
+            .unwrap();
+        let home = s.document.read().home().clone();
+        let tower = home
+            .furniture
+            .iter()
+            .find(|f| f.catalog == "outlet-tower")
+            .unwrap();
+        assert!(
+            (tower.elevation - 90.0).abs() < 1e-9,
+            "{reply}: seated on the top"
+        );
+        let loose = s
+            .place(Parameters(
+                serde_json::from_str(r#"{"items":[{"cat":"outlet-tower","at":[150,200]}]}"#)
+                    .unwrap(),
+            ))
+            .unwrap_err();
+        assert!(loose.message.contains("embutida"), "{loose:?}");
+    }
 }

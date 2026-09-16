@@ -206,6 +206,8 @@ pub(crate) fn build(model: Model, piece: &Furniture, color: Rgb) -> Mesh {
         Model::Bench => bench(&mut ctx),
         Model::DiningSet { chairs } => dining_set(&mut ctx, chairs),
         Model::Planter => planter(&mut ctx),
+        Model::OutletTower => outlet_tower(&mut ctx),
+        Model::DeskBox => desk_box(&mut ctx),
         Model::Rug | Model::Box | Model::Point(_) => {
             let c = ctx.c;
             ctx.cube(
@@ -927,6 +929,66 @@ fn hood(ctx: &mut Ctx) {
     if h > canopy {
         ctx.cube([-dw / 2.0, dw / 2.0], [canopy, h], [-dd / 2.0, dd / 2.0], c);
     }
+}
+
+/// A pop-up tower: its elevation is the countertop, its height what rises.
+fn outlet_tower(ctx: &mut Ctx) {
+    let (w, h) = (ctx.w, ctx.h);
+    let flange = w / 2.0;
+    let body = w * 0.36;
+    // The body that hangs in the cabinet, about 28 cm under the top.
+    ctx.m.cylinder(
+        [0.0, -28.0, 0.0],
+        Axis::Y,
+        28.0,
+        body * 0.95,
+        rgb([90, 90, 94]),
+    );
+    ctx.m
+        .cylinder([0.0, 0.0, 0.0], Axis::Y, 0.4, flange, rgb([170, 172, 176]));
+    ctx.m
+        .cylinder([0.0, 0.4, 0.0], Axis::Y, h - 1.4, body, ctx.c);
+    ctx.m.cylinder(
+        [0.0, h - 1.0, 0.0],
+        Axis::Y,
+        1.0,
+        body * 1.08,
+        rgb([185, 187, 190]),
+    );
+    // Sockets on the faces, one every 5 cm up the body.
+    let mut y = 2.5;
+    while y + 4.0 <= h - 1.5 || y <= 2.5 {
+        ctx.cube(
+            [-1.8, 1.8],
+            [y, y + 4.0],
+            [body - 0.2, body + 0.15],
+            rgb([230, 230, 226]),
+        );
+        y += 5.5;
+    }
+}
+
+/// A desk box: the collar flush with the top and its lid.
+fn desk_box(ctx: &mut Ctx) {
+    let (w, d, h) = (ctx.w, ctx.d, ctx.h);
+    ctx.cube(
+        [-w / 2.0 + 0.8, w / 2.0 - 0.8],
+        [-8.0, 0.0],
+        [-d / 2.0 + 0.8, d / 2.0 - 0.8],
+        rgb([70, 70, 74]),
+    );
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [0.0, h * 0.4],
+        [-d / 2.0, d / 2.0],
+        ctx.c,
+    );
+    ctx.cube(
+        [-w / 2.0 + 1.0, w / 2.0 - 1.0],
+        [h * 0.4, h],
+        [-d / 2.0 + 1.0, d / 2.0 - 1.0],
+        shade(ctx.c, -0.12),
+    );
 }
 
 fn cooktop(ctx: &mut Ctx) {
