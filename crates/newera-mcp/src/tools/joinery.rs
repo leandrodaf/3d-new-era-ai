@@ -37,11 +37,15 @@ pub(crate) struct JoineryParams {
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct CutListParams {
-    /// Build group ids (default: every build on this storey).
+    /// Build or drawn group ids (default: every build and drawn group on this storey).
     ids: Option<Vec<String>>,
     /// Write `.csv` (spreadsheet), `.dxf` (sheets for CNC) or `.svg` (sheets to view).
     path: Option<String>,
 }
+/// Thickest part of a drawn group read as a board, mm: a 50 mm stone or a
+/// double panel still is, a 30 cm body of a model is not.
+const DRAWN_BOARD_MM: f64 = 50.0;
+
 #[tool_router(router = joinery_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
@@ -223,7 +227,7 @@ impl NewEraMcp {
         Ok(summary(&group_id.to_string()).to_string())
     }
     #[tool(
-        description = "Cut list of joinery builds: rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. path .csv, or .dxf/.svg (boards laid out on sheets), writes a file. sources names the panel standards behind the boards: MDF is a dry-process fibreboard (NBR 15316), MDP a particleboard of 551 to 750 kg/m³ that holds screws better (NBR 14810)."
+        description = "Cut list of joinery builds, and of groups drawn by hand: each part of a drawn group up to 50 mm thick is a board at the size it was drawn (board is its finish and thickness, no edge banding), the groups are named in drawn and the parts that are not boards in skipped [[id,name]]. Rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. path .csv, or .dxf/.svg (boards laid out on sheets), writes a file. sources names the panel standards behind the boards: MDF is a dry-process fibreboard (NBR 15316), MDP a particleboard of 551 to 750 kg/m³ that holds screws better (NBR 14810)."
     )]
     pub(crate) fn cut_list(
         &self,
@@ -263,9 +267,62 @@ impl NewEraMcp {
                 }
             }
         }
-        if builds == 0 {
+        // Joinery drawn by hand — a group of solids, boards and all — is cut
+        // from the same sheets: every part thin enough to be a board is one,
+        // with the size it was drawn at. What is not a board is named, not
+        // guessed into a row.
+        let mut drawn: Vec<String> = Vec::new();
+        let mut skipped: Vec<serde_json::Value> = Vec::new();
+        for group in view.furniture.iter().filter(|f| {
+            f.is_group()
+                && !f.properties.contains_key(newera_joinery::PARAMS_KEY)
+                && wanted
+                    .as_ref()
+                    .is_none_or(|ids| ids.contains(&f.id.to_string()))
+        }) {
+            let mut boards = 0;
+            let mut left = Vec::new();
+            for part in group.visible_leaves() {
+                let mut size =
+                    [part.width, part.depth, part.height].map(|cm| (cm * 100.0).round() / 10.0);
+                size.sort_by(|a, b| b.total_cmp(a));
+                if part.model.is_some() || size[2] > DRAWN_BOARD_MM || size[2] <= 0.0 {
+                    left.push(serde_json::json!([part.id.to_string(), part.name]));
+                    continue;
+                }
+                boards += 1;
+                let board = part.texture.as_ref().map_or_else(
+                    || format!("desenhado {} mm", size[2]),
+                    |mat| format!("{mat} {} mm", size[2]),
+                );
+                let row = newera_joinery::CutRow {
+                    name: part.name.clone(),
+                    board,
+                    qty: 1,
+                    size,
+                    edge: [0, 0],
+                    holes: Vec::new(),
+                };
+                match rows.iter_mut().find(|r| {
+                    r.board == row.board
+                        && r.name == row.name
+                        && r.size
+                            .iter()
+                            .zip(row.size)
+                            .all(|(a, b)| (a - b).abs() < 0.05)
+                }) {
+                    Some(existing) => existing.qty += 1,
+                    None => rows.push(row),
+                }
+            }
+            if boards > 0 {
+                drawn.push(group.id.to_string());
+                skipped.extend(left);
+            }
+        }
+        if builds == 0 && drawn.is_empty() {
             return Err(invalid(
-                "no joinery builds here (make one with the joinery tool)",
+                "no joinery here: no joinery builds (make one with the joinery tool) and no group drawn with board parts",
             ));
         }
         drop(doc);
@@ -319,6 +376,12 @@ impl NewEraMcp {
         if !sheets.is_empty() {
             reply["sheets"] = serde_json::json!(sheets);
         }
+        if !drawn.is_empty() {
+            reply["drawn"] = serde_json::json!(drawn);
+        }
+        if !skipped.is_empty() {
+            reply["skipped"] = serde_json::json!(skipped);
+        }
         Ok(reply.to_string())
     }
 }
@@ -328,6 +391,67 @@ mod tests {
     use super::*;
     use crate::edit::CreateParams;
     use crate::tools::server;
+
+    #[test]
+    fn a_group_drawn_by_hand_is_cut_from_its_boards() {
+        let s = server();
+        let board = |id: u64, name: &str, w: f64, d: f64, h: f64| newera_core::Furniture {
+            id: newera_core::FurnitureId(id),
+            catalog: "box".into(),
+            name: name.to_owned(),
+            position: newera_core::Point2::new(630.0, 450.0),
+            width: w,
+            depth: d,
+            height: h,
+            ..newera_core::Furniture::default()
+        };
+        {
+            let mut doc = s.document.write();
+            let mut cupboard = board(1, "vassoureiro", 30.0, 60.0, 280.0);
+            let mut front = board(4, "frente rebaixada", 30.0, 1.8, 276.0);
+            front.texture = Some(newera_core::Material {
+                color: Some([180, 140, 100]),
+                ..newera_core::Material::default()
+            });
+            let mut handle = board(5, "puxador de latão", 2.0, 3.0, 40.0);
+            handle.model = Some("puxador.obj".into());
+            cupboard.children = vec![
+                board(2, "lateral", 1.8, 60.0, 280.0),
+                board(3, "lateral", 1.8, 60.0, 280.0),
+                front,
+                handle,
+                board(6, "moldura 3D", 30.0, 12.0, 8.0),
+            ];
+            doc.execute(newera_core::Command::insert(cupboard)).unwrap();
+        }
+        let reply: serde_json::Value = serde_json::from_str(
+            &s.cut_list(Parameters(serde_json::from_str("{}").unwrap()))
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(reply["drawn"], serde_json::json!(["f1"]), "{reply}");
+        let rows = reply["rows"].as_array().unwrap();
+        let side = rows
+            .iter()
+            .find(|r| r[0] == "lateral")
+            .unwrap_or_else(|| panic!("{reply}"));
+        assert_eq!(side[2], 2, "the two sides are one row: {reply}");
+        assert_eq!(
+            [&side[3], &side[4], &side[5]],
+            [
+                &serde_json::json!(2800.0),
+                &serde_json::json!(600.0),
+                &serde_json::json!(18.0)
+            ],
+            "{reply}"
+        );
+        assert!(rows.iter().any(|r| r[0] == "frente rebaixada"), "{reply}");
+        let skipped = reply["skipped"].to_string();
+        assert!(
+            skipped.contains("puxador de latão") && skipped.contains("moldura 3D"),
+            "a model and a 12 cm block are not boards: {reply}"
+        );
+    }
 
     #[test]
     fn joinery_builds_change_and_list_their_cuts() {
