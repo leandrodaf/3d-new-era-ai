@@ -149,6 +149,10 @@ pub struct Finding {
     /// changed its prefix since: same rule, same piece, same reason kept.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub accepted_as: Option<String>,
+    /// The move the advice implies when no fix is offered ("afaste 14 cm"):
+    /// tried on a copy to say whether it opens another finding.
+    #[serde(skip)]
+    pub probe: Option<serde_json::Value>,
 }
 
 /// What the home offers its people.
@@ -565,6 +569,19 @@ impl Review<'_, '_> {
                     } else {
                         String::new()
                     };
+                    // With no fix, "afaste" means backing the piece itself away.
+                    let probe = if fix.is_none() && side == Side::Front {
+                        let piece = scene.units[i].frame();
+                        let back = piece.to_plan((0.0, -short.ceil()));
+                        Some(serde_json::json!({
+                            "tool": "move",
+                            "ids": [scene.units[i].piece.id.to_string()],
+                            "dx": back.x - piece.position.x,
+                            "dy": back.y - piece.position.y,
+                        }))
+                    } else {
+                        None
+                    };
                     Some(Finding {
                         severity,
                         place: label.clone(),
@@ -575,6 +592,7 @@ impl Review<'_, '_> {
                         ),
                         reference,
                         fix,
+                        probe,
                         ..Finding::default()
                     })
                 } else {
@@ -2214,7 +2232,7 @@ fn fix_creates(
     before: &[Finding],
     finding: &Finding,
 ) -> Option<Finding> {
-    let fix = finding.fix.as_ref()?;
+    let fix = finding.fix.as_ref().or(finding.probe.as_ref())?;
     if fix["tool"] != "move" {
         return None;
     }
@@ -2236,13 +2254,13 @@ fn fix_creates(
     after
         .findings
         .into_iter()
-        .filter(|f| f.accepted.is_none() && !before.iter().any(|b| b.key == f.key))
+        .filter(|f| !before.iter().any(|b| b.key == f.key))
         .filter(|f| {
             moved
                 .iter()
                 .any(|id| f.place.contains(id.as_str()) || f.message.contains(id.as_str()))
         })
-        .max_by_key(|f| rank(f.severity))
+        .max_by_key(|f| (f.accepted.is_none(), rank(f.severity)))
         .map(|f| {
             let heavier = rank(f.severity) >= rank(finding.severity);
             (f, heavier)
@@ -2333,7 +2351,9 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
                 continue;
             }
             if let Some(other) = fix_creates(home, profile, &snapshot, finding) {
-                if severity_rank(other.severity) >= severity_rank(finding.severity) {
+                if other.accepted.is_none()
+                    && severity_rank(other.severity) >= severity_rank(finding.severity)
+                {
                     finding.fix = None;
                     finding.message = format!(
                         "{} Não cabem os dois: afastar isso cria «{}» em {}; a posição atual é a melhor das duas — aceite o que ficar com o motivo.",
@@ -2343,10 +2363,15 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
                     );
                 } else {
                     finding.message = format!(
-                        "{} Isso deixa «{}» em {}, mais leve.",
+                        "{} Isso deixa «{}» em {}{}.",
                         finding.message.trim_end(),
                         other.message.trim_end_matches('.'),
-                        other.place
+                        other.place,
+                        if other.accepted.is_some() {
+                            ", já aceito"
+                        } else {
+                            ", mais leve"
+                        }
                     );
                 }
             }
@@ -3811,6 +3836,7 @@ mod tests {
             .find(|f| f.message.contains("A folha da porta bate"))
             .unwrap_or_else(|| panic!("{report:#?}"));
         let fix = door.fix.clone().expect("a fix");
+        eprintln!("DBGFIX {fix} MSG {}", door.message);
         if fix["tool"] == "update" {
             // The flip names the value to set, not only "the other side".
             let right = fix["items"][0]["hinge_right"].as_bool().unwrap();
@@ -3845,7 +3871,7 @@ mod tests {
             !review(&fixed, &Profile::default())
                 .findings
                 .iter()
-                .any(|f| f.message.contains("A folha da porta bate")),
+                .any(|f| f.message.starts_with("A folha da porta bate")),
             "{fix}"
         );
         // A wheelchair user needs 150 cm to turn and 80 cm doors.
