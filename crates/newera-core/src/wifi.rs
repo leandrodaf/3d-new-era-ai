@@ -20,6 +20,8 @@ use crate::materials::WallFamily;
 /// Where an access point keeps its standard: `wifi5`, `wifi6`, `wifi6e`,
 /// `wifi7`.
 pub const STANDARD_KEY: &str = "wifi:standard";
+/// An access point's wired uplink, Gbps: `1`, `2.5`, `5` or `10`.
+pub const UPLINK_KEY: &str = "wifi:uplink";
 /// Whether an access point is fed by its data cable (PoE): `true`/`false`.
 pub const POE_KEY: &str = "wifi:poe";
 
@@ -57,7 +59,8 @@ impl Band {
         match self {
             Self::G2_4 => 2437.0,
             Self::G5 => 5500.0,
-            Self::G6 => 6200.0,
+            // Brazil keeps 5925–6425 MHz for Wi-Fi (Anatel Ato 10.400/2026).
+            Self::G6 => 6175.0,
         }
     }
 
@@ -73,9 +76,10 @@ impl Band {
     /// Loss of a 15 cm wall of the family, and of a door and a window, dB.
     fn wall_db(self, family: WallFamily) -> f64 {
         let [a, b, c] = match family {
-            WallFamily::Drywall => [3.0, 4.0, 5.0],
-            WallFamily::Masonry => [8.0, 15.0, 18.0],
-            WallFamily::Concrete => [12.0, 20.0, 25.0],
+            WallFamily::Drywall => [3.0, 3.0, 4.0],
+            WallFamily::Masonry => [10.0, 15.0, 16.0],
+            // NIST IR 6055, interpolated to 15 cm of plain concrete.
+            WallFamily::Concrete => [20.0, 33.0, 38.0],
             WallFamily::Glass => [2.0, 4.0, 6.0],
             WallFamily::Wood => [3.0, 5.0, 6.0],
         };
@@ -129,16 +133,28 @@ impl Standard {
         }
     }
 
-    /// The uplink it wants and the cable category that carries it: a
-    /// Wi-Fi 6E access point is sold with 2.5 gigabit (Cat 5e holds it), a Wi-Fi 7
-    /// one with 10 gigabit (Cat 6A for the full 100 m).
-    pub fn uplink(self) -> (&'static str, crate::electrical::Category) {
-        use crate::electrical::Category;
+    /// The uplink an access point of the generation usually comes with,
+    /// Gbps: 1 for Wi-Fi 5 and 6, 2.5 for 6E and for home Wi-Fi 7 (the
+    /// flagship Wi-Fi 7 ones come with 5 or 10; write it on the point).
+    pub fn usual_uplink(self) -> f64 {
         match self {
-            Self::Wifi5 | Self::Wifi6 => ("1 GbE", Category::Cat5e),
-            Self::Wifi6e => ("2.5 GbE", Category::Cat5e),
-            Self::Wifi7 => ("10 GbE", Category::Cat6a),
+            Self::Wifi5 | Self::Wifi6 => 1.0,
+            Self::Wifi6e | Self::Wifi7 => 2.5,
         }
+    }
+}
+
+/// The cable category an uplink needs over a full 100 m channel: 2.5GBASE-T
+/// runs on Cat 5e and 5GBASE-T on Cat 6 (IEEE 802.3bz); 10GBASE-T on Cat 6A
+/// (Cat 6 only up to 37 m, TIA TSB-155).
+pub fn cable_for(gbps: f64) -> crate::electrical::Category {
+    use crate::electrical::Category;
+    if gbps <= 2.5 {
+        Category::Cat5e
+    } else if gbps <= 5.0 {
+        Category::Cat6
+    } else {
+        Category::Cat6a
     }
 }
 
@@ -149,6 +165,8 @@ pub struct AccessPoint {
     pub at: Point2,
     pub z: f64,
     pub standard: Standard,
+    /// Its wired uplink, Gbps.
+    pub uplink_gbps: f64,
 }
 
 /// The access points on the storey shown.
@@ -158,15 +176,23 @@ pub fn access_points(home: &Home) -> Vec<AccessPoint> {
         .iter()
         .flat_map(Furniture::flatten)
         .filter(|f| f.catalog == "wifi-point")
-        .map(|f| AccessPoint {
-            id: Some(f.id),
-            at: f.position,
-            z: f.elevation + f.height / 2.0,
-            standard: f
+        .map(|f| {
+            let standard = f
                 .properties
                 .get(STANDARD_KEY)
                 .and_then(|s| Standard::parse(s))
-                .unwrap_or(Standard::Wifi6),
+                .unwrap_or(Standard::Wifi6);
+            AccessPoint {
+                id: Some(f.id),
+                at: f.position,
+                z: f.elevation + f.height / 2.0,
+                standard,
+                uplink_gbps: f
+                    .properties
+                    .get(UPLINK_KEY)
+                    .and_then(|v| v.replace(',', ".").parse::<f64>().ok())
+                    .unwrap_or_else(|| standard.usual_uplink()),
+            }
         })
         .collect()
 }
@@ -388,6 +414,7 @@ pub fn suggest(
                     at: crate::geometry::polygon_centroid(&r.points).unwrap_or(r.points[0]),
                     z: storey - 10.0,
                     standard,
+                    uplink_gbps: standard.usual_uplink(),
                 },
                 r.name.clone(),
             )
@@ -501,6 +528,7 @@ mod tests {
             at: Point2::new(x, y),
             z: 270.0,
             standard,
+            uplink_gbps: standard.usual_uplink(),
         }
     }
 
@@ -579,5 +607,22 @@ mod tests {
             "{points:?} {short:?}"
         );
         assert!(points.len() <= 2);
+    }
+
+    #[test]
+    fn an_uplink_asks_for_the_cable_that_carries_it_and_concrete_costs_more_than_brick() {
+        use crate::electrical::Category;
+        assert_eq!(cable_for(1.0), Category::Cat5e);
+        assert_eq!(cable_for(2.5), Category::Cat5e);
+        assert_eq!(cable_for(5.0), Category::Cat6);
+        assert_eq!(cable_for(10.0), Category::Cat6a);
+        assert!((Standard::Wifi7.usual_uplink() - 2.5).abs() < 1e-9);
+        for band in Band::ALL {
+            assert!(band.wall_db(WallFamily::Concrete) > band.wall_db(WallFamily::Masonry));
+        }
+        assert!(
+            Band::G6.mhz() >= 5925.0 && Band::G6.mhz() <= 6425.0,
+            "Brazil's 6 GHz band"
+        );
     }
 }

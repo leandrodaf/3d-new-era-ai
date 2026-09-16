@@ -173,6 +173,52 @@ fn class_in(home: &Home, room: &Room) -> Wet {
     }
 }
 
+/// The ICT (RJ45) and broadcast (TV) outlets NBR 16264 table 1 recommends
+/// for a room: 2 and 1 in bedrooms, living rooms, offices, kitchens and
+/// laundries; 3 and 2 in a home theater; 1 and 1 in bathrooms, balconies and
+/// the rest. Circulation, closets and storage are not rooms the table counts.
+fn telecom_outlets(room: &Room, bathroom: bool) -> Option<(usize, usize)> {
+    let name = crate::annotations::fold(&room.name);
+    if bathroom {
+        return Some((1, 1));
+    }
+    let has = |words: &[&str]| words.iter().any(|w| name.contains(w));
+    if has(&[
+        "hall",
+        "corredor",
+        "circulacao",
+        "closet",
+        "deposito",
+        "despensa",
+        "shaft",
+        "escada",
+        "rouparia",
+    ]) {
+        None
+    } else if has(&["home theater", "cinema"]) {
+        Some((3, 2))
+    } else if has(&[
+        "quarto",
+        "dormit",
+        "suite",
+        "sala",
+        "estar",
+        "jantar",
+        "escritorio",
+        "home office",
+        "gourmet",
+        "cozinha",
+        "copa",
+        "servico",
+        "lavanderia",
+    ]) && !has(&["banh"])
+    {
+        Some((2, 1))
+    } else {
+        Some((1, 1))
+    }
+}
+
 /// Whether a room is one people stay in, where a network point belongs.
 fn long_stay(room: &Room) -> bool {
     let name = crate::annotations::fold(&room.name);
@@ -336,8 +382,10 @@ impl Category {
     pub fn name(self) -> &'static str {
         match self {
             Self::Cat5e => "Cabo de rede U/UTP Cat 5e (1 Gbps; 2,5 Gbps até 100 m)",
-            Self::Cat6 => "Cabo de rede U/UTP Cat 6 (1 Gbps; 10 Gbps até 55 m)",
-            Self::Cat6a => "Cabo de rede F/UTP Cat 6A (10 Gbps até 100 m)",
+            Self::Cat6 => "Cabo de rede U/UTP Cat 6 (5 Gbps até 100 m; 10 Gbps até 37 m)",
+            Self::Cat6a => {
+                "Cabo de rede U/UTP ou F/UTP Cat 6A (10 Gbps até 100 m; F/UTP com blindagem aterrada no rack)"
+            }
         }
     }
 
@@ -353,7 +401,7 @@ impl Category {
         match self {
             Self::Cat5e => "Cat 5e",
             Self::Cat6 => "Cat 6",
-            Self::Cat6a => "Cat 6A (Cat 6 leva 10 GbE só até 55 m)",
+            Self::Cat6a => "Cat 6A (Cat 6 leva 10 GbE só até 37 m)",
         }
     }
 
@@ -1131,41 +1179,63 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 source: "nbr5410",
             });
         }
-        if long_stay(room)
-            && class != Wet::Bathroom
-            && count(room.id, PointKind::Network) == 0
-            && count(room.id, PointKind::Wifi) == 0
-        {
-            out.push(Finding {
-                key: format!("elec:network:{}", room.id),
-                accepted: None,
-                severity: Severity::Alerta,
-                place: place.clone(),
-                message: "Sem ponto de rede: um cômodo de permanência pede ao menos uma tomada RJ45 (ou cobertura de Wi-Fi) ligada ao quadro de telecom.".into(),
-                source: "nbr14565",
-            });
-        }
-        let name = crate::annotations::fold(&room.name);
-        if class != Wet::Bathroom
-            && (name.contains("sala")
-                || name.contains("quarto")
-                || name.contains("dormit")
-                || name.contains("suite"))
-            && count(room.id, PointKind::Tv) == 0
-        {
-            out.push(Finding {
-                key: format!("elec:tv:{}", room.id),
-                accepted: None,
-                severity: Severity::Dica,
-                place,
-                message: "Sem ponto de TV: salas e dormitórios costumam ter um ponto coaxial junto ao rack ou à parede da cama.".into(),
-                source: "nbr14565",
-            });
+        // NBR 16264 table 1: the ICT (RJ45) and broadcast (TV) outlets a room
+        // is recommended to have. A Wi-Fi point is not an RJ45 outlet.
+        if let Some((ict, bct)) = telecom_outlets(room, class == Wet::Bathroom) {
+            let have = count(room.id, PointKind::Network);
+            if have < ict {
+                out.push(Finding {
+                    key: format!("elec:network:{}", room.id),
+                    accepted: None,
+                    severity: if have == 0 && long_stay(room) && class != Wet::Bathroom {
+                        Severity::Alerta
+                    } else {
+                        Severity::Dica
+                    },
+                    place: place.clone(),
+                    message: format!(
+                        "{have} de {ict} pontos de rede RJ45: a norma de cabeamento residencial recomenda {ict} neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado."
+                    ),
+                    source: "nbr16264",
+                });
+            }
+            let tv = count(room.id, PointKind::Tv);
+            if tv < bct {
+                out.push(Finding {
+                    key: format!("elec:tv:{}", room.id),
+                    accepted: None,
+                    severity: Severity::Dica,
+                    place: place.clone(),
+                    message: format!(
+                        "{tv} de {bct} pontos de TV: a norma de cabeamento residencial recomenda {bct} neste cômodo (coaxial até 100 m do distribuidor)."
+                    ),
+                    source: "nbr16264",
+                });
+            }
         }
     }
     let network = all
         .iter()
         .any(|p| matches!(p.kind, PointKind::Network | PointKind::Wifi | PointKind::Tv));
+    for rack in all.iter().filter(|p| p.kind == PointKind::TelecomPanel) {
+        let Some(piece) = view.find_piece(rack.id) else {
+            continue;
+        };
+        let powered = all.iter().filter(|p| p.kind == PointKind::Outlet).any(|o| {
+            view.find_piece(o.id)
+                .is_some_and(|f| f.position.distance(piece.position) <= 150.0)
+        });
+        if !powered {
+            out.push(Finding {
+                key: format!("elec:telecom-power:{}", rack.id),
+                accepted: None,
+                severity: Severity::Alerta,
+                place: format!("{} {}", piece.name, rack.id),
+                message: "Distribuidor de telecom sem tomada de energia junto: modem, roteador e switch precisam dela.".into(),
+                source: "nbr16264",
+            });
+        }
+    }
     if network && !all.iter().any(|p| p.kind == PointKind::TelecomPanel) {
         out.push(Finding {
             key: "elec:telecom-panel".into(),
@@ -1173,7 +1243,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
             severity: Severity::Alerta,
             place: "Projeto".into(),
             message: "Há pontos de rede, TV ou Wi-Fi e nenhum quadro de telecom: os cabos precisam de um ponto de distribuição que os reúna.".into(),
-            source: "nbr14565",
+            source: "nbr16264",
         });
     }
     if all.iter().any(|p| p.kind.loads()) && !all.iter().any(|p| p.kind == PointKind::Panel) {
@@ -1217,7 +1287,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 severity: Severity::Alerta,
                 place: cable.name().into(),
                 message: format!("Pontos sem cabo chegando: {}.", unreached.join(", ")),
-                source: "nbr14565",
+                source: "nbr16264",
             });
         }
         let panel_reached = all
@@ -1234,7 +1304,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 severity: Severity::Alerta,
                 place: cable.name().into(),
                 message: "Nenhum cabo chega ao quadro de telecom: os pontos precisam ser levados até ele.".into(),
-                source: "nbr14565",
+                source: "nbr16264",
             });
         }
     }
@@ -1267,11 +1337,12 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Alerta,
                 place: place.clone(),
-                message: "Access point sem alimentação: nenhuma tomada a até 1,5 m. Alimente por PoE (switch ou injetor 802.3af/at no rack, e marque poe) ou ponha uma tomada no forro junto a ele.".into(),
-                source: "nbr14565",
+                message: "Access point sem alimentação: nenhuma tomada a até 1,5 m. Alimente por PoE (switch ou injetor PoE+ 802.3at no rack para Wi-Fi 6, 6E e 7 doméstico; 802.3bt para Wi-Fi 7 corporativo; e marque poe) ou ponha uma tomada no forro junto a ele (distância de referência, não de norma).".into(),
+                source: "nbr16264",
             });
         }
-        let (uplink, needs) = ap.standard.uplink();
+        let uplink = format!("{} GbE", decimal(ap.uplink_gbps).trim_end_matches(",0"));
+        let needs = crate::wifi::cable_for(ap.uplink_gbps);
         let carried = view_lines
             .iter()
             .filter(|l| cable_of(l) == Some(Cable::Data) && reaches(l, ap.at))
@@ -1295,7 +1366,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                     cat.short(),
                     needs.short()
                 ),
-                source: "nbr14565",
+                source: "nbr16264",
             });
         }
     }
@@ -1454,17 +1525,20 @@ mod tests {
             toilet,
         ];
         let findings = check(&home);
-        let about = |place: &str, text: &str| {
-            findings
-                .iter()
-                .any(|f| f.place.starts_with(place) && f.message.contains(text))
-        };
-        assert!(!about("Banho suíte", "ponto de rede"), "{findings:#?}");
-        assert!(!about("Banho suíte", "ponto de TV"), "{findings:#?}");
-        assert!(
-            about("Suíte r1", "ponto de rede"),
-            "the bedroom still asks: {findings:#?}"
-        );
+        // NBR 16264 table 1 recommends 1 RJ45 and 1 TV outlet in a bathroom
+        // — a tip, never the bedroom's 2 and never an alert.
+        let bath = findings
+            .iter()
+            .find(|f| f.place.starts_with("Banho suíte") && f.message.contains("pontos de rede"))
+            .unwrap_or_else(|| panic!("{findings:#?}"));
+        assert!(bath.message.starts_with("0 de 1 "), "{bath:?}");
+        assert_eq!(bath.severity, Severity::Dica);
+        let bedroom = findings
+            .iter()
+            .find(|f| f.place.starts_with("Suíte r1") && f.message.contains("pontos de rede"))
+            .unwrap_or_else(|| panic!("the bedroom still asks: {findings:#?}"));
+        assert!(bedroom.message.starts_with("0 de 2 "), "{bedroom:?}");
+        assert_eq!(bedroom.severity, Severity::Alerta);
         // And its outlet circuit is a wet room's: DR.
         let c2 = circuits(&home)
             .into_iter()
@@ -1783,5 +1857,33 @@ mod tests {
         assert!(!keys.contains(&"elec:panel-full".to_owned()), "{keys:?}");
         assert!(!keys.contains(&"elec:short-circuit".to_owned()));
         assert!((super::panel(&home).unwrap().icn_ka - 4.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn the_telecom_distributor_needs_a_power_outlet_beside_it() {
+        let mut home = Home::default();
+        home.rooms = vec![room(1, "Sala", 0.0, 400.0, 400.0)];
+        home.furniture = vec![
+            point(10, "telecom-panel", (10.0, 200.0), None),
+            point(11, "network-outlet", (390.0, 200.0), None),
+        ];
+        let keys = |home: &Home| {
+            check(home)
+                .into_iter()
+                .map(|f| (f.key, f.source))
+                .collect::<Vec<_>>()
+        };
+        let k = keys(&home);
+        assert!(
+            k.contains(&("elec:telecom-power:f10".to_owned(), "nbr16264")),
+            "{k:?}"
+        );
+        home.furniture
+            .push(point(12, "outlet-mid", (10.0, 150.0), Some("C1")));
+        assert!(
+            !keys(&home)
+                .iter()
+                .any(|(key, _)| key.starts_with("elec:telecom-power"))
+        );
     }
 }
