@@ -437,9 +437,13 @@ pub fn plan_run(
     p: &RunParams,
 ) -> Result<(Vec<RunModule>, Vec<String>), String> {
     let (h, d, elev) = p.sizes();
+    if p.max <= 0.0 || p.target <= 0.0 {
+        return Err("A modulação precisa de max e target positivos.".into());
+    }
+    let mut rules: Vec<String> = Vec::new();
     if !(NARROW..=120.0).contains(&p.max) || p.target < NARROW || p.target > p.max {
-        return Err(format!(
-            "Use max entre {} e 120 cm e target entre {} e max (hoje max = {}, target = {}).",
+        rules.push(format!(
+            "Modulação fora do usual (max entre {} e 120 cm, target entre {} e max): hoje max = {}, target = {}.",
             num(NARROW),
             num(NARROW),
             num(p.max),
@@ -467,7 +471,7 @@ pub fn plan_run(
         ..CabinetParams::default()
     };
     let mut modules: Vec<RunModule> = Vec::new();
-    let mut notes = Vec::new();
+    let mut notes = rules;
     let mut tops: Vec<Top> = Vec::new();
     let mut tall_count = 0u32;
     // Where a drawer unit helps most: next to the stove.
@@ -1101,17 +1105,22 @@ mod tests {
         assert!((over.elevation - 182.0).abs() < 1e-9 && over.width == 70.0);
         assert!(modules.iter().all(|m| m.role != Role::Countertop));
         assert!(modules.iter().all(|m| m.role != Role::Drawers));
+        // A modulation nobody builds is planned anyway, with the note: the
+        // rule is the workshop's opinion, not a gate on the drawing.
+        let (_, notes) = plan_run(
+            &[gap(0.0, 200.0, EndKind::Wall, EndKind::Wall)],
+            &[],
+            &[],
+            &RunParams {
+                max: 20.0,
+                target: 20.0,
+                ..RunParams::default()
+            },
+        )
+        .unwrap();
         assert!(
-            plan_run(
-                &[],
-                &[],
-                &[],
-                &RunParams {
-                    max: 20.0,
-                    ..RunParams::default()
-                }
-            )
-            .is_err()
+            notes.iter().any(|n| n.contains("fora do usual")),
+            "{notes:?}"
         );
     }
 }

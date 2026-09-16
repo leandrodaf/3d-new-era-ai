@@ -3,8 +3,20 @@
 //! An agent (or the user) states intent with a few flat parameters — a
 //! 200 cm wardrobe with two hinged doors and four shelves — and this crate
 //! does the exact work: every board with its thickness, grooves, clearances
-//! and hardware, checked against construction rules. Anything that cannot be
-//! built comes back as a sentence that says what to change.
+//! and hardware.
+//!
+//! What a workshop would say about the request is said, never enforced. A
+//! board thickness nobody stocks, a shelf that will sag, a drawer front too
+//! short to grip, a niche shallower than the cooktop standard asks for: all of
+//! it is built, and comes back in [`Output::notes`]. Most people drawing here
+//! are learning, sketching or just looking at an idea, and a rule that refuses
+//! to draw teaches nothing; the notes are there for when the drawing becomes
+//! something to cut.
+//!
+//! A build fails only on what has no geometry at all — a box whose inside is
+//! zero or negative, a part that would come out backwards, a fixture that goes
+//! somewhere else entirely. That is arithmetic, not an opinion about the
+//! project.
 //!
 //! Geometry is in centimeters, board thicknesses in millimeters as they are
 //! sold. A build is a list of [`Part`]s in the piece's local frame (x across
@@ -396,5 +408,51 @@ mod tests {
         assert!(merged(&stored, &serde_json::json!({"w": "wide"})).is_err());
         assert_eq!(num(1.8), "1,8");
         assert_eq!(num(55.0), "55");
+    }
+
+    /// The rule that used to stop the drawing now travels with it. Somebody
+    /// laying out a kitchen to learn, to try an idea or to see what it would
+    /// look like gets the cabinet and the workshop's opinion, not a refusal.
+    #[test]
+    fn a_rule_is_a_note_and_never_a_refusal() {
+        // A cooktop over a shallow cabinet, a board nobody stocks, a shelf
+        // that will sag, a sofa nobody sits on: every one of them is built.
+        for (json, word) in [
+            (
+                r#"{"kind":"cabinet","w":100,"h":85,"d":35,"cooktop":true}"#,
+                "cooktop",
+            ),
+            (
+                r#"{"kind":"cabinet","w":100,"h":85,"d":55,"t":16}"#,
+                "15, 18 ou 25",
+            ),
+            (
+                r#"{"kind":"cabinet","w":160,"h":85,"d":55,"t":15,"dividers":0,"shelves":2}"#,
+                "barrigar",
+            ),
+            (r#"{"kind":"sofa","seat":70}"#, "35 a 55"),
+            (
+                r#"{"kind":"cove","pts":[[0,0],[300,0],[300,300],[0,300]],"drop":3}"#,
+                "LED",
+            ),
+        ] {
+            let build: Build = serde_json::from_str(json).expect(json);
+            let out = generate(&build).unwrap_or_else(|e| panic!("{json} was refused: {e}"));
+            assert!(
+                out.notes.iter().any(|n| n.contains(word)),
+                "{json}: {:?}",
+                out.notes
+            );
+            assert!(!out.parts.is_empty(), "{json} came back empty");
+        }
+
+        // What has no geometry at all still fails, and says so plainly.
+        let flat: Build =
+            serde_json::from_str(r#"{"kind":"cabinet","w":2,"h":85,"d":55}"#).unwrap();
+        assert!(
+            generate(&flat)
+                .unwrap_err()
+                .contains("não tem lado de dentro")
+        );
     }
 }

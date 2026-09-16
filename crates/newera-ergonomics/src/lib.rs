@@ -1,5 +1,13 @@
 //! Ergonomics and habitability review.
 //!
+//! Nothing here blocks anything. A review reads a drawing and says what it
+//! finds; the drawing is the user's, and so is the decision. Somebody laying
+//! out a house to learn, to try an idea or to see what it would look like is
+//! not stopped by a gas standard, and neither is somebody who knows exactly
+//! what they are doing and means it. Findings that were looked at and settled
+//! can be accepted by key — see [`Finding::accepted`] — so that a plan which
+//! is right reaches zero without anything being swept away.
+//!
 //! Given who lives in a home — how many people, children, elderly, a
 //! wheelchair user — this reads the plan the way a careful architect would:
 //! is there room to walk beside the bed and in front of the stove, do the

@@ -430,14 +430,32 @@ fn hinges(height: f64) -> u32 {
     }
 }
 
+/// Builds the parts of a cabinet from `p`.
+///
+/// What a workshop would say about the request is said, not enforced: a board
+/// thickness nobody stocks, a shelf that will sag, a drawer front too short
+/// to grip, a niche the cooktop standard wants deeper — all of it is built
+/// and noted. Somebody learning, sketching or just looking at an idea is not
+/// stopped by the workshop's opinion; the notes are there when the drawing
+/// becomes something to cut.
+///
+/// It refuses only what has no geometry at all: a box whose inside is zero or
+/// negative, a part that would come out backwards. That is not a judgement on
+/// the project, it is arithmetic.
 #[allow(clippy::too_many_lines)]
 pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
+    let mut asked = p.clone();
+    let p = &mut asked;
+    let mut notes: Vec<String> = Vec::new();
     let (w, h, d) = (p.w, p.h, p.d);
     if ![15.0, 18.0, 25.0].contains(&p.t) {
-        return Err(format!(
-            "Chapa de {} mm não é padrão para caixaria; use t = 15, 18 ou 25.",
+        notes.push(format!(
+            "Chapa de {} mm não é padrão para caixaria (15, 18 ou 25 mm): a marcenaria vai ter de cortar sob encomenda.",
             num(p.t)
         ));
+    }
+    if p.t <= 0.0 {
+        return Err("A chapa precisa de espessura maior que zero.".into());
     }
     let t = cm(p.t);
     let back = cm(p.back.clamp(3.0, 18.0));
@@ -465,9 +483,18 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
     let mut handles = Handles::default();
     // Wall cabinets hang without a plinth: handles near the bottom.
     let wall_cabinet = p.plinth <= 0.0 && h <= TALL_DOOR;
-    if w < 2.0 * t + 10.0 || h < 20.0 || d < 20.0 {
+    if w <= 2.0 * t || h <= 2.0 * t || d <= t {
         return Err(format!(
-            "Armário de {} × {} × {} cm é pequeno demais: mínimo {} cm de largura e 20 cm de altura e profundidade.",
+            "Armário de {} × {} × {} cm não tem lado de dentro: com chapa de {} mm as peças sairiam ao contrário.",
+            num(w),
+            num(d),
+            num(h),
+            num(p.t)
+        ));
+    }
+    if w < 2.0 * t + 10.0 || h < 20.0 || d < 20.0 {
+        notes.push(format!(
+            "Armário de {} × {} × {} cm é menor do que se faz na prática (a partir de {} cm de largura e 20 de altura e profundidade).",
             num(w),
             num(d),
             num(h),
@@ -475,26 +502,29 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
         ));
     }
     if p.cooktop && d < COOKTOP_NICHE {
-        return Err(format!(
-            "A profundidade do armário é de {} cm, mas o cooktop exige nicho mínimo de {} cm. Ajuste a profundidade para 55 cm.",
+        notes.push(format!(
+            "Profundidade de {} cm com cooktop: a norma do aparelho pede nicho de {} cm, e a 55 cm o tampo respira.",
             num(d),
             num(COOKTOP_NICHE)
         ));
     }
-    let (blind_l, blind_r) = (p.blind_left.max(0.0), p.blind_right.max(0.0));
+    let (mut blind_l, mut blind_r) = (p.blind_left.max(0.0), p.blind_right.max(0.0));
     if blind_l + blind_r > 0.0 {
+        // A blind corner is a fixed panel beside a hinged door; with drawers
+        // or sliding leaves there is nothing to hold it, so the cabinet is
+        // built without it rather than not built at all.
         if p.door != DoorType::Hinged || p.drawers > 0 {
-            return Err(
-                "Canto cego só com portas de giro e sem gavetas: use door = hinged e drawers = 0."
-                    .into(),
+            notes.push(
+                "Canto cego pede portas de giro e nenhuma gaveta: o armário saiu sem o painel cego."
+                    .to_owned(),
             );
-        }
-        if w - blind_l - blind_r < 30.0 {
-            return Err(format!(
-                "Com {} cm de painel cego sobram {} cm de porta (mínimo 30); use w = {}.",
+            blind_l = 0.0;
+            blind_r = 0.0;
+        } else if w - blind_l - blind_r < 30.0 {
+            notes.push(format!(
+                "Com {} cm de painel cego sobram {} cm de porta; abaixo de 30 cm a folha não serve para nada.",
                 num(blind_l + blind_r),
-                num(w - blind_l - blind_r),
-                num(blind_l + blind_r + 30.0)
+                num(w - blind_l - blind_r)
             ));
         }
     }
@@ -507,9 +537,18 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
     };
     let dc = d - front_t;
     let hc = h - plinth;
-    if dc < 20.0 || hc < 2.0 * t + 10.0 {
+    if dc <= t || hc <= 2.0 * t {
         return Err(format!(
-            "Com frentes de {} cm e rodapé de {} cm sobra caixa de {} × {} cm: aumente d ou h, ou reduza plinth.",
+            "Com frentes de {} cm e rodapé de {} cm não sobra caixa ({} × {} cm): aumente d ou h, ou reduza plinth.",
+            num(front_t),
+            num(plinth),
+            num(dc),
+            num(hc)
+        ));
+    }
+    if dc < 20.0 || hc < 2.0 * t + 10.0 {
+        notes.push(format!(
+            "Com frentes de {} cm e rodapé de {} cm a caixa fica com {} × {} cm — pouco para guardar qualquer coisa.",
             num(front_t),
             num(plinth),
             num(dc),
@@ -520,7 +559,6 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
     let id = dc - BACK_INSET - back;
     let mut parts = Vec::new();
     let mut hardware = Vec::new();
-    let mut notes = Vec::new();
 
     // Carcass.
     parts.push(
@@ -597,17 +635,22 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
         .unwrap_or(if p.niches.is_empty() { needed } else { 0 });
     let bays = dividers + 1;
     let bay = (iw - f64::from(dividers) * t) / f64::from(bays);
-    if bay < 15.0 {
+    if bay <= 0.0 {
         return Err(format!(
-            "Com {} divisões cada vão fica com {} cm; use no máximo {} divisões nesta largura.",
+            "{dividers} divisões não cabem em {} cm de vão interno.",
+            num(iw)
+        ));
+    }
+    if bay < 15.0 {
+        notes.push(format!(
+            "Com {} divisões cada vão fica com {} cm; abaixo de 15 cm não entra nada de pé.",
             dividers,
-            num(bay),
-            (((iw + t) / (15.0 + t)).floor() as u32).saturating_sub(1)
+            num(bay)
         ));
     }
     if bay > span_limit && (p.shelves > 0 || p.rod) {
-        return Err(format!(
-            "Prateleiras de {} mm vencem no máximo {} cm; cada vão tem {} cm. Use dividers = {} ou chapa mais grossa.",
+        notes.push(format!(
+            "Prateleiras de {} mm vencem {} cm e cada vão tem {} cm: vão barrigar com peso. dividers = {} ou chapa mais grossa resolve.",
             num(p.t),
             num(span_limit),
             num(bay),
@@ -639,21 +682,24 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
     } else {
         f64::from(drawer_count) * 18.0
     };
+    let mut drawer_count = drawer_count;
+    let mut drawer_zone = drawer_zone;
     if drawer_zone > ih {
-        return Err(format!(
-            "{} gavetas de 18 cm não cabem no vão interno de {} cm; use drawers = {} ou door = drawers.",
-            drawer_count,
-            num(ih),
-            (ih / 18.0).floor() as u32
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let fits = (ih / 18.0).floor().max(0.0) as u32;
+        notes.push(format!(
+            "{drawer_count} gavetas de 18 cm não cabem no vão interno de {} cm: saíram {fits}.",
+            num(ih)
         ));
+        drawer_count = fits;
+        drawer_zone = f64::from(fits) * 18.0;
     }
     if drawer_count > 0 {
         let front_h = drawer_zone / f64::from(drawer_count);
         if front_h < 12.0 {
-            return Err(format!(
-                "Gavetas com frente de {} cm são baixas demais (mínimo 12 cm); use drawers = {}.",
-                num(front_h),
-                (drawer_zone / 12.0).floor() as u32
+            notes.push(format!(
+                "Frente de gaveta com {} cm: abaixo de 12 cm não há onde pegar.",
+                num(front_h)
             ));
         }
         let slide = SLIDES.iter().rev().copied().find(|s| *s <= id - 2.0).ok_or_else(|| {
@@ -758,54 +804,69 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
         .map(|n| (n.bottom, n.bottom + n.height))
         .collect();
     niches.sort_by(|a, b| a.0.total_cmp(&b.0));
+    // A niche is a hole through the carcass: it needs the whole bay and a
+    // front that is not in the way. Where the request cannot have both, the
+    // cabinet is built without the niche and says so.
     if !niches.is_empty() {
-        if p.rod {
-            return Err(
-                "Cabideiro e nicho no mesmo módulo não combinam: faça dois módulos.".into(),
-            );
-        }
-        if !matches!(p.door, DoorType::Hinged | DoorType::None) {
-            return Err(
-                "Nicho só em armário com portas de giro ou aberto: use door = hinged.".into(),
-            );
-        }
-        if bays > 1 {
-            return Err(format!(
-                "O nicho ocupa o vão inteiro: use dividers = 0 (vão interno de {} cm).",
+        let no_room = if p.rod {
+            Some("Cabideiro e nicho no mesmo módulo não combinam: saiu sem o nicho.".to_owned())
+        } else if !matches!(p.door, DoorType::Hinged | DoorType::None) {
+            Some("Nicho pede porta de giro ou armário aberto: saiu sem o nicho.".to_owned())
+        } else if bays > 1 {
+            Some(format!(
+                "O nicho ocupa o vão inteiro e há {} divisões: saiu sem o nicho (vão interno de {} cm).",
+                bays - 1,
                 num(iw)
-            ));
+            ))
+        } else {
+            None
+        };
+        if let Some(why) = no_room {
+            notes.push(why);
+            niches.clear();
         }
     }
     let floor = plinth + t + drawer_zone;
-    for (k, &(nb, nt)) in niches.iter().enumerate() {
-        if nb < floor - 0.05 {
-            return Err(format!(
-                "O nicho começa a {} cm do chão, abaixo do fundo útil do armário ({} cm); use bottom ≥ {}.",
-                num(nb),
+    // A niche outside the carcass is moved into it rather than refused: the
+    // drawing keeps the idea, and the note keeps the number that was asked.
+    let mut placed: Vec<(f64, f64)> = Vec::new();
+    for &(nb, nt) in &niches {
+        let height = (nt - nb).min(h - t - floor).max(0.0);
+        if height <= 0.0 {
+            notes.push(format!(
+                "Não sobra altura para o nicho entre {} e {} cm do chão; saiu sem ele.",
                 num(floor),
-                num(floor)
+                num(h - t)
             ));
+            continue;
         }
-        if nt > h - t + 0.05 {
-            return Err(format!(
-                "O nicho de {} cm a partir de {} cm passa do topo interno ({} cm); use h = {} ou bottom = {}.",
-                num(nt - nb),
-                num(nb),
-                num(h - t),
-                num(nt + t),
-                num((h - t - (nt - nb)).max(floor))
-            ));
-        }
-        if let Some(&(next_b, _)) = niches.get(k + 1)
-            && next_b < nt + t - 0.05
+        let mut bottom = nb.clamp(floor, h - t - height);
+        if let Some(&(_, last_top)) = placed.last()
+            && bottom < last_top + t
         {
-            return Err(format!(
-                "Os nichos a {} e {} cm do chão se sobrepõem; o de cima precisa começar em {} cm.",
+            bottom = last_top + t;
+        }
+        let top = bottom + height;
+        if top > h - t + 0.05 {
+            notes.push(format!(
+                "O nicho de {} cm não cabe acima de {} cm; saiu sem ele.",
+                num(height),
+                num(bottom)
+            ));
+            continue;
+        }
+        if (bottom - nb).abs() > 0.05 {
+            notes.push(format!(
+                "Nicho pedido a {} cm do chão: saiu a {} cm, que é onde o armário tem lugar para ele.",
                 num(nb),
-                num(next_b),
-                num(nt + t)
+                num(bottom)
             ));
         }
+        placed.push((bottom, top));
+    }
+    let niches = placed;
+
+    for (k, &(nb, nt)) in niches.iter().enumerate() {
         let below_is_board = k > 0 && (nb - t - (niches[k - 1].1)).abs() < 0.5;
         if nb - t > floor + 0.5 && !below_is_board {
             parts.push(
@@ -853,8 +914,8 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
         let rail_z = shelf_z - 6.0;
         let hanging = rail_z - (plinth + t + drawer_zone);
         if hanging < 95.0 {
-            return Err(format!(
-                "O cabideiro ficaria com {} cm de altura livre (mínimo 95 cm para camisas); aumente h para {} ou use menos gavetas.",
+            notes.push(format!(
+                "Cabideiro com {} cm livres: camisa pede 95 e casaco 140. h = {} resolveria.",
                 num(hanging),
                 num(h + 95.0 - hanging)
             ));
@@ -900,12 +961,18 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
         let (shelf_floor, shelf_zone) =
             shelves_zone(&niches, plinth + t + drawer_zone, shelf_zone, t);
         let step = shelf_zone / f64::from(p.shelves + 1);
-        if step < 15.0 {
+        if step <= 0.0 {
             return Err(format!(
-                "{} prateleiras deixam {} cm entre elas; o mínimo útil é 15 cm: use shelves = {}.",
+                "{} prateleiras não cabem em {} cm de vão.",
                 p.shelves,
-                num(step),
-                ((shelf_zone / 15.0).floor() as u32).saturating_sub(1)
+                num(shelf_zone)
+            ));
+        }
+        if step < 15.0 {
+            notes.push(format!(
+                "{} prateleiras deixam {} cm entre elas; abaixo de 15 cm não entra prato de pé.",
+                p.shelves,
+                num(step)
             ));
         }
         for b in 0..bays {
@@ -953,11 +1020,11 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
                 .max(1);
             let leaf = (open - GAP * f64::from(n + 1)) / f64::from(n);
             if leaf > MAX_DOOR {
-                return Err(format!(
-                    "Porta de giro com {} cm de largura empena e força as dobradiças; use doors = {} (até {} cm cada).",
+                notes.push(format!(
+                    "Porta de giro de {} cm: acima de {} cm a folha empena e força as dobradiças; doors = {} divide.",
                     num(leaf),
-                    (open / MAX_DOOR).ceil() as u32,
-                    num(MAX_DOOR)
+                    num(MAX_DOOR),
+                    (open / MAX_DOOR).ceil() as u32
                 ));
             }
             // Doors cover the front, except across a niche.
@@ -1196,15 +1263,18 @@ mod tests {
         assert!((box_w - (60.0 - 3.6 - 2.6)).abs() < 1e-9);
         assert_eq!(side.size[1], 45.0);
 
+        // What a workshop would say is said, and the cabinet is built anyway:
+        // somebody sketching an idea is not stopped by the shop's opinion.
         let cooktop = generate(&CabinetParams {
             d: 35.0,
             cooktop: true,
             ..CabinetParams::default()
         })
-        .unwrap_err();
-        assert_eq!(
-            cooktop,
-            "A profundidade do armário é de 35 cm, mas o cooktop exige nicho mínimo de 50 cm. Ajuste a profundidade para 55 cm."
+        .unwrap();
+        assert!(
+            cooktop.notes.iter().any(|n| n.contains("cooktop")),
+            "{:?}",
+            cooktop.notes
         );
         let wide = generate(&CabinetParams {
             w: 150.0,
@@ -1212,8 +1282,12 @@ mod tests {
             shelves: 0,
             ..CabinetParams::default()
         })
-        .unwrap_err();
-        assert!(wide.contains("doors = 3"), "{wide}");
+        .unwrap();
+        assert!(
+            wide.notes.iter().any(|n| n.contains("doors = 3")),
+            "{:?}",
+            wide.notes
+        );
         // Without dividers the shelves get them automatically…
         let auto = generate(&CabinetParams {
             w: 160.0,
@@ -1228,22 +1302,41 @@ mod tests {
                 .count(),
             2
         );
-        // …but an explicit choice that can't hold is explained.
+        // …and an explicit choice that will sag is built, with the warning.
         let span = generate(&CabinetParams {
             w: 160.0,
             t: 15.0,
             dividers: Some(0),
             ..CabinetParams::default()
         })
-        .unwrap_err();
-        assert!(span.contains("dividers = 2"), "{span}");
+        .unwrap();
+        assert!(
+            span.notes.iter().any(|n| n.contains("dividers = 2")),
+            "{:?}",
+            span.notes
+        );
+        // More drawers than the box holds: it gets the ones that fit.
         let many = generate(&CabinetParams {
             h: 80.0,
             drawers: 5,
             ..CabinetParams::default()
         })
-        .unwrap_err();
-        assert!(many.contains("drawers = "), "{many}");
+        .unwrap();
+        assert!(
+            many.notes.iter().any(|n| n.contains("não cabem")),
+            "{:?}",
+            many.notes
+        );
+        let drawers = |out: &Output, n: u32| {
+            out.parts
+                .iter()
+                .any(|p| p.name.starts_with(&format!("Gaveta 1.{n} ")))
+        };
+        assert!(
+            drawers(&many, 2) && !drawers(&many, 4),
+            "the drawers that fit were built"
+        );
+        // A drawer needs a slide that exists: that one has no answer at all.
         let shallow = generate(&CabinetParams {
             d: 26.0,
             door: DoorType::Drawers,
@@ -1272,15 +1365,18 @@ mod tests {
                 .all(|p| !p.name.starts_with("Prateleira"))
         );
         assert!(wardrobe.hardware.iter().any(|h| h.contains("tubo")));
+        // A rod with no room to hang is built, and says what it is good for.
+        let low = generate(&CabinetParams {
+            h: 150.0,
+            rod: true,
+            drawers: 2,
+            ..CabinetParams::default()
+        })
+        .unwrap();
         assert!(
-            generate(&CabinetParams {
-                h: 150.0,
-                rod: true,
-                drawers: 2,
-                ..CabinetParams::default()
-            })
-            .unwrap_err()
-            .contains("cabideiro")
+            low.notes.iter().any(|n| n.contains("Cabideiro")),
+            "{:?}",
+            low.notes
         );
         // A tall cabinet with an oven niche: doors below and above, none across it.
         let tower = generate(&CabinetParams {
@@ -1312,6 +1408,8 @@ mod tests {
                 .filter(|p| p.name.starts_with("Prateleira"))
                 .all(|p| p.at[2] > 142.0)
         );
+        // A niche that runs past the top is moved down into the carcass,
+        // and the note keeps the number that was asked for.
         let high = generate(&CabinetParams {
             w: 60.0,
             h: 120.0,
@@ -1321,8 +1419,13 @@ mod tests {
             }],
             ..CabinetParams::default()
         })
-        .unwrap_err();
-        assert!(high.contains("passa do topo interno"), "{high}");
+        .unwrap();
+        assert!(
+            high.notes.iter().any(|n| n.contains("saiu a")),
+            "{:?}",
+            high.notes
+        );
+        assert!(high.parts.iter().any(|p| p.name == "Base do nicho"));
         let corner = generate(&CabinetParams {
             w: 100.0,
             h: 87.0,
@@ -1335,22 +1438,30 @@ mod tests {
         let door = part(&corner, "Porta 1");
         assert!((panel.size[0] - 57.8).abs() < 1e-9);
         assert!((door.at[0] - 58.2).abs() < 1e-9 && (door.size[0] - 41.6).abs() < 1e-9);
+        let narrow = generate(&CabinetParams {
+            w: 80.0,
+            blind_left: 58.0,
+            ..CabinetParams::default()
+        })
+        .unwrap();
         assert!(
-            generate(&CabinetParams {
-                w: 80.0,
-                blind_left: 58.0,
-                ..CabinetParams::default()
-            })
-            .unwrap_err()
-            .contains("use w = 88")
+            narrow
+                .notes
+                .iter()
+                .any(|n| n.contains("não serve para nada")),
+            "{:?}",
+            narrow.notes
         );
+        // A board nobody stocks is cut to order, not refused.
+        let odd = generate(&CabinetParams {
+            t: 16.0,
+            ..CabinetParams::default()
+        })
+        .unwrap();
         assert!(
-            generate(&CabinetParams {
-                t: 16.0,
-                ..CabinetParams::default()
-            })
-            .unwrap_err()
-            .contains("15, 18 ou 25")
+            odd.notes.iter().any(|n| n.contains("15, 18 ou 25")),
+            "{:?}",
+            odd.notes
         );
     }
 

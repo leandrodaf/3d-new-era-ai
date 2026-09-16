@@ -200,18 +200,22 @@ fn check_room(pts: &[[f64; 2]], border: f64) -> Result<Vec<[f64; 2]>, String> {
 }
 
 pub(crate) fn cove(p: &CoveParams) -> Result<Output, String> {
+    let mut notes: Vec<String> = Vec::new();
+    if p.drop <= 0.0 {
+        return Err("A sanca precisa de uma descida maior que zero (drop).".into());
+    }
     if p.drop < 5.0 {
-        return Err(format!(
-            "A sanca precisa descer ao menos 5 cm para esconder a fita de LED (drop = {}).",
+        notes.push(format!(
+            "Descida de {} cm: abaixo de 5 cm a fita de LED aparece.",
             num(p.drop)
         ));
     }
     if p.kind == CoveType::Open && p.slot >= p.drop {
-        return Err(format!(
-            "A abertura de luz de {} cm não pode ser maior que a descida de {} cm; use slot até {}.",
+        notes.push(format!(
+            "A abertura de luz de {} cm é maior que a descida de {} cm: a fita fica à vista; slot até {} a esconde.",
             num(p.slot),
             num(p.drop),
-            num(p.drop - 3.0)
+            num((p.drop - 3.0).max(0.0))
         ));
     }
     let outer = p.pts.clone();
@@ -220,7 +224,7 @@ pub(crate) fn cove(p: &CoveParams) -> Result<Output, String> {
     let (ceiling, drop) = (p.ceiling, p.drop);
     let board = "Gesso acartonado 12,5 mm";
     let mut parts = Vec::new();
-    let mut notes = Vec::new();
+
     match p.kind {
         CoveType::Open | CoveType::Closed => {
             parts.extend(strips(
@@ -331,9 +335,13 @@ pub(crate) fn cove(p: &CoveParams) -> Result<Output, String> {
 }
 
 pub(crate) fn shadow_gap(p: &ShadowGapParams) -> Result<Output, String> {
+    let mut notes: Vec<String> = Vec::new();
+    if p.gap <= 0.0 {
+        return Err("A tabica precisa de uma folga maior que zero (gap).".into());
+    }
     if !(0.5..=5.0).contains(&p.gap) {
-        return Err(format!(
-            "Tabica de {} cm fica fora do usual; use gap entre 0,5 e 5 cm.",
+        notes.push(format!(
+            "Tabica de {} cm fica fora do usual (0,5 a 5 cm).",
             num(p.gap)
         ));
     }
@@ -375,7 +383,7 @@ pub(crate) fn shadow_gap(p: &ShadowGapParams) -> Result<Output, String> {
         parts,
         size: bounds_size(&outer, p.ceiling),
         hardware,
-        notes: Vec::new(),
+        notes,
         extra_cuts: Vec::new(),
         name: format!("Tabica {} cm", num(p.gap)),
     })
@@ -454,14 +462,17 @@ mod tests {
             .unwrap_err()
             .contains("reduza width")
         );
+        // A slot wider than the drop shows the strip: built, and said.
+        let showing = cove(&CoveParams {
+            pts: room(),
+            slot: 20.0,
+            ..CoveParams::default()
+        })
+        .unwrap();
         assert!(
-            cove(&CoveParams {
-                pts: room(),
-                slot: 20.0,
-                ..CoveParams::default()
-            })
-            .unwrap_err()
-            .contains("slot até 12")
+            showing.notes.iter().any(|n| n.contains("slot até 12")),
+            "{:?}",
+            showing.notes
         );
         let inverted = cove(&CoveParams {
             pts: room(),
@@ -495,13 +506,16 @@ mod tests {
             4
         );
         assert!(out.hardware.contains(&"14 m de perfil tabica".to_owned()));
+        let wide = shadow_gap(&ShadowGapParams {
+            pts: room(),
+            gap: 10.0,
+            ..ShadowGapParams::default()
+        })
+        .unwrap();
         assert!(
-            shadow_gap(&ShadowGapParams {
-                pts: room(),
-                gap: 10.0,
-                ..ShadowGapParams::default()
-            })
-            .is_err()
+            wide.notes.iter().any(|n| n.contains("fora do usual")),
+            "{:?}",
+            wide.notes
         );
         assert!(
             shadow_gap(&ShadowGapParams::default())

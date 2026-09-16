@@ -239,8 +239,8 @@ pub fn embed(doc: &mut Document, request: &EmbedRequest) -> Result<Value, String
                 _ => item.width,
             };
             if body + 1.0 > inner_w || item.width > cabinet.w + 0.05 {
-                return Err(format!(
-                    "{} tem {} cm de largura ({} cm de corpo) e o vão interno do armário {} cm: use w = {} no armário.",
+                notes.push(format!(
+                    "{} tem {} cm de largura ({} cm de corpo) e o vão interno do armário {} cm: não entra sem alargar o armário para w = {}.",
                     kind.label(),
                     num(item.width),
                     num(body),
@@ -252,8 +252,8 @@ pub fn embed(doc: &mut Document, request: &EmbedRequest) -> Result<Value, String
             let inner_d = cabinet.d - front_t - 1.0 - cabinet.back / 10.0;
             // Without a door over it, the front may come out to the doors' plane.
             if item.depth > inner_d + front_t + 0.05 {
-                return Err(format!(
-                    "{} tem {} cm de profundidade e o nicho {} cm: use d = {} no armário.",
+                notes.push(format!(
+                    "{} tem {} cm de profundidade e o nicho {} cm: sobra para fora sem d = {} no armário.",
                     kind.label(),
                     num(item.depth),
                     num(inner_d + front_t),
@@ -284,8 +284,8 @@ pub fn embed(doc: &mut Document, request: &EmbedRequest) -> Result<Value, String
                         && (c.elevation - host.elevation - n.bottom).abs() < 1.0
                 });
                 if let Some(other) = occupied {
-                    return Err(format!(
-                        "O nicho de {} a {} cm já tem {} {}: use z = {} para ficar acima dele.",
+                    notes.push(format!(
+                        "O nicho de {} a {} cm já tem {} {}: os dois ficam no mesmo lugar (z = {} poria um acima do outro).",
                         num(n.bottom),
                         num(n.bottom + n.height),
                         other.name,
@@ -326,8 +326,8 @@ pub fn embed(doc: &mut Document, request: &EmbedRequest) -> Result<Value, String
                 ));
             }
             if item.width + 10.0 > panel.w {
-                return Err(format!(
-                    "A TV tem {} cm de largura e o painel {} cm: use w = {} no painel (5 cm de cada lado).",
+                notes.push(format!(
+                    "A TV tem {} cm de largura e o painel {} cm: sem folga nas laterais (w = {} daria 5 cm de cada lado).",
                     num(item.width),
                     num(panel.w),
                     num((item.width + 10.0).ceil())
@@ -337,8 +337,8 @@ pub fn embed(doc: &mut Document, request: &EmbedRequest) -> Result<Value, String
             let center = request.z.unwrap_or(105.0);
             let bottom = center - item.height / 2.0;
             if bottom < 30.0 || center + item.height / 2.0 > panel.h - 5.0 {
-                return Err(format!(
-                    "Com o centro a {} cm a TV de {} cm de altura sai do painel de {} cm; use z entre {} e {}.",
+                notes.push(format!(
+                    "Com o centro a {} cm a TV de {} cm passa do painel de {} cm; z entre {} e {} a mantém dentro.",
                     num(center),
                     num(item.height),
                     num(panel.h),
@@ -348,8 +348,8 @@ pub fn embed(doc: &mut Document, request: &EmbedRequest) -> Result<Value, String
             }
             let at = request.at.unwrap_or(panel.w / 2.0);
             if at - item.width / 2.0 < 0.0 || at + item.width / 2.0 > panel.w {
-                return Err(format!(
-                    "A TV centrada em {} cm sai do painel; use at entre {} e {}.",
+                notes.push(format!(
+                    "A TV centrada em {} cm passa da borda do painel; at entre {} e {} a mantém dentro.",
                     num(at),
                     num(item.width / 2.0),
                     num(panel.w - item.width / 2.0)
@@ -592,8 +592,13 @@ mod tests {
                 dry: true,
             },
         )
-        .unwrap_err();
-        assert!(err.contains("use w = 134"), "{err}");
+        .unwrap();
+        assert!(
+            err["notes"].as_array().is_some_and(|n| n
+                .iter()
+                .any(|note| note.as_str().is_some_and(|text| text.contains("w = 134")))),
+            "{err}"
+        );
     }
 
     #[test]
@@ -647,7 +652,8 @@ mod tests {
                 && group.children.iter().any(|c| c.id == micro.id)
         );
         assert_eq!(group.properties[PARAMS_KEY].matches("bottom").count(), 2);
-        // Into the oven's niche: refused, with the height that works.
+        // Into the oven's niche: done, and said, with the height that
+        // would have kept them apart.
         let another = piece(&mut doc, "microwave", "Micro-ondas", [50.0, 40.0, 30.0]);
         let clash = embed(
             &mut doc,
@@ -660,8 +666,13 @@ mod tests {
                 dry: true,
             },
         )
-        .unwrap_err();
-        assert!(clash.contains("use z = "), "{clash}");
+        .unwrap();
+        assert!(
+            clash["notes"].as_array().is_some_and(|n| n
+                .iter()
+                .any(|note| note.as_str().is_some_and(|text| text.contains("z = ")))),
+            "{clash}"
+        );
         // Too wide for a 50 cm cabinet: the width that works.
         let narrow = host(
             &mut doc,
@@ -682,7 +693,12 @@ mod tests {
                 dry: true,
             },
         )
-        .unwrap_err();
-        assert!(err.contains("use w = 61"), "{err}");
+        .unwrap();
+        assert!(
+            err["notes"].as_array().is_some_and(|n| n
+                .iter()
+                .any(|note| note.as_str().is_some_and(|text| text.contains("w = 61")))),
+            "{err}"
+        );
     }
 }

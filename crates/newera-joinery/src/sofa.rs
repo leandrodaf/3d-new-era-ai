@@ -52,21 +52,27 @@ impl Default for SofaParams {
 
 pub(crate) fn generate(p: &SofaParams) -> Result<Output, String> {
     let fabric = p.color.unwrap_or([150, 140, 125]);
+    let mut notes: Vec<String> = Vec::new();
+    if p.seat <= 0.0 || p.depth <= 0.0 || p.back <= p.seat {
+        return Err(
+            "O sofá precisa de assento e profundidade positivos e encosto acima do assento.".into(),
+        );
+    }
     if !(35.0..=55.0).contains(&p.seat) {
-        return Err(format!(
-            "Assento a {} cm do chão é desconfortável; use seat entre 35 e 55 cm (usual 43).",
+        notes.push(format!(
+            "Assento a {} cm do chão: o usual é 43, e fora de 35 a 55 ninguém senta bem.",
             num(p.seat)
         ));
     }
     if p.back < p.seat + 25.0 {
-        return Err(format!(
-            "O encosto precisa subir ao menos 25 cm acima do assento; use back = {}.",
-            num(p.seat + 35.0)
+        notes.push(format!(
+            "Encosto só {} cm acima do assento: abaixo de 25 cm não apoia as costas.",
+            num(p.back - p.seat)
         ));
     }
     if !(70.0..=180.0).contains(&p.depth) {
-        return Err(format!(
-            "Profundidade de {} cm fora do usual; use depth entre 70 e 180 cm.",
+        notes.push(format!(
+            "Profundidade de {} cm fora do usual (70 a 180 cm).",
             num(p.depth)
         ));
     }
@@ -79,10 +85,16 @@ pub(crate) fn generate(p: &SofaParams) -> Result<Output, String> {
         .modules
         .unwrap_or_else(|| ((inner / 75.0).round() as u32).max(1));
     let module = inner / f64::from(modules);
+    if module <= 0.0 {
+        return Err(format!(
+            "{modules} módulos não cabem em {} cm de sofá.",
+            num(inner)
+        ));
+    }
     if !(45.0..=110.0).contains(&module) {
         let fit = ((inner / 75.0).round() as u32).max(1);
-        return Err(format!(
-            "Com {modules} módulos cada assento teria {} cm (usual 55 a 100); use modules = {fit}.",
+        notes.push(format!(
+            "Com {modules} módulos cada assento fica com {} cm (usual 55 a 100); modules = {fit} acerta.",
             num(module)
         ));
     }
@@ -148,7 +160,7 @@ pub(crate) fn generate(p: &SofaParams) -> Result<Output, String> {
             "{} m² de tecido (estimado)",
             num((p.length * (p.depth + p.back) * 1.6) / 10_000.0)
         )],
-        notes: Vec::new(),
+        notes,
         extra_cuts: Vec::new(),
         name: format!("Sofá {} módulos {} cm", modules, num(p.length)),
     })
@@ -181,21 +193,27 @@ mod tests {
         })
         .unwrap();
         assert!(rounded.parts.iter().any(|p| p.outline.is_some()));
+        // Modules narrower than anyone sits on, and a seat nobody reaches:
+        // both are built, and both say what a sofa usually is.
+        let many = generate(&SofaParams {
+            modules: Some(5),
+            ..SofaParams::default()
+        })
+        .unwrap();
         assert!(
-            generate(&SofaParams {
-                modules: Some(5),
-                ..SofaParams::default()
-            })
-            .unwrap_err()
-            .contains("modules = 2")
+            many.notes.iter().any(|n| n.contains("modules = 2")),
+            "{:?}",
+            many.notes
         );
+        let tall = generate(&SofaParams {
+            seat: 70.0,
+            ..SofaParams::default()
+        })
+        .unwrap();
         assert!(
-            generate(&SofaParams {
-                seat: 70.0,
-                ..SofaParams::default()
-            })
-            .unwrap_err()
-            .contains("entre 35 e 55")
+            tall.notes.iter().any(|n| n.contains("35 a 55")),
+            "{:?}",
+            tall.notes
         );
     }
 }

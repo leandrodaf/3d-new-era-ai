@@ -45,7 +45,7 @@ pub(crate) struct CutListParams {
 #[tool_router(router = joinery_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Parametric joinery and interiors; the server computes every board, clearance and rule and replies {id,name,size,parts,hardware,notes}, or an error saying what to change. kind + p: cabinet {w,h,d cm; t 15|18|25 mm; back mm; door hinged|sliding|drawers|none; doors; shelves; drawers; dividers; plinth; cooktop; color; front finish} · slats {w,h cm; slat, thickness, gap mm; orientation vertical|horizontal; backing; finish} · countertop {length,depth,height,thickness cm; material; support none|legs|brackets; cutouts [{kind sink|cooktop|grommet, x, w?, d?}]} · cove {room or pts; type open|closed|inverted; ceiling, width, drop, slot cm; led} · shadow_gap {room or pts; ceiling, gap, depth cm; led} · sofa {length,depth,seat,back cm; arms straight|rounded|none; modules; color}. Place with at|wall(+along), angle, elev. Change a build: id + p with only new values (e.g. {\"shelves\":3}). dry=true validates only."
+        description = "Parametric joinery and interiors; the server computes every board, clearance and rule and replies {id,name,size,parts,hardware,notes}. What a workshop would say — a board nobody stocks, a shelf that will sag, a drawer front too short to grip, a niche shallower than the cooktop standard wants — comes back in notes and is built anyway: the rules advise, they never refuse. Only what has no geometry at all fails, and says why. kind + p: cabinet {w,h,d cm; t 15|18|25 mm; back mm; door hinged|sliding|drawers|none; doors; shelves; drawers; dividers; plinth; cooktop; color; front finish} · slats {w,h cm; slat, thickness, gap mm; orientation vertical|horizontal; backing; finish} · countertop {length,depth,height,thickness cm; material; support none|legs|brackets; cutouts [{kind sink|cooktop|grommet, x, w?, d?}]} · cove {room or pts; type open|closed|inverted; ceiling, width, drop, slot cm; led} · shadow_gap {room or pts; ceiling, gap, depth cm; led} · sofa {length,depth,seat,back cm; arms straight|rounded|none; modules; color}. Place with at|wall(+along), angle, elev. Change a build: id + p with only new values (e.g. {\"shelves\":3}). dry=true validates only."
     )]
     pub(crate) fn joinery(
         &self,
@@ -376,14 +376,14 @@ mod tests {
             changed["parts"].as_u64() > reply["parts"].as_u64(),
             "{changed}"
         );
-        // Impossible requests explain what to change, and dry runs create nothing.
-        let err =
-            joinery(r#"{"kind":"cabinet","p":{"d":35,"cooktop":true},"dry":true}"#).unwrap_err();
-        assert!(
-            err.message.contains("Ajuste a profundidade para 55 cm"),
-            "{}",
-            err.message
-        );
+        // A request the workshop would argue with is built, and argued with
+        // in the notes; dry runs still create nothing.
+        let shallow =
+            joinery(r#"{"kind":"cabinet","p":{"d":35,"cooktop":true},"dry":true}"#).unwrap();
+        assert!(shallow.contains("cooktop"), "{shallow}");
+        // What has no geometry at all still fails, and says why.
+        let flat = joinery(r#"{"kind":"cabinet","p":{"w":2}}"#).unwrap_err();
+        assert!(flat.message.contains("lado de dentro"), "{}", flat.message);
         let before = s.document.read().home().furniture.len();
         joinery(r#"{"kind":"slats","p":{"w":100},"dry":true}"#).unwrap();
         assert_eq!(s.document.read().home().furniture.len(), before);

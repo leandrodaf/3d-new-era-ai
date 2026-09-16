@@ -88,8 +88,15 @@ const MARGIN: f64 = 5.0;
 #[allow(clippy::too_many_lines)]
 pub(crate) fn generate(p: &CountertopParams) -> Result<Output, String> {
     let (len, dep, t) = (p.length, p.depth, p.thickness);
+    if len <= 0.0 || dep <= 0.0 || t <= 0.0 {
+        return Err("A bancada precisa de comprimento, profundidade e espessura positivos.".into());
+    }
+    let mut notes: Vec<String> = Vec::new();
     if len < 20.0 || dep < 20.0 || !(1.0..=15.0).contains(&t) {
-        return Err("A bancada precisa de ao menos 20 × 20 cm e espessura entre 1 e 15 cm.".into());
+        notes.push(
+            "Fora do que se faz em pedra: a partir de 20 × 20 cm e espessura de 1 a 15 cm."
+                .to_owned(),
+        );
     }
     if p.height < t {
         return Err(format!(
@@ -118,21 +125,35 @@ pub(crate) fn generate(p: &CountertopParams) -> Result<Output, String> {
             CutoutKind::Cooktop => "o cooktop",
             CutoutKind::Grommet => "o passa-cabos",
         };
-        if dep < d + 2.0 * MARGIN {
+        if dep < d {
             return Err(format!(
-                "A bancada tem {} cm de profundidade, mas {label} de {} cm precisa de {} cm de pedra em volta: use depth = {}.",
+                "A bancada tem {} cm de profundidade e {label} tem {} cm: o recorte não cabe na pedra.",
                 num(dep),
-                num(d),
+                num(d)
+            ));
+        }
+        if dep < d + 2.0 * MARGIN {
+            notes.push(format!(
+                "Sobram menos de {} cm de pedra em volta d{} ({} cm de profundidade para um recorte de {}): é onde a pedra trinca.",
                 num(MARGIN),
-                num(d + 2.0 * MARGIN)
+                &label[..1],
+                num(dep),
+                num(d)
             ));
         }
         let (x0, x1) = (c.x - w / 2.0, c.x + w / 2.0);
-        if x0 < MARGIN || x1 > len - MARGIN {
+        if x0 < 0.0 || x1 > len {
             return Err(format!(
-                "O recorte d{} em x = {} cm sai da bancada ou fica a menos de {} cm da ponta; use x entre {} e {}.",
+                "O recorte d{} em x = {} cm sai da bancada de {} cm.",
                 &label[..1],
                 num(c.x),
+                num(len)
+            ));
+        }
+        if x0 < MARGIN || x1 > len - MARGIN {
+            notes.push(format!(
+                "O recorte d{} fica a menos de {} cm da ponta da pedra; x entre {} e {} deixaria apoio.",
+                &label[..1],
                 num(MARGIN),
                 num(MARGIN + w / 2.0),
                 num(len - MARGIN - w / 2.0)
@@ -140,12 +161,19 @@ pub(crate) fn generate(p: &CountertopParams) -> Result<Output, String> {
         }
         // Centered in the depth, a little toward the front for sinks.
         let y0 = (dep - d) / 2.0;
+        if let Some(other) = holes.iter().find(|h| x0 < h.1 && h.0 < x1) {
+            return Err(format!(
+                "Os recortes em x = {} e x = {} cm se sobrepõem.",
+                num(c.x),
+                num(f64::midpoint(other.0, other.1))
+            ));
+        }
         if let Some(other) = holes
             .iter()
             .find(|h| x0 < h.1 + MARGIN && h.0 < x1 + MARGIN)
         {
-            return Err(format!(
-                "Os recortes em x = {} e x = {} cm ficam a menos de {} cm um do outro; afaste-os.",
+            notes.push(format!(
+                "Os recortes em x = {} e x = {} cm ficam a menos de {} cm um do outro: a tira de pedra entre eles quebra no transporte.",
                 num(c.x),
                 num(f64::midpoint(other.0, other.1)),
                 num(MARGIN)
@@ -357,7 +385,7 @@ pub(crate) fn generate(p: &CountertopParams) -> Result<Output, String> {
         parts,
         size: [len, dep, p.height],
         hardware,
-        notes: Vec::new(),
+        notes,
         extra_cuts: vec![{
             let mut slab = Part::board(
                 "Tampo com recortes",
@@ -453,19 +481,27 @@ mod tests {
             }],
             ..CountertopParams::default()
         })
-        .unwrap_err();
-        assert!(shallow.contains("use depth = 58"), "{shallow}");
+        .unwrap();
+        assert!(
+            shallow.notes.iter().any(|n| n.contains("pedra trinca")),
+            "{:?}",
+            shallow.notes
+        );
         let edge = generate(&CountertopParams {
             cutouts: vec![Cutout {
                 kind: CutoutKind::Sink,
-                x: 10.0,
+                x: 27.0,
                 w: None,
                 d: None,
                 drawn: true,
             }],
             ..CountertopParams::default()
         })
-        .unwrap_err();
-        assert!(edge.contains("use x entre 30 e 150"), "{edge}");
+        .unwrap();
+        assert!(
+            edge.notes.iter().any(|n| n.contains("x entre 30 e 150")),
+            "{:?}",
+            edge.notes
+        );
     }
 }

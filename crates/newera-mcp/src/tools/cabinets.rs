@@ -251,14 +251,11 @@ mod tests {
             .map(|f| f.id.to_string())
             .collect();
         assert!(ids.contains(&modules[1][0].as_str().unwrap().to_owned()));
+        // A modulation nobody would build is built, with the note.
         let p: newera_joinery::CabinetRunParams =
             serde_json::from_str(r#"{"wall":"w1","p":{"max":10}}"#).unwrap();
-        assert!(
-            s.cabinet_run(Parameters(p))
-                .unwrap_err()
-                .message
-                .contains("max entre")
-        );
+        let odd = s.cabinet_run(Parameters(p)).unwrap();
+        assert!(odd.contains("fora do usual"), "{odd}");
     }
     #[test]
     fn cabinet_runs_place_sink_and_cooktop_and_line_up_the_wall_row() {
@@ -464,11 +461,13 @@ mod tests {
         )
         .unwrap();
         let tower_id = tower["id"].as_str().unwrap().to_owned();
-        let err = embed(&format!(
+        // Too narrow for the oven: embedded all the same, with the width
+        // that would hold it — the drawing is the user's to decide about.
+        let tight = embed(&format!(
             r#"{{"cat":"oven","host":"{tower_id}","dry":true}}"#
         ))
-        .unwrap_err();
-        assert!(err.contains("use w = 61"), "{err}");
+        .unwrap();
+        assert!(tight.to_string().contains("w = 61"), "{tight}");
         s.joinery(Parameters(
             serde_json::from_str::<JoineryParams>(&format!(
                 r#"{{"id":"{tower_id}","p":{{"w":64}}}}"#
