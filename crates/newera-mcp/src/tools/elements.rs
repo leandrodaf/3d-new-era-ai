@@ -30,6 +30,12 @@ pub(crate) struct IdsParams {
     ids: Vec<String>,
 }
 #[derive(Debug, Deserialize, JsonSchema)]
+pub(crate) struct DeleteParams {
+    ids: Vec<String>,
+    /// Also delete the labels left pointing at the deleted pieces.
+    labels: Option<bool>,
+}
+#[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct MoveParams {
     ids: Vec<String>,
     dx: f64,
@@ -83,13 +89,64 @@ impl NewEraMcp {
         edit::update(&mut doc, p.items).map_err(invalid)?;
         Ok(applied(&doc, &before))
     }
-    #[tool(description = "Delete elements by id, atomically.")]
-    pub(crate) fn delete(&self, Parameters(p): Parameters<IdsParams>) -> Result<String, ErrorData> {
+    #[tool(
+        description = "Delete elements by id, atomically. Labels left pointing at a deleted piece — about it, or standing on it — are named in the reply as labels_left [[id, text]], since an index code over what is now another piece is found by nobody; labels=true deletes them in the same step."
+    )]
+    pub(crate) fn delete(
+        &self,
+        Parameters(p): Parameters<DeleteParams>,
+    ) -> Result<String, ErrorData> {
         let ids = edit::parse_ids(&p.ids).map_err(invalid)?;
         let mut doc = self.document.write();
-        let commands = ids.into_iter().map(Command::remove).collect();
+        let home = doc.home();
+        let gone: Vec<&newera_core::Furniture> = ids
+            .iter()
+            .filter_map(|id| match id {
+                newera_core::ElementId::Furniture(f) => home.find_piece(*f),
+                _ => None,
+            })
+            .flat_map(newera_core::Furniture::flatten)
+            .collect();
+        let left: Vec<(newera_core::LabelId, String)> = home
+            .labels
+            .iter()
+            .filter(|l| !ids.contains(&l.id.into()))
+            .filter(|l| {
+                gone.iter().any(|f| {
+                    if let Some(about) = l.about {
+                        return about == f.id;
+                    }
+                    let (min, max) = newera_core::plan_bounds(f);
+                    home.on_level(l.level, f.level)
+                        && (min.x..=max.x).contains(&l.position.x)
+                        && (min.y..=max.y).contains(&l.position.y)
+                })
+            })
+            .map(|l| (l.id, l.text.clone()))
+            .collect();
+        let also = p.labels.unwrap_or(false);
+        let commands = ids
+            .into_iter()
+            .chain(
+                left.iter()
+                    .filter(|_| also)
+                    .map(|(id, _)| newera_core::ElementId::from(*id)),
+            )
+            .map(Command::remove)
+            .collect();
         doc.execute(Command::Batch { commands }).map_err(core)?;
-        Ok(ok(&doc, &[]))
+        let reply = ok(&doc, &[]);
+        Ok(match (left.is_empty(), also) {
+            (true, _) => reply,
+            (false, true) => format!(
+                "{reply} {}",
+                serde_json::json!({"labels_deleted": left.iter().map(|(id, _)| id.to_string()).collect::<Vec<_>>()})
+            ),
+            (false, false) => format!(
+                "{reply} {}",
+                serde_json::json!({"labels_left": left.iter().map(|(id, text)| serde_json::json!([id.to_string(), text])).collect::<Vec<_>>()})
+            ),
+        })
     }
     #[tool(
         name = "move",

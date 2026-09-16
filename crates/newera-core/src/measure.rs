@@ -1442,6 +1442,24 @@ pub fn check_annotations(home: &Home) -> AnnotationCheck {
     }
 
     for label in &home.labels {
+        // A note about a piece that was deleted points at nothing, whatever
+        // it says: the index code of a niche now standing over the sink.
+        if let Some(id) = label.about
+            && home
+                .furniture
+                .iter()
+                .flat_map(Furniture::flatten)
+                .all(|f| f.id != id)
+        {
+            out.push(Stale {
+                id: label.id.into(),
+                drawn: 0.0,
+                measured: 0.0,
+                against: Some(id.into()),
+                text: format!("{id} is gone; \"{}\" is about nothing", label.text),
+            });
+            continue;
+        }
         let sizes = written_sizes(&label.text);
         if sizes.is_empty() {
             continue;

@@ -391,6 +391,77 @@ mod tests {
     }
 
     #[test]
+    fn deleting_a_piece_names_the_labels_left_pointing_at_it() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"labels":[{"text":"[09]","at":[100,30]},{"text":"lixeira embutida","at":[400,400]},{"text":"[10]","at":[600,30]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"box","name":"nicho da lixeira","at":[100,30],"w":40,"d":60,"h":85},
+                             {"cat":"box","name":"torre","at":[600,30],"w":60,"d":60,"h":220}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let (niche, labels) = {
+            let doc = s.document.read();
+            let home = doc.home();
+            (
+                home.furniture[0].id.to_string(),
+                home.labels
+                    .iter()
+                    .map(|l| l.id.to_string())
+                    .collect::<Vec<_>>(),
+            )
+        };
+        s.update(Parameters(UpdateParams {
+            items: serde_json::from_str(&format!(
+                r#"[{{"id":"{}","about":"{niche}"}}]"#,
+                labels[1]
+            ))
+            .unwrap(),
+            v: None,
+            dry: None,
+        }))
+        .unwrap();
+        let delete = |json: String| {
+            s.delete(Parameters(serde_json::from_str(&json).unwrap()))
+                .unwrap()
+        };
+        let reply = delete(format!(r#"{{"ids":["{niche}"]}}"#));
+        let left: serde_json::Value =
+            serde_json::from_str(&reply[reply.find('{').expect(&reply)..]).unwrap();
+        assert_eq!(
+            left["labels_left"],
+            serde_json::json!([[labels[0], "[09]"], [labels[1], "lixeira embutida"]]),
+            "the one on the tower stays out of it: {reply}"
+        );
+
+        // The note about it is stale too, for whoever did not read the reply.
+        let stale: serde_json::Value = serde_json::from_str(
+            &s.annotations(Parameters(
+                serde_json::from_str(r#"{"stale":true}"#).unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(stale["stale"][0][0], labels[1].as_str(), "{stale}");
+
+        // Or they go in the same step.
+        s.document.write().undo().unwrap();
+        let reply = delete(format!(r#"{{"ids":["{niche}"],"labels":true}}"#));
+        assert!(reply.contains("labels_deleted"), "{reply}");
+        let doc = s.document.read();
+        assert_eq!(doc.home().labels.len(), 1);
+        assert_eq!(doc.home().labels[0].text, "[10]");
+    }
+
+    #[test]
     fn a_dimension_the_counter_moved_away_from_is_caught_and_not_anchored() {
         let s = server();
         s.create(Parameters(
