@@ -70,7 +70,7 @@ impl NewEraMcp {
         Ok(ok(&doc, &ids))
     }
     #[tool(
-        description = "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto, polyline divider); a part of a group takes name, brand, model_name and url on its own — its size and place belong to the group. anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. dry=true answers what it would do — changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), findings resolved and created as issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the same kind check_layout gives (only real defects: a piece resting or built in is never listed), and issues_changed for a clash that stays but grows or shrinks (extent_was) — without writing anything, so a size can be tried before it is applied; dry=\"summary\" answers the same decision without listing the parts a group rebuilds. Otherwise the reply names what changed."
+        description = "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto, polyline divider); a part of a group takes name, brand, model_name and url on its own — its size and place belong to the group. anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. stretch=[part ids] on a group resize says what takes the change: the listed parts grow or shrink, every other part keeps its size and moves along (uprights stay 5.8 cm while the opening between them grows); without it all parts scale together. dry=true answers what it would do — changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), findings resolved and created as issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the same kind check_layout gives (only real defects: a piece resting or built in is never listed), and issues_changed for a clash that stays but grows or shrinks (extent_was) — without writing anything, so a size can be tried before it is applied; dry=\"summary\" answers the same decision without listing the parts a group rebuilds. Otherwise the reply names what changed."
     )]
     pub(crate) fn update(
         &self,
@@ -273,6 +273,75 @@ mod tests {
         assert_eq!(diff["changed"][0]["id"], "f6", "{reply}");
         assert_eq!(diff["changed"][0]["from"]["wdh"][1], 60.0, "{reply}");
     }
+    #[test]
+    fn a_group_resize_says_what_stretches() {
+        let s = server();
+        let part = |id: u64, x0: f64, x1: f64| newera_core::Furniture {
+            id: newera_core::FurnitureId(id),
+            catalog: "box".into(),
+            name: format!("parte {id}"),
+            position: newera_core::Point2::new(100.0 + x0.midpoint(x1), 30.0),
+            width: x1 - x0,
+            depth: 60.0,
+            height: 90.0,
+            ..newera_core::Furniture::default()
+        };
+        {
+            let mut doc = s.document.write();
+            let mut group = part(1, -90.0, 90.0);
+            group.name = "península".into();
+            group.children = vec![
+                part(2, -90.0, -84.2),
+                part(3, -84.2, 25.8),
+                part(4, 25.8, 90.0),
+            ];
+            doc.execute(newera_core::Command::insert(group)).unwrap();
+        }
+        let width = |id: &str| {
+            s.document
+                .read()
+                .home()
+                .find_piece(id.parse().unwrap())
+                .unwrap()
+                .width
+        };
+        s.update(Parameters(UpdateParams {
+            items: serde_json::from_str(r#"[{"id":"f1","w":131,"anchor":"-x","stretch":["f4"]}]"#)
+                .unwrap(),
+            v: None,
+            dry: None,
+        }))
+        .unwrap();
+        assert!(
+            (width("f2") - 5.8).abs() < 1e-6,
+            "the upright keeps its thickness"
+        );
+        assert!(
+            (width("f3") - 110.0).abs() < 1e-6,
+            "the table keeps its size"
+        );
+        assert!(
+            (width("f4") - 15.2).abs() < 1e-6,
+            "the filler takes the change"
+        );
+        let doc = s.document.read();
+        let upright = doc.home().find_piece("f2".parse().unwrap()).unwrap();
+        assert!(
+            (upright.position.x - 12.9).abs() < 1e-6,
+            "anchored at its left face, the upright did not move: {}",
+            upright.position.x
+        );
+        drop(doc);
+        let err = s
+            .update(Parameters(UpdateParams {
+                items: serde_json::from_str(r#"[{"id":"f1","d":80,"stretch":["f9"]}]"#).unwrap(),
+                v: None,
+                dry: None,
+            }))
+            .unwrap_err();
+        assert!(err.message.contains("not a part"), "{err:?}");
+    }
+
     #[test]
     fn a_part_of_a_group_can_be_renamed_but_not_resized_alone() {
         let s = server();

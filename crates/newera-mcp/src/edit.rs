@@ -654,6 +654,11 @@ pub(crate) struct UpdateSpec {
     /// never what a run of joinery wants.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub anchor: Option<String>,
+    /// On a group resize, the parts that take the change (ids); every other
+    /// part keeps its size and moves along. Without it the group scales all
+    /// its parts by the same factor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stretch: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visible: Option<bool>,
     /// Furniture light {lm|w, lamp, k, beam, area, z, on}.
@@ -788,6 +793,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 "opacity",
                 "mirror",
                 "anchor",
+                "stretch",
                 "visible",
                 "hinge_right",
                 "level",
@@ -935,6 +941,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 Element::Label(l)
             }
             Element::Furniture(mut f) => {
+                let before = f.clone();
                 let was = (f.width, f.depth, f.height, f.elevation);
                 f.position = spec.at.unwrap_or(f.position);
                 f.angle = spec.angle.unwrap_or(f.angle);
@@ -944,6 +951,16 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 f.elevation = spec.elev.unwrap_or(f.elevation);
                 if let Some(anchor) = &spec.anchor {
                     hold_face(&mut f, anchor, was)?;
+                }
+                if let Some(parts) = &spec.stretch {
+                    if !f.is_group() {
+                        return Err(format!("stretch applies to a group; {id} has no parts"));
+                    }
+                    let parts: Vec<newera_core::FurnitureId> = parts
+                        .iter()
+                        .map(|raw| raw.parse().map_err(|e| format!("stretch: {e}")))
+                        .collect::<Result<_, _>>()?;
+                    f.follow_group_stretch(&before, &parts)?;
                 }
                 f.pitch = spec.pitch.unwrap_or(f.pitch);
                 f.roll = spec.roll.unwrap_or(f.roll);

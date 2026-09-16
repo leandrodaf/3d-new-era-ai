@@ -480,6 +480,140 @@ impl Furniture {
         }
     }
 
+    /// Like [`Self::follow_group_change`], but only the pieces in `stretch`
+    /// change size along the width and the depth; every other piece keeps its
+    /// size and moves with the stretch that happens before it.
+    ///
+    /// Joinery does not grow by a factor: the uprights keep their thickness
+    /// and the opening between them takes the difference. Scaling the whole
+    /// group turned a 5.8 cm upright into 4.2 and shrank the table the change
+    /// was made for. Along an axis where the size changed and nothing listed
+    /// spans it, the answer is an error rather than a guess. Heights still
+    /// follow the group by proportion.
+    pub fn follow_group_stretch(
+        &mut self,
+        before: &Self,
+        stretch: &[crate::ids::FurnitureId],
+    ) -> Result<(), String> {
+        /// Along one axis: old size, change, the listed stretches merged,
+        /// and their total length.
+        type Stretch = (f64, f64, Vec<(f64, f64)>, f64);
+        /// A local interval of `piece` inside `group`, along the group's x
+        /// (`along_x`) or y.
+        fn interval(group: &Furniture, piece: &Furniture, along_x: bool) -> (f64, f64) {
+            let (cx, cy) = group.to_local(piece.position);
+            let turn = (piece.angle - group.angle).rem_euclid(180.0);
+            let sideways = (turn - 90.0).abs() < 45.0;
+            let half = if along_x == sideways {
+                piece.depth / 2.0
+            } else {
+                piece.width / 2.0
+            };
+            let c = if along_x { cx } else { cy };
+            (c - half, c + half)
+        }
+        fn carry(
+            piece: &mut Furniture,
+            before: &Furniture,
+            new: &Furniture,
+            stretch: &[crate::ids::FurnitureId],
+            map: &dyn Fn(usize, f64) -> f64,
+            sz: f64,
+            turn: f64,
+        ) {
+            let original = piece.clone();
+            let (cx, cy) = before.to_local(original.position);
+            let (x0, x1) = interval(before, &original, true);
+            let (y0, y1) = interval(before, &original, false);
+            let (nx, ny) = if stretch.contains(&original.id) {
+                let (a, b) = (map(0, x0), map(0, x1));
+                let (c, d) = (map(1, y0), map(1, y1));
+                let turn_rel = (original.angle - before.angle).rem_euclid(180.0);
+                let sideways = (turn_rel - 90.0).abs() < 45.0;
+                let (along_w, along_d) = if sideways {
+                    (d - c, b - a)
+                } else {
+                    (b - a, d - c)
+                };
+                piece.width = along_w;
+                piece.depth = along_d;
+                (a.midpoint(b), c.midpoint(d))
+            } else {
+                (map(0, cx), map(1, cy))
+            };
+            piece.position = new.to_plan((nx, ny));
+            piece.angle += turn;
+            piece.height *= sz;
+            piece.elevation = new.elevation + (original.elevation - before.elevation) * sz;
+            for child in &mut piece.children {
+                carry(child, before, new, stretch, map, sz, turn);
+            }
+        }
+        if self.children.is_empty() {
+            return Ok(());
+        }
+        let pieces: Vec<&Furniture> = before.flatten().into_iter().skip(1).collect();
+        let listed: Vec<&Furniture> = pieces
+            .iter()
+            .copied()
+            .filter(|p| stretch.contains(&p.id))
+            .collect();
+        if let Some(missing) = stretch
+            .iter()
+            .find(|id| !pieces.iter().any(|p| p.id == **id))
+        {
+            return Err(format!("{missing} is not a part of {}", self.id));
+        }
+        // For each plan axis of the group: old size, change, and the stretch
+        // map from an old local coordinate to a new one.
+        let mut maps: Vec<Stretch> = Vec::new();
+        for (along_x, old, new) in [
+            (true, before.width, self.width),
+            (false, before.depth, self.depth),
+        ] {
+            let delta = new - old;
+            let mut spans: Vec<(f64, f64)> = listed
+                .iter()
+                .map(|p| interval(before, p, along_x))
+                .collect();
+            spans.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let mut union: Vec<(f64, f64)> = Vec::new();
+            for (a, b) in spans {
+                match union.last_mut() {
+                    Some(last) if a <= last.1 => last.1 = last.1.max(b),
+                    _ => union.push((a, b)),
+                }
+            }
+            let length: f64 = union.iter().map(|(a, b)| b - a).sum();
+            if delta.abs() > 1e-6 && length < 1e-6 {
+                return Err(format!(
+                    "nothing in stretch spans the group's {}; list the parts that take the change",
+                    if along_x { "width" } else { "depth" }
+                ));
+            }
+            maps.push((old, delta, union, length));
+        }
+        let map = |axis: usize, u: f64| {
+            let (old, delta, union, length) = &maps[axis];
+            if delta.abs() <= 1e-6 {
+                return u;
+            }
+            let covered: f64 = union.iter().map(|(a, b)| (u.min(*b) - a).max(0.0)).sum();
+            u + old / 2.0 - (old + delta) / 2.0 + delta * covered / length
+        };
+        let sz = if before.height.abs() > 1e-9 {
+            self.height / before.height
+        } else {
+            1.0
+        };
+        let turn = self.angle - before.angle;
+        let new = self.clone();
+        for child in &mut self.children {
+            carry(child, before, &new, stretch, &map, sz, turn);
+        }
+        Ok(())
+    }
+
     pub fn is_group(&self) -> bool {
         !self.children.is_empty()
     }
@@ -911,6 +1045,98 @@ mod tests {
     #[cfg(test)]
     mod group_tests {
         use super::*;
+
+        #[test]
+        fn a_group_stretches_what_is_listed_and_keeps_the_rest() {
+            let part = |id: u64, x0: f64, x1: f64, d: f64| Furniture {
+                id: FurnitureId(id),
+                position: Point2::new(x0.midpoint(x1), 0.0),
+                width: x1 - x0,
+                depth: d,
+                height: 90.0,
+                ..Furniture::default()
+            };
+            // A peninsula face 180 cm wide: an upright, a 110 cm table with
+            // an arm under it, and a filler — laid out from x = -90.
+            let mut before = Furniture {
+                id: FurnitureId(1),
+                width: 180.0,
+                depth: 60.0,
+                height: 90.0,
+                ..Furniture::default()
+            };
+            before.children = vec![
+                part(2, -90.0, -84.2, 60.0),
+                part(3, -84.2, 25.8, 60.0),
+                part(4, -60.0, -57.0, 24.0),
+                part(5, 25.8, 90.0, 60.0),
+            ];
+            let span = |g: &Furniture, id: u64| {
+                let p = g.children.iter().find(|c| c.id.0 == id).unwrap();
+                (p.position.x - p.width / 2.0, p.position.x + p.width / 2.0)
+            };
+            let close =
+                |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 1e-6 && (a.1 - b.1).abs() < 1e-6;
+
+            // 131 cm, the filler takes it all: the upright and the table keep
+            // their size, and the group still starts at its left face.
+            let mut after = Furniture {
+                width: 131.0,
+                ..before.clone()
+            };
+            after
+                .follow_group_stretch(&before, &[FurnitureId(5)])
+                .unwrap();
+            assert!(
+                close(span(&after, 2), (-65.5, -59.7)),
+                "{:?}",
+                span(&after, 2)
+            );
+            assert!(
+                close(span(&after, 3), (-59.7, 50.3)),
+                "{:?}",
+                span(&after, 3)
+            );
+            assert!(
+                close(span(&after, 5), (50.3, 65.5)),
+                "{:?}",
+                span(&after, 5)
+            );
+            assert!(
+                (span(&after, 4).1 - span(&after, 4).0 - 3.0).abs() < 1e-6,
+                "the arm keeps its size"
+            );
+
+            // The table grows to the tower and the filler goes: both listed,
+            // the change split by their widths — and the upright is still 5.8.
+            let mut both = Furniture {
+                width: 131.0,
+                ..before.clone()
+            };
+            both.follow_group_stretch(&before, &[FurnitureId(3), FurnitureId(5)])
+                .unwrap();
+            assert!((span(&both, 2).1 - span(&both, 2).0 - 5.8).abs() < 1e-6);
+            assert!((span(&both, 5).1 - -span(&both, 2).0 - 131.0 + 65.5 + 65.5).abs() < 1e-6);
+            assert!(
+                close(span(&both, 3), (-59.7, -59.7 + 110.0 * 125.2 / 174.2)),
+                "{:?}",
+                span(&both, 3)
+            );
+
+            // Depth changed and nothing listed spans it: said, not guessed.
+            let mut deeper = Furniture {
+                depth: 70.0,
+                ..before.clone()
+            };
+            let err = deeper.follow_group_stretch(&before, &[]).unwrap_err();
+            assert!(err.contains("depth"), "{err}");
+            assert!(
+                before
+                    .clone()
+                    .follow_group_stretch(&before, &[FurnitureId(9)])
+                    .is_err()
+            );
+        }
 
         #[test]
         fn groups_carry_their_pieces() {
