@@ -150,6 +150,10 @@ fn classify(piece: &Furniture, params: Option<&serde_json::Value>) -> Use {
         "tv" => Use::Tv,
         c if c.starts_with("switch") => Use::Switch,
         c if c.starts_with("outlet") || c == "data-outlet" => Use::Outlet,
+        // A point of a project (a sewer outlet, a water point, a panel) is
+        // what its catalog says, whatever it is named after — "Esgoto — vaso"
+        // is the pipe behind the toilet, not a toilet.
+        _ if piece.discipline.is_some() => Use::Other,
         _ => by_name(piece),
     }
 }

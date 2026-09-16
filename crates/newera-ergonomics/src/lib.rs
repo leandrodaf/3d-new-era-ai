@@ -2280,6 +2280,50 @@ mod tests {
     }
 
     #[test]
+    fn a_project_point_named_after_the_fixture_it_serves_is_not_that_fixture() {
+        let mut home = Home::default();
+        square(&mut home, "Banho social", 200.0, 250.0);
+        let mut toilet = piece(20, "toilet", (60.0, 40.0), (40.0, 63.0, 62.0), 0.0);
+        toilet.name = "Vaso".into();
+        home.furniture.push(toilet);
+        let before = review(&home, &Profile::default());
+        for (id, catalog, name, at) in [
+            (21, "sewer", "Esgoto — vaso banho social", (60.0, 12.0)),
+            (
+                22,
+                "cold-water",
+                "Água fria — vaso banho social",
+                (90.0, 10.0),
+            ),
+            (23, "cold-water", "Água fria — chuveiro", (180.0, 200.0)),
+        ] {
+            let mut point = piece(id, catalog, at, (10.0, 10.0, 5.0), 0.0);
+            point.name = name.into();
+            point.discipline = Some(newera_core::Discipline::Plumbing);
+            home.furniture.push(point);
+        }
+        let scene = Scene::new(&home);
+        for id in 21..=23 {
+            let unit = scene.units.iter().find(|u| u.piece.id == FurnitureId(id));
+            assert!(
+                unit.is_none_or(|u| u.what == Use::Other),
+                "f{id}: {:?}",
+                unit.map(|u| u.what)
+            );
+        }
+        let after = review(&home, &Profile::default());
+        assert!(
+            !after
+                .findings
+                .iter()
+                .any(|f| f.place.contains("Esgoto") || f.place.contains("Água fria")),
+            "{:#?}",
+            after.findings
+        );
+        assert_eq!(after.score, before.score, "{:#?}", after.findings);
+    }
+
+    #[test]
     fn the_sofa_sits_at_a_distance_that_suits_the_screen() {
         let mut home = Home::default();
         square(&mut home, "Sala", 400.0, 400.0);
