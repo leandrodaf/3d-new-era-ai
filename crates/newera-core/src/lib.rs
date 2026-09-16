@@ -60,7 +60,7 @@ pub use levels::{FloorShape, floor_shapes, stair_holes};
 pub use lighting::{LampType, RoomLighting};
 pub use materials::{Material, Pattern, WALL_TYPES, WallFamily, WallType, wall_type};
 pub use measure::{
-    Axis, Clearance, Dir, Obstacle, Solid, Span, Stale, anchor_dimensions, clearance,
+    Axis, Clearance, Dir, Obstacle, Solid, Span, Stale, anchor_dimensions, built_frame, clearance,
     dimensions_following, element_bounds, facing, facing_disagrees, free_span, hold_point,
     obstacles, plan_bounds, stale_annotations, wall_bounds,
 };

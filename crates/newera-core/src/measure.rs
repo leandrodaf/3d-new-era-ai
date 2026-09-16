@@ -286,6 +286,29 @@ pub fn facing_disagrees(piece: &Furniture) -> Option<(&'static str, &'static str
     (built != placed).then_some((built, placed))
 }
 
+/// The piece as it is built, when its `angle` says otherwise: a childless
+/// copy turned so its local `+y` is the face its doors are on, width and
+/// depth swapped for a quarter turn so the box stays where it is.
+///
+/// Anything that measures "in front of", "beside" or "behind" in a piece's
+/// own frame reads that frame from this, so it agrees with [`facing`] —
+/// otherwise a sink cabinet whose doors face the corridor is measured
+/// against its own countertop, at its back.
+#[must_use]
+pub fn built_frame(piece: &Furniture) -> Option<Furniture> {
+    let (built, _) = facing_disagrees(piece)?;
+    let turns = (1..4).find(|k| snap(piece.angle + 90.0 * f64::from(*k)).name() == built)?;
+    let mut frame = Furniture {
+        children: Vec::new(),
+        ..piece.clone()
+    };
+    frame.angle = piece.angle + 90.0 * f64::from(turns);
+    if turns % 2 == 1 {
+        std::mem::swap(&mut frame.width, &mut frame.depth);
+    }
+    Some(frame)
+}
+
 /// Axis-aligned plan box of a piece, `angle`, mirroring and tilt applied.
 ///
 /// This is the `bounds` every read returns, so nobody has to swap width and
@@ -733,8 +756,17 @@ mod tests {
         assert_eq!(facing(&tower), "-y");
         assert_eq!(facing_disagrees(&tower), Some(("-y", "+y")));
 
+        // Read as built: turned to its fronts, over the same floor.
+        let frame = built_frame(&tower).expect("a frame");
+        assert_eq!(snap(frame.angle).name(), "-y");
+        let ((a0, a1), (b0, b1)) = (plan_bounds(&tower), plan_bounds(&frame));
+        assert!(a0.distance(b0) < 1e-9 && a1.distance(b1) < 1e-9);
+        let front = frame.to_plan((0.0, 1.0));
+        assert!(front.y < frame.position.y, "local +y is the built front");
+
         // Turned to agree with what is built, there is nothing to report.
         let turned = island_tower(180.0);
+        assert!(built_frame(&turned).is_none());
         assert_eq!(facing(&turned), "-y");
         assert_eq!(facing_disagrees(&turned), None);
     }

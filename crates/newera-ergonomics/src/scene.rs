@@ -66,11 +66,21 @@ pub struct Unit<'a> {
     pub what: Use,
     /// Joinery parameters, when it is a build.
     pub params: Option<serde_json::Value>,
+    /// The piece turned to face where its doors are, when `angle` says
+    /// another side; see [`Self::frame`].
+    pub built: Option<Furniture>,
 }
 
 impl Unit<'_> {
     pub fn label(&self) -> String {
         format!("{} {}", self.piece.name, self.piece.id)
+    }
+
+    /// The frame "in front of" and "beside" are measured in: the side its
+    /// doors and drawer fronts are built on, as `measure` reads it, not the
+    /// `angle` it happened to be placed with.
+    pub fn frame(&self) -> &Furniture {
+        self.built.as_ref().unwrap_or(self.piece)
     }
 }
 
@@ -414,6 +424,7 @@ impl<'a> Scene<'a> {
                 piece: top,
                 what,
                 params,
+                built: newera_core::built_frame(top),
             });
             // Items embedded in joinery count on their own (a TV on its panel).
             for child in top
@@ -425,6 +436,7 @@ impl<'a> Scene<'a> {
                     piece: child,
                     what: classify(child, None),
                     params: None,
+                    built: None,
                 });
             }
         }
@@ -515,7 +527,7 @@ impl<'a> Scene<'a> {
         max: f64,
         span: (f64, f64),
     ) -> (f64, Option<usize>) {
-        let piece = self.units[i].piece;
+        let piece = self.units[i].frame();
         let (hw, hd) = (piece.width / 2.0, piece.depth / 2.0);
         // The band in the piece's frame, 2 cm in from the corners so
         // neighbours that merely touch a corner don't count.

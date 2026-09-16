@@ -408,7 +408,7 @@ impl Review<'_, '_> {
                     let fix = match side {
                         // In front: push the piece in the way back by the shortfall.
                         Side::Front => blocker.and_then(|j| {
-                            let piece = scene.units[i].piece;
+                            let piece = scene.units[i].frame();
                             let way = piece.to_plan((0.0, 1.0));
                             let dir = (way.x - piece.position.x, way.y - piece.position.y);
                             push_away(scene, j, dir, short.ceil())
@@ -421,7 +421,7 @@ impl Review<'_, '_> {
                             };
                             let spare = scene.free(i, other, short + min + 1.0, span);
                             (spare - short + 0.5 >= min).then(|| {
-                                let piece = scene.units[i].piece;
+                                let piece = scene.units[i].frame();
                                 let to = piece.to_plan((sign * short.ceil(), 0.0));
                                 let round = |v: f64| (v * 10.0).round() / 10.0;
                                 serde_json::json!({
@@ -2596,6 +2596,63 @@ mod tests {
         assert!(
             cites(&report, Severity::Dica, "nbr13103")
                 && !cites(&report, Severity::Erro, "nbr13103"),
+            "{report:#?}"
+        );
+    }
+
+    #[test]
+    fn the_front_is_where_the_doors_are_built_not_where_angle_points() {
+        // A sink cabinet imported with angle 0 (front at +y) whose doors and
+        // drawers are all built on its -y face, toward a 112 cm corridor. At
+        // +y it touches the stone of the peninsula behind it.
+        let mut home = Home::default();
+        square(&mut home, "Cozinha", 300.0, 300.0);
+        let mut sink = piece(20, "sink-counter", (150.0, 150.0), (120.0, 60.0, 90.0), 0.0);
+        let panel = |id: u64, name: &str, elev: f64| {
+            let mut part = piece(id, "panel", (150.0, 121.0), (118.0, 2.0, 30.0), 0.0);
+            part.name = name.to_owned();
+            part.elevation = elev;
+            part
+        };
+        sink.children = vec![
+            panel(21, "Porta esquerda", 0.0),
+            panel(22, "Porta direita", 0.0),
+            panel(23, "Gaveta", 30.0),
+            panel(24, "Frente fixa", 60.0),
+        ];
+        assert_eq!(newera_core::facing(&sink), "-y");
+        home.furniture.push(sink);
+        home.furniture.push(piece(
+            30,
+            "base-cabinet",
+            (150.0, 200.0),
+            (120.0, 40.0, 90.0),
+            180.0,
+        ));
+        let report = review(&home, &Profile::default());
+        assert!(
+            !report
+                .findings
+                .iter()
+                .any(|f| f.place.contains("f20") && f.message.contains("livres à frente")),
+            "the corridor is at the doors, not at the stone behind: {report:#?}"
+        );
+
+        // Squeeze the corridor at the doors and the same rule speaks, about
+        // the side that is really used.
+        home.furniture.push(piece(
+            31,
+            "base-cabinet",
+            (150.0, 90.0),
+            (120.0, 30.0, 90.0),
+            0.0,
+        ));
+        let report = review(&home, &Profile::default());
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.place.contains("f20") && f.message.contains("15 cm livres à frente")),
             "{report:#?}"
         );
     }
