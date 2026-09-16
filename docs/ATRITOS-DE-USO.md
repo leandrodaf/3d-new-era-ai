@@ -163,6 +163,71 @@ lugar em que o cômodo sem porta agora entra (`no_door`). Ou o catálogo trazer
 um fluxo padrão por tipo de peça, para que um ponto de luz recém-colocado já
 ilumine algo plausível.
 
+## 40. Cabear é digitar coordenada por coordenada
+
+Para levar rede aos 4 pontos RJ45, TV aos 3 coaxiais e os troncos de força, a
+partir dos dois quadros:
+
+```
+electrical(action="cable", kind="data", pts=[[170,750],[320,750]])
+→ {"added": ["pl1579"]}
+```
+
+E mais oito chamadas iguais, cada uma com a polilinha digitada à mão a partir
+das coordenadas lidas antes no `/api/home`. O retorno de cada uma é só o id da
+polilinha; quem diz se o cabo chegou é o check seguinte:
+
+```
+electrical(check) → ["alerta","Cabo de rede (Cat 6)",
+                     "Pontos sem cabo chegando: f1555, f1550, f1567."]
+```
+
+Foi esse alerta que guiou as chamadas seguintes, uma de cada vez, até a lista
+esvaziar. Nove chamadas para uma intenção só — e uma polilinha que erra o ponto
+por um dígito é aceita em silêncio, aparecendo apenas na conferência posterior.
+
+A ferramenta já sabe tudo o que falta para traçar sozinha: onde está cada
+ponto, onde está o quadro da espécie, quais pontos estão sem cabo, e como medir
+o percurso com a folga das descidas.
+
+**Reproduzir:** cabear qualquer projeto com mais de dois pontos.
+
+**Deveria:** `cable` aceitar ids — `cable(kind="data", ids=[...])` ligando cada
+um ao seu quadro. Mantendo a polilinha à mão para quando o percurso é imposto
+por shaft, viga ou forro.
+
+## 41. `electrical` não tem `accept`, e o projeto não fecha
+
+`ergonomics` e `check_layout` têm `accept=[[key, motivo]]`: o achado continua
+visível com a razão escrita, para de custar nota, e `orphaned` avisa quando a
+razão deixa de valer. Foi assim que esta planta chegou a 99 honestamente.
+
+`electrical` não tem. Os dois findings do Banho suíte — que são o caso 36, um
+banheiro classificado como cômodo de permanência por causa da palavra "suíte"
+no nome — voltam em toda chamada, sem `key` e sem onde registrar que já foram
+analisados.
+
+O projeto elétrico não fecha limpo, e quem abrir a planta daqui a seis meses
+reinvestiga do zero: não há onde dizer que o motivo é um bug de classificação,
+nem que a alternativa seria renomear um cômodo cujo nome está certo.
+
+**Reproduzir:** qualquer finding do `electrical` que não se queira corrigir.
+
+**Deveria:** `accept` com `key` e `orphaned`, igual às outras duas.
+
+## 42. Um circuito por chamada
+
+`electrical(action="assign")` recebe `ids` e um `circuit`. Os 7 circuitos do
+apartamento — C1 e C2 de iluminação, C3 a C7 de tomadas — custaram 7 chamadas,
+cada uma com a lista de ids colada à mão.
+
+O conjunto é sempre pensado de uma vez: a divisão em circuitos é uma decisão só,
+que separa iluminação de tomadas e isola cozinha, lavanderia e molhados.
+Ninguém atribui um circuito hoje e outro semana que vem.
+
+**Deveria:** aceitar um mapa — `{"C1": [...], "C2": [...]}` — numa chamada, um
+passo de undo.
+
 ---
 
 ## Conferidos na planta real
