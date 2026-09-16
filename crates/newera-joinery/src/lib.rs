@@ -210,7 +210,45 @@ pub fn merged(stored: &str, patch: &serde_json::Value) -> Result<Build, String> 
             }
         }
     }
-    serde_json::from_value(value).map_err(|e| format!("invalid parameters: {e}"))
+    parse_params(&value)
+}
+
+/// Reads parameters, naming the field that does not fit.
+///
+/// serde says `invalid type: boolean true, expected u32` and not where: in a
+/// request of ten keys, two of them booleans, that is a guessing game. Every
+/// field of a build has a default, so each key can be tried on its own, and
+/// the first one that fails alone is the one to name.
+///
+/// # Errors
+/// When the parameters don't describe what `T` is, with the field named.
+pub fn parse_params<T: serde::de::DeserializeOwned>(
+    value: &serde_json::Value,
+) -> Result<T, String> {
+    let error = match T::deserialize(value) {
+        Ok(parsed) => return Ok(parsed),
+        Err(e) => e.to_string(),
+    };
+    let culprit = value.as_object().and_then(|fields| {
+        let tag = fields.get("kind").cloned();
+        fields
+            .iter()
+            .filter(|(key, _)| *key != "kind")
+            .find_map(|(key, v)| {
+                let mut alone = serde_json::Map::new();
+                if let Some(tag) = &tag {
+                    alone.insert("kind".to_owned(), tag.clone());
+                }
+                alone.insert(key.clone(), v.clone());
+                match T::deserialize(&serde_json::Value::Object(alone)) {
+                    Err(e) if !e.to_string().starts_with("missing field") => {
+                        Some(format!("`{key}`: {e}"))
+                    }
+                    _ => None,
+                }
+            })
+    });
+    Err(format!("invalid parameters: {}", culprit.unwrap_or(error)))
 }
 
 /// The build as a furniture group placed with its back-left-bottom corner
@@ -341,6 +379,25 @@ pub(crate) const MDF_WHITE: [u8; 3] = [238, 236, 230];
 #[cfg(test)]
 mod tests {
     #![allow(clippy::float_cmp)]
+
+    #[test]
+    fn a_wrong_type_names_its_field() {
+        let err = super::parse_params::<super::RunParams>(&serde_json::json!({
+            "row": "base", "h": 87, "d": 65, "top": true, "drawers": true
+        }))
+        .unwrap_err();
+        assert!(err.contains("`drawers`"), "{err}");
+        assert!(!err.contains("`top`"), "{err}");
+        let err = super::parse_params::<super::Build>(
+            &serde_json::json!({"kind": "cabinet", "w": "largo"}),
+        )
+        .unwrap_err();
+        assert!(err.contains("`w`"), "{err}");
+        assert!(
+            super::parse_params::<super::Build>(&serde_json::json!({"kind": "cabinet", "w": 80}))
+                .is_ok()
+        );
+    }
 
     use super::*;
 

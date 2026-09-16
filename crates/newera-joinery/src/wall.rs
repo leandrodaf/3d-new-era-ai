@@ -266,8 +266,7 @@ fn resolve(home: &Home, p: &CabinetRunParams) -> Result<Request, String> {
     for (key, value) in &given {
         merged_params.insert(key.clone(), value.clone());
     }
-    let params: RunParams = serde_json::from_value(Value::Object(merged_params))
-        .map_err(|e| format!("invalid parameters: {e}"))?;
+    let params: RunParams = crate::parse_params(&Value::Object(merged_params))?;
     let length = wall.start.distance(wall.end);
     let u = (
         (wall.end.x - wall.start.x) / length,

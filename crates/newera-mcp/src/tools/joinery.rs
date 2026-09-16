@@ -86,8 +86,8 @@ impl NewEraMcp {
             (None, Some(kind)) => {
                 let mut value = patch.clone();
                 value["kind"] = serde_json::Value::String(kind.clone());
-                let build: newera_joinery::Build = serde_json::from_value(value)
-                    .map_err(|e| invalid(format!("invalid parameters: {e}")))?;
+                let build: newera_joinery::Build =
+                    newera_joinery::parse_params(&value).map_err(invalid)?;
                 (build, None)
             }
             (None, None) => {
