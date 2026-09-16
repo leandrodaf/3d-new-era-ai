@@ -16,7 +16,13 @@ use crate::edit::{self, CreateParams, UpdateSpec};
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct UpdateParams {
+    #[serde(default)]
     pub(crate) items: Vec<UpdateSpec>,
+    /// Rename in bulk by a rule instead of listing items: every name (pieces
+    /// and the parts of groups) or label text matching `pattern` has it
+    /// replaced by `to`, in one undoable step.
+    #[serde(default)]
+    pub(crate) rename: Option<edit::RenameSpec>,
     /// Plan version (tab) to write to; switches to it first.
     pub(crate) v: Option<usize>,
     /// Try it without applying: reports what would change, the clearances
@@ -70,23 +76,39 @@ impl NewEraMcp {
         Ok(ok(&doc, &ids))
     }
     #[tool(
-        description = "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto, polyline divider); a part of a group takes name, brand, model_name and url on its own — its size and place belong to the group. anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. stretch=[part ids] on a group resize says what takes the change: the listed parts grow or shrink, every other part keeps its size and moves along (uprights stay 5.8 cm while the opening between them grows); without it all parts scale together. dry=true answers what it would do — changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), findings resolved and created as issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the same kind check_layout gives (only real defects: a piece resting or built in is never listed), and issues_changed for a clash that stays but grows or shrinks (extent_was) — without writing anything, so a size can be tried before it is applied; dry=\"summary\" answers the same decision without listing the parts a group rebuilds. Otherwise the reply names what changed."
+        description = "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto, polyline divider); a part of a group takes name, brand, model_name and url on its own — its size and place belong to the group. anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. stretch=[part ids] on a group resize says what takes the change: the listed parts grow or shrink, every other part keeps its size and moves along (uprights stay 5.8 cm while the opening between them grows); without it all parts scale together. dry=true answers what it would do — changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), findings resolved and created as issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the same kind check_layout gives (only real defects: a piece resting or built in is never listed), and issues_changed for a clash that stays but grows or shrinks (extent_was) — without writing anything, so a size can be tried before it is applied; dry=\"summary\" answers the same decision without listing the parts a group rebuilds. Otherwise the reply names what changed. rename {pattern, to, what: names|labels} renames in bulk by a regex (Rust syntax, `(?i)` for any case, `$1` in to): every piece name — parts of groups included — or label text that matches, in one step; with dry it lists them first."
     )]
     pub(crate) fn update(
         &self,
         Parameters(p): Parameters<UpdateParams>,
     ) -> Result<String, ErrorData> {
+        if p.items.is_empty() && p.rename.is_none() {
+            return Err(invalid(
+                "nothing to change: give items, or rename {pattern, to}",
+            ));
+        }
+        let apply = |doc: &mut newera_core::Document,
+                     items: Vec<UpdateSpec>,
+                     rename: Option<&edit::RenameSpec>| {
+            if let Some(rule) = rename {
+                edit::rename(doc, rule).map_err(invalid)?;
+            }
+            if !items.is_empty() {
+                edit::update(doc, items).map_err(invalid)?;
+            }
+            Ok(())
+        };
         if Dry::on(p.dry.as_ref()) {
             let doc = self.document.read();
-            let items = p.items;
+            let (items, rename) = (p.items, p.rename);
             return reply::preview_with(&doc, Dry::brief(p.dry.as_ref()), move |scratch| {
-                edit::update(scratch, items).map_err(invalid)
+                apply(scratch, items, rename.as_ref())
             });
         }
         let mut doc = self.document.write();
         on_variant(&mut doc, p.v)?;
         let before = doc.home().clone();
-        edit::update(&mut doc, p.items).map_err(invalid)?;
+        apply(&mut doc, p.items, p.rename.as_ref())?;
         Ok(applied(&doc, &before))
     }
     #[tool(
@@ -231,6 +253,7 @@ mod tests {
         let dry: serde_json::Value = serde_json::from_str(
             &s.update(Parameters(UpdateParams {
                 items: serde_json::from_str(r#"[{"id":"f6","d":100}]"#).unwrap(),
+                rename: None,
                 v: None,
                 dry: Some(Dry::All(true)),
             }))
@@ -263,6 +286,7 @@ mod tests {
         let reply = s
             .update(Parameters(UpdateParams {
                 items: serde_json::from_str(r#"[{"id":"f6","d":100}]"#).unwrap(),
+                rename: None,
                 v: None,
                 dry: None,
             }))
@@ -331,6 +355,7 @@ mod tests {
             &s.update(Parameters(UpdateParams {
                 items: serde_json::from_str(&format!(r#"[{{"id":"{id}","hinge_right":{right}}}]"#))
                     .unwrap(),
+                rename: None,
                 v: None,
                 dry: Some(Dry::All(true)),
             }))
@@ -381,6 +406,7 @@ mod tests {
         s.update(Parameters(UpdateParams {
             items: serde_json::from_str(r#"[{"id":"f1","w":131,"anchor":"-x","stretch":["f4"]}]"#)
                 .unwrap(),
+            rename: None,
             v: None,
             dry: None,
         }))
@@ -408,6 +434,7 @@ mod tests {
         let err = s
             .update(Parameters(UpdateParams {
                 items: serde_json::from_str(r#"[{"id":"f1","d":80,"stretch":["f9"]}]"#).unwrap(),
+                rename: None,
                 v: None,
                 dry: None,
             }))
@@ -443,6 +470,7 @@ mod tests {
         let update = |json: &str| {
             s.update(Parameters(UpdateParams {
                 items: serde_json::from_str(json).unwrap(),
+                rename: None,
                 v: None,
                 dry: None,
             }))
@@ -572,6 +600,7 @@ mod tests {
                     r#"[{{"id":"{id}","d":80,"anchor":"{anchor}"}}]"#
                 ))
                 .unwrap(),
+                rename: None,
                 v: None,
                 dry: None,
             }))
@@ -603,6 +632,7 @@ mod tests {
         // Without an anchor the center is what stays, which is the old trap.
         s.update(Parameters(UpdateParams {
             items: serde_json::from_str(r#"[{"id":"f5","d":100}]"#).unwrap(),
+            rename: None,
             v: None,
             dry: None,
         }))
@@ -645,6 +675,7 @@ mod tests {
         .unwrap();
         s.update(Parameters(UpdateParams {
             items: specs,
+            rename: None,
             v: None,
             dry: None,
         }))
@@ -669,6 +700,7 @@ mod tests {
                 .unwrap();
         s.update(Parameters(UpdateParams {
             items: vec![spec],
+            rename: None,
             v: None,
             dry: None,
         }))
@@ -744,6 +776,7 @@ mod tests {
             serde_json::from_str(&format!(r#"{{"id":"{wall}","h_end":300}}"#)).unwrap();
         s.update(Parameters(UpdateParams {
             items: vec![spec],
+            rename: None,
             v: None,
             dry: None,
         }))
@@ -797,6 +830,7 @@ mod tests {
                 .unwrap();
         s.update(Parameters(UpdateParams {
             items: vec![spec],
+            rename: None,
             v: None,
             dry: None,
         }))
@@ -916,6 +950,7 @@ mod tests {
         let id = s.document.read().home().walls[1].id.to_string();
         s.update(Parameters(UpdateParams {
             items: serde_json::from_str(&format!(r#"[{{"id":"{id}","b":[300,-4]}}]"#)).unwrap(),
+            rename: None,
             v: None,
             dry: None,
         }))

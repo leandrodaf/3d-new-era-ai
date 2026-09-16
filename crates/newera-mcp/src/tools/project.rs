@@ -26,6 +26,12 @@ pub(crate) struct SetHomeParams {
     /// Kept with the project, so `ergonomics`, `check_layout` and every dry
     /// run weigh the same municipal rules.
     city: Option<String>,
+    /// Project properties to set, `{key: "value"}`, or remove, `{key: null}`
+    /// — what an import leaves behind (window sizes, panel dividers, ids of
+    /// the program it came from). With `level`, that storey's instead.
+    properties: Option<serde_json::Map<String, serde_json::Value>>,
+    /// Storey whose properties `properties` changes, e.g. `lv2`.
+    level: Option<String>,
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct PluginsParams {
@@ -67,7 +73,7 @@ fn with_extension(path: PathBuf) -> PathBuf {
 #[tool_router(router = project_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Rename the project, set the compass (north), and set the city whose building code applies (city=sao-paulo). The city belongs to the project: ergonomics, check_layout and every dry run then weigh the same municipal rules, so a change can be tested against the score it moves."
+        description = "Rename the project, set or remove project properties (properties {key: value|null}, or a storey's with level), set the compass (north), and set the city whose building code applies (city=sao-paulo). The city belongs to the project: ergonomics, check_layout and every dry run then weigh the same municipal rules, so a change can be tested against the score it moves."
     )]
     pub(crate) fn set_home(
         &self,
@@ -99,6 +105,39 @@ impl NewEraMcp {
                     ..c.clone()
                 },
             });
+        }
+        if let Some(changes) = &p.properties {
+            let apply = |target: &mut newera_core::Properties| -> Result<(), ErrorData> {
+                for (key, value) in changes {
+                    match value {
+                        serde_json::Value::Null => {
+                            target.remove(key);
+                        }
+                        serde_json::Value::String(text) => {
+                            target.insert(key.clone(), text.clone());
+                        }
+                        other => {
+                            target.insert(key.clone(), other.to_string());
+                        }
+                    }
+                }
+                Ok(())
+            };
+            if let Some(raw) = &p.level {
+                let id: newera_core::LevelId =
+                    raw.parse().map_err(|e| invalid(format!("level: {e}")))?;
+                let mut level = doc
+                    .home()
+                    .level(id)
+                    .cloned()
+                    .ok_or_else(|| invalid(format!("no storey {raw}")))?;
+                apply(&mut level.properties)?;
+                commands.push(Command::update(level));
+            } else {
+                let mut properties = doc.home().properties.clone();
+                apply(&mut properties)?;
+                commands.push(Command::SetProperties { properties });
+            }
         }
         if commands.is_empty() {
             return Err(invalid("nothing to change"));
@@ -311,6 +350,108 @@ mod tests {
     use super::*;
     use crate::edit::CreateParams;
     use crate::tools::server;
+
+    #[test]
+    fn an_import_is_cleaned_by_rule_not_one_element_at_a_time() {
+        let s = server();
+        {
+            let mut doc = s.document.write();
+            let part = |id: u64, name: &str| newera_core::Furniture {
+                id: newera_core::FurnitureId(id),
+                catalog: "box".into(),
+                name: name.to_owned(),
+                width: 30.0,
+                depth: 30.0,
+                height: 30.0,
+                ..newera_core::Furniture::default()
+            };
+            let mut tower = part(1, "12 — Torre quente");
+            tower.children = vec![
+                part(2, "48 — Gabinete do tanque 80,5 cm"),
+                part(3, "puxador"),
+            ];
+            doc.execute(Command::Batch {
+                commands: vec![
+                    Command::insert(tower),
+                    Command::insert(part(4, "Mesa Dover")),
+                    Command::SetProperties {
+                        properties: [
+                            (
+                                "com.eteks.sweethome3d.SweetHome3D.FrameX".to_owned(),
+                                "40".to_owned(),
+                            ),
+                            ("keep".to_owned(), "yes".to_owned()),
+                        ]
+                        .into(),
+                    },
+                ],
+            })
+            .unwrap();
+            for text in ["[09]", "[10]", "Vidro canelado"] {
+                let label = newera_core::Label {
+                    id: doc.new_label_id(),
+                    text: text.to_owned(),
+                    ..newera_core::Label::default()
+                };
+                doc.execute(Command::insert(label)).unwrap();
+            }
+        }
+        // The index codes, found by pattern.
+        let found: serde_json::Value = serde_json::from_str(
+            &s.annotations(Parameters(
+                serde_json::from_str(r#"{"q":"re:^\\[\\d+\\]$"}"#).unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(found["labels"].as_array().unwrap().len(), 2, "{found}");
+
+        // The numbered prefixes go in one call, parts of groups included.
+        let rename = |json: &str| s.update(Parameters(serde_json::from_str(json).unwrap()));
+        let dry: serde_json::Value = serde_json::from_str(
+            &rename(r#"{"rename":{"pattern":"^\\d+ — ","to":""},"dry":true}"#).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(dry["changed"].as_array().unwrap().len(), 2, "{dry}");
+        rename(r#"{"rename":{"pattern":"^\\d+ — ","to":""}}"#).unwrap();
+        let names: Vec<String> = {
+            let doc = s.document.read();
+            doc.home()
+                .furniture
+                .iter()
+                .flat_map(newera_core::Furniture::flatten)
+                .map(|f| f.name.clone())
+                .collect()
+        };
+        assert_eq!(
+            names,
+            [
+                "Torre quente",
+                "Gabinete do tanque 80,5 cm",
+                "puxador",
+                "Mesa Dover"
+            ]
+        );
+        let nothing = rename(r#"{"rename":{"pattern":"^\\d+ — ","to":""}}"#).unwrap_err();
+        assert!(nothing.message.contains("nothing matches"), "{nothing:?}");
+
+        // The properties an import left, removed by name.
+        s.set_home(Parameters(
+            serde_json::from_str(
+                r#"{"properties":{"com.eteks.sweethome3d.SweetHome3D.FrameX":null,"source":"limpo"}}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let doc = s.document.read();
+        let props = &doc.home().properties;
+        assert!(
+            !props.contains_key("com.eteks.sweethome3d.SweetHome3D.FrameX"),
+            "{props:?}"
+        );
+        assert_eq!(props.get("keep").map(String::as_str), Some("yes"));
+        assert_eq!(props.get("source").map(String::as_str), Some("limpo"));
+    }
 
     #[test]
     fn an_undo_that_switches_the_plans_annotations_off_says_so() {

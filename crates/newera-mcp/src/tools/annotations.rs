@@ -24,7 +24,8 @@ pub(crate) struct AnnotationParams {
     /// Tie every straight dimension to what its ends touch right now, so from
     /// here on they follow the drawing. Run it while the numbers are right.
     anchor: Option<bool>,
-    /// Search label text, accent- and case-insensitive, e.g. `porta`.
+    /// Search label text, accent- and case-insensitive, e.g. `porta`; or
+    /// `re:<pattern>` for a regular expression.
     q: Option<String>,
     /// Show engineering dimension chains (`auto_dimensions` in the project JSON).
     #[serde(alias = "auto_dimensions")]
@@ -127,7 +128,7 @@ impl NewEraMcp {
         Ok(serde_json::json!({"active": home.active_discipline, "hidden": home.hidden_disciplines}).to_string())
     }
     #[tool(
-        description = "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first; one whose anchor died with a deleted piece is tied again to what it touches now, or else released (no anchor) instead of staying stale. q=<text> searches label text. Set any of dims (engineering dimension chains; auto_dimensions in the project JSON), refs (room reference schedule with tags; references — a tag, once given, stays with its piece: new pieces take the next free number and removed ones leave a gap, so a print and the plan a week later agree; renumber=true numbers them again in reading order), details (brand/model/link in refs; reference_details), legend (symbol legend with counts): a switch answers with the modes, changed, and what it shows — chains [[from,to,cm]] for dims, symbols {discipline:[[name,count]]} for legend — not the schedule; refs=true, or no switch at all, returns {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. bake=true turns the automatic chains into editable dimensions (ids returned). Give pieces brand/model/url via update."
+        description = "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first; one whose anchor died with a deleted piece is tied again to what it touches now, or else released (no anchor) instead of staying stale. q=<text> searches label text on every storey; q=re:<pattern> by a regex (`re:^\\[\\d+\\]$` finds index codes). Set any of dims (engineering dimension chains; auto_dimensions in the project JSON), refs (room reference schedule with tags; references — a tag, once given, stays with its piece: new pieces take the next free number and removed ones leave a gap, so a print and the plan a week later agree; renumber=true numbers them again in reading order), details (brand/model/link in refs; reference_details), legend (symbol legend with counts): a switch answers with the modes, changed, and what it shows — chains [[from,to,cm]] for dims, symbols {discipline:[[name,count]]} for legend — not the schedule; refs=true, or no switch at all, returns {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. bake=true turns the automatic chains into editable dimensions (ids returned). Give pieces brand/model/url via update."
     )]
     pub(crate) fn annotations(
         &self,
@@ -217,11 +218,23 @@ impl NewEraMcp {
                 }
             }
             if let Some(query) = &p.q {
-                let needle = newera_core::fold(query);
-                let rows: Vec<serde_json::Value> = view
+                // `re:` searches by a pattern — the way to sweep a naming
+                // convention like `[09]` — and anything else by the words,
+                // accent- and case-insensitive. Every storey is searched.
+                let matches: Box<dyn Fn(&str) -> bool> =
+                    if let Some(pattern) = query.strip_prefix("re:") {
+                        let re = regex_lite::Regex::new(pattern)
+                            .map_err(|e| invalid(format!("q: {e}")))?;
+                        Box::new(move |text| re.is_match(text))
+                    } else {
+                        let needle = newera_core::fold(query);
+                        Box::new(move |text| newera_core::fold(text).contains(&needle))
+                    };
+                let rows: Vec<serde_json::Value> = doc
+                    .home()
                     .labels
                     .iter()
-                    .filter(|l| newera_core::fold(&l.text).contains(&needle))
+                    .filter(|l| matches(&l.text))
                     .map(compact::label)
                     .collect();
                 out.insert("labels".to_owned(), serde_json::json!(rows));
@@ -570,6 +583,7 @@ mod tests {
                 labels[1]
             ))
             .unwrap(),
+            rename: None,
             v: None,
             dry: None,
         }))
@@ -655,6 +669,7 @@ mod tests {
                 r#"[{{"id":"{counter}","d":65,"anchor":"back"}}]"#
             ))
             .unwrap(),
+            rename: None,
             v: None,
             dry: None,
         }))
@@ -786,6 +801,7 @@ mod tests {
         // Deepen the counter: the dimension follows it, the note does not.
         s.update(Parameters(UpdateParams {
             items: serde_json::from_str(r#"[{"id":"f7","d":100,"anchor":"back"}]"#).unwrap(),
+            rename: None,
             v: None,
             dry: None,
         }))
@@ -910,6 +926,7 @@ mod tests {
         // typed, which is how a plan ends up lying to the workshop.
         s.update(Parameters(UpdateParams {
             items: serde_json::from_str(r#"[{"id":"f7","w":59.85,"d":72}]"#).unwrap(),
+            rename: None,
             v: None,
             dry: None,
         }))
@@ -923,6 +940,7 @@ mod tests {
         // Said outright, the tie holds wherever the note sits.
         s.update(Parameters(UpdateParams {
             items: serde_json::from_str(r#"[{"id":"t5","at":[560,20],"about":"f7"}]"#).unwrap(),
+            rename: None,
             v: None,
             dry: None,
         }))
@@ -1105,6 +1123,7 @@ mod tests {
         .unwrap();
         s.update(Parameters(UpdateParams {
             items: vec![spec],
+            rename: None,
             v: None,
             dry: None,
         }))

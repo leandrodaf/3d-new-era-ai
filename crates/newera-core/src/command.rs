@@ -115,6 +115,27 @@ impl Command {
                     let old = old.clone();
                     new.follow_group_change(&old);
                 }
+                // A part of a group is replaced where it lives, inside its
+                // group: the REST API reaches parts the way MCP does, so a
+                // batch of renames need not split into two paths.
+                if let crate::Element::Furniture(part) = &element
+                    && home.piece(part.id).is_none()
+                    && home.part_owner(part.id).is_some()
+                {
+                    element.validate()?;
+                    let crate::Element::Furniture(part) = element else {
+                        unreachable!("matched above")
+                    };
+                    let slot = home
+                        .furniture
+                        .iter_mut()
+                        .find_map(|top| top.find_part_mut(part.id))
+                        .ok_or(crate::CoreError::NotFound(part.id.into()))?;
+                    let previous = std::mem::replace(slot, part);
+                    return Ok(Self::Update {
+                        element: crate::Element::Furniture(previous),
+                    });
+                }
                 let previous = home.replace(element)?;
                 Ok(Self::Update { element: previous })
             }

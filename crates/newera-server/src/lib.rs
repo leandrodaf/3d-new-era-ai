@@ -752,6 +752,58 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_part_of_a_group_is_updated_through_the_api_like_a_piece() {
+        let document = SharedDocument::new(Document::default());
+        {
+            let mut doc = document.write();
+            let part = |id: u64, name: &str| newera_core::Furniture {
+                id: newera_core::FurnitureId(id),
+                catalog: "box".into(),
+                name: name.to_owned(),
+                width: 30.0,
+                depth: 30.0,
+                height: 30.0,
+                ..newera_core::Furniture::default()
+            };
+            let mut group = part(1, "torre");
+            group.children = vec![part(2, "48 — gabinete"), part(3, "puxador")];
+            doc.execute(Command::insert(group)).unwrap();
+        }
+        let mut renamed = document
+            .read()
+            .home()
+            .find_piece(newera_core::FurnitureId(2))
+            .unwrap()
+            .clone();
+        renamed.name = "gabinete".into();
+        let body = serde_json::json!({
+            "commands": [{"op": "update", "element": newera_core::Element::Furniture(renamed)}]
+        });
+        let app = router(document.clone(), DEFAULT_ADDR, CancellationToken::new());
+        let response = app
+            .oneshot(
+                Request::post("/api/commands")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let text = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&text));
+        let doc = document.read();
+        assert_eq!(
+            doc.home()
+                .find_piece(newera_core::FurnitureId(2))
+                .unwrap()
+                .name,
+            "gabinete"
+        );
+        assert_eq!(doc.home().furniture.len(), 1, "still a part of its group");
+    }
+
+    #[tokio::test]
     async fn a_batch_that_switches_annotations_off_says_so() {
         let document = SharedDocument::new(Document::default());
         document

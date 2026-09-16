@@ -30,6 +30,7 @@ schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio-util.workspace = true
+regex-lite = "0.1.9"
 
 [dev-dependencies]
 tokio.workspace = true

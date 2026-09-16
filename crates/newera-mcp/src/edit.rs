@@ -1010,6 +1010,66 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
     doc.execute(Command::Batch { commands }).map_err(core)
 }
 
+/// A rename by rule: `pattern` replaced by `to` wherever it matches.
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub(crate) struct RenameSpec {
+    /// Regular expression, e.g. `^\\d+ — ` for a numbered prefix.
+    pub pattern: String,
+    /// Replacement; `$1` refers to a group, empty removes the match.
+    #[serde(default)]
+    pub to: String,
+    /// `names` (default: pieces and the parts of groups) or `labels`.
+    pub what: Option<String>,
+}
+
+/// Renames every piece (parts included) or label matching a rule, as one
+/// step — the 59 names of an import that all began with an old index number
+/// were one rule, and without it each passed whole through an agent's
+/// context.
+pub(crate) fn rename(doc: &mut Document, spec: &RenameSpec) -> EditResult<()> {
+    let re = regex_lite::Regex::new(&spec.pattern).map_err(|e| format!("pattern: {e}"))?;
+    let mut commands = Vec::new();
+    match spec.what.as_deref().unwrap_or("names") {
+        "names" => {
+            fn walk(piece: &mut newera_core::Furniture, re: &regex_lite::Regex, to: &str) -> bool {
+                let renamed = re.replace_all(&piece.name, to).trim().to_owned();
+                let mut changed = renamed != piece.name;
+                if changed {
+                    piece.name = renamed;
+                }
+                for child in &mut piece.children {
+                    changed |= walk(child, re, to);
+                }
+                changed
+            }
+            for top in &doc.home().furniture {
+                let mut copy = top.clone();
+                if walk(&mut copy, &re, &spec.to) {
+                    commands.push(Command::update(copy));
+                }
+            }
+        }
+        "labels" => {
+            for label in &doc.home().labels {
+                let renamed = re
+                    .replace_all(&label.text, spec.to.as_str())
+                    .trim()
+                    .to_owned();
+                if renamed != label.text {
+                    let mut copy = label.clone();
+                    copy.text = renamed;
+                    commands.push(Command::update(copy));
+                }
+            }
+        }
+        other => return Err(format!("rename what: names or labels (not {other})")),
+    }
+    if commands.is_empty() {
+        return Err(format!("rename: nothing matches `{}`", spec.pattern));
+    }
+    doc.execute(Command::Batch { commands }).map_err(core)
+}
+
 /// Fields a part of a group takes on its own: what it is called and what it
 /// is, never where it is or how big — the group owns that and rebuilds it.
 const PART_FIELDS: [&str; 5] = ["id", "name", "brand", "model_name", "url"];

@@ -602,6 +602,17 @@ impl Furniture {
         Ok(())
     }
 
+    /// A piece nested anywhere inside this one (not this one itself).
+    pub fn find_part_mut(&mut self, id: crate::ids::FurnitureId) -> Option<&mut Self> {
+        self.children.iter_mut().find_map(|child| {
+            if child.id == id {
+                Some(child)
+            } else {
+                child.find_part_mut(id)
+            }
+        })
+    }
+
     pub fn is_group(&self) -> bool {
         !self.children.is_empty()
     }
