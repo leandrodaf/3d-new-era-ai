@@ -774,7 +774,33 @@ impl Review<'_, '_> {
                         .is_some_and(|o| o.kind == OpeningKind::Passage)
                 })
                 .collect();
-            if passages.is_empty() || passages.len() < ways_in.len() {
+            let what = if space.what == RoomUse::Bathroom {
+                "banheiro"
+            } else {
+                "dormitório"
+            };
+            // No way in at all: a sealed room. Only said once the plan has
+            // doors somewhere — a sketch of rooms with no openings yet is a
+            // sketch, not a sealed flat.
+            if ways_in.is_empty() {
+                let has_openings = home.furniture.iter().any(|f| {
+                    f.visible
+                        && f.opening
+                            .as_ref()
+                            .is_some_and(|o| o.kind != OpeningKind::Window)
+                });
+                if has_openings {
+                    self.push(
+                        Severity::Erro,
+                        space.label(),
+                        format!(
+                            "Sem acesso: nenhuma porta nem vão chega ao {what}; sem uma porta, ele não pode ser usado."
+                        ),
+                    );
+                }
+                continue;
+            }
+            if passages.len() < ways_in.len() {
                 continue;
             }
             // A panel named as a door, standing beside the passage, is the
@@ -790,11 +816,6 @@ impl Review<'_, '_> {
                             .iter()
                             .any(|p| p.position.distance(f.position) <= 120.0)
                 });
-            let what = if space.what == RoomUse::Bathroom {
-                "banheiro"
-            } else {
-                "dormitório"
-            };
             let mut message = format!(
                 "Sem porta: o único acesso ao {what} é um vão livre ({}), que não fecha nem dá privacidade; troque por uma porta.",
                 passages
@@ -3041,6 +3062,36 @@ mod tests {
         assert!(
             said.message.contains("f21") && said.message.contains("f22"),
             "{said:#?}"
+        );
+
+        // No way in at all — the door deleted — is an error, not silence.
+        let mut sealed = home.clone();
+        sealed.furniture.retain(|f| f.id.0 != 21);
+        let mut elsewhere = piece(23, "door", (-300.0, 150.0), (80.0, 15.0, 210.0), 90.0);
+        elsewhere.opening = Some(newera_core::Opening::default());
+        sealed.furniture.push(elsewhere);
+        sealed.rooms.push(newera_core::Room::new(
+            newera_core::RoomId(11),
+            "Sala",
+            vec![
+                Point2::new(-300.0, 0.0),
+                Point2::new(0.0, 0.0),
+                Point2::new(0.0, 300.0),
+                Point2::new(-300.0, 300.0),
+            ],
+        ));
+        let report = review(&sealed, &Profile::default());
+        let said = report
+            .findings
+            .iter()
+            .find(|f| f.message.starts_with("Sem acesso"))
+            .unwrap_or_else(|| panic!("{report:#?}"));
+        assert_eq!(said.severity, Severity::Erro);
+        assert!(said.place.contains("Dormitório"), "{said:#?}");
+        assert!(
+            !report.findings.iter().any(|f| f.place.contains("Sala")
+                && (f.message.starts_with("Sem acesso") || f.message.starts_with("Sem porta"))),
+            "a living room is not held to it: {report:#?}"
         );
 
         // A real door there, and nothing to say.

@@ -171,7 +171,7 @@ impl NewEraMcp {
         out.to_string()
     }
     #[tool(
-        description = "Layout problems: overlap, blocked, in_wall, blocks_door, turned, unclear_front, loose_opening, outgrew_niche, outside_rooms; {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. unclear_front is a group whose parts name fronts on more than one face with no clear winner (candidates, strongest first; placed is the angle's guess every \"in front of\" falls back to) — rename the misleading part or set the angle. Handles weigh most. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. Every row is an object with the `key` it is accepted by (in_wall {key, piece, wall}, blocks_door {key, door, by}). accept=[[key, reason]] marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed under accepted {key, kind, why, extent} with its reason, kept in the project; accept=[[key, \"\"]] takes it back; orphaned [[key, reason]] lists acceptances whose finding is gone on every storey, and prune=true drops them. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing."
+        description = "Layout problems: overlap, blocked, in_wall, blocks_door, no_door, turned, unclear_front, loose_opening, outgrew_niche, outside_rooms; {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. no_door is a bedroom or bathroom (by name) with no door — only open passages, listed, or no way in at all — said once the storey has doors somewhere; a living room, kitchen or balcony left open is not. unclear_front is a group whose parts name fronts on more than one face with no clear winner (candidates, strongest first; placed is the angle's guess every \"in front of\" falls back to) — rename the misleading part or set the angle. Handles weigh most. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. Every row is an object with the `key` it is accepted by (in_wall {key, piece, wall}, blocks_door {key, door, by}). accept=[[key, reason]] marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed under accepted {key, kind, why, extent} with its reason, kept in the project; accept=[[key, \"\"]] takes it back; orphaned [[key, reason]] lists acceptances whose finding is gone on every storey, and prune=true drops them. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing."
     )]
     pub(crate) fn check_layout(
         &self,
@@ -476,6 +476,68 @@ mod tests {
         assert!(s.document.read().home().accepted.is_empty());
         s.document.write().undo().unwrap();
         assert_eq!(s.document.read().home().accepted.len(), 1, "undoable");
+    }
+
+    #[test]
+    fn a_bedroom_without_a_door_is_a_layout_problem_a_living_room_is_not() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[600,0],[600,400],[0,400]],"closed":true},{"pts":[[300,0],[300,400]]}],
+                    "rooms":[{"name":"Sala","at":[150,200]},{"name":"Dormitório","at":[450,200]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        // The flat's entrance, into the living room.
+        s.place(Parameters(
+            serde_json::from_str(r#"{"items":[{"cat":"door","wall":"w4","along":200,"w":90}]}"#)
+                .unwrap(),
+        ))
+        .unwrap();
+        let check = || -> serde_json::Value {
+            serde_json::from_str(&s.check_layout(Parameters(CheckParams::default())).unwrap())
+                .unwrap()
+        };
+        // Sealed: the bedroom has no way in.
+        let sealed = check();
+        let row = &sealed["no_door"][0];
+        assert_eq!(row["name"], "Dormitório", "{sealed}");
+        assert_eq!(row["passages"], serde_json::json!([]), "{sealed}");
+        assert_eq!(
+            sealed["no_door"].as_array().unwrap().len(),
+            1,
+            "the living room is fine: {sealed}"
+        );
+
+        // Only a passage: still no door, the passage named.
+        let reply = s
+            .place(Parameters(
+                serde_json::from_str(
+                    r#"{"items":[{"cat":"passage","wall":"w5","along":200,"w":80}]}"#,
+                )
+                .unwrap(),
+            ))
+            .unwrap();
+        let passage = reply.rsplit("ids=").next().unwrap().trim().to_owned();
+        let open = check();
+        assert_eq!(
+            open["no_door"][0]["passages"],
+            serde_json::json!([passage]),
+            "{open}"
+        );
+
+        // A real door, and it is gone.
+        s.delete(Parameters(
+            serde_json::from_str(&format!(r#"{{"ids":["{passage}"]}}"#)).unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(r#"{"items":[{"cat":"door","wall":"w5","along":200,"w":80}]}"#)
+                .unwrap(),
+        ))
+        .unwrap();
+        assert!(check().get("no_door").is_none(), "{}", check());
     }
 
     #[test]

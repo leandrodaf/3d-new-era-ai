@@ -106,6 +106,14 @@ pub enum Issue {
         /// Where `angle` says the piece looks.
         placed: &'static str,
     },
+    /// A bedroom or a bathroom with no door: reached only through open
+    /// passages, or not reached at all. Only said once the storey has doors
+    /// somewhere — a sketch with no openings yet is not a sealed flat.
+    NoDoor {
+        room: crate::ids::RoomId,
+        /// The open passages that are its only way in; empty when there is none.
+        passages: Vec<FurnitureId>,
+    },
     /// A group whose parts name fronts on more than one face with no clear
     /// winner, so which way it opens is `angle`'s guess. Said instead of
     /// picked in silence: a guess that happens to agree with a wrong angle
@@ -131,6 +139,9 @@ impl Issue {
             Self::Turned { piece, .. } | Self::UnclearFront { piece, .. } => {
                 vec![(*piece).into()]
             }
+            Self::NoDoor { room, passages } => std::iter::once((*room).into())
+                .chain(passages.iter().map(|p| (*p).into()))
+                .collect(),
         }
     }
 
@@ -154,6 +165,7 @@ impl Issue {
             Self::LooseOpening(_) => "loose_opening",
             Self::Turned { .. } => "turned",
             Self::UnclearFront { .. } => "unclear_front",
+            Self::NoDoor { .. } => "no_door",
         }
     }
 
@@ -161,6 +173,9 @@ impl Issue {
     /// same pair keeps the same name whichever piece the check met first —
     /// `overlap:f817+f830`.
     pub fn key(&self) -> String {
+        if let Self::NoDoor { room, .. } = self {
+            return format!("no_door:{room}");
+        }
         let mut ids: Vec<String> = self.ids().iter().map(ToString::to_string).collect();
         ids.sort();
         format!("{}:{}", self.family(), ids.join("+"))
@@ -181,7 +196,9 @@ impl Issue {
     /// Whether an accepted key names a layout finding (and not an
     /// ergonomics one, which shares the project's list of acceptances).
     pub fn is_layout_key(key: &str) -> bool {
-        const FAMILIES: [&str; 8] = [
+        const FAMILIES: [&str; 10] = [
+            "no_door",
+            "unclear_front",
             "overlap",
             "blocked",
             "in_wall",
@@ -563,6 +580,11 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
         }
     }
 
+    // Bedrooms and bathrooms with no door, storey by storey.
+    for (id, passages) in rooms_without_door(home, &wanted) {
+        issues.push(Issue::NoDoor { room: id, passages });
+    }
+
     if !home.rooms.is_empty() {
         let rooms: Vec<(Option<LevelId>, Polygon<f64>)> = home
             .rooms
@@ -625,6 +647,82 @@ pub fn door_blocked_by(home: &Home, door: &Furniture) -> Vec<FurnitureId> {
         .filter(|leaf| leaf_hits(door, &swing, leaf, &polygon(&leaf.projected_footprint())))
         .map(|leaf| leaf.id)
         .collect()
+}
+
+/// Bedrooms and bathrooms, by name, whose only ways in are open passages —
+/// or that have none — on storeys that have doors somewhere.
+fn rooms_without_door(
+    home: &Home,
+    wanted: &dyn Fn(Option<LevelId>) -> bool,
+) -> Vec<(crate::ids::RoomId, Vec<FurnitureId>)> {
+    use crate::furniture::OpeningKind;
+    let private = |name: &str| {
+        let name = crate::annotations::fold(name);
+        [
+            "quarto",
+            "dormit",
+            "suite",
+            "banh",
+            "wc",
+            "lavabo",
+            "sanitario",
+        ]
+        .iter()
+        .any(|w| name.contains(w))
+            && !name.contains("closet")
+    };
+    let mut out = Vec::new();
+    for room in home
+        .rooms
+        .iter()
+        .filter(|r| r.points.len() >= 3 && wanted(r.level) && private(&r.name))
+    {
+        let level = home.resolve_level(room.level);
+        let openings: Vec<&Furniture> = home
+            .furniture
+            .iter()
+            .filter(|f| f.visible && home.resolve_level(f.level) == level)
+            .filter(|f| {
+                f.opening
+                    .as_ref()
+                    .is_some_and(|o| o.kind != OpeningKind::Window)
+            })
+            .collect();
+        if openings.is_empty() {
+            continue;
+        }
+        let near: Vec<&&Furniture> = openings
+            .iter()
+            .filter(|f| distance_to_outline(&room.points, f.position) <= 25.0)
+            .collect();
+        let passages: Vec<FurnitureId> = near
+            .iter()
+            .filter(|f| {
+                f.opening
+                    .as_ref()
+                    .is_some_and(|o| o.kind == OpeningKind::Passage)
+            })
+            .map(|f| f.id)
+            .collect();
+        if near.is_empty() || passages.len() == near.len() {
+            out.push((room.id, passages));
+        }
+    }
+    out
+}
+
+fn distance_to_outline(points: &[Point2], p: Point2) -> f64 {
+    points
+        .iter()
+        .zip(points.iter().cycle().skip(1))
+        .take(points.len())
+        .map(|(a, b)| {
+            let (dx, dy) = (b.x - a.x, b.y - a.y);
+            let len2 = (dx * dx + dy * dy).max(1e-9);
+            let t = (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0);
+            Point2::new(a.x + t * dx, a.y + t * dy).distance(p)
+        })
+        .fold(f64::MAX, f64::min)
 }
 
 /// Room a door or a drawer needs in front of it before it is unusable, cm.

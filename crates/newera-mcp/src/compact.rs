@@ -559,6 +559,21 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
                     ("over", json!(over.map(num))),
                 ]),
             ),
+            Issue::NoDoor { room, passages } => push(
+                "no_door",
+                obj([
+                    ("key", json!(key)),
+                    (
+                        "name",
+                        json!(home.room(room).map_or("", |r| r.name.as_str())),
+                    ),
+                    ("room", issue_ref(home, room.into())),
+                    (
+                        "passages",
+                        json!(passages.iter().map(ToString::to_string).collect::<Vec<_>>()),
+                    ),
+                ]),
+            ),
             Issue::UnclearFront {
                 piece,
                 candidates,
