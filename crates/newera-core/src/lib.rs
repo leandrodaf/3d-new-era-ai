@@ -14,6 +14,7 @@ pub mod collab;
 mod command;
 mod detect;
 mod document;
+pub mod electrical;
 mod elements;
 mod error;
 mod furniture;
