@@ -322,6 +322,19 @@ fn point_symbol(s: &mut Sym, symbol: crate::PointSymbol, size: f64) {
                 s.line(vec![(-r * 0.8, r * k), (r * 0.8, r * k)], false, false);
             }
         }
+        P::VentGrille => {
+            // A plate with louvre slats.
+            let plate = rect(-r, -r * 0.5, r, r * 0.5);
+            s.fill(plate.clone(), false);
+            s.line(plate, true, true);
+            for k in [-0.5, 0.0, 0.5] {
+                s.line(
+                    vec![(-r * 0.8, r * k * 0.8), (r * 0.8, r * k * 0.8)],
+                    false,
+                    false,
+                );
+            }
+        }
         P::DryDrain => {
             // A square with a single bar: no trap.
             s.fill(square.clone(), false);

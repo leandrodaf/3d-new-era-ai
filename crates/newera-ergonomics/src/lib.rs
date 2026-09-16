@@ -1530,7 +1530,32 @@ impl Review<'_, '_> {
                 let gas = !electric(&stove.piece.name);
                 if gas {
                     let glass = self.glass.get(&space.room.id).copied().unwrap_or_default();
-                    if glass <= 0.0 {
+                    // A permanent grille to the outside, low and high.
+                    let grilles = scene
+                        .home
+                        .furniture
+                        .iter()
+                        .flat_map(newera_core::Furniture::flatten)
+                        .filter(|f| {
+                            f.catalog == "vent-grille"
+                                && space.room.points.len() >= 3
+                                && newera_core::electrical::inside_room(
+                                    &space.room.points,
+                                    f.position,
+                                    20.0,
+                                )
+                        })
+                        .count();
+                    if grilles > 0 {
+                        if grilles < 2 {
+                            self.push_ref(
+                                Severity::Dica,
+                                &label,
+                                "Uma grelha de ventilação permanente: a ventilação de aparelho a gás pede abertura inferior e superior; confira a área útil na edição vigente da norma.",
+                                "nbr13103",
+                            );
+                        }
+                    } else if glass <= 0.0 {
                         self.push_ref(
                             Severity::Erro,
                             &label,
@@ -3082,6 +3107,20 @@ mod tests {
                     .iter()
                     .any(|f| f.severity == Severity::Erro && f.message.contains("gás")),
             "{report:#?}"
+        );
+        // Two permanent grilles to the outside close it.
+        for (id, elev) in [(60, 20.0), (61, 200.0)] {
+            let mut grille = piece(id, "vent-grille", (100.0, 7.5), (20.0, 4.0, 15.0), 0.0);
+            grille.elevation = elev;
+            home.furniture.push(grille);
+        }
+        let vented = review(&home, &Profile::default());
+        assert!(
+            !vented
+                .findings
+                .iter()
+                .any(|f| f.reference == Some("nbr13103")),
+            "{vented:#?}"
         );
     }
 

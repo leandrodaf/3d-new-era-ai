@@ -171,6 +171,7 @@ pub fn wall_mounted(catalog: &str) -> bool {
             | "hot-water"
             | "gas-point"
             | "valve"
+            | "vent-grille"
     )
 }
 

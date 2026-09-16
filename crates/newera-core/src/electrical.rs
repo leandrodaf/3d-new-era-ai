@@ -254,6 +254,22 @@ fn perimeter(room: &Room) -> f64 {
         .sum()
 }
 
+/// Whether a point is inside a room or within `margin` cm of its outline —
+/// a piece set in the room's wall counts as the room's.
+pub fn inside_room(points: &[Point2], p: Point2, margin: f64) -> bool {
+    if inside(points, p) {
+        return true;
+    }
+    let n = points.len();
+    (0..n).any(|i| {
+        let (a, b) = (points[i], points[(i + 1) % n]);
+        let (dx, dy) = (b.x - a.x, b.y - a.y);
+        let len2 = (dx * dx + dy * dy).max(1e-9);
+        let t = (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0);
+        Point2::new(a.x + t * dx, a.y + t * dy).distance(p) <= margin
+    })
+}
+
 pub(crate) fn inside(points: &[Point2], p: Point2) -> bool {
     let mut inside = false;
     let n = points.len();

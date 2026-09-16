@@ -232,6 +232,7 @@ pub enum PointSymbol {
     GreaseTrap,
     InspectionBox,
     VentPipe,
+    VentGrille,
     DryDrain,
     LinearDrain,
     RainDrain,
@@ -1660,6 +1661,18 @@ pub static CATALOG: &[CatalogItem] = &[
         [150, 150, 145],
         Model::Point(PointSymbol::GreaseTrap),
         "caixa gordura grease trap",
+    ),
+    raised(
+        item(
+            "vent-grille",
+            "Grelha de ventilação permanente (gás)",
+            C::Plumbing,
+            [20.0, 4.0, 15.0],
+            [200, 200, 195],
+            Model::Point(PointSymbol::VentGrille),
+            "grelha veneziana ventilacao permanente abertura gas ar vent grille louver",
+        ),
+        20.0,
     ),
     item(
         "vent-pipe",

@@ -230,16 +230,19 @@ pub enum Pipe {
     Cold,
     Hot,
     Sewer,
+    /// A vent branch: from the traps up to a vent stack.
+    Vent,
 }
 
 impl Pipe {
-    pub const ALL: [Self; 3] = [Self::Cold, Self::Hot, Self::Sewer];
+    pub const ALL: [Self; 4] = [Self::Cold, Self::Hot, Self::Sewer, Self::Vent];
 
     pub fn key(self) -> &'static str {
         match self {
             Self::Cold => "cold",
             Self::Hot => "hot",
             Self::Sewer => "sewer",
+            Self::Vent => "vent",
         }
     }
 
@@ -252,6 +255,7 @@ impl Pipe {
             Self::Cold => "Água fria",
             Self::Hot => "Água quente",
             Self::Sewer => "Esgoto",
+            Self::Vent => "Ventilação",
         }
     }
 
@@ -262,6 +266,7 @@ impl Pipe {
             Self::Cold => (crate::style::DashStyle::Solid, [40, 110, 210]),
             Self::Hot => (crate::style::DashStyle::Dash, [210, 60, 40]),
             Self::Sewer => (crate::style::DashStyle::Solid, [120, 90, 60]),
+            Self::Vent => (crate::style::DashStyle::DashDot, [90, 140, 90]),
         }
     }
 
@@ -270,7 +275,7 @@ impl Pipe {
         match self {
             Self::Cold => kind == PointKind::Cold,
             Self::Hot => kind == PointKind::Hot,
-            Self::Sewer => matches!(kind, PointKind::Sewer | PointKind::Drain),
+            Self::Sewer | Self::Vent => matches!(kind, PointKind::Sewer | PointKind::Drain),
         }
     }
 }
@@ -721,10 +726,29 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 51..=75 => 180.0,
                 _ => 240.0,
             };
+            // A vent branch drawn to the trap counts as the vented element.
+            let by_branch = view
+                .polylines
+                .iter()
+                .filter(|l| pipe_of(l) == Some(Pipe::Vent))
+                .flat_map(|l| {
+                    l.points
+                        .windows(2)
+                        .map(|w| (w[0], w[1]))
+                        .collect::<Vec<_>>()
+                })
+                .map(|(a, b)| {
+                    let (dx, dy) = (b.x - a.x, b.y - a.y);
+                    let len2 = (dx * dx + dy * dy).max(1e-9);
+                    let t =
+                        (((trap.at.x - a.x) * dx + (trap.at.y - a.y) * dy) / len2).clamp(0.0, 1.0);
+                    Point2::new(a.x + t * dx, a.y + t * dy).distance(trap.at)
+                })
+                .fold(f64::MAX, f64::min);
             let nearest = vents
                 .iter()
                 .map(|v| v.at.distance(trap.at))
-                .fold(f64::MAX, f64::min);
+                .fold(by_branch, f64::min);
             if nearest > limit {
                 out.push(Finding {
                     key: format!("plumb:vent-far:{}", trap.id),
@@ -732,7 +756,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                     severity: Severity::Dica,
                     place: format!("{} {}", trap.name, trap.id),
                     message: format!(
-                        "A {} cm do tubo ventilador mais próximo: um ramal de {mm} mm pede ventilação a até {} cm (em linha reta; confira pelo percurso).",
+                        "A {} cm do tubo ventilador mais próximo: um ramal de {mm} mm pede ventilação a até {} cm (em linha reta; trace o ramal com route kind=vent e ele passa a contar).",
                         nearest.round(),
                         limit.round()
                     ),
@@ -966,6 +990,9 @@ pub fn refuses(pipe: Pipe, via: Via) -> Option<&'static str> {
         (Pipe::Sewer, Via::Wall) => Some(
             "esgoto não corre deitado dentro da parede, sem caimento: na parede ele só desce; use floor",
         ),
+        (Pipe::Vent, Via::Floor) => Some(
+            "o ramal de ventilação sobe do desconector até a coluna, pela parede ou pelo forro; enterrado ele enche de água e não ventila",
+        ),
         _ => None,
     }
 }
@@ -1032,6 +1059,30 @@ pub fn materials(
     };
     let mut out = Vec::new();
     match pipe {
+        Pipe::Vent => {
+            let metres = metres(route.length() * 1.05);
+            out.push(item(
+                "Tubo PVC esgoto série normal 50 mm (ramal de ventilação)".into(),
+                metres,
+                "m",
+            ));
+            out.push(item("Barras de 6 m".into(), (metres / 6.0).ceil(), "un"));
+            out.push(item(
+                "Joelho 45° 50 mm (dois por curva)".into(),
+                (2 * route.bends) as f64,
+                "un",
+            ));
+            out.push(item(
+                "Junção simples 45° 50 × 50 mm".into(),
+                route.branches as f64,
+                "un",
+            ));
+            out.push(item(
+                "Junção 45° de ligação ao ramal de descarga, acima do fecho hídrico".into(),
+                n as f64,
+                "un",
+            ));
+        }
         Pipe::Cold | Pipe::Hot => {
             let (tube, bar, size, thread) = match pipe {
                 Pipe::Cold => (
@@ -1533,6 +1584,20 @@ mod tests {
             !k.contains(&"plumb:vent-far:f30".to_owned()),
             "the toilet is within 2,4 m: {k:?}"
         );
+        // A vent branch drawn to the drain is the vented element.
+        let mut branch = crate::style::Polyline::new(
+            crate::ids::PolylineId(90),
+            vec![
+                Point2::new(40.0, 5.0),
+                Point2::new(150.0, 5.0),
+                Point2::new(150.0, 190.0),
+            ],
+        );
+        branch.discipline = Some(crate::style::Discipline::Plumbing);
+        branch.properties.insert(PIPE_KEY.into(), "vent".into());
+        home.polylines.push(branch);
+        assert!(!keys(&home).contains(&"plumb:vent-far:f34".to_owned()));
+        home.polylines.clear();
 
         // The trap box grows with its load: basin 1 + shower 2 + tub 2 + bidet 1
         // + laundry sink 3 = 9 UHC takes a 75 mm outlet.
