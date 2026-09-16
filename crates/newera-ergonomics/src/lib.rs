@@ -448,6 +448,26 @@ impl Review<'_, '_> {
     /// score like the electrical one: a toilet with no water or no sewer
     /// point is a bathroom that does not work. Only plans with a fixture are
     /// looked at, and an absence on purpose is accepted by the plumbing key.
+    /// Balcony guards and closures (NBR 14718, NBR 7199, NBR 16259): what
+    /// guards a fall is a safety matter, and weighs as such.
+    fn guards(&mut self) {
+        for f in newera_core::guard::check(self.scene.home) {
+            let severity = match f.severity {
+                newera_core::electrical::Severity::Erro => Severity::Erro,
+                newera_core::electrical::Severity::Alerta => Severity::Alerta,
+                newera_core::electrical::Severity::Dica => Severity::Dica,
+            };
+            self.findings.push(Finding {
+                severity,
+                place: f.place,
+                message: f.message,
+                reference: Some(f.source),
+                key: f.key,
+                ..Finding::default()
+            });
+        }
+    }
+
     fn plumbing(&mut self) {
         for f in newera_core::plumbing::check(self.scene.home) {
             let severity = match f.severity {
@@ -2264,6 +2284,7 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
     review.gaps();
     review.electrical();
     review.plumbing();
+    review.guards();
     // The same finding on a row of modules is one finding about all of them.
     let mut findings: Vec<Finding> = Vec::new();
     for f in review.findings {

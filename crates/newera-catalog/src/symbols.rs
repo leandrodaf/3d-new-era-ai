@@ -605,6 +605,29 @@ pub fn plan_symbol(piece: &Furniture) -> Vec<SymbolShape> {
         Model::Fridge => {
             s.line(vec![(-hw, hd - 4.0), (hw, hd - 4.0)], false, false);
         }
+        Model::Railing => {
+            s.line(rect(-hw, -hd, hw, hd), true, true);
+            let mut x = -hw + 11.4;
+            while x < hw {
+                s.line(vec![(x, -hd), (x, hd)], false, false);
+                x += 11.4;
+            }
+        }
+        Model::GlassRailing => {
+            s.fill(rect(-hw, -hd, hw, hd), false);
+            s.line(rect(-hw, -hd, hw, hd), true, true);
+            s.line(vec![(-hw, 0.0), (hw, 0.0)], false, false);
+        }
+        Model::BalconyGlazing => {
+            s.line(rect(-hw, -hd, hw, hd), true, false);
+            let leaves = (w / 60.0).round().max(1.0);
+            let mut k = 1.0;
+            while k < leaves {
+                let x = -hw + w * k / leaves;
+                s.line(vec![(x, -hd), (x, hd)], false, false);
+                k += 1.0;
+            }
+        }
         Model::Cooktop => {
             for (sx, sy, r) in [
                 (-0.22, -0.2, 7.0),
@@ -845,7 +868,7 @@ pub fn plan_symbol(piece: &Furniture) -> Vec<SymbolShape> {
                 false,
             );
         }
-        Model::Railing | Model::Fence | Model::GlassPanel => {
+        Model::Fence | Model::GlassPanel => {
             s.line(vec![(-hw, 0.0), (hw, 0.0)], false, true);
         }
         Model::Lounger => {

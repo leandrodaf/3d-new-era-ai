@@ -1537,4 +1537,46 @@ mod tests {
             .unwrap_err();
         assert!(loose.message.contains("embutida"), "{loose:?}");
     }
+
+    #[test]
+    fn a_balcony_railing_and_its_glass_closure_take_no_outlet_and_are_checked_apart() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(r#"{"walls":[{"pts":[[0,0],[300,0],[300,150]]},{"pts":[[0,0],[0,150]]}],"rooms":[{"name":"Varanda","pts":[[0,0],[300,0],[300,150],[0,150]]}]}"#).unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"railing","at":[150,148],"h":110},{"cat":"balcony-glazing","at":[150,152],"glass":"tempered"}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        // An outlet on the railing: refused, saying what it is.
+        let on_rail = s
+            .place(Parameters(
+                serde_json::from_str(r#"{"items":[{"cat":"outlet-low","at":[150,148]}]}"#).unwrap(),
+            ))
+            .unwrap_err();
+        assert!(
+            on_rail.message.contains("gradil") || on_rail.message.contains("parede"),
+            "{on_rail:?}"
+        );
+        let home = s.document.read().home().clone();
+        let glazing = home
+            .furniture
+            .iter()
+            .find(|f| f.catalog == "balcony-glazing")
+            .unwrap();
+        assert_eq!(
+            glazing
+                .properties
+                .get(newera_core::guard::GLASS_KEY)
+                .map(String::as_str),
+            Some("tempered")
+        );
+        // Railing and closure together: nothing to say about the guard.
+        let guards = newera_core::guard::check(&home);
+        assert!(guards.is_empty(), "{guards:?}");
+    }
 }

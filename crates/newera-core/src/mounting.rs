@@ -397,6 +397,7 @@ pub fn blocked(home: &Home, piece: &Furniture) -> Option<String> {
                 (matches!(f.catalog.as_str(), "shower-glass" | "glass-railing")
                     || crate::annotations::fold(&f.name).contains("vidro"))
                     || f.opacity.is_some_and(|o| o < 0.6)
+                    || crate::guard::guard_of(f).is_some()
             })
             .find(|f| {
                 let mut near = (*f).clone();
@@ -404,11 +405,19 @@ pub fn blocked(home: &Home, piece: &Furniture) -> Option<String> {
                 near.depth += 2.0 * IN_WALL;
                 near.contains(piece.position) && lo < f.elevation + f.height && hi > f.elevation
             })
-            .map(|f| {
-                format!(
+            .map(|f| match crate::guard::guard_of(f) {
+                Some(guard) => format!(
+                    "{} {} está no {} ({} {}): guarda-corpo e fechamento de sacada não recebem caixa nem ponto; leve-o a uma parede de alvenaria da sacada.",
+                    piece.name,
+                    piece.id,
+                    guard.name(),
+                    f.name,
+                    f.id
+                ),
+                None => format!(
                     "{} {} está sobre o vidro de {} ({}): não há onde embutir a caixa; leve-o a uma parede.",
                     piece.name, piece.id, f.name, f.id
-                )
+                ),
             });
     };
     let family = wall
@@ -608,7 +617,8 @@ fn off_structure(view: &Home, piece: &Furniture) -> Option<String> {
     let glass_near = view.furniture.iter().flat_map(Furniture::flatten).any(|f| {
         ((matches!(f.catalog.as_str(), "shower-glass" | "glass-railing")
             || crate::annotations::fold(&f.name).contains("vidro"))
-            || f.opacity.is_some_and(|o| o < 0.6))
+            || f.opacity.is_some_and(|o| o < 0.6)
+            || crate::guard::guard_of(f).is_some())
             && {
                 let mut near = f.clone();
                 near.width += 2.0 * IN_WALL;

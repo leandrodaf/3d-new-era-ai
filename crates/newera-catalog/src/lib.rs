@@ -175,6 +175,11 @@ pub enum Model {
     Corrugated,
     /// Glass panel in a thin metal frame (shower screens, balustrades).
     GlassPanel,
+    /// Laminated glass infill between posts, under a metal handrail.
+    GlassRailing,
+    /// Retractable balcony glazing: frameless glass leaves between a top and
+    /// a bottom track, from the slab to the ceiling.
+    BalconyGlazing,
     /// Sectional garage door.
     GarageDoor,
     /// Pool: coping around a water surface, rectangular or oval.
@@ -1155,21 +1160,30 @@ pub static CATALOG: &[CatalogItem] = &[
     ),
     item(
         "railing",
-        "Guarda-corpo",
+        "Gradil de ferro (guarda-corpo de barras verticais)",
         C::Structure,
         [300.0, 5.0, 110.0],
         STEEL,
         Model::Railing,
-        "railing guarda corpo corrimao parapeito",
+        "gradil grade ferro aco aluminio guarda corpo barras corrimao parapeito sacada varanda railing",
     ),
     item(
         "glass-railing",
-        "Guarda-corpo de vidro",
+        "Guarda-corpo de vidro laminado com corrimão metálico",
         C::Structure,
-        [300.0, 3.0, 110.0],
+        [300.0, 5.0, 110.0],
         [168, 206, 226],
-        Model::GlassPanel,
-        "glass railing guarda corpo vidro",
+        Model::GlassRailing,
+        "guarda corpo vidro laminado corrimao perfil aluminio sacada varanda glass railing",
+    ),
+    item(
+        "balcony-glazing",
+        "Fechamento de vidro da sacada (envidraçamento retrátil)",
+        C::Structure,
+        [300.0, 3.0, 240.0],
+        [190, 220, 232],
+        Model::BalconyGlazing,
+        "fechamento vidro sacada envidracamento retratil cortina de vidro varanda reiki",
     ),
     item(
         "box",
@@ -1854,7 +1868,11 @@ impl CatalogItem {
             visible: true,
             level: None,
             discipline: self.category.discipline(),
-            opacity: matches!(self.model, Model::GlassPanel).then_some(0.35),
+            opacity: match self.model {
+                Model::GlassPanel | Model::GlassRailing => Some(0.35),
+                Model::BalconyGlazing => Some(0.25),
+                _ => None,
+            },
             ..Default::default()
         };
         piece.light = light_for(&piece);

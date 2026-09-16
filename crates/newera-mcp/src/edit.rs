@@ -673,6 +673,13 @@ pub(crate) struct UpdateSpec {
     /// Door hinge on the right.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hinge_right: Option<bool>,
+    /// Glass of a guard or a closure: `laminated`, `tempered`,
+    /// `tempered-laminated` or `wired`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub glass: Option<String>,
+    /// Clear gap between a railing's bars, cm.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gap: Option<f64>,
     /// Move the element to this level id (e.g. `lv2`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub level: Option<String>,
@@ -803,6 +810,8 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 "layer",
                 "visible",
                 "hinge_right",
+                "glass",
+                "gap",
                 "level",
                 "light",
                 "brand",
@@ -997,6 +1006,22 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 }
                 if let (Some(right), Some(opening)) = (spec.hinge_right, f.opening.as_mut()) {
                     opening.hinge_right = right;
+                }
+                if let Some(glass) = &spec.glass {
+                    let glass = glass.trim().to_lowercase();
+                    if !["laminated", "tempered", "tempered-laminated", "wired"]
+                        .contains(&glass.as_str())
+                    {
+                        return Err(format!(
+                            "glass: laminated, tempered, tempered-laminated or wired (not {glass})"
+                        ));
+                    }
+                    f.properties
+                        .insert(newera_core::guard::GLASS_KEY.into(), glass);
+                }
+                if let Some(gap) = spec.gap {
+                    f.properties
+                        .insert(newera_core::guard::GAP_KEY.into(), gap.to_string());
                 }
                 Element::Furniture(f)
             }
@@ -1628,6 +1653,11 @@ pub(crate) struct PlaceSpec {
     pub opacity: Option<f64>,
     pub mirror: Option<bool>,
     pub hinge_right: Option<bool>,
+    /// Glass of a guard or a balcony closure: `laminated`, `tempered`,
+    /// `tempered-laminated` or `wired`.
+    pub glass: Option<String>,
+    /// Clear gap between a railing's bars, cm.
+    pub gap: Option<f64>,
     /// Doors: a point `[x,y]` on the side the leaf swings into (e.g. inside the bathroom).
     pub into: Option<Point2>,
     /// With `cat:"beam"`: end points `[x,y,z]` cm (z above the storey floor);
@@ -2178,6 +2208,22 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
         }
         if let (Some(right), Some(opening)) = (spec.hinge_right, piece.opening.as_mut()) {
             opening.hinge_right = right;
+        }
+        if let Some(glass) = &spec.glass {
+            let glass = glass.trim().to_lowercase();
+            if !["laminated", "tempered", "tempered-laminated", "wired"].contains(&glass.as_str()) {
+                return Err(format!(
+                    "glass: laminated, tempered, tempered-laminated or wired (not {glass})"
+                ));
+            }
+            piece
+                .properties
+                .insert(newera_core::guard::GLASS_KEY.into(), glass);
+        }
+        if let Some(gap) = spec.gap {
+            piece
+                .properties
+                .insert(newera_core::guard::GAP_KEY.into(), gap.to_string());
         }
         match (&spec.wall, spec.at) {
             (Some(wall), _) => {

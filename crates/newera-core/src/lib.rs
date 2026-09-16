@@ -19,6 +19,7 @@ mod elements;
 mod error;
 mod furniture;
 mod geometry;
+pub mod guard;
 mod home;
 mod ids;
 mod joins;

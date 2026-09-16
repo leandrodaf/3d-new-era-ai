@@ -197,6 +197,8 @@ pub(crate) fn build(model: Model, piece: &Furniture, color: Rgb) -> Mesh {
         Model::Fence => fence(&mut ctx),
         Model::Corrugated => corrugated(&mut ctx),
         Model::GlassPanel => glass_panel(&mut ctx),
+        Model::GlassRailing => glass_railing(&mut ctx),
+        Model::BalconyGlazing => balcony_glazing(&mut ctx),
         Model::GarageDoor => garage_door(&mut ctx),
         Model::Pool { oval: false } => pool(&mut ctx),
         Model::Pool { oval: true } => oval_pool(&mut ctx),
@@ -1646,6 +1648,9 @@ fn footing(ctx: &mut Ctx) {
     ctx.cube([-pw / 2.0, pw / 2.0], [base, h], [-pd / 2.0, pd / 2.0], c);
 }
 
+/// A bar railing: posts every 1,20 m, a handrail and a bottom rail, and
+/// vertical bars 1,9 cm thick with a 9,5 cm clear gap — under the 11 cm
+/// NBR 14718 allows, and nothing to climb on.
 fn railing(ctx: &mut Ctx) {
     let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
     let post = d.clamp(3.0, 6.0);
@@ -1659,13 +1664,74 @@ fn railing(ctx: &mut Ctx) {
             c,
         );
     }
-    for y in [h - post, h * 0.55, 10.0] {
+    let rail = post * 0.8;
+    ctx.cube([-w / 2.0, w / 2.0], [h - rail, h], [-d / 2.0, d / 2.0], c);
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [4.0, 4.0 + rail * 0.7],
+        [-d / 2.0, d / 2.0],
+        c,
+    );
+    let bar = 1.9;
+    let pitch = bar + 9.5;
+    let mut x = -w / 2.0 + post + pitch;
+    while x < w / 2.0 - post - bar / 2.0 {
         ctx.cube(
-            [-w / 2.0, w / 2.0],
-            [y, y + post * 0.6],
-            [-d / 2.0, d / 2.0],
+            [x - bar / 2.0, x + bar / 2.0],
+            [4.0 + rail * 0.7, h - rail],
+            [-bar / 2.0, bar / 2.0],
             c,
         );
+        x += pitch;
+    }
+}
+
+/// Laminated glass between posts, under a flat metal handrail.
+fn glass_railing(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let metal = rgb(METAL);
+    let post = 4.0_f64.min(w / 6.0);
+    let spans = (w / 110.0).ceil().max(1.0);
+    for i in 0..=crate::count(spans) {
+        let x = -w / 2.0 + post / 2.0 + (w - post) * f64::from(i) / spans;
+        ctx.cube(
+            [x - post / 2.0, x + post / 2.0],
+            [0.0, h],
+            [-d / 2.0, d / 2.0],
+            metal,
+        );
+    }
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [h - 5.0, h],
+        [-d / 2.0, d / 2.0],
+        metal,
+    );
+    ctx.cube([-w / 2.0, w / 2.0], [0.0, 3.0], [-d / 2.0, d / 2.0], metal);
+    ctx.cube(
+        [-w / 2.0 + post, w / 2.0 - post],
+        [3.0, h - 5.0],
+        [-0.5, 0.5],
+        c,
+    );
+}
+
+/// Frameless glass leaves about 60 cm wide between a top and a bottom track.
+fn balcony_glazing(ctx: &mut Ctx) {
+    let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
+    let metal = rgb(METAL);
+    ctx.cube([-w / 2.0, w / 2.0], [0.0, 3.0], [-d / 2.0, d / 2.0], metal);
+    ctx.cube(
+        [-w / 2.0, w / 2.0],
+        [h - 4.0, h],
+        [-d / 2.0, d / 2.0],
+        metal,
+    );
+    let leaves = (w / 60.0).round().max(1.0);
+    let leaf = w / leaves;
+    for i in 0..crate::count(leaves) {
+        let x0 = -w / 2.0 + leaf * f64::from(i) + 0.2;
+        ctx.cube([x0, x0 + leaf - 0.4], [3.0, h - 4.0], [-0.4, 0.4], c);
     }
 }
 
