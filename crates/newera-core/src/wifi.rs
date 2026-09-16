@@ -360,7 +360,8 @@ fn wants_coverage(name: &str) -> bool {
 }
 
 /// Where to put access points so the rooms people use get a good signal at
-/// `band`: the fewest ceiling points (up to four), each at a room's centre,
+/// `band`: the fewest ceiling points (up to four), each at the centre of a
+/// room that wants coverage,
 /// chosen one at a time for the most rooms covered, then the best worst
 /// room. Returns the points with the rooms still short.
 pub fn suggest(
@@ -377,7 +378,8 @@ pub fn suggest(
         .copied()
         .filter(|r| wants_coverage(&r.name))
         .collect();
-    let candidates: Vec<(AccessPoint, String)> = rooms
+    // Not in a bathroom (damp, a lowered ceiling), outside or in a shaft.
+    let candidates: Vec<(AccessPoint, String)> = wanted
         .iter()
         .map(|r| {
             (
@@ -565,6 +567,11 @@ mod tests {
             .unwrap();
         assert!(sala.median > quarto.median, "{rooms:#?}");
         assert!(sala.good > 0.9, "{sala:?}");
+
+        let mut with_bath = masonry.clone();
+        with_bath.rooms[1].name = "Banho".into();
+        let (points, _) = suggest(&with_bath, Standard::Wifi6e, Band::G6, 280.0);
+        assert!(points.iter().all(|(_, room)| room != "Banho"), "{points:?}");
 
         let (points, short) = suggest(&masonry, Standard::Wifi6, Band::G5, 280.0);
         assert!(
