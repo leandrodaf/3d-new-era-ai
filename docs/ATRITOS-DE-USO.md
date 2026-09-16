@@ -9,100 +9,58 @@ chamada que se fez, a resposta literal, o que era verdade, o que custou e o que
 teria encurtado o caminho. Tudo anotado à mão.
 
 **Este arquivo guarda só o que ainda não foi resolvido.** Cada caso que cai sai
-daqui; o que doía em cada um está no histórico do git. Cinquenta e nove já
-saíram, todos conferidos em uso na mesma planta e não no changelog.
+daqui; o que doía em cada um está no histórico do git. Sessenta já saíram,
+todos conferidos em uso na mesma planta e não no changelog.
 
 O banco de provas é o mesmo apartamento de 65 m² desde o começo, com marcenaria
 desenhada módulo a módulo. Hoje ele está em **nota 100**, zero achados com
-peso, `loose: 0`, `pending: 0` nas três disciplinas e 216 peças, nenhuma sem
+peso, `loose: 0`, `pending: 0` nas três disciplinas e 218 peças, nenhuma sem
 apoio em piso, teto, parede ou outra peça.
 
 ## Em aberto
 
-Um caso, e ele é o 57 outra vez, em outro arquivo: uma peça classificada pela
-palavra que aparece no nome dela, e não pelo que ela é.
+Um caso, e é pequeno: um campo novo que grava certo e responde que não gravou.
 
-## 59. Uma bancada batizada com o nome do eletrodoméstico ao lado não pode receber tomada embutida
+## 60. `update(fixed=…)` escreve a propriedade e diz que não mudou nada
 
-O `outlet-tower` e o `desk-outlet-box` são peças novas e boas: torre retrátil de
-embutir e caixa de tomadas de mesa, com regras próprias de fabricante — 2,5 cm
-entre o furo e a borda do tampo, 30 cm da cuba e da cocção, e uma tomada dentro
-do gabinete quando a torre é de plugue. As três dispararam certo no primeiro
-posicionamento errado que fiz.
+O `fixed` veio junto com a correção do caso 59: serve para declarar que uma
+peça é fixa quando o nome dela não deixa a ferramenta adivinhar. Ele funciona.
+O que ele responde é que não funcionou.
 
-O que não funciona é pôr a torre na cozinha desta planta:
+Numa cadeira que não tinha a propriedade:
 
 ```
-place(cat="outlet-tower-auto", at=[510,300], elev=91)
-→ ok rev=15
-ergonomics → ["erro", "elec:mount:f1901",
-  "… está solta: vai embutida no tampo de uma bancada, ilha ou móvel
-   (ou numa mesa, a caixa de mesa)."]
+update(items=[{"id": "f835", "fixed": true}])
+→ ok rev=11 {"unchanged": [{"id": "f835", "now": {…}}],
+   "unchanged_note": "these already had the values asked for; nothing was changed on them"}
 ```
 
-`[510, 300]` está em cima da bancada `f847`, que vai de x 440 a 632 e de y 264
-a 329, com o topo a 91 cm — exatamente a elevação pedida. Ela é o tampo.
-
-Duas sondas mostram por quê:
+E no `/api/home`, logo depois:
 
 ```
-place(cat="outlet-tower-auto", at=[130,515], elev=75)   # "Escritório 1 — bancada de madeira"
-→ ok rev=22
-place(cat="outlet-tower-auto", at=[800,300], elev=101)  # "Tampo contínuo sobre lava e seca até fachada"
-→ vai embutida numa bancada, ilha ou móvel fixo: não há um sob [800.0, 300.0]
+f835 props: {"piece:fixed": "true", "ref:tag": "146", "sh3d:id": "…"}
 ```
 
-A bancada do escritório aceita; a da lavanderia não. A diferença está no nome.
-Em `crates/newera-core/src/mounting.rs:658`, `movable()` decide se a peça é
-móvel solto procurando palavras no nome, e a lista tem `"lava"`, `"geladeira"`,
-`"forno"`, `"mesa"`. O `host_of` descarta tudo que `movable()` aponta:
+A propriedade foi gravada. A resposta diz o contrário, e diz na forma mais
+enganosa possível — *"já tinham os valores pedidos"* —, que é a frase que
+convence quem chamou a parar de tentar. Foi o que aconteceu comigo: li o
+"unchanged", concluí que o campo não existia na versão instalada e só descobri
+que tinha gravado ao despejar o JSON da planta.
 
-| tampo | por que é descartado |
-|---|---|
-| `Bancada contínua junto à geladeira` | "geladeira" |
-| `Tampo contínuo sobre lava e seca até fachada` | "lava" |
-| `Península — pedra sobre lava-louças 60,5 cm` | "lava" |
+O `layer` já acerta isso: `update(items=[{"id": "f831", "layer": "joinery"}])`
+responde `{"changed": 41}`.
 
-Nesta cozinha os três tampos são nomeados pelo eletrodoméstico que servem, que
-é como um projeto de marcenaria nomeia as peças, e nenhum deles pode receber
-uma torre. O contorno seria rebatizar a bancada com uma palavra que a regra não
-conheça — trocar um nome que descreve a peça por um que engana a ferramenta.
-Foi o que o caso 43 já custou uma vez na hidráulica; não fiz.
+**Segunda metade:** não há como retirar a declaração. `layer: ""` volta à
+classificação automática; `fixed: null` não faz nada (e responde "unchanged"
+também), e `fixed: false` grava `"false"`, que é uma afirmação diferente de
+"não declarei". Na planta ficou um `piece:fixed: "false"` na mesa de jantar,
+resíduo de um teste, que não tenho como apagar.
 
-**Custou:** quatro posicionamentos, duas sondas e uma leitura do `mounting.rs`.
-A torre saiu da planta; a caixa de mesa do escritório ficou, porque ali o tampo
-se chama "bancada de madeira".
+**Reproduzir:** `update(fixed=true)` em qualquer peça sem `piece:fixed`, e
+depois ler as propriedades dela.
 
-**Deveria:** `mounting.rs` usar a mesma correção que `layers.rs` recebeu no caso
-57 — palavra de marcenaria ("bancada", "tampo", "península", "gabinete") ganha
-da palavra de eletrodoméstico quando as duas aparecem no mesmo nome. E, já que
-a peça pode ser declarada em vez de adivinhada, deixar o `update` marcar um
-tampo como fixo, para quando o nome não ajudar.
+**Custou:** um despejo do `/api/home` para descobrir que a chamada tinha
+funcionado, e um `undo` para limpar a cadeira.
 
-**Não piorar:** a geladeira, a lava-louças e o forno de verdade têm que
-continuar recusados como anfitriões — o achado *"está dentro de LG WD18GNTS6BA
-— Lava e Seca 18 kg (f825)"*, que apareceu nesta mesma rodada e pegou um erro
-real meu, depende disso.
-
-## Resolvido no código, a conferir na planta
-
-**59** (commit `1e4d646`). `movable()` e `is_appliance()` em `mounting.rs`
-agora dão prioridade à palavra de marcenaria (bancada, tampo, península,
-gabinete, balcão, armário, nicho, prateleira, aéreo, arremate, gavet…,
-separador) e casam palavras inteiras, então "Lavanderia — gavetões" também
-deixou de ser "lava". Novo campo `update(fixed=true|false)` grava
-`piece:fixed` para quando o nome não ajuda. Na cópia da planta:
-
-- `place(cat="outlet-tower-auto", at=[510,300])` → assenta a 91 cm na `f847`,
-  sem achado (antes subia para o topo do arremate junto ao teto, 280 cm, e
-  dava "0,0 cm da borda");
-- `at=[800,300]` → 101 cm na `f846`, sem achado;
-- `at=[505,452]` → aceita na península; resta a dica real "25,5 cm da cuba";
-- `at=[575,300]`, sobre o cooktop real `f826` → `tower-below` e
-  `tower-wet-heat` (corretos);
-- `outlet-mid` em `[735,305]` elev 50 continua recusada: "está dentro de LG
-  WD18GNTS6BA — Lava e Seca 18 kg (f825)".
-
-De quebra: `tower-wet-heat` e `tower-below` só leem cuba/cocção de peça que é
-uma ("Cooktop Brastemp…", catálogo), não de "Armário de portas junto ao
-cooktop" nem "Gaveteiro pia", e medem da borda da peça, não do centro.
+**Deveria:** responder `changed` quando grava, como o `layer` faz; e aceitar
+`fixed: ""` (ou `null`) como "volte a decidir sozinho", apagando a propriedade.
