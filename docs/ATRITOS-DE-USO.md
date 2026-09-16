@@ -344,6 +344,39 @@ nome; e, fora de grupo, as palavras de marcenaria pesarem mais que as de
 eletrodoméstico quando as duas aparecem ("aéreo geladeira", "nicho do forno",
 "torre da lava-louças" são todos marcenaria).
 
+## Resolvidos no código, a conferir na planta (48 a 57 e o que veio junto)
+
+Tudo abaixo está no app reinstalado. A suíte do workspace passa inteira (421
+testes) e o clippy está limpo. Uma cópia desta planta, tirada da sessão
+aberta, foi rodada antes do commit: a nota ficou em **77**. As regras novas
+acharam 4 casos reais, todos listados em `check_layout` → `loose`:
+
+- `f1571`, tomada da cozinha, e `f1664`, RJ45 da cozinha, dentro do vão da
+  porta do banho social;
+- `f1610`, água fria da lava e seca, e `f1613`, registro geral, sobre o
+  fechamento de vidro da varanda.
+
+Há ainda três pontos atrás da folha de porta, pelo lado da dobradiça, só como
+dica.
+
+| # | Como conferir | O que deve voltar |
+|---|---|---|
+| 48 | `ergonomics` com uma aceitação antiga `-:f807:…` | O achado `nbr15575g:f807:…` vem aceito com o mesmo motivo, com `accepted_as` apontando a chave antiga. A antiga não aparece mais em `orphaned`. (`e4d58b4`) |
+| 49 | `update(items=[{"id":"f1576","props":{…}}])` | Erro `unknown field props`, nunca "nada mudou". (`df75a6a`) |
+| 50 | O sofá entre a península e o rack | O `fix` que moveria o sofá para dentro de outro achado igual ou pior some, e a mensagem diz *"Não cabem os dois: afastar isso cria «…» em …"*. Quando o outro achado é mais leve, a mensagem avisa *"Isso deixa «…»"*. (`f59adf2`) |
+| 51 | `plumbing(action="route", kind="cold")` com traçados antigos à mão | `replaced_drawn` lista as polilinhas trocadas: as da mesma espécie que chegam aos pontos, e as sem espécie que começam e terminam neles. O `electrical route` faz o mesmo. O `plumbing()` avisa linhas sem espécie em `plumb:untyped-lines`. (`5cf2f3b`) |
+| 52 | `move(ids=["f933"], to=[515,616])` | O primeiro id vai para lá e os outros acompanham. Parede como primeiro id diz *"move takes dx/dy"*. (`6a60091`) |
+| 53 | `catalog(q="grelha ventilação")`; `plumbing(action="route", kind="vent")` | Peça nova `vent-grille`: duas grelhas no ambiente do gás fecham o alerta, uma só vira dica. O ramal de ventilação é traçado da coluna aos desconectores, pela parede ou pelo forro, nunca pelo piso, com materiais. Um ramal traçado que chega ao desconector conta no `plumb:vent-far`. (`d2cc8eb`) |
+| 54 | `check_layout()` | `overlap_kinds` separa `served` (ponto dentro da peça a que serve, de propósito) de `nesting`. Ponto de rede ou tomada pedido atrás de uma bancada nasce 15 cm acima do tampo. (`bdb59df`, `dac8049`) |
+| 55 | `plumbing(action="route", kind="hot")` sem aquecedor | A mensagem já diz que `from` é o id de uma peça, com exemplo. (`d331846`) |
+| 56 | `place(cat="outlet-low", at=[400,40])` longe de parede | Recusado com a distância da parede mais próxima. Perto de uma parede, o ponto vai para a face dela. Ponto de teto vai ao teto. `check_layout` ganhou `loose` com o motivo: solto, no vidro, no vão, no ar. Ponto atrás de móvel ou embutido em móvel **não** é defeito. (`ddc8deb`, `bdb59df`, `b729946`) |
+| 57 | `plan_layer` do "Aéreo geladeira" e das peças "Coifa — …" | Marcenaria. Peça de grupo só sai da camada do grupo quando a dela é certa: escrita à mão, luminária ou eletrodoméstico de catálogo. (`e650c05`) |
+| Camada elétrica | Menu Camadas → "Elétrica (tomadas, luz, cabos)" | Esconder a elétrica tira tomadas, luminárias, cabos e números de circuito, na planta e no 3D. (`ce75ef3`) |
+| Ralos | `catalog(q="ralo")`; `plumbing()` | Ralo agora é o modelo que ele é, pelas fichas Tigre/Wavin/Krona: caixa sifonada 150×150×50, 100×150×50 e 150×185×75, ralo sifonado pequeno, ralo seco, linear com e sem sifão, ralo pluvial. Cada um tem fecho, saída, UHC e profundidade. O ralo vai rente ao piso do cômodo, nunca na parede, no vão ou embaixo de gabinete. O check cobra, por cômodo: um desconector de verdade (fecho de 50 mm), a carga que a saída aguenta, o ralo dentro do box e ralo pluvial em área descoberta. O `route` de esgoto compra cada ralo pelo modelo e soma a profundidade do corpo. (`4290312`) |
+| Fita elétrica | `electrical(action="route", kind="power", ids=[…], via="tape")` | Escolhe o modelo Eletrofitas pela carga; tomada exige a EF18.9.18, que tem terra. Recusa acima de 20 A, em banheiro ou área externa, e para rede ou TV. Compra os kits da Leroy com código, preço e emendas, e traz as notas: coberta por malha e massa, disjuntor até a corrente da fita, fora da NBR 5410 e sem Inmetro. (`5be63f2`) |
+| Tomadas embutidas | `place(cat="outlet-tower", at=[…])` sobre uma bancada | Torre retrátil de 60 mm, automática de 85 mm, de 4 tomadas de 100 mm, caixa de mesa e tomada de embutir em móvel, com símbolo e modelo 3D. A torre assenta no tampo, e bancada e torre podem vir na mesma chamada. O check cobra: nada embaixo (gaveta, forno, lava-louças, cuba, cooktop), 2,5 cm da borda, 30 cm da cuba e do cooktop, nada de banheiro, e tomada no gabinete para a torre de plugue. (`659715b`) |
+| Lacunas de norma | `route`/`circuits`/`plumbing`/`ergonomics`/`wifi` | Elétrica: caixas de passagem a cada 15 m menos 3 m por curva, DR agrupado admitido. Esgoto: caixa de inspeção de 60 cm, nota da curva do vaso e o teto de 5 % nos subcoletores. Wi-Fi: access point de outro andar atravessando a laje (10/13 dB), vidro low-e, bandas por AP. Ergonomia: 60 cm entre camas de solteiro, tampo acessível a 85 cm e cama a 46 cm, aquecedor a gás no banheiro (tipo C), cocção a gás onde se dorme (8,14 kW). O quadro de cargas do app agora rola a lista de achados. (`779d461`, `05344a7`, `71ffc3e`, `dac8049`, `70e3132`) |
+
 ---
 
 ## Conferido nesta rodada
