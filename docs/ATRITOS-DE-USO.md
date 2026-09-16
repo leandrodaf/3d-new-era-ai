@@ -2,29 +2,25 @@
 
 O que dói quando um agente conduz uma planta real pelo MCP, do lado de fora.
 
-Este documento é escrito de fora para dentro: um agente recebe uma planta de
-verdade e a tarefa de corrigi-la. Cada vez que uma ferramenta responde menos do
-que a pergunta pedia, obriga a um contorno, ou leva a uma conclusão errada
-antes de levar à certa, o caso é anotado aqui com o que aconteceu de fato.
-
-Não é uma lista de desejos, e não é crítica da planta. Cada entrada traz a
+Um agente recebe uma planta de verdade e a tarefa de corrigi-la. Cada vez que
+uma ferramenta responde menos do que a pergunta pedia, obriga a um contorno, ou
+leva a uma conclusão errada antes de levar à certa, o caso entra aqui com a
 chamada que se fez, a resposta literal, o que era verdade, o que custou e o que
-teria encurtado o caminho. Tudo é anotado aqui, à mão.
+teria encurtado o caminho. Tudo anotado à mão.
 
-O banco de provas é a mesma planta desde o começo: um apartamento de 65 m² com
-marcenaria desenhada módulo a módulo. Nesta rodada ele fechou com **nota 100**,
-zero achados com peso, `loose: 0` e `pending: 0` nas três disciplinas —
-elétrica (22 tomadas, 13 pontos de rede, 7 circuitos, quadro de 24 módulos com
-3 de reserva, 3 peças de automação, um access point com cobertura calculada e
-158 m de cabo traçados pelo `route`), hidráulica (30 pontos, 3 colunas e 20 m
-de ramal de ventilação, 2 grelhas de ventilação permanente, 78 m de tubo) e
-arquitetura.
+**Este arquivo guarda só o que ainda não foi resolvido.** Cada caso que cai sai
+daqui; o que doía em cada um está no histórico do git. Cinquenta e seis já
+saíram, todos conferidos em uso na mesma planta e não no changelog.
 
-## Rodada em aberto
+O banco de provas é o mesmo apartamento de 65 m² desde o começo, com marcenaria
+desenhada módulo a módulo. Hoje ele está em **nota 100**, zero achados com
+peso, `loose: 0` e `pending: 0` nas três disciplinas.
 
-Dois casos. Dos dez abertos na rodada passada, oito caíram na versão nova,
-conferidos um a um na planta com o comando que os produziu. O que sobrou é um
-achado que anda em círculo e um traçado que a própria ferramenta não reconhece.
+## Em aberto
+
+Três casos: um achado que anda em círculo, um traçado que a própria ferramenta
+não reconhece, e um mecanismo que não deu sintoma na última subida mas continua
+sem existir.
 
 ## 50. Dois achados que se anulam, e o `fix` que anda em círculo
 
@@ -111,62 +107,27 @@ conjunto está contido no primeiro, deveria substituir.
 mesma folga que as outras espécies usam — ou o `route` recusar traçar o que o
 `check` não vai aceitar, em vez de entregar um traçado e cobrá-lo em seguida.
 
----
+## 48. A aceitação órfã não aponta para o achado que a sucedeu
 
-## Conferido nesta rodada
+*Sem sintoma na última subida de versão — nenhuma das 20 aceitações se perdeu.
+Fica aberto porque a rede de proteção continua não existindo.*
 
-Oito dos dez casos abertos caíram. Cada um testado na planta, com o comando que
-o produziu — não no changelog.
+Quando uma regra passa a citar a fonte, a chave do achado ganha o prefixo
+(`-:f807:livres-frente-passagem-cama` virou
+`nbr15575g:f807:livres-frente-passagem-cama`). É a mesma regra, sobre a mesma
+peça, com o mesmo sufixo — e a aceitação escrita à mão vira órfã, o achado
+volta aberto, e a nota cai sem explicação.
 
-| # | O que doía | O comando desta rodada | O que voltou |
-|---|---|---|---|
-| 48 | A aceitação virava órfã quando a chave do achado ganhava a fonte como prefixo | Subida de versão inteira, depois `ergonomics(prune=true)` e `plumbing(check)` | Nenhuma aceitação se perdeu nesta subida: os 20 motivos escritos continuaram colados aos achados. O mecanismo que o caso pedia — casar a órfã com o achado sucessor — não existe: `orphaned` ainda devolve só `[chave, motivo]`, testado com uma aceitação inventada (`plumb:vent-far:f9999`). Sem sintoma, e sem rede de proteção para a próxima vez |
-| 49 | `update` aceitava um campo inexistente e respondia "nada mudou" | `update(items=[{"id":"f1576","props":{…}}])` | `unknown field 'props', expected one of id, a, b, t, h, arc, name, pts, …` — recusa na cara, com a lista do que existe |
-| 51 | O `route` redesenhava e o traçado à mão ficava por cima | `cable(kind="tv", pts=[[170,750],[340,750],[340,700]])` e depois `route(kind="tv")` | `"replaced_drawn": ["pl1877"]` — apagou o traçado antigo e disse qual |
-| 52 | `move` só andava por delta | `move(ids=["f933"], to=[515,630])` | `ok` |
-| 53 | Achado que desenho nenhum fechava | `catalog(q="grelha veneziana ventilação")` e `plumbing(route, kind="vent")` | Existem os dois: `vent-grille` "Grelha de ventilação permanente (gás)" 20 × 4 × 15, e `route kind=vent`, que recusa o piso com a razão certa (*"enterrado ele enche de água e não ventila"*). A grelha zera o alerta de gás quando está no cômodo do aparelho — aqui a cozinha não tem parede externa e a envoltória é o fechamento da varanda, então o achado segue aceito, agora apontando para uma peça desenhada |
-| 54 | `check_layout` afogava os casos reais em 49 aninhamentos esperados | `check_layout()` | `overlap_kinds: {nesting: 20, served: 31}` — o ponto dentro da peça que ele serve virou relação própria — e uma relação nova, `loose`, com a razão escrita: *"está no vão da porta Porta do banho social (f1512): não há parede ali para a caixa"* |
-| 55 | `route hot` pedia a origem e não dizia que era um id | `plumbing(route, kind="hot")` sem `from` | *"name the heater (aquecedor), or give from as the id of the piece it starts from (a heater, a shaft, a column), e.g. from=\"f801\""* |
-| 56 | Nada avisava que um ponto ficou solto no ar | `place(cat="outlet-low", at=[400,40])` e `place(cat="network-outlet", at=[135,620])` | A primeira foi assentada sozinha: pedida em `y=40`, ficou em `y=12`, com as costas na face da parede. A segunda foi recusada: *"fica embutido em parede, e a parede mais próxima (w20) está a 119 cm: dê at junto a uma parede ou wall=<id>"* |
-| 57 | A camada automática seguia a primeira palavra do nome | `update(items=[{"id":"f831","layer":""}])` e o mesmo nas 14 peças do armário da coifa | Tirados os overrides manuais, "Aéreo geladeira" continua `joinery`, e as 14 peças de madeira do armário da coifa também — a peça de um grupo só sai da camada do grupo quando a camada dela foi escrita à mão |
+O `orphaned` continua devolvendo só o par, testado com uma aceitação inventada:
 
-### O que as regras novas encontraram na planta
+```
+plumbing(check, accept=[["plumb:vent-far:f9999", "teste de orfandade"]])
+→ "orphaned": [["plumb:vent-far:f9999", "teste de orfandade"]]
+```
 
-Duas verificações que não existiam antes acharam **nove erros reais**, seis
-deles introduzidos por mim na rodada passada, quando assentei os pontos à mão
-sem saber de vão de porta nem de vidro:
+Nada liga a órfã ao achado que ocupou o lugar dela.
 
-- `loose` — a tomada e o RJ45 da cozinha **dentro do vão da porta do banho
-  social**; o registro geral **sobre o vidro do fechamento da varanda**; o ponto
-  de água da lava-e-seca solto no meio da lavanderia;
-- `elec:hidden` — cinco pontos **atrás da folha aberta de uma porta**
-  (*"ponha-o do lado da maçaneta"*): a tomada do dormitório atrás da porta da
-  suíte, os dois pontos da cozinha atrás da porta do banheiro, a tomada e o
-  RJ45 do escritório atrás da porta de entrada.
-
-Todos corrigidos. A tomada da cozinha foi para junto da geladeira, o RJ45 para
-o extremo da bancada, o registro geral desceu para 90 cm (abaixo do peitoril do
-vidro) e o ponto da lava-e-seca subiu para a parede atrás da máquina.
-
-Estado final: **nota 100**, zero achados com peso, `loose: 0`, `pending: 0` nas
-três disciplinas, 213 peças e **nenhuma sem apoio** em piso, teto, parede ou
-outra peça — medido peça a peça, não por amostragem.
-
-## O que já caiu
-
-Cinquenta e seis casos, todos verificados em uso na mesma planta, não no
-changelog. A lista com o que doía em cada um e onde foi resolvido está no
-histórico do git.
-
-Os que mais mudaram o trabalho: a folga negativa no lugar do `0` ambíguo; a
-extensão junto da folga (`"54 cm em 34,5 dos 185 cm"`), que separa um móvel
-inutilizável de um canto apertado; o `ergonomics` medindo pelo lado em que a
-peça abre; o `cut_list` alcançando o que foi desenhado à mão e declarando o que
-pulou; o grupo que mantém a espessura das chapas e faz crescer o vão; o número
-da peça preso à peça; o `no_door` para cômodo sem acesso; o quantitativo
-agrupado por tipo; o ponto de disciplina que deixou de ser lido como móvel; e
-as três disciplinas com o mesmo par `check` + `route`, que é o que transformou
-a hidráulica de adivinhação em trabalho conferido; e, nesta rodada, o `place`
-que assenta o ponto na parede sozinho e as duas relações que dizem quando uma
-peça não está apoiada em nada ou ficou atrás da folha de uma porta — as três
-coisas que faziam a planta parecer certa no número e errada no desenho.
+**Deveria:** casar órfã e achado novo pelo sufixo (peça + regra) e reaproveitar
+o motivo, dizendo que a chave mudou — ou, no mínimo, apontar no `orphaned` o
+achado que provavelmente o sucedeu. A chave é identidade; se ela carrega a
+fonte, ela muda quando a fonte muda.
