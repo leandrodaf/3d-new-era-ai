@@ -1,382 +1,205 @@
 # Atritos de uso
 
-O que dói quando um agente conduz uma planta real pelo MCP, do lado de fora.
+O que ainda dói quando um agente conduz uma planta real pelo MCP, do lado de fora.
 
-Este documento é escrito de fora para dentro: um agente recebe uma planta de
-verdade e a tarefa de corrigi-la. Cada vez que uma ferramenta responde menos do
-que a pergunta pedia, obriga a um contorno, ou leva a uma conclusão errada
-antes de levar à certa, o caso é anotado aqui com o que aconteceu de fato.
+Cada caso traz **o que aconteceu**, com a resposta literal que serve de prova,
+**como reproduzir** em um comando, e **o que deveria acontecer**. O banco de
+provas é sempre a mesma planta — um apartamento de 65 m² com marcenaria
+desenhada módulo a módulo, hoje em nota 99 e zero colisões.
 
-Não é uma lista de desejos. Cada entrada traz o que se tentou, o que voltou, e
-o que teria encurtado o caminho — com o caso concreto que o produziu, para que
-se possa reproduzir.
-
-## Rodada em aberto
-
-Duas versões de fixes depois, mesma planta. **Seis caíram** (15, 18, 19, 20,
-22, 24), **dois vieram pela metade** (16 e 21) e **três seguem** (17, 23, 25).
-Um novo apareceu junto da correção do 16, e é o mais sério da lista: o 26.
-
-### O que caiu
-
-Conferido em uso, não por leitura do changelog:
-
-- **1 — o dry run diz o tipo.** `"issues_new": [{"ids": "f1042", "kind": "turned"}]`.
-- **2 — folga negativa.** `"+y": [-58, "f830", …]` onde antes vinha `0`.
-- **4 — `ergonomics` usa a face construída.** O gabinete da pia, que relatava
-  "1 cm livres à frente" medindo contra o próprio tampo, agora relata os
-  75,2 cm do corredor, que é para onde ele abre.
-- **6 — a folga vem com a extensão.** `"54 cm livres à frente em 34,5 dos
-  185 cm"`. Era o que faltava para ler um aperto: 34,5 cm de 185 é a quina da
-  mesa de cabeceira, não um armário que não abre. Três justificativas escritas
-  à mão na rodada anterior, com sonda, agora vêm prontas na mensagem.
-- **8 — as análises no REST**, com `bounds` já girado.
-- **9 — `accept` em `check_layout`**, com `orphaned` junto.
-- **11 — aceites órfãos aparecem.** `"orphaned": [["nbr15575g:f848:…", "…"]]`.
-  O aceite que sobrevivia ao próprio achado agora se anuncia.
-- **12a — `catalog(scope=project)` respeita o `q`.** Quatro linhas no lugar de
-  duzentas.
-
-O 7 e o 10 foram além do pedido: `annotations(stale=true)` agora **confere os
-nomes das peças** e **diz o que conferiu** —
-
-```
-"checked": {"dims": 19, "dims_unanchored": 10, "labels": 0, "names": 59}
-```
-
-`dims_unanchored: 10` é exatamente a resposta que faltava: dez cotas que ninguém
-está vigiando, em vez de um `[]` que parecia um atestado de saúde.
-
-## 15. ~~O parser de medidas não entende a vírgula decimal~~ — RESOLVIDO
-
-A checagem de nomes, recém-chegada, devolveu 50 achados nesta planta. **28
-deles** são isto:
-
-```
-f954  escrito=5   medido=56,8   "48 — Gabinete do tanque integrado — 80,5 cm, duas portas"
-f849  escrito=75  medido=70,8   "Aéreo lavanderia — módulo 70,75 cm; limpeza"
-f831  escrito=9   medido=35     "Aéreo geladeira — 79,9 cm; ventilação inferior preservada"
-f1043 escrito=9   medido=30,7   "Micro-ondas … 53,9 × 43 × 30,7"
-```
-
-`80,5` foi lido como `5`; `70,75` como `75`; `79,9` como `9`. O parser quebra no
-separador decimal brasileiro e fica com o que vem depois da vírgula.
-
-Num software que mede em centímetros, cita ABNT e tem a interface em português,
-é o formato que a planta inteira usa. O efeito é pior do que não ter a
-checagem: 28 alarmes falsos afogam os reais — havia um só, `f1035`, "tampo
-aberto 110 × 30" com 119 cm de largura.
-
-**Encurtaria:** aceitar `,` como separador decimal ao ler o número.
-
-## 16. Redimensionar um grupo inverte a face que ele declara — PARCIAL
-
-Ampliar a mesa basculante de 110 para 119 cm — mudança só em `x` — fez a peça
-trocar de lado:
-
-```
-"from": {… "faces": "+y", "wdh": [110, 36, 29]}
-"to":   {… "faces": "-y", "wdh": [119, 36, 29]}
-```
-
-A geometria em `y` é idêntica antes e depois (o tampo segue projetando de 485 a
-515, para a sala). Só a face declarada girou, e com ela veio um `turned` novo
-no relatório.
-
-Pior, não há como desfazer só a declaração: `arrange flip` acerta o `faces`
-mas **espelha o conteúdo** — o tampo saltou de 485-515 para 479-509, entrando
-6 cm dentro do móvel —, e `angle` gira o grupo inteiro. Foi preciso dar undo e
-deixar a peça com o metadado errado.
-
-**Encurtaria:** o resize não recalcular a face; ou um jeito de corrigir a
-declaração sem mover nada.
-
-## 17. Grupo só sabe encolher junto
-
-A face da península tinha 180 cm: montante de 5,8, a mesa de 110, e 63,8 cm de
-trecho cheio. O vão virou 131 cm, e o que se queria era manter os montantes e
-**crescer** a mesa até a torre quente.
-
-`update(w=131)` no grupo escala tudo pelo mesmo fator: montante 5,8 → 4,2, mesa
-110 → 80,3. O oposto do pedido. Um vão de marcenaria não encolhe assim — os
-montantes têm a espessura que têm, e quem cresce é o vão entre eles.
-
-A saída foi `arrange ungroup`, editar as sete peças à mão com as contas
-refeitas, e deixar desagrupado.
-
-**Encurtaria:** uma forma de dizer o que estica e o que fica.
-
-## 18. ~~Parte de grupo não pode ser renomeada~~ — RESOLVIDO
-
-Depois do resize, `f1035` continua se chamando "tampo aberto 110 × 30" com
-119 cm. Corrigir é recusado:
-
-```
-f1035 … is a part of f1042; edit f1042 instead
-```
-
-Mas editar `f1042` renomeia o grupo, não a parte. O nome errado é o da peça de
-dentro — a mesma que o `stale` novo acusa, com razão, e a única que não se pode
-consertar. O achado real fica para sempre na lista.
-
-**Encurtaria:** permitir `name` em parte de grupo. É metadado, não geometria.
-
-## 19. ~~A sonda do `measure` não vê um armário de 280 cm~~ — RESOLVIDO
-
-Sondando a bancada da lavanderia:
-
-```
-measure(axis="x", at=450, range=[612, 650], z=[0, 280])
-→ spans: [[612, 613, "f1080", "Torre — rodapé recuado"], [613, 650, null, ""]]
-```
-
-De 613 a 650 estaria vazio. Não está: o vassoureiro `f988` ocupa 615-645, com a
-lateral `f957` em 615-617 subindo de z 0 a 280. A sonda atravessa um armário
-inteiro como se fosse ar — e reporta, na mesma resposta, uma peça vizinha
-(`f1080`) que também é parte de um grupo.
-
-O mesmo `measure`, perguntado de outro jeito, acerta:
-
-```
-measure(from="f988") → "+x": [50, "f955", …]
-```
-
-A consequência apareceu sozinha: `annotations(stale=true)` marcou a cota `d106`
-("passagem de 50 cm") como errada, dizendo que a ponta dela não toca nada e
-que `f1080` está 32 cm adiante — porque a ancoragem enxerga o mesmo vazio. A
-cota está certa; quem não vê é a sonda.
-
-**Encurtaria:** a sonda ler as partes de todo grupo, como `from` já faz. É a
-ferramenta que responde "o que tem aqui" — e um armário que some dela some
-também da ancoragem que depende dela.
-
-
-<!--
-  Modelo de uma entrada:
-
-  ## N. Título que diz o que dói
-
-  O caso, com os números e a resposta que voltou.
-
-  ```
-  a resposta literal, quando ela é a prova
-  ```
-
-  Por que custou caro, e o que se fez para contornar.
-
-  **Encurtaria:** a mudança que teria evitado o contorno.
--->
-
-## 20. ~~A lista de corte só enxerga o que o `joinery` fez~~ — RESOLVIDO
-
-Esta planta é marcenaria do começo ao fim: torre quente, gabinete do tanque,
-gavetões, aéreos, vassoureiro — cada um desenhado módulo a módulo, com as
-larguras, as chapas, os puxadores e os rodapés recuados no nome de cada peça.
-
-```
-cut_list()          → "no joinery builds here (make one with the joinery tool)"
-cut_list(ids=[…])   → idem
-```
-
-Nenhum móvel do projeto entra na lista de corte. Os que vieram de modelos
-importados não entram; o vassoureiro reconstruído aqui, como grupo de sólidos,
-também não. A saída mais valiosa do software — a lista que vai para a serra,
-com chapas, fitas de borda e ferragens — está fechada para quem desenhou de
-outro jeito, e é justamente quem mais precisaria dela.
-
-O `joinery` resolveria, mas refazer um vassoureiro paramétrico custa o
-acabamento: as molduras 3D, as frentes rebaixadas e os puxadores de latão que
-combinam com o resto da cozinha não sobrevivem à troca.
-
-**Encurtaria:** o `cut_list` aceitar um grupo qualquer, tratando cada sólido
-como uma peça — as medidas estão todas lá.
-
-> **Confirmado pelo outro lado.** O buffet da varanda foi refeito com
-> `cabinet_run` + `joinery`, e o `cut_list` respondeu na hora: 28 linhas de
-> peças com material, quantidade, medidas e fita de borda (`"2+2"`), mais a
-> ferragem separada por módulo — corrediças, dobradiças de caneco, suportes de
-> prateleira, puxadores —, tudo apoiado em NBR 15316 e NBR 14810. É uma
-> ferramenta excelente atrás de uma porta fechada: quem desenhou a planta com
-> modelos importados não a alcança, e o custo de alcançá-la é refazer o móvel.
-
-## 22. ~~O erro de tipo não diz qual campo~~ — RESOLVIDO
-
-`cabinet_run` com dez parâmetros em `p` e um deles errado:
-
-```
-{"row": "base", "h": 87, "d": 65, "top": true, "drawers": true, …}
-→ "invalid parameters: invalid type: boolean `true`, expected u32"
-```
-
-Qual deles? `top` também é booleano e está certo; `drawers` é que esperava um
-número. A mensagem não nomeia o campo, e num `p` de dez chaves sobra tentativa
-e erro.
-
-O contraste está na chamada seguinte, que errou o tipo de `room`:
-
-```
-→ "invalid id `Varanda` (expected e.g. `r12`)"
-```
-
-Essa diz o que veio, o que se esperava e dá um exemplo. É o padrão que a outra
-deveria seguir.
-
-**Encurtaria:** nomear o campo no erro de tipo dentro de `p`.
-
-## 21. `accept` no `check_layout` ainda não vale para `in_wall` — PARCIAL
-
-O `accept` chegou (era o atrito 9), e funciona: aceitar um par de sobreposição
-tira o peso e mantém a linha no relatório, com `orphaned` avisando quando o
-motivo deixa de valer.
-
-Mas a chave só existe para `overlap` —
-
-```
-"key": "overlap:f826+f847"
-```
-
-`in_wall` e `outside_rooms` vêm sem `key`. São, nesta planta, as cinco linhas
-que sobram para sempre: as duas persianas de rolo que estão dentro da parede
-porque é ali que elas ficam, o shaft e os dois vidros do escritório que não
-estão dentro de nenhum polígono de cômodo porque não deveriam estar. Aceitar
-uma delas devolve `orphaned` — a chave inventada não corresponde a nada.
-
-**Encurtaria:** `key` também em `in_wall` e `outside_rooms`.
-
-## 23. Não há como reusar um modelo que já está no projeto
-
-O arremate de madeira da cozinha é um modelo importado. Para repetir a mesma
-peça — e a mesma textura — na lavanderia, na varanda, na torre e no
-vassoureiro, o caminho natural seria referenciá-lo:
-
-```
-place(model="51/crown.obj", …)
-→ "51/crown.obj: could not read the file: No such file or directory"
-```
-
-O caminho existe: é exatamente o que `catalog(scope="project")` devolve para
-aquela peça. Só que ele nomeia um modelo **embutido no projeto**, não um
-arquivo em disco, e `place` só sabe ler do disco. O original pode ter vindo de
-um `.sh3d` importado meses atrás, de um arquivo que não existe mais na máquina.
-
-O `catalog(scope="project")` chega a anunciar a intenção certa — *"how many
-there are and one id to copy from"* —, mas não existe um "copie esta peça". O
-contorno foi `arrange array` com um deslocamento qualquer (`dy: 1000`, para
-jogar as cópias fora da casa) e depois `update` em cada uma, trazendo-a para o
-lugar e redimensionando. Oito peças de roda-teto nasceram assim.
-
-**Encurtaria:** `place` aceitar o id de uma peça existente como fonte — ou um
-`copy` explícito em `arrange`, sem precisar arremessar as cópias para longe
-primeiro.
-
-## 24. ~~Uma peça a 2,72 m é avaliada como obstáculo de circulação~~ — RESOLVIDO
-
-A moldura de roda-teto da torre, 3 cm de saliência a **272 cm do piso**,
-recebeu:
-
-```
-"82 cm livres à frente (circulação diante de bancada e equipamentos:
- mínimo 85 cm); afaste Sofá Milano … 4 cm."
-```
-
-A folga é medida contra o sofá, lá no chão. Ninguém circula diante de uma
-moldura que está acima da cabeça; o que passa por ali passa por baixo dela.
-
-O `fix` oferecido era mover o sofá 4 cm. Rodado em dry, isso de fato resolvia o
-alerta e subia a nota de 94 para 98 — criando, em troca, uma dica nova: 33 cm
-entre o sofá e o rack, abaixo dos 35 de mínimo. Um aperto real no lugar de um
-falso positivo.
-
-`measure` já sabe fazer isso direito: tem `z`, a banda de altura que conta,
-`[0, 200]` por padrão — "o que uma pessoa andando encontra". A regra de
-circulação não usa a mesma ideia.
-
-**Encurtaria:** a checagem de circulação ignorar o que está acima da cabeça, ou
-medir a folga na altura em que a peça realmente estorva.
-
-## 25. `joinery` não tem `anchor`, e o armário se descola da parede
-
-O balcão da varanda precisava recuar de 65 para 57 cm de profundidade, para
-alinhar com o volume que divide a sala da varanda. Com `joinery`:
-
-```
-joinery(id="f1219", p={"d": 57})
-```
-
-O módulo encolheu pela frente **e pelo fundo**: estava em `y 691-756`,
-encostado na parede, e foi para `695-752` — quatro centímetros de vão atrás,
-onde nenhum armário de parede fica. O tampo fez o mesmo. Foram quatro peças a
-reposicionar com um `move(dy=4)` depois, e só se percebe o problema medindo,
-porque num render de frente o vão atrás não aparece.
-
-O `update` resolve isso desde sempre, e a própria documentação dele explica por
-quê: *"anchor … holds one face still … instead of growing around the center,
-so a run of joinery keeps its back on the wall"*. É exatamente o caso. Mas
-`anchor` é de `update`, e mudar um parâmetro de um build é `joinery`, que não
-o tem.
-
-**Encurtaria:** `anchor` em `joinery`, com o mesmo significado — ou um armário
-de parede manter o fundo por padrão, já que o `cabinet_run` sabe em que parede
-o pôs.
-
-## 26. O `turned` parou de avisar, e a face continua errada
-
-Esta é a que preocupa, porque veio junto com a correção do 16.
-
-O vassoureiro extraível (`f1218`) abre para `-y`, o corredor da cozinha: é lá
-que está a frente, o puxador e os 67,6 cm de espaço livre. Na versão anterior
-ele aparecia em `turned` com `built: -y, placed: +y` — a face **certa**, o
-`angle` errado, e o aviso apontando a divergência.
-
-Agora:
-
-```
-get_home(f1218)     → "faces": "+y"
-measure(from=f1218) → "faces": "+y",  "-y": [67.6, "f829", …]
-check_layout()      → turned: f901, f909, f1130, f1165   (f1218 saiu)
-```
-
-As duas ferramentas passaram a concordar — **no valor errado**. O armário
-declara que abre para a sala, onde a folga é de 0,9 cm contra o próprio
-roda-teto, e nada mais sinaliza isso: a lista de `turned` era o único lugar
-onde a divergência aparecia, e ela deixou de apontar exatamente porque os dois
-lados agora dizem a mesma coisa.
-
-A peça foi montada com `arrange group` a partir de sólidos desenhados — não tem
-painel de porta que o motor reconheça como frente. Um armário assim fica sem o
-aviso e sem a face.
-
-**Encurtaria:** derivar a face das frentes reais quando houver, e quando não
-houver, dizer que não sabe em vez de escolher um lado.
+Os casos resolvidos saem daqui conforme caem; o histórico fica no git.
 
 ---
 
-## O que a rodada anterior deixou para verificar
+## 26. O `turned` parou de avisar, e a face continua errada
 
-A primeira rodada levantou 14 atritos sobre um apartamento de 65 m² com
-marcenaria desenhada módulo a módulo. O texto completo de cada um, com os
-números e as respostas literais, está no histórico:
+O mais sério da lista, porque apagou o próprio alarme.
 
-    git show caf4ec1:docs/ATRITOS-DE-USO.md
+O vassoureiro extraível abre para `-y`, o corredor da cozinha: é lá que estão a
+frente, o puxador e 67,6 cm livres. Do outro lado há 0,9 cm, contra o próprio
+roda-teto.
 
-Um deles — as análises existirem só atrás do MCP, e o REST mandar `width`/`depth`
-sem o ângulo aplicado — foi resolvido em `94cdd11`. Os outros treze são o ponto
-de partida da revisão nova: conferir, na versão que sobe agora, o que caiu, o
-que continua e o que apareceu junto.
+```
+get_home(ids=["f1218"])   → "faces": "+y"
+measure(from="f1218")     → "faces": "+y",  "-y": [67.6, "f829", …]
+check_layout()            → turned: f901, f909, f1130, f1165   (f1218 não está)
+```
 
-| # | O que doía | Onde |
+Na versão anterior ele aparecia em `turned` com `built: -y, placed: +y` — a
+face **certa** e o ângulo errado, com o aviso apontando a divergência. Agora as
+duas ferramentas concordam **no valor errado**, e por concordarem o `turned`
+deixou de apontar. Era o único lugar onde isso aparecia.
+
+A peça foi montada com `arrange group` sobre sólidos desenhados: não tem painel
+de porta que o motor reconheça como frente.
+
+**Reproduzir:** `measure(from="f1218")` — compare o `faces` com onde estão a
+frente e o puxador (`get_home(ids=["f1210","f1212"])`, y 415,6–419,1).
+
+**Deveria:** derivar a face das frentes quando houver; quando não houver, dizer
+que não sabe em vez de escolher um lado — e continuar sinalizando.
+
+## 27. O `anchor` enxerga dentro dos grupos; o `stale` não
+
+Descoberto agora, ancorando as cotas soltas da planta.
+
+```
+annotations(anchor=true)   → {"anchored": ["d104", "d105"]}
+annotations(stale=true)    → ["d105", 91, 91, "f1210",
+                              "f1210 is gone; this no longer marks anything"]
+```
+
+Repare nos números: **escrito 91, medido 91** — a cota está certa. E `f1210`
+não sumiu:
+
+```
+get_home(ids=["f1210"])
+→ "Vassoureiro extraível — frente 30 × 195 cm", bounds [[615,417.1],[645,419.1]]
+```
+
+Ela existe: é **parte do grupo** `f1218`. O `anchor` desceu no grupo e amarrou a
+cota nela; o `stale` só procura no nível de cima, não acha, e declara a âncora
+morta. A cota fica permanentemente stale, com o número correto, a cada revisão.
+
+É o mesmo efeito do antigo caso 13 — cota travada em estado de erro — mas por
+outra causa, e esta reproduz em um par de comandos.
+
+**Reproduzir:** os dois comandos acima, nesta ordem.
+
+**Deveria:** o `stale` procurar a âncora também dentro dos grupos, como o
+`anchor` já faz.
+
+## 17. Grupo só sabe escalar tudo junto
+
+Um armário de 30 cm que precisa virar 40 cm não engorda as chapas: os montantes
+continuam com 2 cm e quem cresce é o vão entre eles.
+
+```
+update(items=[{"id": "f1218", "w": 40}], dry=true)
+→ f957  lateral:    2 cm  → 2,7 cm
+→ f1214 corrediça:  1,5   → 2
+→ f1216 fundo:      26    → 34,7
+```
+
+Fator 1,333 aplicado a tudo. Chapa de 15 mm não vira 20 mm porque o armário
+ficou mais largo, e corrediça telescópica é comprada em medidas de catálogo.
+
+O mesmo apareceu na moldura da mesa basculante: levar a face de 180 para 131 cm
+**encolhia** a mesa de 110 para 80, quando o pedido era manter os montantes e
+crescer a mesa até a torre. A saída foi `ungroup`, refazer as sete peças na mão
+e deixar desagrupado.
+
+**Reproduzir:** o `update` acima, em dry.
+
+**Deveria:** haver como dizer o que estica e o que fica — ou espessuras de
+chapa e ferragem serem preservadas por padrão.
+
+## 25. `joinery` não tem `anchor`, e o armário se descola da parede
+
+```
+joinery(id="f1291", p={"d": 55})
+antes:  bounds y 699–756   (encostado na parede)
+depois: bounds y 700–755   (1 cm de vão atrás)
+```
+
+Encolhe pela frente **e** pelo fundo. Nenhum armário de parede tem vão atrás, e
+o problema não aparece em render nenhum de frente — só medindo.
+
+O `update` resolve isso desde sempre, e a documentação dele explica exatamente
+este caso: *"anchor … holds one face still … so a run of joinery keeps its back
+on the wall"*. Mas `anchor` é de `update`, e mudar parâmetro de build é
+`joinery`.
+
+**Reproduzir:** o comando acima, seguido de `get_home(ids=["f1291"])`.
+
+**Deveria:** `anchor` em `joinery` com o mesmo significado — ou o fundo ficar
+parado por padrão, já que o `cabinet_run` sabe em que parede pôs o módulo.
+
+## 23. Não há como reusar um modelo que já está no projeto
+
+Para repetir o arremate de madeira da cozinha em mais cinco lugares:
+
+```
+place(items=[{"model": "51/crown.obj", …}])
+→ "51/crown.obj: could not read the file: No such file or directory"
+
+place(items=[{"cat": "f832", …}])
+→ "unknown catalog id `f832` (use the catalog tool)"
+```
+
+O caminho `51/crown.obj` é exatamente o que `catalog(scope="project")` devolve
+para aquela peça, mas nomeia um modelo **embutido no projeto**, não um arquivo
+em disco — o original pode ter vindo de um `.sh3d` importado meses atrás.
+
+O `catalog(scope="project")` até anuncia a intenção certa — *"one id to copy
+from"* — mas não existe o "copiar esta peça". O contorno foi `arrange array`
+com `dy: 1000`, para jogar as cópias fora da casa, e `update` em cada uma para
+trazê-la de volta. Oito peças de roda-teto nasceram assim.
+
+**Reproduzir:** qualquer um dos dois comandos acima.
+
+**Deveria:** `place` aceitar o id de uma peça existente como fonte, ou um
+`copy` em `arrange` que não precise arremessar as cópias para longe primeiro.
+
+## 21. `accept` no `check_layout` ainda não vale para `in_wall`
+
+O `accept` chegou e funciona: `overlap`, `outside_rooms` e `turned` trazem
+`key`, e `orphaned` avisa quando o motivo deixa de valer.
+
+`in_wall` não tem `key`:
+
+```
+check_layout()
+→ in_wall:        [[{bounds, id, level, name, z}, …]]        sem key
+→ outside_rooms:  [{bounds, id, key, level, name, z}, …]     com key
+```
+
+São as duas persianas de rolo integradas, que estão dentro da espessura da
+parede porque é ali que uma persiana de rolo fica. Duas linhas que voltam a
+cada revisão sem como dizer "visto, está correto".
+
+**Reproduzir:** `check_layout()` e comparar as chaves das duas listas.
+
+**Deveria:** `key` em `in_wall` também.
+
+---
+
+## Sem como reproduzir agora
+
+**O `fix` que desmancha o móvel** (antigo caso 5). Na versão anterior, o `fix`
+de um alerta mandava mover a lava-louças 17 cm — para fora do nicho de
+marcenaria em que estava embutida — e isso *melhorava* a nota, sem que
+`outgrew_niche` fosse consultado. Hoje a planta não tem nenhum finding com
+`fix` oferecido, então não dá para dizer se mudou. Fica anotado para a próxima
+planta que ofereça um.
+
+---
+
+## O que já caiu
+
+Verificado em uso, não no changelog. O texto de cada um está no histórico do
+git, com os números e as respostas literais.
+
+| # | O que doía | Caiu em |
 |---|---|---|
-| 1 | Dry run não diz o *tipo* do problema que vai criar (só `["f817+f830"]`) | `move`, `update` |
-| 2 | Folga `0` quer dizer "encostado" e "enfiado dentro" | `clearances` |
-| 3 | Modelo importado colide pela caixa, e não há como declarar convivência | `check_layout` |
-| 4 | Discorda de `measure` sobre para que lado a peça abre; `turned` não tem conserto | `ergonomics` |
-| 5 | O `fix` sugerido tira o embutido do móvel e melhora a nota | `ergonomics` |
-| 6 | A folga é o pior ponto, sem dizer em que extensão vale | `ergonomics` |
-| 7 | Os números que a planta guarda no nome das peças não são conferidos | `annotations` |
-| 9 | Não há `accept` com motivo, como em `ergonomics` | `check_layout` |
-| 10 | Cota sem âncora nunca fica stale; ancorar depois congela o erro | `annotations` |
-| 11 | `accept` sobrevive ao achado que o justificava, e volta silenciado | `ergonomics` |
-| 12a | `scope=project` ignora o `q` e despeja o projeto inteiro | `catalog` |
-| 12b | O `score` do dry run usa a ocupação padrão, não a da revisão | dry runs |
-| 13 | Âncora morre com a peça e `anchor=true` não religa; cota fica stale para sempre | `annotations` |
-| 14 | Apagada a peça, o rótulo dela fica apontando para o vazio | `delete` |
+| 1 | Dry run não dizia o tipo do problema que ia criar | `kind` no `issues_new` |
+| 2 | Folga `0` valia para "encostado" e "enfiado dentro" | folga negativa |
+| 3 | Colisão por caixa sem como declarar convivência | `accept` em `overlap` |
+| 4 | `ergonomics` media pelo lado oposto ao que a peça abre | face construída |
+| 6 | A folga era o pior ponto, sem a extensão | "54 cm em 34,5 dos 185" |
+| 7 | Os números no nome das peças não eram conferidos | `stale` confere nomes |
+| 8 | Análises só atrás do MCP; `bounds` sem ângulo no REST | `/api/*` + bounds |
+| 9 | Sem `accept` no `check_layout` | `accept` + `orphaned` |
+| 10 | `stale` calado não distinguia "tudo certo" de "nada conferido" | `checked: {...}` |
+| 11 | `accept` sobrevivia ao achado que o justificava | `orphaned` |
+| 12a | `scope=project` ignorava o `q` | `q` respeitado |
+| 12b | Score do dry usava a ocupação padrão | usa a da revisão |
+| 13 | Cota sem âncora nunca ficava stale | `dims_unanchored` |
+| 14 | Rótulo ficava apontando para o vazio após `delete` | `labels_left` |
+| 15 | "80,5 cm" era lido como `5` — 28 de 50 achados falsos | vírgula decimal |
+| 16 | Resize de grupo invertia a face declarada | face preservada |
+| 18 | Parte de grupo não podia ser renomeada | `name` aceito |
+| 19 | A sonda atravessava um armário de 280 cm | lê as partes |
+| 20 | `cut_list` só enxergava o que o `joinery` fez | `drawn` + `skipped` |
+| 22 | Erro de tipo não dizia qual campo | nomeia o campo |
+| 24 | Peça a 2,72 m avaliada como obstáculo de circulação | ignora o que está alto |
