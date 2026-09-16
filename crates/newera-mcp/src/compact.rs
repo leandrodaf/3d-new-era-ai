@@ -289,11 +289,14 @@ pub(crate) fn piece(
     }
     // Which jamb a hinged leaf turns on: a flip of it is a change, and a dry
     // run that answered `{}` for one looked like a flip that did nothing.
-    if f.opening
+    // Always said, true or false: a flip read as `true → null` looked like
+    // the value had been lost.
+    if let Some(o) = f
+        .opening
         .as_ref()
-        .is_some_and(|o| !o.sliding && o.leaves < 2 && o.hinge_right)
+        .filter(|o| !o.sliding && o.leaves < 2 && o.kind == newera_core::OpeningKind::Door)
     {
-        v["hinge_right"] = json!(true);
+        v["hinge_right"] = json!(o.hinge_right);
     }
     if f.is_opening()
         && let Some(i) = cuts

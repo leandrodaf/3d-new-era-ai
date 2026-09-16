@@ -426,6 +426,10 @@ mod tests {
             &changed["to"]["hinge_right"],
         );
         assert_ne!(from, to, "the hinge is named as what moved: {dry}");
+        assert!(
+            from.is_boolean() && to.is_boolean(),
+            "both sides as booleans, never null: {dry}"
+        );
 
         // Asking for the hinge it already has is said, not answered with a
         // silent ok or an empty dry run.
