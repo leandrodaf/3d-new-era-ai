@@ -379,10 +379,21 @@ impl NewEraMcp {
                 };
                 let bill = electrical::materials(&route, cable, section, category, &kinds);
                 // Replaces the run drawn before for the same thing.
+                // Named by what it serves, so routing the same points again
+                // replaces it and routing others adds a run beside it.
                 let run = format!(
                     "{}:{}",
                     cable.key(),
-                    p.circuit.clone().unwrap_or_else(|| "all".into())
+                    p.circuit.clone().unwrap_or_else(|| {
+                        let mut ids: Vec<String> =
+                            wanted.iter().map(|pt| pt.id.to_string()).collect();
+                        ids.sort();
+                        if p.ids.is_empty() {
+                            "all".into()
+                        } else {
+                            ids.join("+")
+                        }
+                    })
                 );
                 let mut commands: Vec<newera_core::Command> = home
                     .polylines
