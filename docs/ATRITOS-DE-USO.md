@@ -13,7 +13,9 @@ se possa reproduzir.
 
 ## Rodada em aberto
 
-Versão com os fixes, mesma planta, continuando a marcenaria da península.
+Duas versões de fixes depois, mesma planta. **Seis caíram** (15, 18, 19, 20,
+22, 24), **dois vieram pela metade** (16 e 21) e **três seguem** (17, 23, 25).
+Um novo apareceu junto da correção do 16, e é o mais sério da lista: o 26.
 
 ### O que caiu
 
@@ -45,7 +47,7 @@ nomes das peças** e **diz o que conferiu** —
 `dims_unanchored: 10` é exatamente a resposta que faltava: dez cotas que ninguém
 está vigiando, em vez de um `[]` que parecia um atestado de saúde.
 
-## 15. O parser de medidas não entende a vírgula decimal
+## 15. ~~O parser de medidas não entende a vírgula decimal~~ — RESOLVIDO
 
 A checagem de nomes, recém-chegada, devolveu 50 achados nesta planta. **28
 deles** são isto:
@@ -67,7 +69,7 @@ aberto 110 × 30" com 119 cm de largura.
 
 **Encurtaria:** aceitar `,` como separador decimal ao ler o número.
 
-## 16. Redimensionar um grupo inverte a face que ele declara
+## 16. Redimensionar um grupo inverte a face que ele declara — PARCIAL
 
 Ampliar a mesa basculante de 110 para 119 cm — mudança só em `x` — fez a peça
 trocar de lado:
@@ -104,7 +106,7 @@ refeitas, e deixar desagrupado.
 
 **Encurtaria:** uma forma de dizer o que estica e o que fica.
 
-## 18. Parte de grupo não pode ser renomeada, e é a parte que mente
+## 18. ~~Parte de grupo não pode ser renomeada~~ — RESOLVIDO
 
 Depois do resize, `f1035` continua se chamando "tampo aberto 110 × 30" com
 119 cm. Corrigir é recusado:
@@ -119,7 +121,7 @@ consertar. O achado real fica para sempre na lista.
 
 **Encurtaria:** permitir `name` em parte de grupo. É metadado, não geometria.
 
-## 19. A sonda do `measure` não vê um armário de 280 cm
+## 19. ~~A sonda do `measure` não vê um armário de 280 cm~~ — RESOLVIDO
 
 Sondando a bancada da lavanderia:
 
@@ -165,7 +167,7 @@ também da ancoragem que depende dela.
   **Encurtaria:** a mudança que teria evitado o contorno.
 -->
 
-## 20. A lista de corte só enxerga o que o `joinery` fez
+## 20. ~~A lista de corte só enxerga o que o `joinery` fez~~ — RESOLVIDO
 
 Esta planta é marcenaria do começo ao fim: torre quente, gabinete do tanque,
 gavetões, aéreos, vassoureiro — cada um desenhado módulo a módulo, com as
@@ -197,7 +199,7 @@ como uma peça — as medidas estão todas lá.
 > ferramenta excelente atrás de uma porta fechada: quem desenhou a planta com
 > modelos importados não a alcança, e o custo de alcançá-la é refazer o móvel.
 
-## 22. O erro de tipo não diz qual campo
+## 22. ~~O erro de tipo não diz qual campo~~ — RESOLVIDO
 
 `cabinet_run` com dez parâmetros em `p` e um deles errado:
 
@@ -221,7 +223,7 @@ deveria seguir.
 
 **Encurtaria:** nomear o campo no erro de tipo dentro de `p`.
 
-## 21. `accept` no `check_layout` só vale para `overlap`
+## 21. `accept` no `check_layout` ainda não vale para `in_wall` — PARCIAL
 
 O `accept` chegou (era o atrito 9), e funciona: aceitar um par de sobreposição
 tira o peso e mantém a linha no relatório, com `orphaned` avisando quando o
@@ -267,7 +269,7 @@ lugar e redimensionando. Oito peças de roda-teto nasceram assim.
 `copy` explícito em `arrange`, sem precisar arremessar as cópias para longe
 primeiro.
 
-## 24. Uma peça a 2,72 m de altura é avaliada como obstáculo de circulação
+## 24. ~~Uma peça a 2,72 m é avaliada como obstáculo de circulação~~ — RESOLVIDO
 
 A moldura de roda-teto da torre, 3 cm de saliência a **272 cm do piso**,
 recebeu:
@@ -316,6 +318,36 @@ o tem.
 **Encurtaria:** `anchor` em `joinery`, com o mesmo significado — ou um armário
 de parede manter o fundo por padrão, já que o `cabinet_run` sabe em que parede
 o pôs.
+
+## 26. O `turned` parou de avisar, e a face continua errada
+
+Esta é a que preocupa, porque veio junto com a correção do 16.
+
+O vassoureiro extraível (`f1218`) abre para `-y`, o corredor da cozinha: é lá
+que está a frente, o puxador e os 67,6 cm de espaço livre. Na versão anterior
+ele aparecia em `turned` com `built: -y, placed: +y` — a face **certa**, o
+`angle` errado, e o aviso apontando a divergência.
+
+Agora:
+
+```
+get_home(f1218)     → "faces": "+y"
+measure(from=f1218) → "faces": "+y",  "-y": [67.6, "f829", …]
+check_layout()      → turned: f901, f909, f1130, f1165   (f1218 saiu)
+```
+
+As duas ferramentas passaram a concordar — **no valor errado**. O armário
+declara que abre para a sala, onde a folga é de 0,9 cm contra o próprio
+roda-teto, e nada mais sinaliza isso: a lista de `turned` era o único lugar
+onde a divergência aparecia, e ela deixou de apontar exatamente porque os dois
+lados agora dizem a mesma coisa.
+
+A peça foi montada com `arrange group` a partir de sólidos desenhados — não tem
+painel de porta que o motor reconheça como frente. Um armário assim fica sem o
+aviso e sem a face.
+
+**Encurtaria:** derivar a face das frentes reais quando houver, e quando não
+houver, dizer que não sabe em vez de escolher um lado.
 
 ---
 
