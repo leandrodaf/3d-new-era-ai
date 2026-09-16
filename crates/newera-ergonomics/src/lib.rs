@@ -1783,6 +1783,38 @@ fn key_of(finding: &Finding) -> String {
     format!("{rule}:{place}:{words}")
 }
 
+/// Acceptances of ergonomics findings that no current finding answers to,
+/// on any storey, for these people.
+///
+/// A finding accepted with "corridor of 69 cm" as its reason, and then fixed
+/// for real, leaves the reason behind; if the counter ever comes back, the
+/// finding returns already silenced. Listing them is what lets them go.
+pub fn orphaned(home: &Home, profile: &Profile) -> Vec<(String, String)> {
+    let mine: Vec<(&String, &String)> = home
+        .accepted
+        .iter()
+        .filter(|(key, _)| !newera_core::Issue::is_layout_key(key))
+        .collect();
+    if mine.is_empty() {
+        return Vec::new();
+    }
+    let storeys: Vec<Option<newera_core::LevelId>> = if home.levels.is_empty() {
+        vec![None]
+    } else {
+        home.levels.iter().map(|l| Some(l.id)).collect()
+    };
+    let mut live = std::collections::BTreeSet::new();
+    for storey in storeys {
+        let mut shown = home.clone();
+        shown.selected_level = storey;
+        live.extend(review(&shown, profile).findings.into_iter().map(|f| f.key));
+    }
+    mine.into_iter()
+        .filter(|(key, _)| !live.contains(*key))
+        .map(|(key, why)| (key.clone(), why.clone()))
+        .collect()
+}
+
 pub fn review(home: &Home, profile: &Profile) -> Report {
     let view = home.level_view(home.current_level());
     let scene = Scene::new(&view);

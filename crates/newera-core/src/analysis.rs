@@ -165,6 +165,40 @@ impl Issue {
         self.is_defect() && self.accepted(home).is_none()
     }
 
+    /// Whether an accepted key names a layout finding (and not an
+    /// ergonomics one, which shares the project's list of acceptances).
+    pub fn is_layout_key(key: &str) -> bool {
+        const FAMILIES: [&str; 8] = [
+            "overlap",
+            "blocked",
+            "in_wall",
+            "blocks_door",
+            "outside_rooms",
+            "outgrew_niche",
+            "loose_opening",
+            "turned",
+        ];
+        key.split_once(':')
+            .is_some_and(|(family, _)| FAMILIES.contains(&family))
+    }
+
+    /// Acceptances of layout findings that no longer exist on any storey.
+    ///
+    /// The reason stays in the project after what it explained is gone, and
+    /// if the problem comes back it comes back already silenced, with a
+    /// reason about a drawing that no longer exists.
+    pub fn orphaned(home: &Home) -> Vec<(String, String)> {
+        let live: std::collections::BTreeSet<String> = check_layout_in(home, Storeys::All)
+            .iter()
+            .map(Issue::key)
+            .collect();
+        home.accepted
+            .iter()
+            .filter(|(key, _)| Self::is_layout_key(key) && !live.contains(*key))
+            .map(|(key, why)| (key.clone(), why.clone()))
+            .collect()
+    }
+
     /// Writes a key the way [`Issue::key`] does, so `f830+f817` and a bare
     /// pair of ids name the same overlap.
     pub fn normalize_key(raw: &str) -> String {

@@ -159,6 +159,7 @@ mod tests {
                 level: Some("all".into()),
                 areas: None,
                 accept: Vec::new(),
+                prune: false,
             }))
             .unwrap(),
         )
@@ -185,6 +186,7 @@ mod tests {
                 level: Some("all".into()),
                 areas: None,
                 accept: Vec::new(),
+                prune: false,
             }))
             .unwrap(),
         )

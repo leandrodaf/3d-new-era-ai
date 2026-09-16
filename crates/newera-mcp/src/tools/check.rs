@@ -18,6 +18,9 @@ pub(crate) struct ErgonomicsParams {
     /// the reason, and stop costing score. An empty reason takes it back.
     #[serde(default)]
     pub(crate) accept: Vec<Vec<String>>,
+    /// Drop the acceptances listed in `orphaned`, in one undoable step.
+    #[serde(default)]
+    pub(crate) prune: bool,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -33,6 +36,9 @@ pub(crate) struct CheckParams {
     /// it back.
     #[serde(default)]
     pub(crate) accept: Vec<Vec<String>>,
+    /// Drop the acceptances listed in `orphaned`, in one undoable step.
+    #[serde(default)]
+    pub(crate) prune: bool,
 }
 /// A server on an empty document, for the domain modules' tests.
 fn round2(v: f64) -> f64 {
@@ -41,10 +47,10 @@ fn round2(v: f64) -> f64 {
 #[tool_router(router = check_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Ergonomics and habitability review for the people living there. It never blocks anything: it reads the drawing and says what it finds, and the drawing stays the user's — somebody sketching to learn or to see an idea is not stopped by a standard. (occupants, children, elderly, wheelchair, stature cm, city): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen (work triangle, counter heights, Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. Reply {score, capacity, findings:[{sev, place, msg, key, weight, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. weight is what the score would gain if that one went away, so a score that moved can be read; key names the finding for accept. src is the source the finding stands on, empty when it is common practice; resolve it in sources instead of asking. tier is the reliability ladder A obliges (Brazilian standard, municipal code) · B references (foreign standard) · C doctrine · D measured · E survey — and it is why a finding is an error or only a tip. fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap). city, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against a standard the more restrictive one wins — set it once with set_home(city=…) so dry runs and check_layout weigh the same rules. accept=[[key, reason]] marks findings already looked at: they stay in the report with their reason and stop costing score, which is what lets a correct plan reach zero pendencies honestly; accept=[[key, empty]] takes it back."
+        description = "Ergonomics and habitability review for the people living there. It never blocks anything: it reads the drawing and says what it finds, and the drawing stays the user's — somebody sketching to learn or to see an idea is not stopped by a standard. (occupants, children, elderly, wheelchair, stature cm, city): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen (work triangle, counter heights, Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. Reply {score, capacity, findings:[{sev, place, msg, key, weight, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. weight is what the score would gain if that one went away, so a score that moved can be read; key names the finding for accept. src is the source the finding stands on, empty when it is common practice; resolve it in sources instead of asking. tier is the reliability ladder A obliges (Brazilian standard, municipal code) · B references (foreign standard) · C doctrine · D measured · E survey — and it is why a finding is an error or only a tip. fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap). city, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against a standard the more restrictive one wins — set it once with set_home(city=…) so dry runs and check_layout weigh the same rules. accept=[[key, reason]] marks findings already looked at: they stay in the report with their reason and stop costing score, which is what lets a correct plan reach zero pendencies honestly; accept=[[key, empty]] takes it back. orphaned [[key, reason]] lists acceptances no current finding answers to, on any storey, for these people — the problem was fixed, and would come back already silenced; prune=true drops them."
     )]
     pub(crate) fn ergonomics(&self, Parameters(p): Parameters<ErgonomicsParams>) -> String {
-        if !p.accept.is_empty() {
+        if !p.accept.is_empty() || p.prune {
             let mut doc = self.document.write();
             let mut accepted = doc.home().accepted.clone();
             for pair in &p.accept {
@@ -54,10 +60,21 @@ impl NewEraMcp {
                     Some(why) => accepted.insert(key, why.to_owned()),
                 };
             }
-            let _ = doc.execute(newera_core::Command::SetAccepted { accepted });
+            if p.prune {
+                for (key, _) in newera_ergonomics::orphaned(doc.home(), &p.profile) {
+                    accepted.remove(&key);
+                }
+            }
+            if accepted != doc.home().accepted {
+                let _ = doc.execute(newera_core::Command::SetAccepted { accepted });
+            }
         }
         let doc = self.document.read();
         let report = newera_ergonomics::review(doc.home(), &p.profile);
+        let orphaned: Vec<[String; 2]> = newera_ergonomics::orphaned(doc.home(), &p.profile)
+            .into_iter()
+            .map(|(key, why)| [key, why])
+            .collect();
         let findings: Vec<serde_json::Value> = report
             .findings
             .iter()
@@ -83,24 +100,32 @@ impl NewEraMcp {
             .collect();
         // Each source spelled out once, not once per sentence.
         let codes: Vec<&str> = report.refs.iter().map(|r| r.code).collect();
-        serde_json::json!({
+        let mut out = serde_json::json!({
             "score": report.score,
             "capacity": report.capacity,
             "findings": findings,
             "sources": super::sources(&codes),
-        })
-        .to_string()
+        });
+        if !orphaned.is_empty() {
+            out["orphaned"] = serde_json::json!(orphaned);
+        }
+        out.to_string()
     }
     #[tool(
-        description = "Layout problems: overlap, blocked, in_wall, blocks_door, turned, loose_opening, outgrew_niche, outside_rooms; {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. Overlap rows carry their key; any other finding is keyed family:ids sorted (in_wall:f3+w1). accept=[[key, reason]] marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed under accepted {key, kind, why, extent} with its reason, kept in the project; accept=[[key, \"\"]] takes it back. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing."
+        description = "Layout problems: overlap, blocked, in_wall, blocks_door, turned, loose_opening, outgrew_niche, outside_rooms; {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. Overlap rows carry their key; any other finding is keyed family:ids sorted (in_wall:f3+w1). accept=[[key, reason]] marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed under accepted {key, kind, why, extent} with its reason, kept in the project; accept=[[key, \"\"]] takes it back; orphaned [[key, reason]] lists acceptances whose finding is gone on every storey, and prune=true drops them. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing."
     )]
     pub(crate) fn check_layout(
         &self,
         Parameters(p): Parameters<CheckParams>,
     ) -> Result<String, ErrorData> {
-        if !p.accept.is_empty() {
+        if !p.accept.is_empty() || p.prune {
             let mut doc = self.document.write();
             let mut accepted = doc.home().accepted.clone();
+            if p.prune {
+                for (key, _) in newera_core::Issue::orphaned(doc.home()) {
+                    accepted.remove(&key);
+                }
+            }
             for pair in &p.accept {
                 let key =
                     newera_core::Issue::normalize_key(pair.first().map_or("", String::as_str));
@@ -109,8 +134,10 @@ impl NewEraMcp {
                     Some(why) => accepted.insert(key, why.to_owned()),
                 };
             }
-            doc.execute(newera_core::Command::SetAccepted { accepted })
-                .map_err(super::reply::core)?;
+            if accepted != doc.home().accepted {
+                doc.execute(newera_core::Command::SetAccepted { accepted })
+                    .map_err(super::reply::core)?;
+            }
         }
         let doc = self.document.read();
         let (view, scope) = match p.level.as_deref() {
@@ -133,6 +160,13 @@ impl NewEraMcp {
             ),
         };
         let mut report = compact::issues(&view, scope);
+        let orphaned: Vec<[String; 2]> = newera_core::Issue::orphaned(doc.home())
+            .into_iter()
+            .map(|(key, why)| [key, why])
+            .collect();
+        if !orphaned.is_empty() {
+            report["orphaned"] = serde_json::json!(orphaned);
+        }
         if let Some(expected) = p.areas {
             let rows: Vec<serde_json::Value> = expected
                 .iter()
@@ -190,6 +224,7 @@ mod tests {
                 areas: Some([("sala".to_owned(), 10.0), ("Cozinha".to_owned(), 8.0)].into()),
                 level: None,
                 accept: Vec::new(),
+                prune: false,
             }))
             .unwrap(),
         )
@@ -241,6 +276,98 @@ mod tests {
         let bg = doc.home().background.as_ref().unwrap();
         assert!(!bg.visible && (bg.opacity - 0.2).abs() < 1e-9);
     }
+    #[test]
+    fn an_acceptance_outliving_its_finding_is_listed_and_can_be_pruned() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}],"rooms":[{"name":"Quarto","at":[200,150]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"bed-double","wall":"w1","along":90},
+                             {"cat":"box","name":"a","at":[300,150],"w":60,"d":60,"h":90},
+                             {"cat":"box","name":"b","at":[340,150],"w":60,"d":60,"h":90}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let (bed, a, b) = {
+            let doc = s.document.read();
+            let f = &doc.home().furniture;
+            (
+                f[0].id.to_string(),
+                f[1].id.to_string(),
+                f[2].id.to_string(),
+            )
+        };
+        let review = |json: &str| -> serde_json::Value {
+            serde_json::from_str(&s.ergonomics(Parameters(serde_json::from_str(json).unwrap())))
+                .unwrap()
+        };
+        let check = |json: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.check_layout(Parameters(serde_json::from_str(json).unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        // A walk beside the bed, accepted with the measure as the reason.
+        let first = review("{}");
+        let key = first["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["place"].as_str().unwrap().contains(bed.as_str()))
+            .unwrap_or_else(|| panic!("{first}"))["key"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let accepted = review(&format!(r#"{{"accept":[["{key}","corredor de 3 cm"]]}}"#));
+        assert!(accepted.get("orphaned").is_none(), "{accepted}");
+        check(&format!(r#"{{"accept":[["{a}+{b}","caixa do modelo"]]}}"#));
+
+        // Both problems are fixed for real: the bed goes, the boxes part.
+        s.delete(Parameters(
+            serde_json::from_str(&format!(r#"{{"ids":["{bed}"]}}"#)).unwrap(),
+        ))
+        .unwrap();
+        s.move_elements(Parameters(
+            serde_json::from_str(&format!(r#"{{"ids":["{b}"],"dx":40,"dy":0}}"#)).unwrap(),
+        ))
+        .unwrap();
+
+        // The reasons are still in the project, and now they say so.
+        let after = review("{}");
+        assert_eq!(
+            after["orphaned"],
+            serde_json::json!([[key, "corredor de 3 cm"]]),
+            "{after}"
+        );
+        let layout = check("{}");
+        let pair = format!("overlap:{a}+{b}");
+        assert_eq!(
+            layout["orphaned"],
+            serde_json::json!([[pair, "caixa do modelo"]]),
+            "{layout}"
+        );
+
+        // Pruned in one step each, and only the ones that are orphans.
+        let pruned = review(r#"{"prune":true}"#);
+        assert!(pruned.get("orphaned").is_none(), "{pruned}");
+        assert!(
+            check("{}")["orphaned"].is_array(),
+            "ergonomics leaves layout acceptances alone"
+        );
+        assert!(check(r#"{"prune":true}"#).get("orphaned").is_none());
+        assert!(s.document.read().home().accepted.is_empty());
+        s.document.write().undo().unwrap();
+        assert_eq!(s.document.read().home().accepted.len(), 1, "undoable");
+    }
+
     #[test]
     fn a_blind_in_its_wall_and_a_shaft_outside_rooms_can_be_accepted() {
         let s = server();
