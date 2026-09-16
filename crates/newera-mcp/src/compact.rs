@@ -543,6 +543,19 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
                     ("over", json!(over.map(num))),
                 ]),
             ),
+            Issue::UnclearFront {
+                piece,
+                candidates,
+                placed,
+            } => push(
+                "unclear_front",
+                obj([
+                    ("key", json!(key)),
+                    ("piece", issue_ref(home, piece.into())),
+                    ("candidates", json!(candidates)),
+                    ("placed", json!(placed)),
+                ]),
+            ),
             Issue::Turned {
                 piece,
                 built,

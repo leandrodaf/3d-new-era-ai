@@ -217,23 +217,59 @@ fn front_word(name: &str) -> f64 {
 /// exactly what `angle` cannot tell: a group brought in from another program
 /// carries whatever angle it was placed with.
 fn built_front(group: &Furniture) -> Option<&'static str> {
+    let score = front_scores(group)?;
+    let (best, runner_up) = best_face(&score);
+    // Only a clear majority overrules `angle`: one door against one back panel
+    // says nothing, five fronts against a blind panel says everything.
+    (score[best] >= 2.0 && score[best] >= 2.0 * runner_up).then(|| FACES[best])
+}
+
+/// Faces in the order scores are kept.
+const FACES: [&str; 4] = ["-x", "+x", "-y", "+y"];
+
+/// How much a handle says about the face it is on: more than any panel, since
+/// nobody puts a pull on the back of a cabinet.
+const HANDLE: f64 = 6.0;
+
+/// The best face and the score of the runner-up.
+fn best_face(score: &[f64; 4]) -> (usize, f64) {
+    let best = (0..4)
+        .max_by(|a, b| score[*a].total_cmp(&score[*b]))
+        .unwrap_or_default();
+    let runner_up = (0..4)
+        .filter(|f| *f != best)
+        .map(|f| score[f])
+        .fold(0.0_f64, f64::max);
+    (best, runner_up)
+}
+
+/// What the parts of a group say about each face, `-x +x -y +y`.
+fn front_scores(group: &Furniture) -> Option<[f64; 4]> {
     let parts: Vec<&Furniture> = group.flatten().into_iter().skip(1).collect();
     if parts.len() < 2 {
         return None;
     }
     let (min, max) = plan_bounds(group);
-    // Faces in the order `-x`, `+x`, `-y`, `+y`.
     let mut score = [0.0_f64; 4];
     for part in parts {
         let name = part
             .properties
             .get("joinery:part")
             .map_or(part.name.as_str(), String::as_str);
+        let (lo, hi) = plan_bounds(part);
+        // A handle sits on the face that opens: the nearest one says it.
+        if is_handle(name) {
+            let away = [lo.x - min.x, max.x - hi.x, lo.y - min.y, max.y - hi.y];
+            let (nearest, _) = best_face(&away.map(|d| -d));
+            if away[nearest] <= AT_FACE {
+                score[nearest] += HANDLE;
+            }
+            continue;
+        }
         let weight = 1.0 + front_word(name);
         if weight <= 0.0 {
             continue;
         }
-        let (lo, hi) = plan_bounds(part);
         let (across_x, across_y) = (hi.x - lo.x, hi.y - lo.y);
         // A panel lies flat against one face: thin one way and clearly wide
         // the other. A 3 × 3 cm post is neither, and counting it as soon as a
@@ -255,15 +291,38 @@ fn built_front(group: &Furniture) -> Option<&'static str> {
             }
         }
     }
-    let names = ["-x", "+x", "-y", "+y"];
-    let best = (0..4).max_by(|a, b| score[*a].total_cmp(&score[*b]))?;
-    let runner_up = (0..4)
-        .filter(|f| *f != best)
-        .map(|f| score[f])
-        .fold(0.0_f64, f64::max);
-    // Only a clear majority overrules `angle`: one door against one back panel
-    // says nothing, five fronts against a blind panel says everything.
-    (score[best] >= 2.0 && score[best] >= 2.0 * runner_up).then(|| names[best])
+    Some(score)
+}
+
+/// Whether a part's name says it is a handle.
+fn is_handle(name: &str) -> bool {
+    let name = crate::annotations::fold(name);
+    ["puxador", "handle", "knob", "pull ", "pegador"]
+        .iter()
+        .any(|w| name.contains(w))
+}
+
+/// A group whose parts point at a front without settling on one — fronts on
+/// one face and a door-named side on another — so its `angle` is what every
+/// "in front of" falls back to, unconfirmed. The candidate faces, strongest
+/// first; `None` when the parts agree or say nothing.
+#[must_use]
+pub fn front_unclear(group: &Furniture) -> Option<Vec<&'static str>> {
+    let score = front_scores(group)?;
+    if built_front(group).is_some() {
+        return None;
+    }
+    let (best, _) = best_face(&score);
+    if score[best] < 2.0 + 3.0 {
+        // Nothing named as a front: plain boxes say nothing, and that is fine.
+        return None;
+    }
+    // The faces that come close to the strongest: the doubt, not the noise.
+    let mut faces: Vec<usize> = (0..4)
+        .filter(|f| score[*f] >= 2.0 && score[*f] * 2.0 > score[best])
+        .collect();
+    faces.sort_by(|a, b| score[*b].total_cmp(&score[*a]));
+    (faces.len() >= 2).then(|| faces.into_iter().map(|f| FACES[f]).collect())
 }
 
 /// Which way a piece's front looks, as `+x`, `-x`, `+y` or `-y`.
@@ -946,6 +1005,140 @@ mod tests {
         );
         assert!((gap(a, b, Axis::X) + 5.5).abs() < 1e-9, "the tape agrees");
         assert!((gap(b, a, Axis::X) + 5.5).abs() < 1e-9, "from either side");
+    }
+
+    /// The pull-out broom cupboard of a real plan, part by part from its
+    /// bounds: fronts and brass pulls on -y, a right side still named after
+    /// the door it used to be.
+    fn broom_cupboard(with_pulls: bool) -> Furniture {
+        let part = |id: u64, name: &str, a: (f64, f64), b: (f64, f64), h: f64| {
+            let mut p = piece(
+                id,
+                (f64::midpoint(a.0, b.0), f64::midpoint(a.1, b.1)),
+                (b.0 - a.0, b.1 - a.1, h),
+                0.0,
+            );
+            p.name = name.to_owned();
+            p
+        };
+        let mut group = part(
+            1218,
+            "Vassoureiro extraível",
+            (615.0, 415.6),
+            (645.0, 484.1),
+            280.0,
+        );
+        group.children = vec![
+            part(
+                957,
+                "Vassoureiro — lateral esquerda",
+                (615.0, 419.1),
+                (617.0, 484.1),
+                280.0,
+            ),
+            part(
+                959,
+                "Vassoureiro — fundo",
+                (617.0, 482.1),
+                (643.0, 484.1),
+                280.0,
+            ),
+            part(
+                960,
+                "Vassoureiro — base",
+                (617.0, 420.1),
+                (643.0, 483.1),
+                2.0,
+            ),
+            part(
+                1209,
+                "Vassoureiro — fechamento lateral direito (era a porta para a passagem)",
+                (643.0, 419.1),
+                (645.0, 484.1),
+                280.0,
+            ),
+            part(
+                1210,
+                "Vassoureiro extraível — frente 30 × 195 cm",
+                (615.0, 417.1),
+                (645.0, 419.1),
+                195.0,
+            ),
+            part(
+                1211,
+                "Vassoureiro — frente do maleiro superior 30 × 71 cm",
+                (615.0, 417.1),
+                (645.0, 419.1),
+                71.0,
+            ),
+            part(
+                1214,
+                "corrediça telescópica esquerda 60 cm",
+                (617.0, 421.1),
+                (618.5, 481.1),
+                4.0,
+            ),
+            part(
+                1215,
+                "corrediça telescópica direita 60 cm",
+                (641.5, 421.1),
+                (643.0, 481.1),
+                4.0,
+            ),
+            part(
+                1217,
+                "travessa traseira de rigidez",
+                (617.0, 479.1),
+                (643.0, 481.1),
+                60.0,
+            ),
+        ];
+        if with_pulls {
+            group.children.push(part(
+                1212,
+                "Vassoureiro extraível — puxador barra latão",
+                (628.5, 415.6),
+                (631.5, 417.1),
+                30.0,
+            ));
+            group.children.push(part(
+                1213,
+                "Vassoureiro — puxador do maleiro",
+                (628.5, 415.6),
+                (631.5, 417.1),
+                15.0,
+            ));
+        }
+        group
+    }
+
+    #[test]
+    fn pulls_say_where_a_cupboard_opens_and_a_doubt_is_said_not_guessed() {
+        // Its pulls settle it: -y, the kitchen corridor, not the angle's +y.
+        let cupboard = broom_cupboard(true);
+        assert_eq!(facing(&cupboard), "-y");
+        assert_eq!(facing_disagrees(&cupboard), Some(("-y", "+y")));
+        assert_eq!(front_unclear(&cupboard), None);
+
+        // Without them, two fronts on -y and a side named after a door on +x
+        // settle nothing — and that is said, with both candidates.
+        let doubtful = broom_cupboard(false);
+        assert_eq!(facing_disagrees(&doubtful), None);
+        assert_eq!(front_unclear(&doubtful), Some(vec!["-y", "+x"]));
+        let mut home = Home::default();
+        home.furniture.push(doubtful);
+        let issues = crate::check_layout(&home);
+        assert!(
+            issues.iter().any(|i| matches!(i, crate::Issue::UnclearFront { candidates, .. } if candidates[0] == "-y")),
+            "{issues:?}"
+        );
+
+        // A plain box of boards with no front named anywhere says nothing.
+        let mut plain = broom_cupboard(false);
+        plain
+            .children
+            .retain(|p| !p.name.contains("frente") && !p.name.contains("porta"));
+        assert_eq!(front_unclear(&plain), None);
     }
 
     #[test]

@@ -106,6 +106,16 @@ pub enum Issue {
         /// Where `angle` says the piece looks.
         placed: &'static str,
     },
+    /// A group whose parts name fronts on more than one face with no clear
+    /// winner, so which way it opens is `angle`'s guess. Said instead of
+    /// picked in silence: a guess that happens to agree with a wrong angle
+    /// would otherwise raise nothing at all.
+    UnclearFront {
+        piece: FurnitureId,
+        /// The faces the parts point at, strongest first.
+        candidates: Vec<&'static str>,
+        placed: &'static str,
+    },
 }
 
 impl Issue {
@@ -118,7 +128,9 @@ impl Issue {
             Self::BlocksDoor { door, by } => vec![(*door).into(), (*by).into()],
             Self::OutsideRooms(f) | Self::LooseOpening(f) => vec![(*f).into()],
             Self::OutgrewNiche { piece, host, .. } => vec![(*piece).into(), (*host).into()],
-            Self::Turned { piece, .. } => vec![(*piece).into()],
+            Self::Turned { piece, .. } | Self::UnclearFront { piece, .. } => {
+                vec![(*piece).into()]
+            }
         }
     }
 
@@ -141,6 +153,7 @@ impl Issue {
             Self::OutgrewNiche { .. } => "outgrew_niche",
             Self::LooseOpening(_) => "loose_opening",
             Self::Turned { .. } => "turned",
+            Self::UnclearFront { .. } => "unclear_front",
         }
     }
 
@@ -554,6 +567,12 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
                     piece: group.id,
                     built,
                     placed,
+                });
+            } else if let Some(candidates) = crate::measure::front_unclear(group) {
+                issues.push(Issue::UnclearFront {
+                    piece: group.id,
+                    candidates,
+                    placed: crate::measure::facing(group),
                 });
             }
         }
