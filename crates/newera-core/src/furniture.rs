@@ -443,40 +443,28 @@ impl Furniture {
 
     /// After a group's box was moved, turned or resized from `before`, carries
     /// its pieces along: positions, angles, sizes and elevations follow.
+    ///
+    /// Joinery is resized the way a joiner resizes it, not by a factor: the
+    /// boards on the edges of the box — sides, back, top, bottom, 6 cm thick
+    /// or less — keep their thickness and stay on their edge, and the room
+    /// between them takes the change. A board inside keeps its thickness too,
+    /// holding on to the edge board it touches. A cupboard 30 cm wide made 40
+    /// keeps 2 cm sides and 15 mm slides; its back grows 10 cm. A group with
+    /// no board on an edge — a table and its chairs — scales as before.
     pub fn follow_group_change(&mut self, before: &Self) {
-        fn carry(
-            piece: &mut Furniture,
-            old: &Furniture,
-            new: &Furniture,
-            s: (f64, f64, f64),
-            turn: f64,
-        ) {
-            let (lx, ly) = old.to_local(piece.position);
-            let (lx, ly) = (lx * s.0, ly * s.1);
-            // `to_local` undoes mirroring; `to_plan` redoes it for the new box.
-            piece.position = new.to_plan((lx, ly));
-            piece.angle += turn;
-            piece.width *= s.0;
-            piece.depth *= s.1;
-            piece.height *= s.2;
-            piece.elevation = new.elevation + (piece.elevation - old.elevation) * s.2;
-            for child in &mut piece.children {
-                carry(child, old, new, s, turn);
-            }
-        }
         if self.children.is_empty() {
             return;
         }
-        let ratio = |new: f64, old: f64| if old.abs() > 1e-9 { new / old } else { 1.0 };
-        let (sx, sy, sz) = (
-            ratio(self.width, before.width),
-            ratio(self.depth, before.depth),
-            ratio(self.height, before.height),
-        );
+        let parts: Vec<&Self> = before.flatten().into_iter().skip(1).collect();
+        let maps = [
+            AxisMap::new(&parts, before, Along::Width, before.width, self.width),
+            AxisMap::new(&parts, before, Along::Depth, before.depth, self.depth),
+            AxisMap::new(&parts, before, Along::Height, before.height, self.height),
+        ];
         let turn = self.angle - before.angle;
-        let (old_center, new) = (before.clone(), self.clone());
+        let new = self.clone();
         for child in &mut self.children {
-            carry(child, &old_center, &new, (sx, sy, sz), turn);
+            carry_part(child, before, &new, &maps, turn);
         }
     }
 
@@ -938,6 +926,168 @@ pub fn align_to_wall(piece: &mut Furniture, wall: &Wall, along: f64) {
     }
 }
 
+/// One axis of a group, in the group's own frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Along {
+    Width,
+    Depth,
+    Height,
+}
+
+/// Thickest a board can be and still keep its thickness on a resize, cm.
+const BOARD: f64 = 6.0;
+/// How close to an edge a board has to sit to hold on to it, cm.
+const ON_EDGE: f64 = 1.0;
+
+/// Where a piece of a group sits along one axis of it, in the group's frame:
+/// centered for width and depth, from the group's bottom for height.
+fn part_span(group: &Furniture, part: &Furniture, along: Along) -> (f64, f64) {
+    if along == Along::Height {
+        let lo = part.elevation - group.elevation;
+        return (lo, lo + part.height);
+    }
+    let (cx, cy) = group.to_local(part.position);
+    let turn = (part.angle - group.angle).rem_euclid(180.0);
+    let sideways = (turn - 90.0).abs() < 45.0;
+    let along_x = along == Along::Width;
+    let half = if along_x == sideways {
+        part.depth / 2.0
+    } else {
+        part.width / 2.0
+    };
+    let c = if along_x { cx } else { cy };
+    (c - half, c + half)
+}
+
+/// How old coordinates along one axis of a group become new ones.
+#[derive(Debug, Clone, Copy)]
+struct AxisMap {
+    lo: f64,
+    old: f64,
+    new: f64,
+    /// The stretch between the edge boards, when there are edge boards and
+    /// room left between them.
+    zone: Option<(f64, f64)>,
+}
+
+impl AxisMap {
+    fn new(parts: &[&Furniture], group: &Furniture, along: Along, old: f64, new: f64) -> Self {
+        let lo = if along == Along::Height {
+            0.0
+        } else {
+            -old / 2.0
+        };
+        let hi = lo + old;
+        let (mut zone_lo, mut zone_hi, mut boards) = (lo, hi, 0);
+        for part in parts {
+            let (a, b) = part_span(group, part, along);
+            if b - a > BOARD {
+                continue;
+            }
+            if a - lo <= ON_EDGE {
+                zone_lo = zone_lo.max(b);
+                boards += 1;
+            } else if hi - b <= ON_EDGE {
+                zone_hi = zone_hi.min(a);
+                boards += 1;
+            }
+        }
+        let delta = new - old;
+        let zone = (boards > 0
+            && (old - new).abs() > 1e-9
+            && zone_hi - zone_lo > 1e-6
+            && zone_hi - zone_lo + delta > 1e-6)
+            .then_some((zone_lo, zone_hi));
+        Self { lo, old, new, zone }
+    }
+
+    fn new_lo(&self) -> f64 {
+        if (self.lo).abs() < 1e-12 {
+            0.0
+        } else {
+            -self.new / 2.0
+        }
+    }
+
+    /// An old coordinate, mapped.
+    fn point(&self, u: f64) -> f64 {
+        let new_lo = self.new_lo();
+        match self.zone {
+            None => {
+                let k = if self.old.abs() > 1e-9 {
+                    self.new / self.old
+                } else {
+                    1.0
+                };
+                new_lo + (u - self.lo) * k
+            }
+            Some((z0, z1)) => {
+                let hi = self.lo + self.old;
+                if u <= z0 {
+                    new_lo + (u - self.lo)
+                } else if u >= z1 {
+                    new_lo + self.new - (hi - u)
+                } else {
+                    let length = z1 - z0;
+                    new_lo + (z0 - self.lo) + (u - z0) * (length + self.new - self.old) / length
+                }
+            }
+        }
+    }
+
+    /// An old span, mapped: a board keeps its thickness, held by the edge it
+    /// touches, anything else stretches with the room it spans.
+    fn span(&self, (a, b): (f64, f64)) -> (f64, f64) {
+        let Some((z0, z1)) = self.zone else {
+            return (self.point(a), self.point(b));
+        };
+        if b - a > BOARD {
+            return (self.point(a), self.point(b));
+        }
+        let size = b - a;
+        if a <= z0 + ON_EDGE {
+            let start = self.point(a.min(z0).max(a));
+            (start, start + size)
+        } else if b >= z1 - ON_EDGE {
+            let end = self.point(b.max(z1).min(b));
+            (end - size, end)
+        } else {
+            let c = self.point(f64::midpoint(a, b));
+            (c - size / 2.0, c + size / 2.0)
+        }
+    }
+}
+
+/// Carries one piece of a group, and its own pieces, from `before` to `new`.
+fn carry_part(
+    piece: &mut Furniture,
+    before: &Furniture,
+    new: &Furniture,
+    maps: &[AxisMap; 3],
+    turn: f64,
+) {
+    let original = piece.clone();
+    let (x0, x1) = maps[0].span(part_span(before, &original, Along::Width));
+    let (y0, y1) = maps[1].span(part_span(before, &original, Along::Depth));
+    let (z0, z1) = maps[2].span(part_span(before, &original, Along::Height));
+    let rel = (original.angle - before.angle).rem_euclid(180.0);
+    let sideways = (rel - 90.0).abs() < 45.0;
+    let (along_w, along_d) = if sideways {
+        (y1 - y0, x1 - x0)
+    } else {
+        (x1 - x0, y1 - y0)
+    };
+    piece.width = along_w;
+    piece.depth = along_d;
+    piece.height = z1 - z0;
+    piece.elevation = new.elevation + z0;
+    piece.position = new.to_plan((x0.midpoint(x1), y0.midpoint(y1)));
+    piece.angle += turn;
+    for child in &mut piece.children {
+        carry_part(child, before, new, maps, turn);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1135,6 +1285,121 @@ mod tests {
                     .clone()
                     .follow_group_stretch(&before, &[FurnitureId(9)])
                     .is_err()
+            );
+        }
+
+        #[test]
+        fn a_cupboard_made_wider_keeps_its_boards_and_widens_its_room() {
+            let part =
+                |id: u64, name: &str, x0: f64, x1: f64, y0: f64, y1: f64, z0: f64, h: f64| {
+                    Furniture {
+                        id: FurnitureId(id),
+                        name: name.to_owned(),
+                        position: Point2::new(x0.midpoint(x1), y0.midpoint(y1)),
+                        width: x1 - x0,
+                        depth: y1 - y0,
+                        height: h,
+                        elevation: z0,
+                        ..Furniture::default()
+                    }
+                };
+            // A broom cupboard 30 wide at x 615–645, as drawn in a real plan.
+            let mut before = part(1, "vassoureiro", 615.0, 645.0, 415.6, 484.1, 0.0, 280.0);
+            before.children = vec![
+                part(
+                    957,
+                    "lateral esquerda",
+                    615.0,
+                    617.0,
+                    419.1,
+                    484.1,
+                    0.0,
+                    280.0,
+                ),
+                part(
+                    1209,
+                    "lateral direita",
+                    643.0,
+                    645.0,
+                    419.1,
+                    484.1,
+                    0.0,
+                    280.0,
+                ),
+                part(959, "fundo", 617.0, 643.0, 482.1, 484.1, 0.0, 280.0),
+                part(963, "topo", 617.0, 643.0, 420.1, 483.1, 278.0, 2.0),
+                part(1210, "frente", 615.0, 645.0, 417.1, 419.1, 0.0, 195.0),
+                part(1212, "puxador", 628.5, 631.5, 415.6, 417.1, 100.0, 30.0),
+                part(
+                    1214,
+                    "corrediça esquerda",
+                    617.0,
+                    618.5,
+                    421.1,
+                    481.1,
+                    2.0,
+                    4.0,
+                ),
+                part(1216, "fundo do cesto", 617.0, 643.0, 421.1, 481.1, 2.0, 2.0),
+            ];
+            let mut after = before.clone();
+            after.width = 40.0;
+            after.position.x = 635.0; // held on its left face
+            after.follow_group_change(&before);
+            let span = |id: u64| {
+                let p = after
+                    .flatten()
+                    .into_iter()
+                    .find(|p| p.id.0 == id)
+                    .unwrap()
+                    .clone();
+                (p.position.x - p.width / 2.0, p.position.x + p.width / 2.0)
+            };
+            let close =
+                |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 1e-6 && (a.1 - b.1).abs() < 1e-6;
+            assert!(
+                close(span(957), (615.0, 617.0)),
+                "left side stays 2 cm: {:?}",
+                span(957)
+            );
+            assert!(
+                close(span(1209), (653.0, 655.0)),
+                "right side stays 2 cm, on the new edge: {:?}",
+                span(1209)
+            );
+            assert!(
+                close(span(959), (617.0, 653.0)),
+                "the back takes the 10 cm: {:?}",
+                span(959)
+            );
+            assert!(
+                close(span(1210), (615.0, 655.0)),
+                "the front spans it all: {:?}",
+                span(1210)
+            );
+            assert!(
+                close(span(1214), (617.0, 618.5)),
+                "the slide keeps 15 mm on its side: {:?}",
+                span(1214)
+            );
+            assert!(close(span(1216), (617.0, 653.0)), "{:?}", span(1216));
+            assert!(
+                (span(1212).1 - span(1212).0 - 3.0).abs() < 1e-6,
+                "the pull keeps its size"
+            );
+            assert!(
+                (span(1212).0.midpoint(span(1212).1) - 635.0).abs() < 1e-6,
+                "centered on the front"
+            );
+
+            // Taller: the top keeps 2 cm and stays on top.
+            let mut taller = before.clone();
+            taller.height = 290.0;
+            taller.follow_group_change(&before);
+            let top = taller.children.iter().find(|p| p.id.0 == 963).unwrap();
+            assert!(
+                (top.height - 2.0).abs() < 1e-6 && (top.elevation - 288.0).abs() < 1e-6,
+                "{top:?}"
             );
         }
 
