@@ -1090,21 +1090,29 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                 if findings.is_empty() {
                     ui.label(crate::i18n::tr("Nada a apontar."));
                 }
-                for f in &findings {
-                    let color = match f.severity {
-                        newera_core::electrical::Severity::Erro => {
-                            egui::Color32::from_rgb(200, 60, 50)
+                // A long list scrolls instead of pushing the window off screen.
+                egui::ScrollArea::vertical()
+                    .max_height(280.0)
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        for f in &findings {
+                            let color = match f.severity {
+                                newera_core::electrical::Severity::Erro => {
+                                    egui::Color32::from_rgb(200, 60, 50)
+                                }
+                                newera_core::electrical::Severity::Alerta => {
+                                    egui::Color32::from_rgb(200, 140, 40)
+                                }
+                                newera_core::electrical::Severity::Dica => {
+                                    ui.visuals().weak_text_color()
+                                }
+                            };
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(RichText::new(&f.place).strong().color(color));
+                                ui.label(&f.message);
+                            });
                         }
-                        newera_core::electrical::Severity::Alerta => {
-                            egui::Color32::from_rgb(200, 140, 40)
-                        }
-                        newera_core::electrical::Severity::Dica => ui.visuals().weak_text_color(),
-                    };
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new(&f.place).strong().color(color));
-                        ui.label(&f.message);
                     });
-                }
                 ui.add_space(6.0);
                 if ui.button(crate::i18n::tr("Fechar")).clicked() {
                     close = true;
