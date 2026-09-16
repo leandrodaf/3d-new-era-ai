@@ -394,7 +394,8 @@ pub fn blocked(home: &Home, piece: &Furniture) -> Option<String> {
             .flat_map(Furniture::flatten)
             .filter(|f| f.id != piece.id && !f.is_opening())
             .filter(|f| {
-                matches!(f.catalog.as_str(), "shower-glass" | "glass-railing")
+                (matches!(f.catalog.as_str(), "shower-glass" | "glass-railing")
+                    || crate::annotations::fold(&f.name).contains("vidro"))
                     || f.opacity.is_some_and(|o| o < 0.6)
             })
             .find(|f| {
@@ -502,7 +503,8 @@ fn off_structure(view: &Home, piece: &Furniture) -> Option<String> {
         return None;
     }
     let glass_near = view.furniture.iter().flat_map(Furniture::flatten).any(|f| {
-        (matches!(f.catalog.as_str(), "shower-glass" | "glass-railing")
+        ((matches!(f.catalog.as_str(), "shower-glass" | "glass-railing")
+            || crate::annotations::fold(&f.name).contains("vidro"))
             || f.opacity.is_some_and(|o| o < 0.6))
             && {
                 let mut near = f.clone();
@@ -527,9 +529,9 @@ fn built_into<'a>(view: &'a Home, piece: &Furniture) -> Option<&'a Furniture> {
     view.furniture
         .iter()
         .flat_map(Furniture::flatten)
-        .filter(|f| {
-            f.id != piece.id && !f.is_group() && f.opening.is_none() && f.discipline.is_none()
-        })
+        // A joinery group counts as the cabinet it is: its parts are thin
+        // panels, and the point under its sink is inside the whole.
+        .filter(|f| f.id != piece.id && f.opening.is_none() && f.discipline.is_none())
         .filter(|f| f.height >= 60.0 && f.width.min(f.depth) >= 30.0 && !movable(f))
         .find(|f| {
             let mut near = (*f).clone();
@@ -840,6 +842,33 @@ mod tests {
         water.catalog = "cold-water".into();
         seat(&island, &mut water).unwrap();
         assert!(blocked(&island, &water).is_none());
+        // A joinery cabinet drawn as a group of thin panels holds it too.
+        let mut grouped = home.clone();
+        let panel = |id: u64, x: f64| Furniture {
+            id: FurnitureId(id),
+            catalog: "imported".into(),
+            name: "Gaveteiro pia: lateral".into(),
+            position: Point2::new(x, 150.0),
+            width: 2.0,
+            depth: 58.0,
+            height: 87.0,
+            ..Furniture::default()
+        };
+        grouped.furniture.push(Furniture {
+            id: FurnitureId(61),
+            catalog: "group".into(),
+            name: "Pia: dois gavetões".into(),
+            position: Point2::new(200.0, 150.0),
+            width: 70.0,
+            depth: 59.0,
+            height: 87.0,
+            children: vec![panel(62, 166.0), panel(63, 234.0)],
+            ..Furniture::default()
+        });
+        assert!(
+            blocked(&grouped, &water).is_none(),
+            "the point under the sink is in the cabinet"
+        );
         island.furniture[0].name = "Mesa de jantar".into();
         assert!(
             blocked(&island, &water).unwrap().contains("solto"),

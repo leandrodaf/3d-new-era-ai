@@ -771,7 +771,11 @@ pub fn check(home: &Home) -> Vec<Finding> {
         .collect();
     // An inspection box is at least 60 cm across (NBR 8160 5.1.5.3).
     for b in &boxes {
+        let stack = ["queda", "prumada", "coluna", "shaft", "tq-", "tq "]
+            .iter()
+            .any(|w| crate::annotations::fold(&b.name).contains(w));
         if let Some(f) = view.find_piece(b.id)
+            && !stack
             && f.width.min(f.depth) + 0.5 < 60.0
         {
             out.push(Finding {
