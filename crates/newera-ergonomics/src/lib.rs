@@ -1681,6 +1681,89 @@ impl Review<'_, '_> {
         }
     }
 
+    /// What the other rules leave out: the walk between two single beds
+    /// (NBR 15575-1 annex F, 60 cm), an accessible basin or sink and bed
+    /// (NBR 9050: top at 85 cm at most, bed at 46 cm), a gas heater in a
+    /// bathroom (NBR 13103: type C, sealed, only) and gas cooking in a room
+    /// people also sleep in (NBR 13103 6.2.2.3).
+    fn gaps(&mut self) {
+        let scene = self.scene;
+        for space in &scene.spaces {
+            let label = space.label();
+            let units: Vec<&crate::scene::Unit> =
+                space.units.iter().map(|&i| &scene.units[i]).collect();
+            // Two single beds side by side.
+            let singles: Vec<&&crate::scene::Unit> =
+                units.iter().filter(|u| u.what == Use::Bed(1)).collect();
+            for (k, a) in singles.iter().enumerate() {
+                for b in singles.iter().skip(k + 1) {
+                    let (x, y) = a.piece.to_local(b.piece.position);
+                    let across = f64::midpoint(a.piece.depth, b.piece.depth);
+                    let gap = x.abs() - f64::midpoint(a.piece.width, b.piece.width);
+                    if y.abs() < across * 0.5 && (0.0..60.0).contains(&gap) {
+                        self.push_ref(
+                            Severity::Alerta,
+                            &label,
+                            format!(
+                                "{} cm entre {} e {}: entre duas camas de solteiro a referência é 60 cm.",
+                                cm(gap),
+                                a.label(),
+                                b.label()
+                            ),
+                            "nbr15575g",
+                        );
+                    }
+                }
+            }
+            if self.profile.wheelchair {
+                for u in &units {
+                    let (_, top) = u.piece.height_range();
+                    match u.what {
+                        Use::Basin | Use::Sink if top > 85.5 => self.push_ref(
+                            Severity::Alerta,
+                            u.label(),
+                            format!("Tampo a {} cm: para cadeira de rodas, até 85 cm, com vão livre embaixo.", cm(top)),
+                            "nbr9050",
+                        ),
+                        Use::Bed(_) if (top - 46.0).abs() > 4.0 => self.push_ref(
+                            Severity::Dica,
+                            u.label(),
+                            format!("Cama a {} cm do chão: a transferência da cadeira pede uns 46 cm.", cm(top)),
+                            "nbr9050",
+                        ),
+                        _ => {}
+                    }
+                }
+            }
+            let gas_named = |u: &crate::scene::Unit| {
+                let n = newera_core::fold(&u.piece.name);
+                n.contains("gas") && (n.contains("aquecedor") || n.contains("boiler"))
+            };
+            if space.what == RoomUse::Bathroom {
+                for u in units.iter().filter(|u| gas_named(u)) {
+                    self.push_ref(
+                        Severity::Erro,
+                        u.label(),
+                        "Aquecedor a gás no banheiro: ali só é admitido aparelho tipo C (câmara de combustão estanque); do contrário, leve-o para fora, para a área de serviço ventilada.",
+                        "nbr13103",
+                    );
+                }
+            }
+            let sleeps = units.iter().any(|u| matches!(u.what, Use::Bed(_)));
+            let gas_cooking = units
+                .iter()
+                .any(|u| u.what == Use::Stove && !electric(&u.piece.name));
+            if sleeps && gas_cooking {
+                self.push_ref(
+                    Severity::Dica,
+                    &label,
+                    "Cocção a gás no mesmo ambiente em que se dorme: a norma limita a 8,14 kW, com válvula de segurança em todos os queimadores e coifa com saída para o exterior.",
+                    "nbr13103",
+                );
+            }
+        }
+    }
+
     fn reach(&mut self) {
         if !self.profile.wheelchair {
             return;
@@ -2178,6 +2261,7 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
     review.kitchen();
     review.screens();
     review.reach();
+    review.gaps();
     review.electrical();
     review.plumbing();
     // The same finding on a row of modules is one finding about all of them.
@@ -2560,6 +2644,66 @@ mod tests {
         assert!(
             orphaned(&home, &Profile::default()).is_empty(),
             "not an orphan: it moved"
+        );
+    }
+
+    #[test]
+    fn beds_side_by_side_accessible_tops_and_gas_where_people_wash_or_sleep() {
+        let mut bedroom = Home::default();
+        square(&mut bedroom, "Quarto", 400.0, 400.0);
+        bedroom.furniture.push(piece(
+            20,
+            "bed-single",
+            (100.0, 107.5),
+            (90.0, 200.0, 50.0),
+            0.0,
+        ));
+        bedroom.furniture.push(piece(
+            21,
+            "bed-single",
+            (230.0, 107.5),
+            (90.0, 200.0, 50.0),
+            0.0,
+        ));
+        let r = review(&bedroom, &Profile::default());
+        assert!(says(&r, Severity::Alerta, "40 cm entre"), "{r:#?}");
+
+        let mut bath = Home::default();
+        square(&mut bath, "Banheiro", 200.0, 250.0);
+        let mut basin = piece(30, "basin-cabinet", (100.0, 30.0), (60.0, 45.0, 90.0), 0.0);
+        basin.name = "Lavatório".into();
+        bath.furniture.push(basin);
+        let mut heater = piece(31, "imported", (30.0, 200.0), (40.0, 20.0, 60.0), 0.0);
+        heater.name = "Aquecedor a gás".into();
+        heater.elevation = 150.0;
+        bath.furniture.push(heater);
+        let wheel = Profile {
+            wheelchair: true,
+            ..Profile::default()
+        };
+        let r = review(&bath, &wheel);
+        assert!(says(&r, Severity::Alerta, "Tampo a 90 cm"), "{r:#?}");
+        assert!(
+            r.findings.iter().any(|f| f.message.contains("tipo C")),
+            "{r:#?}"
+        );
+
+        let mut studio = Home::default();
+        square(&mut studio, "Studio", 500.0, 400.0);
+        studio.furniture.push(piece(
+            40,
+            "bed-double",
+            (100.0, 107.5),
+            (140.0, 200.0, 50.0),
+            0.0,
+        ));
+        studio
+            .furniture
+            .push(piece(41, "stove", (400.0, 37.5), (60.0, 60.0, 90.0), 0.0));
+        let r = review(&studio, &Profile::default());
+        assert!(
+            r.findings.iter().any(|f| f.message.contains("8,14 kW")),
+            "{r:#?}"
         );
     }
 
