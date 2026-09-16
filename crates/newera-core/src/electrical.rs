@@ -892,6 +892,153 @@ pub fn main_breaker(home: &Home) -> Option<Supply> {
     })
 }
 
+/// Where a distribution panel keeps how many DIN modules it holds.
+pub const MODULES_KEY: &str = "elec:modules";
+/// Where the project keeps the presumed short-circuit current at the
+/// delivery point, kA, as the utility informs it.
+pub const SHORT_KA_KEY: &str = "elec:short_ka";
+/// Where the project keeps its earthing scheme: `TN-S`, `TN-C-S` or `TT`.
+pub const EARTHING_KEY: &str = "elec:earthing";
+
+/// What goes into the distribution panel, and whether it fits.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Panel {
+    /// Devices and the DIN modules each line takes: `[device, count, modules]`.
+    pub devices: Vec<(String, u32, u32)>,
+    /// Modules the devices take, spare ways included.
+    pub used: u32,
+    /// Modules the panel holds: written on it, or a guess from its size.
+    pub capacity: u32,
+    /// Whether the capacity was written or guessed.
+    pub capacity_written: bool,
+    /// Spare ways NBR 5410 asks for the number of circuits.
+    pub spare: u32,
+    /// The surge protector: class and poles.
+    pub dps: String,
+    pub earthing: String,
+    /// Breaking capacity the breakers need, kA.
+    pub icn_ka: f64,
+    /// Whether the short-circuit level was informed or assumed.
+    pub icn_written: bool,
+    /// Largest partial breaker and the main one, A.
+    pub largest_partial_a: u32,
+    pub main_a: u32,
+}
+
+/// Spare ways a panel keeps for the circuits it has, as NBR 5410 sets them:
+/// two up to six circuits, three up to twelve, four up to thirty, and 15 %
+/// above.
+pub fn spare_ways(circuits: usize) -> u32 {
+    match circuits {
+        0 => 0,
+        1..=6 => 2,
+        7..=12 => 3,
+        13..=30 => 4,
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
+        n => (n as f64 * 0.15).ceil() as u32,
+    }
+}
+
+/// The distribution panel's fill and protection for the load schedule: a
+/// one-pole breaker per 127 V circuit and two poles for 220 V between
+/// phases, a two-pole DR per circuit that needs one, the main breaker with a
+/// pole per phase, the surge protector (one module per phase and one for
+/// neutral) and the spare ways. A panel's capacity is its written
+/// `elec:modules`, or a guess from its size (a 40 × 60 cm box, 24).
+pub fn panel(home: &Home) -> Option<Panel> {
+    let circuits = circuits(home);
+    let supply = main_breaker(home)?;
+    let voltage = home
+        .properties
+        .get(VOLTAGE_KEY)
+        .and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(127.0);
+    let mut devices: Vec<(String, u32, u32)> = Vec::new();
+    let mut add = |name: String, count: u32, poles: u32| {
+        if count > 0 {
+            devices.push((name, count, count * poles));
+        }
+    };
+    let count = |f: &dyn Fn(&Circuit) -> bool| {
+        u32::try_from(circuits.iter().filter(|c| f(c)).count()).unwrap_or(u32::MAX)
+    };
+    let between_phases = |c: &Circuit| voltage < 200.0 && c.volts > voltage + 1.0;
+    add(
+        "Disjuntor monopolar".into(),
+        count(&|c| !between_phases(c)),
+        1,
+    );
+    add(
+        "Disjuntor bipolar (220 V entre fases)".into(),
+        count(&between_phases),
+        2,
+    );
+    add("DR bipolar 30 mA".into(), count(&|c| c.rcd), 2);
+    add(
+        format!("Disjuntor geral {}P {} A", supply.phases, supply.breaker_a),
+        1,
+        u32::from(supply.phases),
+    );
+    add(
+        format!("DPS classe II, {} fase(s) + neutro", supply.phases),
+        1,
+        u32::from(supply.phases) + 1,
+    );
+    let spare = spare_ways(circuits.len());
+    add("Espaço reserva".into(), spare, 1);
+    let used = devices.iter().map(|d| d.2).sum();
+    let view = home.level_view(home.current_level());
+    let box_ = view
+        .furniture
+        .iter()
+        .flat_map(Furniture::flatten)
+        .find(|f| point_kind(f) == PointKind::Panel);
+    let written = box_
+        .and_then(|f| f.properties.get(MODULES_KEY))
+        .and_then(|v| v.parse::<u32>().ok());
+    // A DIN module is 1.8 cm; the box loses some 12 cm of width to its
+    // sides and wiring, and takes a row per 30 cm of height — a 40 × 60 cm
+    // box holds 30, where the market sells 24 to 32.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let guessed = box_.map_or(24, |f| {
+        let per_row = ((f.width - 12.0) / 1.8).floor().max(4.0) as u32;
+        let rows = (f.height / 30.0).floor().max(1.0) as u32;
+        per_row.min(18) * rows
+    });
+    let short = home
+        .properties
+        .get(SHORT_KA_KEY)
+        .and_then(|v| v.replace(',', ".").parse::<f64>().ok());
+    let icn = [3.0, 4.5, 6.0, 10.0]
+        .into_iter()
+        .find(|k| *k >= short.unwrap_or(6.0))
+        .unwrap_or(10.0);
+    Some(Panel {
+        devices,
+        used,
+        capacity: written.unwrap_or(guessed),
+        capacity_written: written.is_some(),
+        spare,
+        dps: format!(
+            "Classe II (In ≥ 5 kA), {} fase(s) + neutro, junto ao geral",
+            supply.phases
+        ),
+        earthing: home
+            .properties
+            .get(EARTHING_KEY)
+            .cloned()
+            .unwrap_or_else(|| "TN-S".into()),
+        icn_ka: icn,
+        icn_written: short.is_some(),
+        largest_partial_a: circuits.iter().map(|c| c.breaker_a).max().unwrap_or(0),
+        main_a: supply.breaker_a,
+    })
+}
+
 /// Sorts `C2` before `C10`.
 fn natural(name: &str) -> (String, u64) {
     let digits: String = name.chars().filter(char::is_ascii_digit).collect();
@@ -1153,6 +1300,51 @@ pub fn check(home: &Home) -> Vec<Finding> {
         }
     }
     automation(home, &all, &mut out);
+    if let Some(panel) = panel(home) {
+        let place = "Quadro de distribuição".to_owned();
+        if panel.used > panel.capacity {
+            out.push(Finding {
+                key: "elec:panel-full".into(),
+                accepted: None,
+                severity: Severity::Erro,
+                place: place.clone(),
+                message: format!(
+                    "Não cabe: {} módulos DIN (com {} de reserva) num quadro de {} módulos{}. Use um quadro maior ou divida em dois, antes de a parede ser fechada.",
+                    panel.used,
+                    panel.spare,
+                    panel.capacity,
+                    if panel.capacity_written { "" } else { " (estimado pelo tamanho; informe elec:modules)" }
+                ),
+                source: "nbr5410",
+            });
+        }
+        if panel.main_a < panel.largest_partial_a * 2 {
+            out.push(Finding {
+                key: "elec:selectivity".into(),
+                accepted: None,
+                severity: Severity::Dica,
+                place: place.clone(),
+                message: format!(
+                    "Geral de {} A e parcial de {} A: com menos de o dobro, uma falta no circuito maior pode desarmar o geral junto. Confira a seletividade nas curvas do fabricante (geral curva C, parciais curva B ajudam).",
+                    panel.main_a, panel.largest_partial_a
+                ),
+                source: "nbr5410",
+            });
+        }
+        if !panel.icn_written {
+            out.push(Finding {
+                key: "elec:short-circuit".into(),
+                accepted: None,
+                severity: Severity::Dica,
+                place,
+                message: format!(
+                    "Capacidade de interrupção dos disjuntores assumida em {} kA: peça à concessionária a corrente de curto presumida no ponto de entrega e informe elec:short_ka.",
+                    decimal(panel.icn_ka)
+                ),
+                source: "nbr5410",
+            });
+        }
+    }
     let loose: Vec<String> = all
         .iter()
         .filter(|p| (p.kind.loads() || p.kind == PointKind::Automation) && p.circuit.is_none())
@@ -1540,5 +1732,56 @@ mod tests {
             (c1.va - 101.5).abs() < 1e-9,
             "100 VA of light + 1.5 W standby: {c1:?}"
         );
+    }
+
+    #[test]
+    fn the_panel_counts_its_modules_with_spare_ways_and_says_when_it_does_not_fit() {
+        assert_eq!(spare_ways(6), 2);
+        assert_eq!(spare_ways(10), 3);
+        assert_eq!(spare_ways(20), 4);
+        assert_eq!(spare_ways(40), 6);
+        let mut home = Home::default();
+        home.rooms = vec![room(1, "Cozinha", 0.0, 400.0, 400.0)];
+        let mut furniture = vec![{
+            let mut p = point(10, "electrical-panel", (10.0, 10.0), None);
+            p.width = 40.0;
+            p.height = 60.0;
+            p
+        }];
+        for k in 0..10_u32 {
+            furniture.push(point(
+                20 + u64::from(k),
+                "outlet-low",
+                (50.0 + 30.0 * f64::from(k), 10.0),
+                Some(&format!("C{k}")),
+            ));
+        }
+        home.furniture = furniture;
+        let panel = panel(&home).unwrap();
+        // Ten one-pole breakers, ten two-pole DR (a kitchen), main, DPS, 3 spare.
+        assert_eq!(panel.spare, 3);
+        let dr = panel
+            .devices
+            .iter()
+            .find(|d| d.0.starts_with("DR"))
+            .unwrap();
+        assert_eq!((dr.1, dr.2), (10, 20), "{panel:?}");
+        assert_eq!(panel.used, 10 + 20 + 1 + 2 + 3, "{panel:?}");
+        assert!(!panel.capacity_written);
+        let keys: Vec<String> = check(&home).into_iter().map(|f| f.key).collect();
+        assert!(
+            keys.contains(&"elec:panel-full".to_owned()),
+            "36 modules in a 40 × 60 box: {keys:?} {panel:?}"
+        );
+        assert!(keys.contains(&"elec:short-circuit".to_owned()));
+
+        home.furniture[0]
+            .properties
+            .insert(MODULES_KEY.into(), "48".into());
+        home.properties.insert(SHORT_KA_KEY.into(), "4,5".into());
+        let keys: Vec<String> = check(&home).into_iter().map(|f| f.key).collect();
+        assert!(!keys.contains(&"elec:panel-full".to_owned()), "{keys:?}");
+        assert!(!keys.contains(&"elec:short-circuit".to_owned()));
+        assert!((super::panel(&home).unwrap().icn_ka - 4.5).abs() < 1e-9);
     }
 }

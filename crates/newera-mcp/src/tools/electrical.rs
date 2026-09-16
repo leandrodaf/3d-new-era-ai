@@ -32,6 +32,13 @@ pub(crate) struct ElectricalParams {
     standby_w: Option<f64>,
     /// For `assign` on a dimmer: the most lighting it takes, W.
     max_w: Option<f64>,
+    /// For `assign` on a distribution panel: the DIN modules it holds.
+    modules: Option<u32>,
+    /// For `voltage`: the presumed short-circuit current at the delivery
+    /// point, kA, as the utility informs it.
+    short_ka: Option<f64>,
+    /// For `voltage`: the earthing scheme, `TN-S`, `TN-C-S` or `TT`.
+    earthing: Option<String>,
     /// Supply voltage, V; with `assign`, the points' own, 127 or 220.
     volts: Option<f64>,
     /// Findings looked at: `[[key, reason]]`; they stay listed with the reason
@@ -65,7 +72,7 @@ pub(crate) struct ElectricalParams {
 #[tool_router(router = electrical_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Electrical and telecom project, NBR 5410 and NBR 14565. Points are the electrical pieces (catalog electrical: outlets, switches, lighting points, panel, network-outlet RJ45, tv-outlet, wifi-point, telecom-panel) plus every fixture that lights. check (default): {points:{kind:count}, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — accept=[[key, reason]] with any action marks findings looked at (they stay listed with the reason and stop counting in pending), an empty reason takes one back, orphaned lists acceptances whose finding is gone and prune=true drops them — a ceiling lighting point per room, general-use outlets per room (kitchens and laundries one per 3.5 m of perimeter, bathrooms one by the basin, living rooms and bedrooms one per 5 m), a network point in long-stay rooms, a TV point in living rooms and bedrooms, a distribution and a telecom panel, points without a circuit, lighting and outlets sharing a circuit, a dedicated load not alone. circuits: rows [name, kinds, points, VA, V, A, wire mm², breaker A, DR] and main_breaker {a, phases, load_a_per_phase}: the supply to ask the utility for (one phase up to 8 kVA with no 220 V circuit on a 127 V supply, two up to 20 kVA, three above; the utility's own limits prevail) and its main breaker — power by the norm's defaults (100 VA per lighting point; 600 VA for each of the first three outlets of a kitchen, laundry or bathroom, 100 VA after and elsewhere; shower 5500, air conditioning 1500) unless set; wire the larger of what the current needs and 1.5 mm² for lighting or 2.5 for power; DR where a circuit serves a wet room or a balcony; a shower runs on 220 V. assign {ids, circuit, va?} — or the whole division at once, circuits {\"C1\": [ids], \"C2\": [ids]} — writes the circuits (and power, and volts 127|220 per point — a 220 V outlet makes its circuit 220 V) on points in one undoable step. voltage {volts}. cable {kind: power|data|tv, pts} (with ids or circuit instead of pts, it is a route): draws a run of the electrical project, told apart on the plan (power solid, network dashed, TV dash-dot); check then reports cables_m, the length by kind with a tenth for the drops, and network or TV points no run reaches, or a telecom panel none reaches. route {kind: power|data|tv, ids? | circuit?, via?: ceiling|floor|wall, cat?: cat5e|cat6|cat6a, from?}: lays the run the way it is built, along the walls and inside them (or in the slab), from the nearest panel of its kind to the points (all of the kind when none given), sharing the trunk, and draws it replacing the earlier run of the same circuit; replies {via, suggested, length_m {horizontal, vertical, total}, by_premise_m, bends, materials: [[item, qty, unit]]} — conduit, boxes, wire by conductor, cable, connectors. Without via it takes the cheapest premise that can be built; a via that cannot reach a point (wall with a point out of every wall; ceiling with a low point out of every wall, nowhere to drop) is refused naming the points. Automation (catalog smart-relay, smart-switch, dimmer, presence-sensor, smart-lock): each draws its standby on its circuit (assign standby_w; relay, dimmer and sensor 0.5 W, smart switch 0.8 by default), circuits reports standby_w, and check asks a relay or smart switch for a neutral in its box, a dimmer for the room's lighting to fit its max_w (default 200 W) and pass 10 W, a ceiling sensor to be at 2.2 m or higher and to see the room's far corner, a lock to sit on a door. wifi {ids?, standard?: wifi5|wifi6|wifi6e|wifi7, poe?, band?: 2.4|5|6}: writes the standard and PoE on access points (wifi-point) when given, and replies {access_points: [[id, standard, bands, uplink]], coverage: [[room, band, median dBm, worst dBm (9 places in 10), share at -67 dBm or better, grade]], suggested: {standard, band, points: [[x, y, z, room]], short: [rooms still under -67 dBm]}} — signal estimated from free-space loss, distance and each wall crossed by its material and thickness (a door or window where the path goes through one), per band; the suggestion is the fewest ceiling points (up to four) at room centres covering the rooms people use. check also asks each access point for its data cable, power (an outlet within 1.5 m or poe) and a cable category that carries its uplink (Wi-Fi 7: 10 GbE, Cat 6A). Circuit numbers are drawn next to the points on the plan, and with annotations(legend=true) the load schedule under the legend."
+        description = "Electrical and telecom project, NBR 5410 and NBR 14565. Points are the electrical pieces (catalog electrical: outlets, switches, lighting points, panel, network-outlet RJ45, tv-outlet, wifi-point, telecom-panel) plus every fixture that lights. check (default): {points:{kind:count}, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — accept=[[key, reason]] with any action marks findings looked at (they stay listed with the reason and stop counting in pending), an empty reason takes one back, orphaned lists acceptances whose finding is gone and prune=true drops them — a ceiling lighting point per room, general-use outlets per room (kitchens and laundries one per 3.5 m of perimeter, bathrooms one by the basin, living rooms and bedrooms one per 5 m), a network point in long-stay rooms, a TV point in living rooms and bedrooms, a distribution and a telecom panel, points without a circuit, lighting and outlets sharing a circuit, a dedicated load not alone. circuits: rows [name, kinds, points, VA, V, A, wire mm², breaker A, DR] and main_breaker {a, phases, load_a_per_phase}: the supply to ask the utility for (one phase up to 8 kVA with no 220 V circuit on a 127 V supply, two up to 20 kVA, three above; the utility's own limits prevail) and its main breaker — power by the norm's defaults (100 VA per lighting point; 600 VA for each of the first three outlets of a kitchen, laundry or bathroom, 100 VA after and elsewhere; shower 5500, air conditioning 1500) unless set; wire the larger of what the current needs and 1.5 mm² for lighting or 2.5 for power; DR where a circuit serves a wet room or a balcony; a shower runs on 220 V. assign {ids, circuit, va?} — or the whole division at once, circuits {\"C1\": [ids], \"C2\": [ids]} — writes the circuits (and power, and volts 127|220 per point — a 220 V outlet makes its circuit 220 V) on points in one undoable step. voltage {volts?, short_ka?, earthing?: TN-S|TN-C-S|TT}. circuits also gives panel {devices: [[device, count, DIN modules]], modules {used, capacity, capacity_written, spare}, dps, earthing, icn_ka, selective}: one-pole breakers for 127 V circuits and two-pole for 220 V between phases, a two-pole DR per circuit that needs one, the main breaker, the surge protector (DPS class II, a module per phase and neutral) and NBR 5410's spare ways (2 up to 6 circuits, 3 up to 12, 4 up to 30, 15 % above); capacity is the panel's modules (assign modules on it) or a guess from its size, and check says when it does not fit, when the main breaker is under twice the largest partial (selectivity) and when the short-circuit level was assumed. cable {kind: power|data|tv, pts} (with ids or circuit instead of pts, it is a route): draws a run of the electrical project, told apart on the plan (power solid, network dashed, TV dash-dot); check then reports cables_m, the length by kind with a tenth for the drops, and network or TV points no run reaches, or a telecom panel none reaches. route {kind: power|data|tv, ids? | circuit?, via?: ceiling|floor|wall, cat?: cat5e|cat6|cat6a, from?}: lays the run the way it is built, along the walls and inside them (or in the slab), from the nearest panel of its kind to the points (all of the kind when none given), sharing the trunk, and draws it replacing the earlier run of the same circuit; replies {via, suggested, length_m {horizontal, vertical, total}, by_premise_m, bends, materials: [[item, qty, unit]]} — conduit, boxes, wire by conductor, cable, connectors. Without via it takes the cheapest premise that can be built; a via that cannot reach a point (wall with a point out of every wall; ceiling with a low point out of every wall, nowhere to drop) is refused naming the points. Automation (catalog smart-relay, smart-switch, dimmer, presence-sensor, smart-lock): each draws its standby on its circuit (assign standby_w; relay, dimmer and sensor 0.5 W, smart switch 0.8 by default), circuits reports standby_w, and check asks a relay or smart switch for a neutral in its box, a dimmer for the room's lighting to fit its max_w (default 200 W) and pass 10 W, a ceiling sensor to be at 2.2 m or higher and to see the room's far corner, a lock to sit on a door. wifi {ids?, standard?: wifi5|wifi6|wifi6e|wifi7, poe?, band?: 2.4|5|6}: writes the standard and PoE on access points (wifi-point) when given, and replies {access_points: [[id, standard, bands, uplink]], coverage: [[room, band, median dBm, worst dBm (9 places in 10), share at -67 dBm or better, grade]], suggested: {standard, band, points: [[x, y, z, room]], short: [rooms still under -67 dBm]}} — signal estimated from free-space loss, distance and each wall crossed by its material and thickness (a door or window where the path goes through one), per band; the suggestion is the fewest ceiling points (up to four) at room centres covering the rooms people use. check also asks each access point for its data cable, power (an outlet within 1.5 m or poe) and a cable category that carries its uplink (Wi-Fi 7: 10 GbE, Cat 6A). Circuit numbers are drawn next to the points on the plan, and with annotations(legend=true) the load schedule under the legend."
     )]
     pub(crate) fn electrical(
         &self,
@@ -176,6 +183,16 @@ impl NewEraMcp {
                 if standby > 0.0 {
                     reply["standby_w"] = compact::num(standby);
                 }
+                if let Some(panel) = electrical::panel(doc.home()) {
+                    reply["panel"] = serde_json::json!({
+                        "devices": panel.devices.iter().map(|d| serde_json::json!([d.0, d.1, d.2])).collect::<Vec<_>>(),
+                        "modules": {"used": panel.used, "capacity": panel.capacity, "capacity_written": panel.capacity_written, "spare": panel.spare},
+                        "dps": panel.dps,
+                        "earthing": panel.earthing,
+                        "icn_ka": panel.icn_ka,
+                        "selective": panel.main_a >= panel.largest_partial_a * 2,
+                    });
+                }
                 if let Some(supply) = electrical::main_breaker(doc.home()) {
                     reply["main_breaker"] = serde_json::json!({
                         "a": supply.breaker_a,
@@ -211,6 +228,7 @@ impl NewEraMcp {
                     && p.volts.is_none()
                     && p.standby_w.is_none()
                     && p.max_w.is_none()
+                    && p.modules.is_none()
                 {
                     return Err(invalid(
                         "assign needs circuit (empty to clear), va or volts",
@@ -261,6 +279,11 @@ impl NewEraMcp {
                             piece
                                 .properties
                                 .insert(electrical::STANDBY_KEY.into(), w.to_string());
+                        }
+                        if let Some(m) = p.modules {
+                            piece
+                                .properties
+                                .insert(electrical::MODULES_KEY.into(), m.to_string());
                         }
                         if let Some(w) = p.max_w {
                             piece
@@ -628,16 +651,35 @@ impl NewEraMcp {
                 Ok(applied(&doc, &before))
             }
             "voltage" => {
-                let volts = p
-                    .volts
-                    .ok_or_else(|| invalid("voltage needs volts: 127 or 220"))?;
-                if !(100.0..=400.0).contains(&volts) {
-                    return Err(invalid("volts: a supply voltage, 127 or 220"));
+                if p.volts.is_none() && p.short_ka.is_none() && p.earthing.is_none() {
+                    return Err(invalid(
+                        "voltage needs volts (127 or 220), short_ka or earthing",
+                    ));
                 }
                 let mut doc = self.document.write();
                 let before = doc.home().clone();
                 let mut properties = doc.home().properties.clone();
-                properties.insert(electrical::VOLTAGE_KEY.into(), volts.to_string());
+                if let Some(volts) = p.volts {
+                    if !(100.0..=400.0).contains(&volts) {
+                        return Err(invalid("volts: a supply voltage, 127 or 220"));
+                    }
+                    properties.insert(electrical::VOLTAGE_KEY.into(), volts.to_string());
+                }
+                if let Some(ka) = p.short_ka {
+                    if !(1.0..=50.0).contains(&ka) {
+                        return Err(invalid(
+                            "short_ka: the presumed short-circuit current, kA (e.g. 4.5, 6, 10)",
+                        ));
+                    }
+                    properties.insert(electrical::SHORT_KA_KEY.into(), ka.to_string());
+                }
+                if let Some(scheme) = &p.earthing {
+                    let scheme = scheme.trim().to_uppercase();
+                    if !["TN-S", "TN-C-S", "TT"].contains(&scheme.as_str()) {
+                        return Err(invalid("earthing: TN-S, TN-C-S or TT"));
+                    }
+                    properties.insert(electrical::EARTHING_KEY.into(), scheme);
+                }
                 doc.execute(newera_core::Command::SetProperties { properties })
                     .map_err(core)?;
                 Ok(applied(&doc, &before))
@@ -1105,6 +1147,74 @@ mod tests {
                 .to_string()
                 .contains(&format!("elec:neutral:{}", ids[1])),
             "{check}"
+        );
+    }
+
+    #[test]
+    fn the_panel_is_filled_and_its_protection_given_in_the_schedule() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[400,0],[400,400],[0,400]],"closed":true}],"rooms":[{"name":"Cozinha","at":[200,200]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let reply = s
+            .place(Parameters(
+                serde_json::from_str(
+                    r#"{"items":[{"cat":"electrical-panel","at":[10,200]},{"cat":"outlet-mid","at":[100,10]},{"cat":"shower-point","at":[300,10]}]}"#,
+                )
+                .unwrap(),
+            ))
+            .unwrap();
+        let ids: Vec<String> = reply
+            .rsplit("ids=")
+            .next()
+            .unwrap()
+            .split(',')
+            .map(|s| s.trim().to_owned())
+            .collect();
+        let electrical = |json: &str| {
+            s.electrical(Parameters(serde_json::from_str(json).unwrap()))
+                .map(|r| serde_json::from_str(&r).unwrap_or(serde_json::Value::String(r)))
+        };
+        electrical(&format!(
+            r#"{{"action":"assign","circuits":{{"C1":["{}"],"C2":["{}"]}}}}"#,
+            ids[1], ids[2]
+        ))
+        .unwrap();
+        let schedule = electrical(r#"{"action":"circuits"}"#).unwrap();
+        let panel = &schedule["panel"];
+        assert_eq!(panel["modules"]["spare"], 2, "{schedule}");
+        assert!(
+            panel["devices"].to_string().contains("bipolar (220 V"),
+            "the shower is between phases: {schedule}"
+        );
+        assert!(
+            panel["dps"].as_str().unwrap().contains("Classe II"),
+            "{schedule}"
+        );
+        assert_eq!(panel["earthing"], "TN-S");
+        assert!(
+            electrical("{}").unwrap()["findings"]
+                .to_string()
+                .contains("elec:short-circuit")
+        );
+
+        electrical(r#"{"action":"voltage","short_ka":10,"earthing":"tt"}"#).unwrap();
+        electrical(&format!(
+            r#"{{"action":"assign","ids":["{}"],"modules":4}}"#,
+            ids[0]
+        ))
+        .unwrap();
+        let schedule = electrical(r#"{"action":"circuits"}"#).unwrap();
+        assert_eq!(schedule["panel"]["icn_ka"], 10.0, "{schedule}");
+        assert_eq!(schedule["panel"]["earthing"], "TT");
+        let text = electrical("{}").unwrap()["findings"].to_string();
+        assert!(
+            text.contains("elec:panel-full") && !text.contains("elec:short-circuit"),
+            "{text}"
         );
     }
 }
