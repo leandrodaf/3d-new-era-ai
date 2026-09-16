@@ -228,6 +228,63 @@ Ninguém atribui um circuito hoje e outro semana que vem.
 **Deveria:** aceitar um mapa — `{"C1": [...], "C2": [...]}` — numa chamada, um
 passo de undo.
 
+## 43. Ponto de projeto é avaliado como a louça que ele serve
+
+Lançando os 27 pontos hidráulicos com o nome do aparelho que cada um serve,
+como se faz em projeto:
+
+```
+place(cat="sewer", at=[126,468], name="Esgoto — vaso banho social")
+→ ["alerta","Esgoto — vaso banho social f1589",
+   "17 cm livres à frente (uso do vaso: mínimo 60 cm); afaste 43 cm."]
+```
+
+Seis findings desses de uma vez, e o score de 99 para 69. Um ponto de esgoto de
+10 × 10 × 5 cm sendo cobrado por circulação de vaso sanitário — ele fica
+justamente atrás do aparelho, que é onde deve ficar.
+
+Provado trocando só o nome, mesma peça e mesmo lugar:
+
+```
+place(cat="sewer", at=[126,468], name="ES-01")   → nenhum finding
+```
+
+É o mesmo mecanismo do "Banho suíte" que vira dormitório: a regra lê o nome. O
+catálogo (`sewer`, `cold-water`, `floor-drain`) já diz o que a peça é.
+
+**O custo foi a nomenclatura.** Tive que abandonar os nomes descritivos e usar
+código e ambiente — `AF-01 — banho social`, `ES-05 — cozinha`. Num banheiro com
+três pontos de água fria, "AF-04, AF-05, AF-06 — banho suíte" não diz qual é do
+vaso, qual do lavatório e qual do chuveiro. É o que o instalador lê na obra.
+
+**Reproduzir:** qualquer ponto de disciplina cujo nome cite a louça que serve.
+
+**Deveria:** peça de catálogo de disciplina não entrar nas regras de circulação
+e uso de móvel. O catálogo tem precedência sobre o nome.
+
+## 44. A hidráulica não tem quem confira
+
+O elétrico foi montado guiado a cada passo: `electrical(check)` apontava cômodo
+a cômodo quantas tomadas faltavam, depois listava os pontos sem cabo chegando,
+até a lista esvaziar. Foi o que tornou 22 tomadas, 7 circuitos e 58 m de cabo
+um trabalho seguro.
+
+A hidráulica não tem equivalente. Existe o catálogo (`cold-water`, `hot-water`,
+`sewer`, `floor-drain`, `valve`, `grease-trap`, `inspection-box`,
+`water-meter`, `gas-point`) e a camada funciona — as 8 polilinhas entraram em
+`plumbing` sozinhas e `lines_cm` passou a `{"electrical":5247,
+"plumbing":2483.6}`. Mas não há `plumbing(check)`.
+
+Os 27 pontos saíram de conferência própria: ler a lista de louças e decidir na
+mão o que cada uma pede. Se eu tivesse esquecido o ralo de um banheiro ou a
+água quente da pia, nada teria dito. Das três disciplinas, a hidráulica é a
+única que sai sem ninguém ter conferido.
+
+**Deveria:** um `plumbing` espelhando `electrical` — um ponto de água e um de
+esgoto por louça, ralo em área molhada, caixa de gordura na cozinha, ramal
+chegando a cada ponto —, apoiado nas NBR 5626, 8160 e 13103, esta última já
+citada pelo `ergonomics`.
+
 ---
 
 ## Conferidos na planta real
