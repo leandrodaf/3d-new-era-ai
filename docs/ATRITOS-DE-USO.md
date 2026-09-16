@@ -165,6 +165,50 @@ também da ancoragem que depende dela.
   **Encurtaria:** a mudança que teria evitado o contorno.
 -->
 
+## 20. A lista de corte só enxerga o que o `joinery` fez
+
+Esta planta é marcenaria do começo ao fim: torre quente, gabinete do tanque,
+gavetões, aéreos, vassoureiro — cada um desenhado módulo a módulo, com as
+larguras, as chapas, os puxadores e os rodapés recuados no nome de cada peça.
+
+```
+cut_list()          → "no joinery builds here (make one with the joinery tool)"
+cut_list(ids=[…])   → idem
+```
+
+Nenhum móvel do projeto entra na lista de corte. Os que vieram de modelos
+importados não entram; o vassoureiro reconstruído aqui, como grupo de sólidos,
+também não. A saída mais valiosa do software — a lista que vai para a serra,
+com chapas, fitas de borda e ferragens — está fechada para quem desenhou de
+outro jeito, e é justamente quem mais precisaria dela.
+
+O `joinery` resolveria, mas refazer um vassoureiro paramétrico custa o
+acabamento: as molduras 3D, as frentes rebaixadas e os puxadores de latão que
+combinam com o resto da cozinha não sobrevivem à troca.
+
+**Encurtaria:** o `cut_list` aceitar um grupo qualquer, tratando cada sólido
+como uma peça — as medidas estão todas lá.
+
+## 21. `accept` no `check_layout` só vale para `overlap`
+
+O `accept` chegou (era o atrito 9), e funciona: aceitar um par de sobreposição
+tira o peso e mantém a linha no relatório, com `orphaned` avisando quando o
+motivo deixa de valer.
+
+Mas a chave só existe para `overlap` —
+
+```
+"key": "overlap:f826+f847"
+```
+
+`in_wall` e `outside_rooms` vêm sem `key`. São, nesta planta, as cinco linhas
+que sobram para sempre: as duas persianas de rolo que estão dentro da parede
+porque é ali que elas ficam, o shaft e os dois vidros do escritório que não
+estão dentro de nenhum polígono de cômodo porque não deveriam estar. Aceitar
+uma delas devolve `orphaned` — a chave inventada não corresponde a nada.
+
+**Encurtaria:** `key` também em `in_wall` e `outside_rooms`.
+
 ---
 
 ## O que a rodada anterior deixou para verificar
