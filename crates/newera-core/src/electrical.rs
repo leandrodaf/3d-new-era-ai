@@ -1582,6 +1582,18 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 message: why,
                 source: "nbr5410",
             });
+        } else if let Some(why) = view
+            .find_piece(point.id)
+            .and_then(|f| crate::mounting::hidden(home, f))
+        {
+            out.push(Finding {
+                key: format!("elec:hidden:{}", point.id),
+                accepted: None,
+                severity: Severity::Alerta,
+                place: format!("{} {}", point.name, point.id),
+                message: why,
+                source: "nbr5410",
+            });
         }
     }
     automation(home, &all, &mut out);

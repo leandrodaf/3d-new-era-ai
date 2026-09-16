@@ -914,6 +914,12 @@ mod tests {
             show_all_3d: None,
         }))
         .unwrap();
+        // Outlets and switches go into walls.
+        let walls: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[200,0],[200,200],[0,200]],"closed":true}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(walls)).unwrap();
         let params: PlaceParams = serde_json::from_str(
             r#"{"items":[{"cat":"outlet-low","at":[10,10]},{"cat":"outlet-low","at":[60,10]},{"cat":"switch","at":[100,10]}]}"#,
         )

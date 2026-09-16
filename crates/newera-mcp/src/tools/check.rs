@@ -507,7 +507,14 @@ mod tests {
             };
             doc.execute(Command::insert(fixture)).unwrap();
         }
-        // A catalog fixture comes rated.
+        // A catalog fixture comes rated, on the ceiling of a room.
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[220,20],[380,20],[380,180],[220,180]],"closed":true}],"rooms":[{"name":"Sala","at":[300,100]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
         s.place(Parameters(
             serde_json::from_str(r#"{"items":[{"cat":"led-panel","at":[300,100]}]}"#).unwrap(),
         ))

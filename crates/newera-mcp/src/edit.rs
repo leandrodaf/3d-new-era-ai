@@ -2215,7 +2215,12 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
         {
             piece.follow_group_change(source);
         }
-        // A point set into a wall never goes into glass or an opening's span.
+        // A fixed point goes onto its structure: a wall point onto a wall's
+        // face, a ceiling point up to the ceiling — never loose, never into
+        // glass or an opening's span.
+        if spec.wall.is_none() && source.is_none() {
+            newera_core::mounting::seat(doc.home(), &mut piece)?;
+        }
         if let Some(why) = newera_core::mounting::blocked(doc.home(), &piece) {
             return Err(why);
         }

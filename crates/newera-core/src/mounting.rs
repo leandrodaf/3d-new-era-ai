@@ -14,6 +14,125 @@ use crate::materials::WallFamily;
 /// its thickness, cm.
 const IN_WALL: f64 = 12.0;
 
+/// What a point is fixed to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mount {
+    /// Set into a wall: outlets, switches, panels, wall lights, water points.
+    Wall,
+    /// Fixed to the ceiling: lighting points, Wi-Fi, presence sensors.
+    Ceiling,
+}
+
+/// How far from a wall a point asked for `at` is still taken into it, cm.
+const SNAP: f64 = 60.0;
+/// How far under the ceiling a ceiling point may hang, cm.
+const UNDER_CEILING: f64 = 30.0;
+
+/// What a catalog piece is fixed to, if it is a fixed point.
+pub fn mount_of(catalog: &str) -> Option<Mount> {
+    if wall_mounted(catalog) {
+        Some(Mount::Wall)
+    } else if matches!(
+        catalog,
+        "light-ceiling" | "downlight" | "led-panel" | "wifi-point" | "presence-sensor"
+    ) {
+        Some(Mount::Ceiling)
+    } else {
+        None
+    }
+}
+
+/// The ceiling over a plan point, cm above the floor: the top of the nearest
+/// wall, which is the slab it holds.
+fn ceiling_at(view: &Home, at: Point2) -> Option<f64> {
+    view.walls
+        .iter()
+        .filter(|w| !w.is_arc())
+        .min_by(|a, b| {
+            distance_to_segment(at, a.start, a.end)
+                .total_cmp(&distance_to_segment(at, b.start, b.end))
+        })
+        .map(|w| w.height.max(w.height_at_end.unwrap_or(w.height)))
+}
+
+fn in_a_room(view: &Home, at: Point2) -> bool {
+    view.rooms
+        .iter()
+        .any(|r| r.points.len() >= 3 && crate::electrical::inside(&r.points, at))
+}
+
+/// Seats a fixed point where it is fixed: a wall point onto the face of the
+/// nearest wall, its back to it; a ceiling point at the ceiling height.
+/// Refuses one that has no structure to be fixed to.
+pub fn seat(home: &Home, piece: &mut Furniture) -> Result<(), String> {
+    let Some(mount) = mount_of(&piece.catalog) else {
+        return Ok(());
+    };
+    let view = home.level_view(home.current_level());
+    match mount {
+        Mount::Wall => {
+            let (wall, dist) = view
+                .walls
+                .iter()
+                .filter(|w| !w.is_arc())
+                .map(|w| (w, distance_to_segment(piece.position, w.start, w.end)))
+                .min_by(|a, b| a.1.total_cmp(&b.1))
+                .ok_or_else(|| {
+                    format!(
+                        "{} precisa de uma parede, e não há paredes neste pavimento",
+                        piece.name
+                    )
+                })?;
+            if dist > wall.thickness / 2.0 + SNAP && built_into(&view, piece).is_some() {
+                return Ok(());
+            }
+            if dist > wall.thickness / 2.0 + SNAP {
+                return Err(format!(
+                    "{} fica embutido em parede, e a parede mais próxima ({}) está a {} cm: dê at junto a uma parede ou wall=<id>",
+                    piece.name,
+                    wall.id,
+                    (dist - wall.thickness / 2.0).round()
+                ));
+            }
+            let (a, b) = (wall.start, wall.end);
+            let len = a.distance(b).max(1e-9);
+            let (ux, uy) = ((b.x - a.x) / len, (b.y - a.y) / len);
+            let t = ((piece.position.x - a.x) * ux + (piece.position.y - a.y) * uy).clamp(0.0, len);
+            let foot = Point2::new(a.x + ux * t, a.y + uy * t);
+            // The face on the side the point was asked, or the room's side.
+            let side = (piece.position.x - foot.x) * -uy + (piece.position.y - foot.y) * ux;
+            let mut n = (-uy, ux);
+            if side < 0.0
+                || (side.abs() < 1e-6
+                    && !in_a_room(
+                        &view,
+                        Point2::new(foot.x + n.0 * wall.thickness, foot.y + n.1 * wall.thickness),
+                    ))
+            {
+                n = (uy, -ux);
+            }
+            let off = wall.thickness / 2.0 + piece.depth / 2.0;
+            piece.position = Point2::new(foot.x + n.0 * off, foot.y + n.1 * off);
+            // Its front faces the room: local +y along the normal.
+            piece.angle = (-n.0).atan2(n.1).to_degrees();
+            Ok(())
+        }
+        Mount::Ceiling => {
+            if !in_a_room(&view, piece.position) {
+                return Err(format!(
+                    "{} vai no teto de um cômodo, e {:?} não está dentro de nenhum",
+                    piece.name,
+                    [piece.position.x.round(), piece.position.y.round()]
+                ));
+            }
+            if let Some(ceiling) = ceiling_at(&view, piece.position) {
+                piece.elevation = (ceiling - piece.height).max(0.0);
+            }
+            Ok(())
+        }
+    }
+}
+
 /// Whether a catalog piece is set into a wall.
 pub fn wall_mounted(catalog: &str) -> bool {
     matches!(
@@ -54,10 +173,33 @@ fn distance_to_segment(p: Point2, a: Point2, b: Point2) -> f64 {
 /// or in the span of a door, a window or an open passage at its height.
 /// Pieces not set into walls, or standing in no wall, are never refused.
 pub fn blocked(home: &Home, piece: &Furniture) -> Option<String> {
+    let view = home.level_view(home.current_level());
+    if mount_of(&piece.catalog) == Some(Mount::Ceiling) {
+        if !in_a_room(&view, piece.position) {
+            return Some(format!(
+                "{} {} vai no teto e está fora de qualquer cômodo.",
+                piece.name, piece.id
+            ));
+        }
+        let top = piece.elevation + piece.height;
+        return ceiling_at(&view, piece.position)
+            .filter(|c| top < c - UNDER_CEILING || top > c + 5.0)
+            .map(|c| {
+                format!(
+                    "{} {} está a {} cm do chão, solto no ar: vai fixado no teto, a {} cm.",
+                    piece.name,
+                    piece.id,
+                    top.round(),
+                    c.round()
+                )
+            });
+    }
     if !wall_mounted(&piece.catalog) {
         return None;
     }
-    let view = home.level_view(home.current_level());
+    if let Some(why) = off_structure(&view, piece) {
+        return Some(why);
+    }
     let wall = view
         .walls
         .iter()
@@ -68,6 +210,7 @@ pub fn blocked(home: &Home, piece: &Furniture) -> Option<String> {
         .map(|(w, _)| w);
     let (lo, hi) = (piece.elevation, piece.elevation + piece.height);
     let Some(wall) = wall else {
+        // Not in a wall: said by the caller unless a glass piece explains it.
         // In no wall: set on a glass piece (a shower screen, a railing, a
         // see-through partition) at its height is set on nothing.
         return view
@@ -129,6 +272,226 @@ pub fn blocked(home: &Home, piece: &Furniture) -> Option<String> {
                 )
             })
         })
+}
+
+fn in_wall<'a>(view: &'a Home, piece: &Furniture) -> Option<&'a crate::elements::Wall> {
+    view.walls
+        .iter()
+        .filter(|w| !w.is_arc())
+        .map(|w| (w, distance_to_segment(piece.position, w.start, w.end)))
+        .filter(|(w, d)| *d <= w.thickness / 2.0 + IN_WALL)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(w, _)| w)
+}
+
+/// A wall point standing in no wall and on no glass either: loose in a room.
+fn off_structure(view: &Home, piece: &Furniture) -> Option<String> {
+    if in_wall(view, piece).is_some() {
+        return None;
+    }
+    let glass_near = view.furniture.iter().flat_map(Furniture::flatten).any(|f| {
+        (matches!(f.catalog.as_str(), "shower-glass" | "glass-railing")
+            || f.opacity.is_some_and(|o| o < 0.6))
+            && {
+                let mut near = f.clone();
+                near.width += 2.0 * IN_WALL;
+                near.depth += 2.0 * IN_WALL;
+                near.contains(piece.position)
+            }
+    });
+    (!glass_near && built_into(view, piece).is_none()).then(|| {
+        format!(
+            "{} {} está solto no meio do cômodo: vai embutido numa parede, ou no móvel fixo de uma ilha ou bancada.",
+            piece.name, piece.id
+        )
+    })
+}
+
+/// A fixed piece a point may be set into instead of a wall: a counter, an
+/// island or a cabinet it stands inside of — where an island's sink takes
+/// its water from the floor and its outlet on the side. Appliances, seats,
+/// beds and tables are not structure.
+fn built_into<'a>(view: &'a Home, piece: &Furniture) -> Option<&'a Furniture> {
+    view.furniture
+        .iter()
+        .flat_map(Furniture::flatten)
+        .filter(|f| {
+            f.id != piece.id && !f.is_group() && f.opening.is_none() && f.discipline.is_none()
+        })
+        .filter(|f| f.height >= 60.0 && f.width.min(f.depth) >= 30.0 && !movable(f))
+        .find(|f| {
+            let mut near = (*f).clone();
+            near.width += 20.0;
+            near.depth += 20.0;
+            near.contains(piece.position)
+        })
+}
+
+/// Pieces that stand free and are no structure to fix a point to.
+fn movable(f: &Furniture) -> bool {
+    let name = crate::annotations::fold(&f.name);
+    [
+        "geladeira",
+        "refrigerador",
+        "maquina",
+        "lava",
+        "secadora",
+        "forno",
+        "micro",
+        "fogao",
+        "tv",
+        "televis",
+        "cama",
+        "sofa",
+        "poltrona",
+        "cadeira",
+        "mesa",
+        "banco",
+        "puff",
+        "berco",
+        "tapete",
+    ]
+    .iter()
+    .any(|w| name.contains(w))
+        || matches!(
+            f.catalog.as_str(),
+            "fridge"
+                | "washer"
+                | "dryer"
+                | "dishwasher"
+                | "oven"
+                | "microwave"
+                | "stove"
+                | "tv"
+                | "bed-single"
+                | "bed-double"
+                | "bed-queen"
+                | "bed-king"
+                | "sofa-2"
+                | "sofa-3"
+                | "sofa-l"
+                | "armchair"
+                | "chair"
+                | "stool"
+                | "crib"
+                | "coffee-table"
+                | "side-table"
+                | "dining-table-4"
+                | "dining-table-6"
+                | "round-table"
+                | "dining-set-4"
+                | "dining-set-6"
+                | "desk"
+                | "office-chair"
+        )
+}
+
+/// Why a wall point in its wall cannot be reached, if so: behind the leaf of
+/// a hinged door on its hinge side, or covered by a piece standing in front
+/// of it at its height — a wardrobe, a cabinet, a shelf. Appliances plug in
+/// behind themselves, and beds and seats leave an outlet behind within reach.
+pub fn hidden(home: &Home, piece: &Furniture) -> Option<String> {
+    if !wall_mounted(&piece.catalog) {
+        return None;
+    }
+    let view = home.level_view(home.current_level());
+    in_wall(&view, piece)?;
+    let (lo, hi) = (piece.elevation, piece.elevation + piece.height);
+    for f in view
+        .furniture
+        .iter()
+        .flat_map(Furniture::flatten)
+        .filter(|f| f.id != piece.id)
+    {
+        if let Some(opening) = f.opening.as_ref() {
+            if opening.kind == OpeningKind::Door && !opening.sliding && opening.leaves < 2 {
+                let (x, y) = f.to_local(piece.position);
+                let half = f.width / 2.0;
+                let beyond = if opening.hinge_right {
+                    x - half
+                } else {
+                    -half - x
+                };
+                if beyond > 0.0
+                    && beyond <= f.width
+                    && y.abs() <= f.depth / 2.0 + IN_WALL
+                    && lo < f.elevation + f.height
+                {
+                    return Some(format!(
+                        "{} {} fica atrás da folha aberta de {} ({}): ponha-o do lado da maçaneta.",
+                        piece.name, piece.id, f.name, f.id
+                    ));
+                }
+            }
+            continue;
+        }
+        if f.is_group() || f.discipline.is_some() || f.width.min(f.depth) <= 3.0 || f.height < 20.0
+        {
+            continue;
+        }
+        let name = crate::annotations::fold(&f.name);
+        let free = [
+            "geladeira",
+            "refrigerador",
+            "maquina",
+            "lava",
+            "secadora",
+            "forno",
+            "micro",
+            "fogao",
+            "cooktop",
+            "tv",
+            "televis",
+            "coifa",
+            "cama",
+            "sofa",
+            "poltrona",
+            "cadeira",
+            "mesa",
+            "banco",
+            "puff",
+            "berco",
+        ]
+        .iter()
+        .any(|w| name.contains(w))
+            || matches!(
+                f.catalog.as_str(),
+                "fridge"
+                    | "washer"
+                    | "dryer"
+                    | "dishwasher"
+                    | "oven"
+                    | "microwave"
+                    | "stove"
+                    | "tv"
+                    | "hood"
+                    | "bed-single"
+                    | "bed-double"
+                    | "bed-queen"
+                    | "bed-king"
+                    | "sofa-2"
+                    | "sofa-3"
+                    | "sofa-l"
+                    | "armchair"
+                    | "chair"
+                    | "stool"
+                    | "crib"
+            );
+        if free {
+            continue;
+        }
+        let (flo, fhi) = f.height_range();
+        let mut near = f.clone();
+        near.width += 2.0;
+        near.depth += 2.0 * IN_WALL;
+        if near.contains(piece.position) && lo < fhi && hi > flo {
+            return Some(format!(
+                "{} {} fica escondido atrás de {} ({}): suba-o acima do móvel, tire-o de trás dele ou recorte o fundo.",
+                piece.name, piece.id, f.name, f.id
+            ));
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -204,10 +567,8 @@ mod tests {
             blocked(&home, &outlet(30.0, (200.0, 3.0))).is_none(),
             "on the wall between"
         );
-        assert!(
-            blocked(&home, &outlet(30.0, (200.0, 150.0))).is_none(),
-            "in no wall at all"
-        );
+        let loose = blocked(&home, &outlet(30.0, (200.0, 150.0))).expect("in no wall at all");
+        assert!(loose.contains("solto"), "{loose}");
 
         // A glass wall takes nothing.
         home.walls[0].apply_type(
@@ -231,10 +592,111 @@ mod tests {
             ..Furniture::default()
         });
         assert!(blocked(&open, &outlet(30.0, (50.0, 4.0))).is_some());
-        assert!(blocked(&open, &outlet(30.0, (50.0, 80.0))).is_none());
+        assert!(
+            blocked(&open, &outlet(30.0, (50.0, 80.0)))
+                .unwrap()
+                .contains("solto")
+        );
         // A ceiling light is not set into walls.
         let mut light = outlet(270.0, (200.0, 3.0));
         light.catalog = "light-ceiling".into();
-        assert!(blocked(&home, &light).is_none());
+        assert!(
+            !blocked(&home, &light).unwrap_or_default().contains("vidro"),
+            "a ceiling light is not set in the wall"
+        );
+    }
+
+    #[test]
+    fn points_are_seated_on_their_structure_and_hidden_ones_are_said() {
+        use crate::elements::Room;
+        let mut home = Home::default();
+        let corners = [(0.0, 0.0), (400.0, 0.0), (400.0, 300.0), (0.0, 300.0)];
+        for k in 0..4 {
+            let (a, b) = (corners[k], corners[(k + 1) % 4]);
+            let mut w = Wall::new(
+                WallId(k as u64 + 1),
+                Point2::new(a.0, a.1),
+                Point2::new(b.0, b.1),
+            );
+            w.height = 270.0;
+            home.walls.push(w);
+        }
+        home.rooms.push(Room::new(
+            crate::ids::RoomId(9),
+            "Sala",
+            corners.iter().map(|c| Point2::new(c.0, c.1)).collect(),
+        ));
+        // An outlet asked 30 cm off the wall goes onto its face, back to it.
+        let mut o = outlet(30.0, (150.0, 30.0));
+        seat(&home, &mut o).unwrap();
+        assert!(
+            (o.position.y - (7.5 + 2.0)).abs() < 1e-6 && (o.position.x - 150.0).abs() < 1e-6,
+            "{:?}",
+            o.position
+        );
+        assert!(blocked(&home, &o).is_none());
+        // One asked in the middle of the room is refused.
+        let mut middle = outlet(30.0, (200.0, 150.0));
+        assert!(
+            seat(&home, &mut middle)
+                .unwrap_err()
+                .contains("parede mais próxima")
+        );
+        // An island counter is structure: a water point inside it stays.
+        let mut island = home.clone();
+        island.furniture.push(Furniture {
+            id: FurnitureId(60),
+            catalog: "imported".into(),
+            name: "Ilha".into(),
+            position: Point2::new(200.0, 150.0),
+            width: 120.0,
+            depth: 60.0,
+            height: 90.0,
+            ..Furniture::default()
+        });
+        let mut water = outlet(60.0, (200.0, 150.0));
+        water.catalog = "cold-water".into();
+        seat(&island, &mut water).unwrap();
+        assert!(blocked(&island, &water).is_none());
+        island.furniture[0].name = "Mesa de jantar".into();
+        assert!(
+            blocked(&island, &water).unwrap().contains("solto"),
+            "a table is no structure"
+        );
+        // A Wi-Fi point goes up to the ceiling; one left at 1 m is loose.
+        let mut ap = outlet(100.0, (200.0, 150.0));
+        ap.catalog = "wifi-point".into();
+        ap.height = 4.0;
+        assert!(blocked(&home, &ap).unwrap().contains("solto no ar"));
+        seat(&home, &mut ap).unwrap();
+        assert!((ap.elevation - 266.0).abs() < 1e-6 && blocked(&home, &ap).is_none());
+        let mut outside = ap.clone();
+        outside.position = Point2::new(600.0, 150.0);
+        assert!(seat(&home, &mut outside).is_err());
+
+        // Behind a wardrobe standing against the wall: hidden; above it, not.
+        home.furniture.push(Furniture {
+            id: FurnitureId(50),
+            catalog: "imported".into(),
+            name: "Armário".into(),
+            position: Point2::new(150.0, 7.5 + 30.0),
+            width: 120.0,
+            depth: 60.0,
+            height: 220.0,
+            ..Furniture::default()
+        });
+        assert!(
+            hidden(&home, &o)
+                .unwrap()
+                .contains("escondido atrás de Armário")
+        );
+        let mut high = o.clone();
+        high.elevation = 230.0;
+        assert!(hidden(&home, &high).is_none());
+        home.furniture[0].name = "Geladeira".into();
+        assert!(
+            hidden(&home, &o).is_none(),
+            "an appliance plugs in behind itself"
+        );
     }
 }
