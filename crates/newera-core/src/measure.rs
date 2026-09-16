@@ -426,6 +426,14 @@ fn blocks(piece: &Furniture) -> bool {
         && !piece.properties.contains_key("joinery:embedded")
 }
 
+/// [`blocks`], leaving thinness out of it.
+fn blocks_but_thin(piece: &Furniture) -> bool {
+    piece.visible
+        && !piece.is_opening()
+        && piece.discipline.is_none()
+        && !piece.properties.contains_key("joinery:embedded")
+}
+
 /// Every solid of one storey, walls first. `skip` leaves pieces out — the one
 /// being measured from, typically.
 pub fn obstacles(home: &Home, skip: &dyn Fn(&Furniture) -> bool) -> Vec<Obstacle> {
@@ -445,8 +453,13 @@ pub fn obstacles(home: &Home, skip: &dyn Fn(&Furniture) -> bool) -> Vec<Obstacle
         });
     }
     for top in &home.furniture {
+        let grouped = !top.children.is_empty();
         for leaf in top.visible_leaves() {
-            if !blocks(leaf) || skip(leaf) {
+            // A cabinet is drawn as its boards: a 1.8 cm side standing 280 cm
+            // tall is a wall of it, not a rug, and without it a probe walks
+            // through the whole cabinet as if it were air.
+            let board = grouped && leaf.height > FLAT && leaf.width.max(leaf.depth) > FLAT;
+            if !(blocks(leaf) || (board && blocks_but_thin(leaf))) || skip(leaf) {
                 continue;
             }
             out.push(Obstacle {
@@ -925,6 +938,46 @@ mod tests {
         );
         assert!((gap(a, b, Axis::X) + 5.5).abs() < 1e-9, "the tape agrees");
         assert!((gap(b, a, Axis::X) + 5.5).abs() < 1e-9, "from either side");
+    }
+
+    #[test]
+    fn a_probe_sees_a_cabinet_made_of_thin_boards() {
+        // A broom cupboard 30 wide, 280 tall, drawn as 1.8 cm boards: two
+        // sides, a back and a front, and nothing thicker.
+        let mut home = Home::default();
+        let board = |id: u64, at: (f64, f64), w: f64, d: f64| {
+            let mut part = piece(id, at, (w, d, 280.0), 0.0);
+            part.name = format!("chapa {id}");
+            part
+        };
+        let mut cupboard = piece(1, (630.0, 450.0), (30.0, 60.0, 280.0), 0.0);
+        cupboard.name = "vassoureiro".into();
+        cupboard.children = vec![
+            board(2, (615.9, 450.0), 1.8, 60.0),
+            board(3, (644.1, 450.0), 1.8, 60.0),
+            board(4, (630.0, 420.9), 26.4, 1.8),
+            board(5, (630.0, 479.1), 26.4, 1.8),
+        ];
+        home.furniture.push(cupboard);
+        // And a rug, which a probe still walks over.
+        home.furniture
+            .push(piece(9, (700.0, 450.0), (60.0, 40.0, 1.0), 0.0));
+
+        let spans = free_span(&home, Axis::X, 450.0, Some((612.0, 760.0)), (0.0, 280.0));
+        let solid: Vec<Option<Solid>> = spans
+            .iter()
+            .filter(|s| !s.is_free())
+            .map(|s| s.what.clone())
+            .collect();
+        assert_eq!(
+            solid,
+            vec![
+                Some(Solid::Piece(FurnitureId(2))),
+                Some(Solid::Piece(FurnitureId(3)))
+            ],
+            "{spans:#?}"
+        );
+        assert!((spans[1].from - 615.0).abs() < 0.01, "{spans:#?}");
     }
 
     #[test]
