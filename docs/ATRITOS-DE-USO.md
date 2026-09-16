@@ -11,14 +11,14 @@ Não é uma lista de desejos. Cada entrada traz o que se tentou, o que voltou, e
 o que teria encurtado o caminho — com o caso concreto que o produziu, para que
 se possa reproduzir.
 
-Desde que existe o `feedback`, o caso vai primeiro por lá, com os mesmos
-campos. Este arquivo é o registro que fica no repositório.
+Este arquivo é o registro: tudo é anotado aqui, à mão, com o caso inteiro.
 
 ## Rodada em aberto
 
-Projeto elétrico montado do zero na mesma planta: 22 tomadas, 4 pontos de rede,
-3 de TV, dois quadros e 7 circuitos pela NBR 5410. Os dois casos abaixo já
-foram enviados pelo `feedback`.
+Projeto elétrico e hidráulico montados do zero na mesma planta: 22 tomadas,
+21 pontos de luz dimensionados, 4 de rede, 3 de TV, dois quadros, 7 circuitos
+pela NBR 5410 e 58 m de cabo; depois 27 pontos hidráulicos e 8 ramais. Os casos
+abaixo saíram do que foi preciso fazer para chegar lá.
 
 ## 36. O cômodo é classificado pelo nome, e "Banho suíte" vira dormitório
 
