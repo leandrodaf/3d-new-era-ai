@@ -436,22 +436,7 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
         };
         let swing = polygon(&swing);
         for (i, piece) in pieces.iter().enumerate() {
-            // Below the door's sill (footings under a raised floor) is out of its way.
-            // A leaf only ever swings into its own storey.
-            if piece.is_opening()
-                || levels[i] != levels[d]
-                || piece.height <= FLAT
-                || piece.height_range().1 <= door.elevation + 1.0
-            {
-                continue;
-            }
-            let shared = swing.intersection(&footprints[i]);
-            let high_enough = shared
-                .iter()
-                .next()
-                .and_then(centroid)
-                .is_some_and(|at| piece.underside_at(at) >= door.elevation + door.height);
-            if shared.unsigned_area() > MIN_OVERLAP && !high_enough {
+            if levels[i] == levels[d] && leaf_hits(door, &swing, piece, &footprints[i]) {
                 issues.push(Issue::BlocksDoor {
                     door: door.id,
                     by: piece.id,
@@ -600,6 +585,46 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
         }
     }
     issues
+}
+
+/// Whether a door's leaf, sweeping `swing`, runs into `piece`.
+fn leaf_hits(
+    door: &Furniture,
+    swing: &Polygon<f64>,
+    piece: &Furniture,
+    footprint: &Polygon<f64>,
+) -> bool {
+    // Below the door's sill (footings under a raised floor) is out of its way.
+    if piece.is_opening() || piece.height <= FLAT || piece.height_range().1 <= door.elevation + 1.0
+    {
+        return false;
+    }
+    let shared = swing.intersection(footprint);
+    let high_enough = shared
+        .iter()
+        .next()
+        .and_then(centroid)
+        .is_some_and(|at| piece.underside_at(at) >= door.elevation + door.height);
+    shared.unsigned_area() > MIN_OVERLAP && !high_enough
+}
+
+/// The pieces of `door`'s storey its leaf runs into, by the rule
+/// [`check_layout`] reports `blocks_door` with — so a suggested fix, a hinge
+/// on the other jamb say, is checked against the same test it has to pass.
+pub fn door_blocked_by(home: &Home, door: &Furniture) -> Vec<FurnitureId> {
+    let Some(swing) = door_swing(door) else {
+        return Vec::new();
+    };
+    let swing = polygon(&swing);
+    let level = home.resolve_level(door.level);
+    home.furniture
+        .iter()
+        .filter(|top| top.id != door.id && home.resolve_level(top.level) == level)
+        .flat_map(Furniture::visible_leaves)
+        .filter(|leaf| leaf.id != door.id && !leaf.properties.contains_key("joinery:embedded"))
+        .filter(|leaf| leaf_hits(door, &swing, leaf, &polygon(&leaf.projected_footprint())))
+        .map(|leaf| leaf.id)
+        .collect()
 }
 
 /// Room a door or a drawer needs in front of it before it is unusable, cm.

@@ -320,6 +320,30 @@ mod tests {
             swings_into_bathroom(&swing),
             "still swings into the bathroom: {swing:?}"
         );
+
+        // A flip of the hinge is a change a dry run names, not `{}`.
+        let right = !s.document.read().home().furniture[0]
+            .opening
+            .as_ref()
+            .unwrap()
+            .hinge_right;
+        let dry: serde_json::Value = serde_json::from_str(
+            &s.update(Parameters(UpdateParams {
+                items: serde_json::from_str(&format!(r#"[{{"id":"{id}","hinge_right":{right}}}]"#))
+                    .unwrap(),
+                v: None,
+                dry: Some(Dry::All(true)),
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let changed = &dry["changed"][0];
+        assert_eq!(changed["id"], id.as_str(), "{dry}");
+        let (from, to) = (
+            &changed["from"]["hinge_right"],
+            &changed["to"]["hinge_right"],
+        );
+        assert_ne!(from, to, "the hinge is named as what moved: {dry}");
     }
 
     #[test]

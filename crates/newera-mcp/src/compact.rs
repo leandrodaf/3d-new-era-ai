@@ -279,6 +279,14 @@ pub(crate) fn piece(
     if !f.visible {
         v["visible"] = json!(false);
     }
+    // Which jamb a hinged leaf turns on: a flip of it is a change, and a dry
+    // run that answered `{}` for one looked like a flip that did nothing.
+    if f.opening
+        .as_ref()
+        .is_some_and(|o| !o.sliding && o.leaves < 2 && o.hinge_right)
+    {
+        v["hinge_right"] = json!(true);
+    }
     if f.is_opening()
         && let Some(i) = cuts
             .iter()
