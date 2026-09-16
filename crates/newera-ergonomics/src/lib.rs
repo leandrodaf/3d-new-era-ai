@@ -396,7 +396,7 @@ impl Review<'_, '_> {
         for (i, u) in scene.units.iter().enumerate() {
             let label = u.label();
             let need = |side: Side, min: f64, span: (f64, f64), severity: Severity, what: Why| {
-                let (free, blocker) = scene.free_and_blocker(i, side, min + 1.0, span);
+                let (free, blocker, tight) = scene.free_along(i, side, min + 1.0, span, min);
                 if free + 0.5 < min {
                     let where_ = match side {
                         Side::Front => "à frente",
@@ -448,11 +448,23 @@ impl Review<'_, '_> {
                         "não há espaço do outro lado: use peça menor ou reorganize".to_owned()
                     };
                     let Why(reason, reference) = what;
+                    // How much of the side is that narrow: a corner taken by
+                    // a nightstand is not a wardrobe that does not open.
+                    let frame = scene.units[i].frame();
+                    let whole = match side {
+                        Side::Front => frame.width,
+                        Side::Left | Side::Right => frame.depth,
+                    } * (span.1 - span.0);
+                    let stretch = if tight + 2.0 < whole - 4.0 {
+                        format!(" em {} dos {} cm", cm(tight), cm(whole))
+                    } else {
+                        String::new()
+                    };
                     Some(Finding {
                         severity,
                         place: label.clone(),
                         message: format!(
-                            "{} cm livres {where_} ({reason}: mínimo {} cm); {advice}.",
+                            "{} cm livres {where_}{stretch} ({reason}: mínimo {} cm); {advice}.",
                             cm(free),
                             cm(min)
                         ),
@@ -2710,6 +2722,58 @@ mod tests {
             Some(serde_json::json!("f20")),
             "{narrow:#?}"
         );
+    }
+
+    #[test]
+    fn a_narrow_corner_says_how_much_of_the_side_it_takes() {
+        // A 185 cm wardrobe whose doors face a free room, but for a 38 cm
+        // nightstand 54 cm in front of one stretch of it.
+        let mut home = Home::default();
+        square(&mut home, "Quarto", 400.0, 400.0);
+        home.furniture.push(piece(
+            20,
+            "wardrobe",
+            (100.0, 37.5),
+            (185.0, 60.0, 220.0),
+            0.0,
+        ));
+        home.furniture.push(piece(
+            21,
+            "nightstand",
+            (69.0, 67.5 + 54.0 + 20.0),
+            (38.0, 40.0, 55.0),
+            0.0,
+        ));
+        let report = review(&home, &Profile::default());
+        let front = report
+            .findings
+            .iter()
+            .find(|f| f.place.contains("f20") && f.message.contains("livres à frente"))
+            .unwrap_or_else(|| panic!("{report:#?}"));
+        assert!(
+            front
+                .message
+                .starts_with("54 cm livres à frente em 38 dos 185 cm"),
+            "{front:#?}"
+        );
+
+        let key = front.key.clone();
+
+        // Across the whole front, the sentence stays as it was — and so does
+        // the name it is accepted by.
+        home.furniture[1].width = 185.0;
+        home.furniture[1].position.x = 100.0;
+        let report = review(&home, &Profile::default());
+        let front = report
+            .findings
+            .iter()
+            .find(|f| f.place.contains("f20") && f.message.contains("livres à frente"))
+            .unwrap_or_else(|| panic!("{report:#?}"));
+        assert!(
+            front.message.starts_with("54 cm livres à frente ("),
+            "{front:#?}"
+        );
+        assert_eq!(front.key, key);
     }
 
     #[test]

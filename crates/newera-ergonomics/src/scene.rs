@@ -527,6 +527,24 @@ impl<'a> Scene<'a> {
         max: f64,
         span: (f64, f64),
     ) -> (f64, Option<usize>) {
+        let (free, blocker, _) = self.free_along(i, side, max, span, 0.0);
+        (free, blocker)
+    }
+
+    /// Like [`Self::free_and_blocker`], plus how many centimeters of the
+    /// side have less than `need` free.
+    ///
+    /// The free floor is the worst point of the side, and the worst point
+    /// alone makes a wardrobe with 93 cm in front of its doors read like one
+    /// that does not open, because a nightstand takes 38 cm of one corner.
+    pub fn free_along(
+        &self,
+        i: usize,
+        side: Side,
+        max: f64,
+        span: (f64, f64),
+        need: f64,
+    ) -> (f64, Option<usize>, f64) {
         let piece = self.units[i].frame();
         let (hw, hd) = (piece.width / 2.0, piece.depth / 2.0);
         // The band in the piece's frame, 2 cm in from the corners so
@@ -557,19 +575,28 @@ impl<'a> Scene<'a> {
         let band = polygon(&band);
         let mut free = max;
         let mut blocker = None;
+        // Stretches of the side, `(from, to)` along it, with less than `need`.
+        let mut tight: Vec<(f64, f64)> = Vec::new();
         let mut measure = |shape: &Polygon<f64>, who: Option<usize>| {
             for poly in shape.intersection(&band) {
+                let (mut near, mut from, mut to) = (f64::MAX, f64::MAX, f64::MIN);
                 for c in poly.exterior().coords() {
                     let (x, y) = piece.to_local(Point2::new(c.x, c.y));
-                    let d = match side {
-                        Side::Front => y - hd,
-                        Side::Left => -hw - x,
-                        Side::Right => x - hw,
+                    let (d, along) = match side {
+                        Side::Front => (y - hd, x),
+                        Side::Left => (-hw - x, y),
+                        Side::Right => (x - hw, y),
                     };
+                    near = near.min(d.max(0.0));
+                    from = from.min(along);
+                    to = to.max(along);
                     if d.max(0.0) < free {
                         free = d.max(0.0);
                         blocker = who;
                     }
+                }
+                if near + 0.5 < need {
+                    tight.push((from, to));
                 }
             }
         };
@@ -602,7 +629,16 @@ impl<'a> Scene<'a> {
             }
             measure(&self.footprints[j], Some(j));
         }
-        (free, blocker)
+        tight.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let (mut length, mut reach) = (0.0, f64::MIN);
+        for (from, to) in tight {
+            let from = from.max(reach);
+            if to > from {
+                length += to - from;
+                reach = to;
+            }
+        }
+        (free, blocker, length)
     }
 
     /// Whether a unit stands in the way of people and other pieces.
