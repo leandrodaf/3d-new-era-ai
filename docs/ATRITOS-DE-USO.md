@@ -292,6 +292,31 @@ circulação não usa a mesma ideia.
 **Encurtaria:** a checagem de circulação ignorar o que está acima da cabeça, ou
 medir a folga na altura em que a peça realmente estorva.
 
+## 25. `joinery` não tem `anchor`, e o armário se descola da parede
+
+O balcão da varanda precisava recuar de 65 para 57 cm de profundidade, para
+alinhar com o volume que divide a sala da varanda. Com `joinery`:
+
+```
+joinery(id="f1219", p={"d": 57})
+```
+
+O módulo encolheu pela frente **e pelo fundo**: estava em `y 691-756`,
+encostado na parede, e foi para `695-752` — quatro centímetros de vão atrás,
+onde nenhum armário de parede fica. O tampo fez o mesmo. Foram quatro peças a
+reposicionar com um `move(dy=4)` depois, e só se percebe o problema medindo,
+porque num render de frente o vão atrás não aparece.
+
+O `update` resolve isso desde sempre, e a própria documentação dele explica por
+quê: *"anchor … holds one face still … instead of growing around the center,
+so a run of joinery keeps its back on the wall"*. É exatamente o caso. Mas
+`anchor` é de `update`, e mudar um parâmetro de um build é `joinery`, que não
+o tem.
+
+**Encurtaria:** `anchor` em `joinery`, com o mesmo significado — ou um armário
+de parede manter o fundo por padrão, já que o `cabinet_run` sabe em que parede
+o pôs.
+
 ---
 
 ## O que a rodada anterior deixou para verificar
