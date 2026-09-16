@@ -41,7 +41,7 @@ pub(crate) struct PlumbingParams {
 #[tool_router(router = plumbing_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Plumbing project, NBR 5626 (cold and hot water) and NBR 8160 (sewer). Points are the plumbing pieces (catalog plumbing: cold-water, hot-water, sewer, floor-drain, valve, grease-trap, inspection-box, water-meter, gas-point) and what a point is comes from its catalog, never its name; fixtures are the pieces that use water (toilet, basin, kitchen sink, shower, bathtub, washer, laundry sink, dishwasher). check (default): {points:{kind:count}, pipes_m, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — a cold-water point by every fixture and a sewer point (or a floor drain for basin, shower, tub and machines) within reach, the discharge diameter it needs (toilet 100 mm, kitchen sink and machines 50, others 40); hot water where the project has any; a floor drain where there is a shower or tub; a grease trap for a kitchen sink; the premises — where the water comes from (water-meter or valve) and where the sewer goes (inspection-box or stack); points no drawn pipe of their kind reaches. accept=[[key, reason]] and prune=true as in electrical. route {kind: cold|hot|sewer, ids?, via?: ceiling|floor|wall, from?, depth?}: lays the run from its source to the points along the walls and inside them, or through the ceiling or under the floor, sharing the trunk, draws it (replacing the earlier run of the same points and the lines drawn by hand to them, listed in replaced_drawn) and replies {via, suggested, length_m, by_premise_m, bends, branches, materials: [[item, qty, unit]]} — water: pipe and bars, 90° elbows, tees, threaded elbows at the points, a gate valve per room, adhesive; sewer: the branch at the largest diameter it takes, the drops at each point's own, a 45° Y junction at each branch (never a 90° tee), two 45° elbows per turn, sealing rings, trap boxes. Sewer runs only under the floor, by gravity, with 2 % fall up to 75 mm and 1 % above: the reply says needs_depth_cm, and with depth a run that does not fit is refused saying how much it needs. Without via the cheapest premise that can be built is taken; one that cannot (a point in no wall; from the ceiling a low point in no wall, nowhere to drop; sewer up to the ceiling or lying in a wall) is refused with why."
+        description = "Plumbing project, NBR 5626 (cold and hot water) and NBR 8160 (sewer). Points are the plumbing pieces (catalog plumbing: cold-water, hot-water, sewer, valve, grease-trap, inspection-box, water-meter, gas-point, vent-pipe, and the drains as the models they are: floor-drain caixa sifonada 150x150x50, floor-drain-100, floor-drain-75 (150x185x75, up to 15 UHC), trap-drain-small (seal under 50 mm, no trap), dry-drain, linear-drain (w 50/70/90, no trap), linear-drain-trap, rain-drain for open areas; drains are set flush in the floor of a room, never in a wall, a door span or under a cabinet) and what a point is comes from its catalog, never its name; fixtures are the pieces that use water (toilet, basin, kitchen sink, shower, bathtub, washer, laundry sink, dishwasher). check (default): {points:{kind:count}, pipes_m, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — a cold-water point by every fixture and a sewer point (or a floor drain for basin, shower, tub and machines) within reach, the discharge diameter it needs (toilet 100 mm, kitchen sink and machines 50, others 40); hot water where the project has any; a floor drain in every bathroom, kitchen and laundry, inside the shower area where there is one, at least one real trap (50 mm seal) per room, the UHC its outlet takes (50 mm: 6, 75 mm: 15), rain drains for open terraces; a grease trap for a kitchen sink; the premises — where the water comes from (water-meter or valve) and where the sewer goes (inspection-box or stack); points no drawn pipe of their kind reaches. accept=[[key, reason]] and prune=true as in electrical. route {kind: cold|hot|sewer, ids?, via?: ceiling|floor|wall, from?, depth?}: lays the run from its source to the points along the walls and inside them, or through the ceiling or under the floor, sharing the trunk, draws it (replacing the earlier run of the same points and the lines drawn by hand to them, listed in replaced_drawn) and replies {via, suggested, length_m, by_premise_m, bends, branches, materials: [[item, qty, unit]]} — water: pipe and bars, 90° elbows, tees, threaded elbows at the points, a gate valve per room, adhesive; sewer: the branch at the largest diameter it takes, the drops at each point's own, a 45° Y junction at each branch (never a 90° tee), two 45° elbows per turn, sealing rings, trap boxes. Sewer runs only under the floor, by gravity, with 2 % fall up to 75 mm and 1 % above: the reply says needs_depth_cm, and with depth a run that does not fit is refused saying how much it needs. Without via the cheapest premise that can be built is taken; one that cannot (a point in no wall; from the ceiling a low point in no wall, nowhere to drop; sewer up to the ceiling or lying in a wall) is refused with why."
     )]
     pub(crate) fn plumbing(
         &self,
@@ -226,6 +226,15 @@ impl NewEraMcp {
             })
             .collect();
         let trunk = sizes.iter().map(|(_, mm)| *mm).max().unwrap_or(50);
+        // The drains on the run, by their model.
+        let drains: Vec<(String, plumbing::DrainSpec)> = wanted
+            .iter()
+            .filter_map(|pt| {
+                view.find_piece(pt.id)
+                    .and_then(|f| plumbing::drain_spec(&f.catalog).map(|d| (f.id.to_string(), d)))
+            })
+            .collect();
+        let drain_depth = drains.iter().map(|(_, d)| d.depth_cm).fold(0.0, f64::max);
         let feeds_toilet = wanted
             .iter()
             .any(|pt| plumbing::served_by(home, pt.at) == Some(plumbing::Fixture::Toilet));
@@ -258,7 +267,7 @@ impl NewEraMcp {
                 && let Some(depth) = p.depth
             {
                 let mms: Vec<u32> = sizes.iter().map(|(_, mm)| *mm).collect();
-                let needs = plumbing::sewer_depth(route, &mms);
+                let needs = plumbing::sewer_depth_with(route, &mms, drain_depth);
                 if needs > depth {
                     return Some(format!(
                         "o ramal precisa de {needs} cm sob o piso ({trunk} mm com caimento de {} %) e há {depth}: aproxime os pontos da prumada, divida em ramais, ou aumente o rebaixo",
@@ -300,7 +309,23 @@ impl NewEraMcp {
             )));
         }
         let rooms: std::collections::BTreeSet<_> = wanted.iter().filter_map(|pt| pt.room).collect();
-        let bill = plumbing::materials(&route, pipe, &sizes, rooms.len());
+        let mut bill = plumbing::materials(&route, pipe, &sizes, rooms.len());
+        if pipe == Pipe::Sewer && !drains.is_empty() {
+            // Each drain as the model it is, not a generic trap box.
+            bill.retain(|m| !m.item.starts_with("Caixa sifonada"));
+            let mut by_item: std::collections::BTreeMap<&str, f64> =
+                std::collections::BTreeMap::new();
+            for (_, d) in &drains {
+                *by_item.entry(d.item).or_default() += 1.0;
+            }
+            for (item, quantity) in by_item {
+                bill.push(newera_core::electrical::Material {
+                    item: item.to_owned(),
+                    quantity,
+                    unit: "un",
+                });
+            }
+        }
         let run = {
             let mut ids: Vec<String> = wanted.iter().map(|pt| pt.id.to_string()).collect();
             ids.sort();
@@ -380,7 +405,23 @@ impl NewEraMcp {
             reply["trunk_mm"] = serde_json::json!(trunk);
             reply["slope_pct"] = serde_json::json!(plumbing::slope(trunk) * 100.0);
             let mms: Vec<u32> = sizes.iter().map(|(_, mm)| *mm).collect();
-            reply["needs_depth_cm"] = serde_json::json!(plumbing::sewer_depth(&route, &mms));
+            reply["needs_depth_cm"] =
+                serde_json::json!(plumbing::sewer_depth_with(&route, &mms, drain_depth));
+            let loose: Vec<&str> = drains
+                .iter()
+                .filter(|(_, d)| !d.is_trap())
+                .map(|(id, _)| id.as_str())
+                .collect();
+            let mut notes = vec![
+                "Piso com caimento para o ralo: 1,5 % a 2,5 % dentro do box, 0,5 % no resto da área molhada (NBR 13753).".to_owned(),
+            ];
+            if !loose.is_empty() {
+                notes.push(format!(
+                    "{} não têm fecho hídrico de 50 mm: ligue-os a uma caixa sifonada do cômodo, não direto ao ramal.",
+                    loose.join(", ")
+                ));
+            }
+            reply["notes"] = serde_json::json!(notes);
         }
         Ok(reply.to_string())
     }

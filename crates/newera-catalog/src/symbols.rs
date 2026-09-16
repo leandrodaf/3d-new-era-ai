@@ -322,6 +322,27 @@ fn point_symbol(s: &mut Sym, symbol: crate::PointSymbol, size: f64) {
                 s.line(vec![(-r * 0.8, r * k), (r * 0.8, r * k)], false, false);
             }
         }
+        P::DryDrain => {
+            // A square with a single bar: no trap.
+            s.fill(square.clone(), false);
+            s.line(square, true, true);
+            s.line(vec![(-r * 0.8, 0.0), (r * 0.8, 0.0)], false, true);
+        }
+        P::LinearDrain => {
+            // A long grille across the piece's own width.
+            let bar = rect(-r * 2.2, -r * 0.35, r * 2.2, r * 0.35);
+            s.fill(bar.clone(), false);
+            s.line(bar, true, true);
+            for k in [-1.6, -0.8, 0.0, 0.8, 1.6] {
+                s.line(vec![(r * k, -r * 0.25), (r * k, r * 0.25)], false, false);
+            }
+        }
+        P::RainDrain => {
+            s.fill(circle(0.0, 0.0, r), false);
+            s.line(circle(0.0, 0.0, r), true, true);
+            s.line(vec![(-r * 0.6, -r * 0.6), (r * 0.6, r * 0.6)], false, true);
+            s.line(vec![(-r * 0.6, r * 0.6), (r * 0.6, -r * 0.6)], false, true);
+        }
         P::Valve => {
             let bow = vec![(-r, -r * 0.6), (r, r * 0.6), (r, -r * 0.6), (-r, r * 0.6)];
             s.fill(vec![(-r, -r * 0.6), (0.0, 0.0), (-r, r * 0.6)], true);

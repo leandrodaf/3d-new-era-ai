@@ -39,6 +39,8 @@ pub enum PointKind {
     GreaseTrap,
     InspectionBox,
     Vent,
+    /// A rainwater drain: goes to the rainwater system, never the sewer.
+    RainDrain,
     WaterMeter,
     Gas,
 }
@@ -54,6 +56,7 @@ impl PointKind {
             Self::GreaseTrap => "Caixa de gordura",
             Self::InspectionBox => "Caixa de inspeção",
             Self::Vent => "Ventilação",
+            Self::RainDrain => "Ralo pluvial",
             Self::WaterMeter => "Hidrômetro",
             Self::Gas => "Gás",
         }
@@ -64,7 +67,9 @@ impl PointKind {
             "cold-water" => Self::Cold,
             "hot-water" => Self::Hot,
             "sewer" => Self::Sewer,
-            "floor-drain" => Self::Drain,
+            "floor-drain" | "floor-drain-100" | "floor-drain-75" | "trap-drain-small"
+            | "dry-drain" | "linear-drain" | "linear-drain-trap" => Self::Drain,
+            "rain-drain" => Self::RainDrain,
             "valve" => Self::Valve,
             "grease-trap" => Self::GreaseTrap,
             "inspection-box" => Self::InspectionBox,
@@ -358,6 +363,75 @@ pub fn served_by(home: &Home, at: Point2) -> Option<Fixture> {
         .map(|(x, _)| x)
 }
 
+/// What a floor drain of the catalog is, from its makers' sheets (Tigre,
+/// Wavin/Amanco, Krona) and NBR 8160.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct DrainSpec {
+    /// Water seal, mm (0: none). A trap needs at least 50 (8160 5.1.1.1 a).
+    pub seal_mm: u32,
+    /// Outlet, mm.
+    pub outlet_mm: u32,
+    /// Most UHC it takes: its body (DN100 6, DN150 15, 5.1.1.2) and its outlet
+    /// (DN40 3, DN50 6, DN75 20, table 5), whichever is less.
+    pub max_uhc: u32,
+    /// Height of its body under the finished floor, cm.
+    pub depth_cm: f64,
+    /// What to buy.
+    pub item: &'static str,
+}
+
+impl DrainSpec {
+    /// Whether it is a trap (desconector) by itself.
+    pub fn is_trap(self) -> bool {
+        self.seal_mm >= 50
+    }
+}
+
+/// The spec of a floor drain by catalog id.
+pub fn drain_spec(catalog: &str) -> Option<DrainSpec> {
+    let spec = |seal_mm, outlet_mm, max_uhc, depth_cm, item| DrainSpec {
+        seal_mm,
+        outlet_mm,
+        max_uhc,
+        depth_cm,
+        item,
+    };
+    Some(match catalog {
+        "floor-drain" => spec(
+            50,
+            50,
+            6,
+            15.5,
+            "Caixa sifonada 150×150×50 com grelha (7 entradas de 40 mm)",
+        ),
+        "floor-drain-100" => spec(50, 50, 6, 15.5, "Caixa sifonada 100×150×50 com grelha"),
+        "floor-drain-75" => spec(
+            50,
+            75,
+            15,
+            18.5,
+            "Caixa sifonada 150×185×75 com grelha (5 entradas de 40 mm)",
+        ),
+        "trap-drain-small" => spec(
+            20,
+            40,
+            2,
+            5.5,
+            "Ralo sifonado 100 mm (fecho de 9 a 20 mm, não é desconector)",
+        ),
+        "dry-drain" => spec(0, 40, 2, 5.5, "Ralo seco 100 mm, saída 40"),
+        "linear-drain" => spec(0, 40, 2, 4.2, "Ralo linear sem sifão, saída 40"),
+        "linear-drain-trap" => spec(
+            50,
+            50,
+            3,
+            6.0,
+            "Ralo linear sifonado, saída 50 (fecho de 50 mm)",
+        ),
+        _ => return None,
+    })
+}
+
 /// The UHC a floor drain's trap box receives: the fixtures of its room that
 /// may drain into it.
 pub fn drain_uhc(home: &Home, point: &Point) -> u32 {
@@ -376,11 +450,15 @@ pub fn drain_uhc(home: &Home, point: &Point) -> u32 {
 }
 
 /// The discharge diameter a sewer point takes, mm: its fixture's; for a
-/// floor drain, its outlet by the UHC it receives (NBR 8160 table 4: 50 up
-/// to 6, 75 above); and 50 when nothing says.
+/// floor drain, the outlet of its model; and 50 when nothing says.
 pub fn sewer_mm(home: &Home, point: &Point) -> u32 {
     if point.kind == PointKind::Drain {
-        return if drain_uhc(home, point) <= 6 { 50 } else { 75 };
+        let catalog = home
+            .level_view(home.current_level())
+            .find_piece(point.id)
+            .map(|f| f.catalog.clone())
+            .unwrap_or_default();
+        return drain_spec(&catalog).map_or(50, |d| d.outlet_mm);
     }
     let name = crate::annotations::fold(&point.name);
     if name.contains("vaso") || name.contains("bacia") {
@@ -519,16 +597,91 @@ pub fn check(home: &Home) -> Vec<Finding> {
             .filter(|x| x.drains_to_floor())
             .map(|x| x.uhc())
             .sum();
-        if !drains.is_empty() && uhc > 15 {
+        let specs: Vec<(&Point, DrainSpec)> = drains
+            .iter()
+            .filter_map(|p| {
+                view.find_piece(p.id)
+                    .and_then(|f| drain_spec(&f.catalog))
+                    .map(|d| (*p, d))
+            })
+            .collect();
+        // A drain with no water seal of 50 mm is no trap: the room needs one
+        // that is, or the smell comes back up.
+        if !specs.is_empty() && !specs.iter().any(|(_, d)| d.is_trap()) {
+            out.push(Finding {
+                key: format!("plumb:trap:{}", room.id),
+                accepted: None,
+                severity: Severity::Alerta,
+                place: place.clone(),
+                message: format!(
+                    "Nenhum ralo do cômodo é desconector: ralo seco, linear sem sifão ou sifonado pequeno (fecho de 9 a 20 mm) precisam desaguar numa caixa sifonada com fecho de 50 mm ({}).",
+                    specs.iter().map(|(p, _)| p.id.to_string()).collect::<Vec<_>>().join(", ")
+                ),
+                source: "nbr8160",
+            });
+        }
+        // What the trap boxes take together against the fixtures sent to them.
+        let capacity: u32 = specs
+            .iter()
+            .filter(|(_, d)| d.is_trap())
+            .map(|(_, d)| d.max_uhc)
+            .sum();
+        if capacity > 0 && uhc > capacity {
             out.push(Finding {
                 key: format!("plumb:drain-load:{}", room.id),
                 accepted: None,
                 severity: Severity::Alerta,
-                place,
+                place: place.clone(),
                 message: format!(
-                    "{uhc} UHC para a caixa sifonada: acima de 15 nenhuma caixa de 150 mm atende; divida entre duas caixas ou leve aparelhos a ramais próprios."
+                    "{uhc} UHC vão para o ralo e ele aguenta {capacity}: a saída de 50 mm leva até 6 UHC; use a caixa sifonada 150×185×75 (até 15), divida entre duas caixas ou leve aparelhos a ramais próprios."
                 ),
                 source: "nbr8160",
+            });
+        }
+        // In a room with a shower the drain belongs inside the shower area,
+        // where the floor falls 1,5 % to 2,5 % to it.
+        let shower_pieces: Vec<&Furniture> = fixtures
+            .iter()
+            .filter(|(x, f)| {
+                *x == Fixture::Shower
+                    && inside(&room.points, f.position)
+                    && f.width.min(f.depth) >= 50.0
+            })
+            .map(|(_, f)| f)
+            .collect();
+        if !drains.is_empty()
+            && !shower_pieces.is_empty()
+            && !drains.iter().any(|d| {
+                shower_pieces.iter().any(|f| {
+                    let mut area = (*f).clone();
+                    area.width += 10.0;
+                    area.depth += 10.0;
+                    area.contains(d.at)
+                })
+            })
+        {
+            out.push(Finding {
+                key: format!("plumb:drain-shower:{}", room.id),
+                accepted: None,
+                severity: Severity::Alerta,
+                place: place.clone(),
+                message: "Nenhum ralo dentro da área do box: a água do banho escorre para o resto do banheiro; ponha o ralo (ou um linear) dentro do box, com caimento de 1,5 % a 2,5 % para ele.".into(),
+                source: "nbr13753",
+            });
+        }
+        // An open balcony or terrace is rainwater: its drain never joins the
+        // sewer (NBR 8160 4.1.3.1, NBR 10844).
+        let open_air = ["terraco", "descobert", "quintal", "area externa", "jardim"]
+            .iter()
+            .any(|w| name.contains(w));
+        if open_air && !drains.is_empty() {
+            out.push(Finding {
+                key: format!("plumb:rain:{}", room.id),
+                accepted: None,
+                severity: Severity::Alerta,
+                place: place.clone(),
+                message: "Área descoberta com ralo de esgoto: a água de chuva vai para o sistema pluvial, nunca para o esgoto; use o ralo pluvial.".into(),
+                source: "nbr10844",
             });
         }
     }
@@ -629,6 +782,18 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 place: format!("{} {}", point.name, point.id),
                 message: why,
                 source: "nbr5626",
+            });
+        } else if let Some(why) = view
+            .find_piece(point.id)
+            .and_then(|f| crate::mounting::hidden(home, f))
+        {
+            out.push(Finding {
+                key: format!("plumb:hidden:{}", point.id),
+                accepted: None,
+                severity: Severity::Alerta,
+                place: format!("{} {}", point.name, point.id),
+                message: why,
+                source: "nbr8160",
             });
         }
     }
@@ -810,6 +975,11 @@ pub fn refuses(pipe: Pipe, via: Via) -> Option<&'static str> {
 /// safe side where it joins a larger trunk —, the trunk pipe itself and 2 cm
 /// to lay it on. `sizes` are the points' diameters, in the route's order.
 pub fn sewer_depth(route: &Route, sizes: &[u32]) -> f64 {
+    sewer_depth_with(route, sizes, 0.0)
+}
+
+/// [`sewer_depth`], and never less than the deepest drain body on the run.
+pub fn sewer_depth_with(route: &Route, sizes: &[u32], drain_depth: f64) -> f64 {
     let trunk = sizes.iter().copied().max().unwrap_or(50);
     let fall = route
         .terminals
@@ -819,7 +989,7 @@ pub fn sewer_depth(route: &Route, sizes: &[u32]) -> f64 {
         .zip(sizes)
         .map(|((t, cm), mm)| (cm - t.z.max(0.0) - route.terminals[0].z.max(0.0)) * slope(*mm))
         .fold(0.0, f64::max);
-    let cm = fall + f64::from(trunk) / 10.0 + 2.0;
+    let cm = (fall + f64::from(trunk) / 10.0 + 2.0).max(drain_depth);
     (cm * 10.0).round() / 10.0
 }
 
@@ -1388,7 +1558,20 @@ mod tests {
             .find(|p| p.id == FurnitureId(34))
             .unwrap();
         assert_eq!(drain_uhc(&home, &drain), 9);
+        // The 150×150×50 box's 50 mm outlet takes 6: said, with the way out.
+        assert_eq!(sewer_mm(&home, &drain), 50);
+        assert!(keys(&home).contains(&"plumb:drain-load:r9".to_owned()));
+        home.furniture
+            .iter_mut()
+            .find(|f| f.id == FurnitureId(34))
+            .unwrap()
+            .catalog = "floor-drain-75".into();
+        let drain = points(&home)
+            .into_iter()
+            .find(|p| p.id == FurnitureId(34))
+            .unwrap();
         assert_eq!(sewer_mm(&home, &drain), 75);
+        assert!(!keys(&home).contains(&"plumb:drain-load:r9".to_owned()));
 
         // Inspection within 10 m.
         home.furniture.retain(|f| f.id != FurnitureId(36));
@@ -1396,5 +1579,92 @@ mod tests {
             .push(point(36, "inspection-box", "CI", (1300.0, 125.0), 0.0));
         let k = keys(&home);
         assert!(k.contains(&"plumb:inspection-far:f30".to_owned()), "{k:?}");
+    }
+
+    #[test]
+    fn drains_are_fixed_in_the_floor_and_checked_as_the_models_they_are() {
+        use crate::mounting::{blocked, hidden, seat};
+        assert!(drain_spec("floor-drain").unwrap().is_trap());
+        assert!(
+            !drain_spec("trap-drain-small").unwrap().is_trap(),
+            "a 20 mm seal is no trap"
+        );
+        assert!(!drain_spec("dry-drain").unwrap().is_trap());
+        assert_eq!(drain_spec("floor-drain-75").unwrap().max_uhc, 15);
+
+        let mut home = bathroom();
+        let keys = |home: &Home| check(home).into_iter().map(|f| f.key).collect::<Vec<_>>();
+        // A dry drain in the box and nothing else: no trap in the room.
+        home.furniture
+            .push(point(40, "dry-drain", "Ralo seco", (150.0, 200.0), 0.0));
+        let k = keys(&home);
+        assert!(k.contains(&"plumb:trap:r9".to_owned()), "{k:?}");
+        assert!(!k.contains(&"plumb:drain-shower:r9".to_owned()), "{k:?}");
+        // A trap box added outside the box: a trap now, but the box has only the dry one.
+        home.furniture.push(point(
+            41,
+            "floor-drain",
+            "Caixa sifonada",
+            (60.0, 150.0),
+            0.0,
+        ));
+        let k = keys(&home);
+        assert!(!k.contains(&"plumb:trap:r9".to_owned()), "{k:?}");
+        // Only the trap box, outside the shower area: said.
+        home.furniture.retain(|f| f.id != FurnitureId(40));
+        assert!(keys(&home).contains(&"plumb:drain-shower:r9".to_owned()));
+
+        // Fixed in the floor: inside the room, never in a wall or a door span,
+        // and never under a cabinet.
+        let mut d = point(42, "floor-drain", "Ralo", (100.0, 125.0), 7.0);
+        seat(&home, &mut d).unwrap();
+        assert!(d.elevation.abs() < 1e-9, "flush with the floor");
+        let mut in_wall = d.clone();
+        in_wall.position = Point2::new(100.0, 0.0);
+        assert!(
+            blocked(&home, &in_wall)
+                .unwrap()
+                .contains("dentro da parede")
+        );
+        let mut outside = d.clone();
+        outside.position = Point2::new(100.0, 600.0);
+        assert!(seat(&home, &mut outside).is_err());
+        let mut cabinet_over = home.clone();
+        cabinet_over.furniture.push(piece(
+            43,
+            "base-cabinet",
+            "Gabinete",
+            (100.0, 125.0),
+            (60.0, 45.0, 85.0),
+        ));
+        assert!(
+            hidden(&cabinet_over, &d)
+                .unwrap()
+                .contains("embaixo de Gabinete")
+        );
+        // The shower's own drain is where it belongs.
+        let mut in_box = d.clone();
+        in_box.position = Point2::new(150.0, 200.0);
+        assert!(hidden(&home, &in_box).is_none());
+
+        // An open terrace drains rainwater, never the sewer.
+        let mut terrace = Home::default();
+        terrace.rooms.push(Room::new(
+            RoomId(5),
+            "Terraço descoberto",
+            vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(300.0, 0.0),
+                Point2::new(300.0, 300.0),
+                Point2::new(0.0, 300.0),
+            ],
+        ));
+        terrace
+            .furniture
+            .push(point(50, "floor-drain", "Ralo", (150.0, 150.0), 0.0));
+        assert!(keys(&terrace).contains(&"plumb:rain:r5".to_owned()));
+        terrace.furniture[0].catalog = "rain-drain".into();
+        assert!(!keys(&terrace).contains(&"plumb:rain:r5".to_owned()));
+        assert!(!Pipe::Sewer.serves(PointKind::RainDrain));
     }
 }

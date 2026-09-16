@@ -161,6 +161,28 @@ pub static STANDARDS: &[Standard] = &[
         Verified,
     ),
     s(
+        "nbr13753",
+        "ABNT NBR 13753 — Revestimento de piso com placas cerâmicas",
+        "1996",
+        Tier::A,
+        "Caimento do piso para o ralo: 0,5 % em áreas molhadas, 1,5 % a 2,5 % dentro do box, 1 % a 1,5 % em áreas externas.",
+        Some(
+            "https://normadedesempenho.com.br/a-execucao-em-conformidade-dos-revestimentos-de-pisos-com-placas-ceramicas/",
+        ),
+        ConfirmBeforeUse,
+    ),
+    s(
+        "nbr10844",
+        "ABNT NBR 10844 — Instalações prediais de águas pluviais",
+        "1989",
+        Tier::A,
+        "Água de chuva de terraços e áreas descobertas vai ao sistema pluvial, sem ligação com o esgoto.",
+        Some(
+            "https://ecivilufes.files.wordpress.com/2013/06/nbr-10844-1989-instalac3a7c3b5es-prediais-de-c3a1guas-pluviais.pdf",
+        ),
+        Verified,
+    ),
+    s(
         "nbr5626",
         "ABNT NBR 5626:2020 — Sistemas prediais de água fria e água quente — Projeto, execução, operação e manutenção",
         "2020",

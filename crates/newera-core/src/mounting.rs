@@ -21,6 +21,8 @@ pub enum Mount {
     Wall,
     /// Fixed to the ceiling: lighting points, Wi-Fi, presence sensors.
     Ceiling,
+    /// Set into the floor: drains and trap boxes.
+    Floor,
 }
 
 /// How far from a wall a point asked for `at` is still taken into it, cm.
@@ -37,6 +39,8 @@ pub fn mount_of(catalog: &str) -> Option<Mount> {
         "light-ceiling" | "downlight" | "led-panel" | "wifi-point" | "presence-sensor"
     ) {
         Some(Mount::Ceiling)
+    } else if crate::plumbing::drain_spec(catalog).is_some() || catalog == "rain-drain" {
+        Some(Mount::Floor)
     } else {
         None
     }
@@ -117,6 +121,14 @@ pub fn seat(home: &Home, piece: &mut Furniture) -> Result<(), String> {
             piece.angle = (-n.0).atan2(n.1).to_degrees();
             Ok(())
         }
+        Mount::Floor => {
+            // Flush with the finished floor.
+            piece.elevation = 0.0;
+            match blocked(home, piece) {
+                Some(why) => Err(why),
+                None => Ok(()),
+            }
+        }
         Mount::Ceiling => {
             if !in_a_room(&view, piece.position) {
                 return Err(format!(
@@ -174,6 +186,9 @@ fn distance_to_segment(p: Point2, a: Point2, b: Point2) -> f64 {
 /// Pieces not set into walls, or standing in no wall, are never refused.
 pub fn blocked(home: &Home, piece: &Furniture) -> Option<String> {
     let view = home.level_view(home.current_level());
+    if mount_of(&piece.catalog) == Some(Mount::Floor) {
+        return floor_blocked(&view, piece);
+    }
     if mount_of(&piece.catalog) == Some(Mount::Ceiling) {
         if !in_a_room(&view, piece.position) {
             return Some(format!(
@@ -284,6 +299,43 @@ fn in_wall<'a>(view: &'a Home, piece: &Furniture) -> Option<&'a crate::elements:
         .map(|(w, _)| w)
 }
 
+/// A drain set where no floor takes it: outside every room, inside a wall,
+/// or in a door's span.
+fn floor_blocked(view: &Home, piece: &Furniture) -> Option<String> {
+    if !in_a_room(view, piece.position) {
+        return Some(format!(
+            "{} {} vai no piso de um cômodo e está fora de todos.",
+            piece.name, piece.id
+        ));
+    }
+    if let Some(w) = view
+        .walls
+        .iter()
+        .filter(|w| !w.is_arc())
+        .find(|w| distance_to_segment(piece.position, w.start, w.end) < w.thickness / 2.0)
+    {
+        return Some(format!(
+            "{} {} está dentro da parede {}: o ralo vai no piso, fora dela.",
+            piece.name, piece.id, w.id
+        ));
+    }
+    view.furniture
+        .iter()
+        .flat_map(Furniture::flatten)
+        .filter(|f| f.opening.is_some())
+        .find(|f| {
+            let mut span = (*f).clone();
+            span.depth += 10.0;
+            span.contains(piece.position)
+        })
+        .map(|f| {
+            format!(
+                "{} {} está no vão de {} ({}): a soleira não leva ralo; ponha-o dentro do cômodo.",
+                piece.name, piece.id, f.name, f.id
+            )
+        })
+}
+
 /// A wall point standing in no wall and on no glass either: loose in a room.
 fn off_structure(view: &Home, piece: &Furniture) -> Option<String> {
     if in_wall(view, piece).is_some() {
@@ -391,10 +443,42 @@ fn movable(f: &Furniture) -> bool {
 /// of it at its height — a wardrobe, a cabinet, a shelf. Appliances plug in
 /// behind themselves, and beds and seats leave an outlet behind within reach.
 pub fn hidden(home: &Home, piece: &Furniture) -> Option<String> {
+    let view = home.level_view(home.current_level());
+    if mount_of(&piece.catalog) == Some(Mount::Floor) {
+        // Under a piece standing on the floor it cannot be cleaned: a
+        // shower's or a tub's own drain is where it belongs.
+        return view
+            .furniture
+            .iter()
+            .flat_map(Furniture::flatten)
+            .filter(|f| {
+                f.id != piece.id
+                    && !f.is_group()
+                    && f.opening.is_none()
+                    && f.discipline.is_none()
+                    && f.elevation < 5.0
+                    && f.height >= 10.0
+            })
+            .filter(|f| {
+                let name = crate::annotations::fold(&f.name);
+                !matches!(
+                    f.catalog.as_str(),
+                    "shower" | "shower-glass" | "bathtub" | "rug"
+                ) && !["box", "chuveiro", "banheira", "tapete", "ducha"]
+                    .iter()
+                    .any(|w| name.contains(w))
+            })
+            .find(|f| f.contains(piece.position))
+            .map(|f| {
+                format!(
+                    "{} {} fica embaixo de {} ({}): sem acesso para limpar e desentupir.",
+                    piece.name, piece.id, f.name, f.id
+                )
+            });
+    }
     if !wall_mounted(&piece.catalog) {
         return None;
     }
-    let view = home.level_view(home.current_level());
     in_wall(&view, piece)?;
     let (lo, hi) = (piece.elevation, piece.elevation + piece.height);
     for f in view
