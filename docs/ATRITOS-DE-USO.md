@@ -64,3 +64,19 @@ funcionado, e um `undo` para limpar a cadeira.
 
 **Deveria:** responder `changed` quando grava, como o `layer` faz; e aceitar
 `fixed: ""` (ou `null`) como "volte a decidir sozinho", apagando a propriedade.
+
+## Resolvido no código, a conferir na planta
+
+**60** (commit `1f7ac5b`). Na cópia da planta:
+
+- `update(items=[{"id":"f835","fixed":true}])` →
+  `{"changed":[{"id":"f835","from":{"fixed":null},"to":{"fixed":true}}]}`;
+- a mesma chamada de novo → `unchanged` (agora é verdade);
+- `update(items=[{"id":"f835","fixed":""}])` → `changed`, de `true` para
+  `null`, e a propriedade `piece:fixed` sai da peça — é assim que se apaga o
+  `"false"` que ficou na mesa de jantar;
+- `get_home` mostra `"fixed": true|false` nas peças que têm a declaração;
+- `fixed: "talvez"` é recusado com a lista do que vale.
+
+Além disso, `unchanged` passou a comparar a peça inteira, e não só a forma
+compacta: nenhuma propriedade gravada volta a ser respondida como "nada mudou".
