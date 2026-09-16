@@ -29,6 +29,13 @@ pub(crate) struct ElectricalParams {
     va: Option<f64>,
     /// Supply voltage, V.
     volts: Option<f64>,
+    /// Findings looked at: `[[key, reason]]`; they stay listed with the reason
+    /// and stop counting as pending. An empty reason takes one back.
+    #[serde(default)]
+    accept: Vec<Vec<String>>,
+    /// Drop the acceptances listed in `orphaned`.
+    #[serde(default)]
+    prune: bool,
     /// For `cable`: what the run carries, `power`, `data` or `tv`.
     kind: Option<String>,
     /// For `cable`: the run's points `[[x,y], …]`, cm.
@@ -39,12 +46,40 @@ pub(crate) struct ElectricalParams {
 #[tool_router(router = electrical_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Electrical and telecom project, NBR 5410 and NBR 14565. Points are the electrical pieces (catalog electrical: outlets, switches, lighting points, panel, network-outlet RJ45, tv-outlet, wifi-point, telecom-panel) plus every fixture that lights. check (default): {points:{kind:count}, findings:[[sev, place, msg, src]], sources} — a ceiling lighting point per room, general-use outlets per room (kitchens and laundries one per 3.5 m of perimeter, bathrooms one by the basin, living rooms and bedrooms one per 5 m), a network point in long-stay rooms, a TV point in living rooms and bedrooms, a distribution and a telecom panel, points without a circuit, lighting and outlets sharing a circuit, a dedicated load not alone. circuits: rows [name, kinds, points, VA, V, A, wire mm², breaker A, DR] — power by the norm's defaults (100 VA per lighting point; 600 VA for each of the first three outlets of a kitchen, laundry or bathroom, 100 VA after and elsewhere; shower 5500, air conditioning 1500) unless set; wire the larger of what the current needs and 1.5 mm² for lighting or 2.5 for power; DR where a circuit serves a wet room or a balcony; a shower runs on 220 V. assign {ids, circuit, va?} — or the whole division at once, circuits {\"C1\": [ids], \"C2\": [ids]} — writes the circuits (and power) on points in one undoable step. voltage {volts}. cable {kind: power|data|tv, pts}: draws a run of the electrical project, told apart on the plan (power solid, network dashed, TV dash-dot); check then reports cables_m, the length by kind with a tenth for the drops, and network or TV points no run reaches, or a telecom panel none reaches. Circuit numbers are drawn next to the points on the plan, and with annotations(legend=true) the load schedule under the legend."
+        description = "Electrical and telecom project, NBR 5410 and NBR 14565. Points are the electrical pieces (catalog electrical: outlets, switches, lighting points, panel, network-outlet RJ45, tv-outlet, wifi-point, telecom-panel) plus every fixture that lights. check (default): {points:{kind:count}, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — accept=[[key, reason]] with any action marks findings looked at (they stay listed with the reason and stop counting in pending), an empty reason takes one back, orphaned lists acceptances whose finding is gone and prune=true drops them — a ceiling lighting point per room, general-use outlets per room (kitchens and laundries one per 3.5 m of perimeter, bathrooms one by the basin, living rooms and bedrooms one per 5 m), a network point in long-stay rooms, a TV point in living rooms and bedrooms, a distribution and a telecom panel, points without a circuit, lighting and outlets sharing a circuit, a dedicated load not alone. circuits: rows [name, kinds, points, VA, V, A, wire mm², breaker A, DR] — power by the norm's defaults (100 VA per lighting point; 600 VA for each of the first three outlets of a kitchen, laundry or bathroom, 100 VA after and elsewhere; shower 5500, air conditioning 1500) unless set; wire the larger of what the current needs and 1.5 mm² for lighting or 2.5 for power; DR where a circuit serves a wet room or a balcony; a shower runs on 220 V. assign {ids, circuit, va?} — or the whole division at once, circuits {\"C1\": [ids], \"C2\": [ids]} — writes the circuits (and power) on points in one undoable step. voltage {volts}. cable {kind: power|data|tv, pts}: draws a run of the electrical project, told apart on the plan (power solid, network dashed, TV dash-dot); check then reports cables_m, the length by kind with a tenth for the drops, and network or TV points no run reaches, or a telecom panel none reaches. Circuit numbers are drawn next to the points on the plan, and with annotations(legend=true) the load schedule under the legend."
     )]
     pub(crate) fn electrical(
         &self,
         Parameters(p): Parameters<ElectricalParams>,
     ) -> Result<String, ErrorData> {
+        if !p.accept.is_empty() || p.prune {
+            let mut doc = self.document.write();
+            let mut accepted = doc.home().accepted.clone();
+            if p.prune {
+                for (key, _) in electrical::orphaned(doc.home()) {
+                    accepted.remove(&key);
+                }
+            }
+            for pair in &p.accept {
+                let key = pair
+                    .first()
+                    .map(|k| k.trim().to_owned())
+                    .unwrap_or_default();
+                if !key.starts_with("elec:") {
+                    return Err(invalid(format!(
+                        "accept: electrical keys start with elec: (not {key})"
+                    )));
+                }
+                match pair.get(1).map(|w| w.trim()) {
+                    None | Some("") => accepted.remove(&key),
+                    Some(why) => accepted.insert(key, why.to_owned()),
+                };
+            }
+            if accepted != doc.home().accepted {
+                doc.execute(newera_core::Command::SetAccepted { accepted })
+                    .map_err(core)?;
+            }
+        }
         match p.action.as_deref().unwrap_or("check") {
             "check" => {
                 let doc = self.document.read();
@@ -60,7 +95,19 @@ impl NewEraMcp {
                 codes.dedup();
                 let rows: Vec<serde_json::Value> = findings
                     .iter()
-                    .map(|f| serde_json::json!([f.severity, f.place, f.message, f.source]))
+                    .map(|f| {
+                        let mut row =
+                            serde_json::json!([f.severity, f.place, f.message, f.source, f.key]);
+                        if let (Some(why), Some(cells)) = (&f.accepted, row.as_array_mut()) {
+                            cells.push(serde_json::json!(why));
+                        }
+                        row
+                    })
+                    .collect();
+                let pending = findings.iter().filter(|f| f.accepted.is_none()).count();
+                let orphaned: Vec<[String; 2]> = electrical::orphaned(home)
+                    .into_iter()
+                    .map(|(k, why)| [k, why])
                     .collect();
                 let cables: serde_json::Map<String, serde_json::Value> =
                     electrical::cable_lengths(home)
@@ -71,6 +118,8 @@ impl NewEraMcp {
                     "points": kinds,
                     "cables_m": cables,
                     "findings": rows,
+                    "pending": pending,
+                    "orphaned": orphaned,
                     "sources": super::sources(&codes),
                 })
                 .to_string())
@@ -340,5 +389,34 @@ mod tests {
                 .len(),
             2
         );
+
+        // A finding looked at and accepted stays, with its reason.
+        let check = electrical("{}");
+        let first = check["findings"][0].clone();
+        let key = first[4].as_str().unwrap().to_owned();
+        assert!(key.starts_with("elec:"), "{check}");
+        let before = check["pending"].as_u64().unwrap();
+        let accepted = electrical(&format!(
+            r#"{{"accept":[["{key}","rede sai pelo Wi-Fi da sala"]]}}"#
+        ));
+        let row = accepted["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r[4] == key.as_str())
+            .unwrap_or_else(|| panic!("{accepted}"))
+            .clone();
+        assert_eq!(row[5], "rede sai pelo Wi-Fi da sala", "{accepted}");
+        assert_eq!(
+            accepted["pending"].as_u64().unwrap(),
+            before - 1,
+            "{accepted}"
+        );
+        let wrong = s
+            .electrical(Parameters(
+                serde_json::from_str(r#"{"accept":[["overlap:f1+f2","x"]]}"#).unwrap(),
+            ))
+            .unwrap_err();
+        assert!(wrong.message.contains("elec:"), "{wrong:?}");
     }
 }

@@ -1931,7 +1931,7 @@ pub fn orphaned(home: &Home, profile: &Profile) -> Vec<(String, String)> {
     let mine: Vec<(&String, &String)> = home
         .accepted
         .iter()
-        .filter(|(key, _)| !newera_core::Issue::is_layout_key(key))
+        .filter(|(key, _)| !newera_core::Issue::is_layout_key(key) && !key.starts_with("elec:"))
         .collect();
     if mine.is_empty() {
         return Vec::new();

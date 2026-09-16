@@ -470,6 +470,16 @@ pub fn decimal(value: f64) -> String {
     format!("{value:.1}").replace('.', ",")
 }
 
+/// Acceptances of electrical findings no current finding answers to.
+pub fn orphaned(home: &Home) -> Vec<(String, String)> {
+    let live: std::collections::BTreeSet<String> = check(home).into_iter().map(|f| f.key).collect();
+    home.accepted
+        .iter()
+        .filter(|(key, _)| key.starts_with("elec:") && !live.contains(*key))
+        .map(|(key, why)| (key.clone(), why.clone()))
+        .collect()
+}
+
 /// Sorts `C2` before `C10`.
 fn natural(name: &str) -> (String, u64) {
     let digits: String = name.chars().filter(char::is_ascii_digit).collect();
@@ -493,6 +503,11 @@ pub struct Finding {
     pub place: String,
     pub message: String,
     pub source: &'static str,
+    /// The name it is accepted by: `elec:` + the rule + where, stable while
+    /// the numbers in the message move.
+    pub key: String,
+    /// The reason it was accepted with, when someone looked and decided.
+    pub accepted: Option<String>,
 }
 
 /// What NBR 5410 asks of each room, and what a home's network needs.
@@ -518,6 +533,8 @@ pub fn check(home: &Home) -> Vec<Finding> {
         let class = class_in(home, room);
         if count(room.id, PointKind::Lighting) == 0 {
             out.push(Finding {
+                key: format!("elec:light:{}", room.id),
+                accepted: None,
                 severity: Severity::Erro,
                 place: place.clone(),
                 message: "Sem ponto de luz: a NBR 5410 pede ao menos um ponto de iluminação no teto de cada cômodo, comandado por interruptor.".into(),
@@ -549,6 +566,8 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 _ => format!("um a cada 5 m de perímetro ({} m)", decimal(per)),
             };
             out.push(Finding {
+                key: format!("elec:outlets:{}", room.id),
+                accepted: None,
                 severity: Severity::Erro,
                 place: place.clone(),
                 message: format!("{have} de {needed} tomadas de uso geral: a NBR 5410 pede {why}."),
@@ -561,6 +580,8 @@ pub fn check(home: &Home) -> Vec<Finding> {
             && count(room.id, PointKind::Wifi) == 0
         {
             out.push(Finding {
+                key: format!("elec:network:{}", room.id),
+                accepted: None,
                 severity: Severity::Alerta,
                 place: place.clone(),
                 message: "Sem ponto de rede: um cômodo de permanência pede ao menos uma tomada RJ45 (ou cobertura de Wi-Fi) ligada ao quadro de telecom.".into(),
@@ -576,6 +597,8 @@ pub fn check(home: &Home) -> Vec<Finding> {
             && count(room.id, PointKind::Tv) == 0
         {
             out.push(Finding {
+                key: format!("elec:tv:{}", room.id),
+                accepted: None,
                 severity: Severity::Dica,
                 place,
                 message: "Sem ponto de TV: salas e dormitórios costumam ter um ponto coaxial junto ao rack ou à parede da cama.".into(),
@@ -588,6 +611,8 @@ pub fn check(home: &Home) -> Vec<Finding> {
         .any(|p| matches!(p.kind, PointKind::Network | PointKind::Wifi | PointKind::Tv));
     if network && !all.iter().any(|p| p.kind == PointKind::TelecomPanel) {
         out.push(Finding {
+            key: "elec:telecom-panel".into(),
+            accepted: None,
             severity: Severity::Alerta,
             place: "Projeto".into(),
             message: "Há pontos de rede, TV ou Wi-Fi e nenhum quadro de telecom: os cabos precisam de um ponto de distribuição que os reúna.".into(),
@@ -596,6 +621,8 @@ pub fn check(home: &Home) -> Vec<Finding> {
     }
     if all.iter().any(|p| p.kind.loads()) && !all.iter().any(|p| p.kind == PointKind::Panel) {
         out.push(Finding {
+            key: "elec:panel".into(),
+            accepted: None,
             severity: Severity::Erro,
             place: "Projeto".into(),
             message: "Há cargas e nenhum quadro de distribuição.".into(),
@@ -627,6 +654,8 @@ pub fn check(home: &Home) -> Vec<Finding> {
             .collect();
         if !unreached.is_empty() {
             out.push(Finding {
+                key: format!("elec:unreached:{}", cable.key()),
+                accepted: None,
                 severity: Severity::Alerta,
                 place: cable.name().into(),
                 message: format!("Pontos sem cabo chegando: {}.", unreached.join(", ")),
@@ -642,6 +671,8 @@ pub fn check(home: &Home) -> Vec<Finding> {
             });
         if !panel_reached {
             out.push(Finding {
+                key: format!("elec:panel-unreached:{}", cable.key()),
+                accepted: None,
                 severity: Severity::Alerta,
                 place: cable.name().into(),
                 message: "Nenhum cabo chega ao quadro de telecom: os pontos precisam ser levados até ele.".into(),
@@ -656,6 +687,8 @@ pub fn check(home: &Home) -> Vec<Finding> {
         .collect();
     if !loose.is_empty() {
         out.push(Finding {
+            key: "elec:no-circuit".into(),
+            accepted: None,
             severity: Severity::Alerta,
             place: "Circuitos".into(),
             message: format!("{} pontos sem circuito: {}.", loose.len(), loose.join(", ")),
@@ -665,6 +698,8 @@ pub fn check(home: &Home) -> Vec<Finding> {
     for circuit in circuits(home) {
         if circuit.kinds.contains(&PointKind::Lighting) && circuit.kinds.len() > 1 {
             out.push(Finding {
+                key: format!("elec:mixed:{}", circuit.name),
+                accepted: None,
                 severity: Severity::Erro,
                 place: format!("Circuito {}", circuit.name),
                 message:
@@ -675,12 +710,17 @@ pub fn check(home: &Home) -> Vec<Finding> {
         }
         if circuit.kinds.contains(&PointKind::Dedicated) && circuit.points.len() > 1 {
             out.push(Finding {
+                key: format!("elec:dedicated:{}", circuit.name),
+                accepted: None,
                 severity: Severity::Erro,
                 place: format!("Circuito {}", circuit.name),
                 message: "Um equipamento de uso específico (chuveiro, ar-condicionado) pede circuito exclusivo.".into(),
                 source: "nbr5410",
             });
         }
+    }
+    for finding in &mut out {
+        finding.accepted = home.accepted.get(&finding.key).cloned();
     }
     out
 }
