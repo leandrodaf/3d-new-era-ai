@@ -564,8 +564,10 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
 }
 
 /// Fields that can be changed on an element. Each applies only to the kinds
-/// that have it; anything else is rejected so mistakes are loud.
+/// that have it; anything else — a field that does not exist included — is
+/// rejected so mistakes are loud.
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct UpdateSpec {
     #[serde(skip_serializing)]
     pub id: String,
@@ -1524,6 +1526,15 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("does not apply"), "{err}");
+    }
+
+    #[test]
+    fn update_refuses_a_field_that_does_not_exist() {
+        // `props` was dropped in silence and the reply said nothing changed.
+        let err = serde_json::from_str::<UpdateSpec>(r#"{"id":"f1","props":{"elec:modules":24}}"#)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("unknown field `props`"), "{err}");
     }
 
     #[test]
