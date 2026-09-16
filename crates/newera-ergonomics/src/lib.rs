@@ -145,6 +145,10 @@ pub struct Finding {
     /// carries it — but it no longer costs anything in the score.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub accepted: Option<String>,
+    /// The key the acceptance was written under, when the rule's source
+    /// changed its prefix since: same rule, same piece, same reason kept.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accepted_as: Option<String>,
 }
 
 /// What the home offers its people.
@@ -2059,7 +2063,10 @@ pub fn orphaned(home: &Home, profile: &Profile) -> Vec<(String, String)> {
     for storey in storeys {
         let mut shown = home.clone();
         shown.selected_level = storey;
-        live.extend(review(&shown, profile).findings.into_iter().map(|f| f.key));
+        for f in review(&shown, profile).findings {
+            live.extend(f.accepted_as);
+            live.insert(f.key);
+        }
     }
     mine.into_iter()
         .filter(|(key, _)| !live.contains(*key))
@@ -2119,6 +2126,17 @@ pub fn review(home: &Home, profile: &Profile) -> Report {
             finding.key = key_of(finding);
         }
         finding.accepted = home.accepted.get(&finding.key).cloned();
+        // The same rule on the same place under an older prefix — a rule that
+        // came to cite its source: the acceptance follows it.
+        if finding.accepted.is_none()
+            && let Some((_, suffix)) = finding.key.split_once(':')
+            && let Some((old, why)) = home.accepted.iter().find(|(k, _)| {
+                k.split_once(':').is_some_and(|(_, s)| s == suffix) && **k != finding.key
+            })
+        {
+            finding.accepted = Some(why.clone());
+            finding.accepted_as = Some(old.clone());
+        }
     }
     // Errors weigh fully; many alerts or tips of a crowded plan level off.
     let penalty_of = |list: &[Finding]| {
@@ -2359,6 +2377,42 @@ mod tests {
         named_again(&mut home);
         let scene = Scene::new(&home);
         assert_eq!(scene.overlaps().len(), 1);
+    }
+
+    #[test]
+    fn an_acceptance_follows_its_finding_when_the_rule_changes_prefix() {
+        let mut home = Home::default();
+        square(&mut home, "Cozinha", 300.0, 300.0);
+        for w in &mut home.walls {
+            w.height = 240.0;
+        }
+        let report = review(&home, &Profile::default());
+        let finding = report
+            .findings
+            .iter()
+            .find(|f| f.key.starts_with("nbr15575:"))
+            .unwrap_or_else(|| panic!("{report:#?}"))
+            .clone();
+        // Accepted back when the rule cited nothing: `-:` instead of `nbr15575:`.
+        let old = format!("-:{}", finding.key.split_once(':').unwrap().1);
+        home.accepted
+            .insert(old.clone(), "laje existente, não há como subir".into());
+        let again = review(&home, &Profile::default());
+        let same = again
+            .findings
+            .iter()
+            .find(|f| f.key == finding.key)
+            .unwrap();
+        assert_eq!(
+            same.accepted.as_deref(),
+            Some("laje existente, não há como subir")
+        );
+        assert_eq!(same.accepted_as.as_deref(), Some(old.as_str()));
+        assert!(again.score > report.score);
+        assert!(
+            orphaned(&home, &Profile::default()).is_empty(),
+            "not an orphan: it moved"
+        );
     }
 
     #[test]
