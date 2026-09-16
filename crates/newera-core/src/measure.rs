@@ -1220,11 +1220,76 @@ fn label_subject<'h>(home: &'h Home, label: &Label, sizes: &[Vec<f64>]) -> Optio
 /// its numbers still match — which is where the plan of a joiner quietly goes
 /// wrong after a resize.
 pub fn stale_annotations(home: &Home) -> Vec<Stale> {
-    let mut out = Vec::new();
+    check_annotations(home).stale
+}
+
+/// What [`check_annotations`] found, and how much it could look at.
+///
+/// An empty list reads the same for a plan whose notes all agree with the
+/// drawing and for one where no note could be compared with anything — two
+/// hundred index codes, none tied to a piece. The counts tell them apart.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct AnnotationCheck {
+    pub stale: Vec<Stale>,
+    /// Dimensions holding onto what they mark.
+    pub dimensions: usize,
+    /// Labels with sizes, compared with the piece they are about.
+    pub labels: usize,
+    /// Clauses of piece names with sizes, compared with the piece itself.
+    pub names: usize,
+    /// Sizes written where nothing can confirm them: a label about no piece,
+    /// or a name giving an inner opening, a door leaf or a whole set — which
+    /// the model has no field for, and which is why it went in the name.
+    pub unverified: Vec<(ElementId, String)>,
+}
+
+/// Words that say a size is of something the piece's box does not measure.
+const NOT_THE_BOX: [&str; 11] = [
+    "vao", "nicho", "intern", "livre", "folha", "conjunto", "total", "abertura", "inner",
+    "opening", "leaf",
+];
+
+/// Sizes a piece's name gives, clause by clause: `N × M` groups, and a lone
+/// `N cm`, which is how a module is named ("módulo 70 cm").
+fn named_sizes(clause: &str) -> Vec<Vec<f64>> {
+    let mut sizes = written_sizes(clause);
+    let tokens: Vec<&str> = clause.split_whitespace().collect();
+    let in_groups: Vec<f64> = sizes.iter().flatten().copied().collect();
+    for (i, token) in tokens.iter().enumerate() {
+        let lower = token.to_lowercase();
+        let (number, unit) = match lower.strip_suffix("cm") {
+            Some(n) if !n.is_empty() => (n.to_owned(), true),
+            _ => (
+                lower.clone(),
+                tokens.get(i + 1).is_some_and(|t| {
+                    t.to_lowercase().trim_matches(|c: char| !c.is_alphabetic()) == "cm"
+                }),
+            ),
+        };
+        let Ok(value) = number
+            .trim_matches(|c: char| !c.is_ascii_digit())
+            .replace(',', ".")
+            .parse::<f64>()
+        else {
+            continue;
+        };
+        if unit && !in_groups.contains(&value) {
+            sizes.push(vec![value]);
+        }
+    }
+    sizes
+}
+
+/// Every annotation checked against the drawing, with how many were.
+#[must_use]
+pub fn check_annotations(home: &Home) -> AnnotationCheck {
+    let mut report = AnnotationCheck::default();
+    let out = &mut report.stale;
     for dim in &home.dimensions {
         let Some(holds) = dim.holds.as_ref() else {
             continue;
         };
+        report.dimensions += 1;
         for hold in holds {
             if element_bounds(home, hold.id).is_none() {
                 out.push(Stale {
@@ -1245,8 +1310,12 @@ pub fn stale_annotations(home: &Home) -> Vec<Stale> {
             continue;
         }
         let Some(piece) = label_subject(home, label, &sizes) else {
+            report
+                .unverified
+                .push((label.id.into(), label.text.clone()));
             continue;
         };
+        report.labels += 1;
         let actual = [piece.width, piece.depth, piece.height];
         for written in sizes {
             // Any order: a note may read width × height × depth.
@@ -1288,7 +1357,45 @@ pub fn stale_annotations(home: &Home) -> Vec<Stale> {
             break;
         }
     }
-    out
+
+    // The names: where a plan drawn by a joiner keeps its sizes.
+    for piece in home.furniture.iter().flat_map(Furniture::flatten) {
+        let actual = [piece.width, piece.depth, piece.height];
+        for clause in piece.name.split([';', ',', '|', '(', ')', '—', '/']) {
+            let sizes = named_sizes(clause);
+            if sizes.is_empty() {
+                continue;
+            }
+            let folded = crate::annotations::fold(clause);
+            if NOT_THE_BOX.iter().any(|w| folded.contains(w)) {
+                report
+                    .unverified
+                    .push((piece.id.into(), clause.trim().to_owned()));
+                continue;
+            }
+            report.names += 1;
+            let wrong = sizes
+                .iter()
+                .flatten()
+                .find(|w| !actual.iter().any(|a| (a - *w).abs() <= STALE_TOLERANCE));
+            if let Some(written) = wrong {
+                let closest = actual
+                    .iter()
+                    .copied()
+                    .min_by(|a, b| (a - written).abs().total_cmp(&(b - written).abs()))
+                    .unwrap_or(0.0);
+                report.stale.push(Stale {
+                    id: piece.id.into(),
+                    drawn: *written,
+                    measured: (closest * 10.0).round() / 10.0,
+                    against: Some(piece.id.into()),
+                    text: piece.name.clone(),
+                });
+                break;
+            }
+        }
+    }
+    report
 }
 
 /// Size groups written in a note: `80 × 65 × 280`, `58x50`, `0,80 × 0,65`.

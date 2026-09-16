@@ -121,7 +121,7 @@ impl NewEraMcp {
         Ok(serde_json::json!({"active": home.active_discipline, "hidden": home.hidden_disciplines}).to_string())
     }
     #[tool(
-        description = "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about and dimensions whose anchor is gone: rows [id, written, measured, against, text] — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right. q=<text> searches label text. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs), legend (symbol legend with counts); bake=true turns the automatic chains into editable dimensions (ids returned). Otherwise returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
+        description = "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, and dimensions whose anchor is gone: rows [id, written, measured, against, text]; checked {dims, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right. q=<text> searches label text. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs), legend (symbol legend with counts); bake=true turns the automatic chains into editable dimensions (ids returned). Otherwise returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
     )]
     pub(crate) fn annotations(
         &self,
@@ -143,7 +143,9 @@ impl NewEraMcp {
             let view = doc.home().level_view(doc.home().current_level());
             let mut out = serde_json::Map::new();
             if p.stale.unwrap_or(false) {
-                let rows: Vec<serde_json::Value> = newera_core::stale_annotations(&view)
+                let check = newera_core::check_annotations(&view);
+                let rows: Vec<serde_json::Value> = check
+                    .stale
                     .into_iter()
                     .map(|s| {
                         serde_json::json!([
@@ -156,6 +158,23 @@ impl NewEraMcp {
                     })
                     .collect();
                 out.insert("stale".to_owned(), serde_json::json!(rows));
+                // An empty list after comparing nothing is not a clean plan.
+                out.insert(
+                    "checked".to_owned(),
+                    serde_json::json!({
+                        "dims": check.dimensions,
+                        "labels": check.labels,
+                        "names": check.names,
+                    }),
+                );
+                if !check.unverified.is_empty() {
+                    let rows: Vec<serde_json::Value> = check
+                        .unverified
+                        .into_iter()
+                        .map(|(id, text)| serde_json::json!([id.to_string(), text]))
+                        .collect();
+                    out.insert("unverified".to_owned(), serde_json::json!(rows));
+                }
             }
             if let Some(query) = &p.q {
                 let needle = newera_core::fold(query);
@@ -243,6 +262,70 @@ mod tests {
     use crate::tools::read::GetHomeParams;
     use crate::tools::render::RenderParams;
     use crate::tools::server;
+
+    #[test]
+    fn stale_says_how_much_it_compared_and_reads_the_names() {
+        let s = server();
+        let annotations = |json: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.annotations(Parameters(serde_json::from_str(json).unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        // Index codes only: nothing to compare, and the answer says so.
+        s.create(Parameters(
+            serde_json::from_str(r#"{"labels":[{"text":"[09]","at":[900,900]}]}"#).unwrap(),
+        ))
+        .unwrap();
+        let empty = annotations(r#"{"stale":true}"#);
+        assert_eq!(empty["stale"], serde_json::json!([]), "{empty}");
+        assert_eq!(
+            empty["checked"],
+            serde_json::json!({"dims": 0, "labels": 0, "names": 0}),
+            "{empty}"
+        );
+
+        // A joiner's plan keeps its sizes in the names.
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[
+                    {"cat":"box","name":"Cuba — módulo 70 cm","at":[35,30],"w":64.5,"d":60,"h":92},
+                    {"cat":"box","name":"Torre quente 60 × 60 × 220; nicho 61 × 87 cm","at":[200,30],"w":60,"d":60,"h":220},
+                    {"cat":"box","name":"Aéreo de 118 cm; duas folhas de 59 cm","at":[400,30],"w":118,"d":35,"h":70}
+                ]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let ids: Vec<String> = s
+            .document
+            .read()
+            .home()
+            .furniture
+            .iter()
+            .map(|f| f.id.to_string())
+            .collect();
+        let report = annotations(r#"{"stale":true}"#);
+        let rows = report["stale"].as_array().unwrap();
+        assert_eq!(rows.len(), 1, "{report}");
+        assert_eq!(
+            rows[0][0],
+            ids[0].as_str(),
+            "the sink was narrowed: {report}"
+        );
+        assert_eq!(rows[0][1], 70, "{report}");
+        assert_eq!(rows[0][2], 64.5, "{report}");
+        assert_eq!(report["checked"]["names"], 3, "{report}");
+        let unverified = report["unverified"].as_array().unwrap();
+        let said = |id: &str, text: &str| {
+            unverified
+                .iter()
+                .any(|r| r[0] == id && r[1].as_str().unwrap().contains(text))
+        };
+        assert!(said(&ids[1], "nicho 61 × 87"), "{report}");
+        assert!(said(&ids[2], "folhas de 59"), "{report}");
+    }
 
     #[test]
     fn annotations_report_the_notes_that_stopped_being_true() {
