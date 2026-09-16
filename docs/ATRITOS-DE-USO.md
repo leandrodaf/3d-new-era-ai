@@ -236,6 +236,59 @@ somar o que os dispositivos ocupam, avisando quando não cabe — no mesmo tom d
 `no_door`, que hoje diz que um cômodo ficou sem acesso. E a proteção seguir
 até onde a norma vai: DPS, aterramento, kA e seletividade.
 
+## Auditoria das normas: o que mudou, a conferir na planta
+
+Cada número que as ferramentas usam foi conferido no texto das normas. Foram
+lidos o texto integral da NBR 5410:2004, da NBR 8160:1999, da NBR 5626:2020,
+da NBR 15575-1:2013 e da NBR 9050:2020, a ET 0017 v02 da Enel SP, o Decreto
+57.776/2017, o Decreto estadual 12.342/78, a NBR 5413:1992 e as diretrizes da
+NKBA. A NBR 16264 e a NBR 13103 foram vistas por fontes que reproduzem suas
+tabelas; por isso continuam marcadas como "confirmar antes de usar". O que
+estava errado foi corrigido. **Os números da planta vão mudar**: nota,
+findings, cargas e disjuntores. A tabela diz o que conferir e o que deve
+voltar. Tudo está no app reinstalado.
+
+| Área | Como conferir | O que deve voltar |
+|---|---|---|
+| Carga de iluminação (5410 9.5.2.1.2) | `electrical(action="circuits")` | A carga é do cômodo, pela área, e se divide entre os pontos dele: 100 VA até 6 m², mais 60 VA a cada 4 m² inteiros. Antes eram 100 VA por ponto. Os VA de C1 e C2 mudam. (`a3bc454`) |
+| Iluminação e tomadas no mesmo circuito (9.5.3.3) | `electrical()` | Só vira erro acima de 16 A, ou se toda a iluminação ou todas as tomadas estiverem em circuitos mistos. Nos demais casos, a residência admite. |
+| Tomadas de cozinha e lavanderia (9.5.3.2) | `electrical()` | Novo erro `elec:kitchen-circuit:Cn` quando essas tomadas dividem circuito com iluminação ou com pontos de outros cômodos. |
+| Circuito exclusivo (9.5.3.1) | `electrical()` | Só é exigido para equipamento acima de 10 A. |
+| DR (5.1.3.2.2) | `circuits`, coluna DR | Agora também a iluminação de cozinha, lavanderia, área de serviço e garagem abaixo de 2,50 m, e as tomadas externas. O C2 da cozinha passa a ter DR. |
+| Seção e agrupamento (tabela 42) | `circuits`, depois de `route` de força | A seção é corrigida pelo número de circuitos que dividem o mesmo trecho de eletroduto no traçado. Também pode ser informado: `grouping` no projeto (`elec:grouping`). |
+| Queda de tensão (6.2.7.2) | `route` de força, depois `electrical()` | `elec:drop:Cn` quando passa de 4 % até o ponto mais longe. |
+| Disjuntores (NM 60898) | `circuits` | Série 6, 10, 13, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125 A. |
+| Chuveiro | `circuits` | Sem potência escrita, conta 7500 W (os mais vendidos): 34 A, 6 mm², 40 A. Informe a potência da placa com `assign va`. |
+| Fornecimento Enel SP (ET 0017) | `circuits`, campo `main_breaker` | Monofásico até 12 kW (antes 8), bifásico até 20 kW, trifásico até 75 kW. O disjuntor de entrada sai da tabela fixa da Enel: 50, 63, 80, 100, 125… A. |
+| Quadro | `circuits`, campo `panel` | Capacidade de interrupção de 10 kA (Enel, até 63 A), aterramento TN-C-S e DPS com Up ≤ 1,5 kV e N-PE ≥ 10 kA. A seletividade virou regra prática, citando a NM 60898 e não a 5410. |
+| Automação | `electrical()` e `circuits` | Os achados citam dado de fabricante, não a 5410. Consumo em espera: 1 W (relé, dimmer, sensor) e 1,2 W (interruptor inteligente). Dimmer até 1,1 A (~140 W em 127 V). Sensor de teto entre 2,2 e 3 m, alcance de 1,45 × a altura. |
+| Rede e TV: norma residencial | `electrical()` | Citam a **NBR 16264** (residencial), não a 14565 (comercial). A tabela 1 pede por cômodo: dormitório, sala, escritório, cozinha e lavanderia com 2 RJ45 e 1 TV; banheiro e demais cômodos com 1 e 1; home theater com 3 e 2. O Wi-Fi não conta como RJ45. Achado novo `elec:telecom-power` quando o distribuidor de telecom não tem tomada junto. Espere dicas novas por cômodo. (`148c9ae`) |
+| Cabos e Wi-Fi | `route kind=data` e `wifi` | Cat 6 leva 10 GbE só até 37 m, e 5 GbE até 100 m. Cat 6A pode ser U/UTP ou F/UTP. PoE passa a ser 802.3at ou 802.3bt, nunca af. O uplink é propriedade do AP (`wifi uplink=`); no Wi-Fi 7 o padrão é 2,5 GbE. O concreto atenua mais (20/33/38 dB). A faixa de 6 GHz respeita o corte da Anatel (Ato 10.400/2026). O limite de 90 m conta as sobras. |
+| Hidráulica (8160, 5626, Código Sanitário SP) | `plumbing()` e `plumbing(action="route")` | Máquina de lavar precisa de ponto de esgoto próprio de 50 mm (`plumb:sewer`), nunca a caixa sifonada. Ralo no piso de todo banheiro, cozinha, copa e lavanderia (`plumb:drain`, art. 15 II). Ventilação (`plumb:vent`, e `plumb:vent-far` pela tabela 1; peça nova `vent-pipe`). Caixa sifonada dimensionada pelas UHC: saída de 50 mm até 6, 75 acima, aviso acima de 15. Vaso, caixa sifonada e caixa de gordura a até 10 m da inspeção (`plumb:inspection-far`). Profundidade pelo caimento de cada ramal. Série reforçada nos ramais de 50 mm. Y de 50 com bucha para ramal de 40. Nota sobre válvula de descarga (50 mm, ramal próprio). Espere pendências novas: ventilação e ralo seco na cozinha e na lavanderia. (`d12538e`) |
+| Pé-direito (15575-1 16.1.1) | `ergonomics` | Cozinha e lavanderia pedem 2,50 m; só banheiro e circulação admitem 2,30 m. (`16e7032`) |
+| Folgas (15575-1, Anexo F) | `ergonomics` | 40 cm diante de vaso e lavatório (antes 60); 50 cm diante de tanque e máquina (antes 60); 50 cm diante de sofá e poltrona (antes 35). Pés da cama e mesa passam a citar a norma. Guarda-roupa: 80 cm por adulto (1,60 m no casal). |
+| São Paulo (Decreto 57.776, 12.342) | `ergonomics(city="sao-paulo")` | Círculo de 1,50 m na cozinha (antes 1,20). Lados mínimos do decreto e do anexo F: dormitório 2,00, sala 2,40, cozinha 1,50, banheiro 1,10, lavanderia e circulação 0,90. Área mínima de 5 m² nos cômodos de permanência. Iluminação natural de 1/8 do piso, 1/5 no escritório e 1/10 na lavanderia. |
+| NBR 9050 | `ergonomics(wheelchair=true)` | Interruptor entre 60 e 100 cm, tomada entre 40 e 100 (antes 40–120 para os dois). |
+| Gás | `ergonomics` | Com janela, o gás ainda pede abertura permanente (Alerta): janela que fecha não é ventilação. Sem janela, continua erro, citando o Decreto 57.776 3.M. |
+| Cozinha | `ergonomics` | Triângulo pela NKBA: total até 792 cm, cada lado entre 122 e 274 cm. MCMV vira comparação (Dica). Duas tomadas sobre a bancada podem ser uma tomada dupla (`elec:sockets=2`). Lavabo não precisa de box. |
+| Iluminação | `lighting()` | Os valores residenciais vêm da NBR 5413: cozinha e banheiro 150 lx (bancada e espelho 300); antes eram 300 e 200. A 8995-1 fica como referência de local de trabalho. |
+
+**Ainda não coberto** (fica para a próxima rodada):
+- **Elétrica:**
+  - caixa de passagem a cada 15 m menos 3 m por curva, e no máximo 3 curvas entre caixas;
+  - DR agrupado para mais de um circuito, que hoje conta um DR por circuito;
+  - fator de demanda.
+- **Esgoto:**
+  - declividade máxima de 5 %;
+  - a proibição da 4.2.3.5 (ramal ligado pela inspeção da curva do vaso);
+  - dimensões da caixa de inspeção.
+- **Wi-Fi:** atenuação entre andares e vidro low-e.
+- **Ergonomia:**
+  - 60 cm entre camas de solteiro;
+  - acessibilidade: pia a até 85 cm e cama a 46 cm;
+  - gás em banheiro, que só admite aparelho tipo C;
+  - limite de 8,14 kW em ambiente integrado.
+
 ---
 
 ## Conferido nesta rodada
