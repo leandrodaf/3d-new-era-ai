@@ -255,6 +255,84 @@ Detalhe pequeno que confunde toda inspeção pelo REST:
 Ao conferir pelo `/api/home` se um modo ficou ligado, é preciso traduzir de
 cabeça — e `dims`/`auto_dimensions` é justamente o que não se parece.
 
+## 32. Quatro cômodos sem porta, e nada avisou
+
+Dormitório, suíte, banho social e banho da suíte não tinham porta. Tinham um
+**vão livre** (`passage`, que corta a parede e não fecha nada) e, ao lado dele,
+um **painel desenhado** simulando a folha aberta encostada na parede —
+"Porta dormitório — aberta junto à parede", 78 × 6 × 208, sem `opening`.
+
+```
+f794  Passagem                              opening: passage
+f853  Porta dormitório — aberta junto…      opening: —
+```
+
+Herança da importação do `.sh3d`. O efeito: quatro cômodos sem privacidade, o
+schedule listando "Porta" e "Passagem" como coisas separadas, nenhum arco de
+abertura no desenho, e as verificações que dependem de porta — `blocks_door`
+entre elas — sem nada para verificar.
+
+Nenhuma ferramenta apontou. `loose_opening` existe para o caso vizinho ("a door
+or window in no wall — a passage drawn as a panel"), mas não pega este: aqui o
+painel não é uma abertura órfã, é um móvel com nome de porta, e o vão ao lado é
+uma passagem legítima. Os dois, isolados, são válidos.
+
+Convertidos em portas de verdade, o `blocks_door` imediatamente acusou o que
+estava escondido havia o projeto inteiro: **a folha do banho social batia no
+lavatório**.
+
+**Encurtaria:** um aviso para cômodo de dormir ou banheiro cujo único acesso é
+`passage` — ou para móvel com "porta" no nome parado ao lado de um vão.
+
+## 33. Mover uma porta 4 cm inverte o lado que ela abre
+
+Para afastar a folha do lavatório, movi a porta do banheiro quatro
+centímetros ao longo da própria parede:
+
+```
+move(ids=["f1510"], dy=-4)
+from: {"angle": 90,  "faces": "-x", …}
+to:   {"angle": 270, "faces": "+x", …}
+```
+
+Um deslocamento de 4 cm **girou a porta em 180°**. Ela passou a abrir para a
+cozinha — porta de banheiro abrindo para a área de preparo de comida. O dry run
+anunciou o movimento como bom: resolveu o `blocks_door` e levou a nota de 87
+para 99, sem mencionar a inversão.
+
+Só apareceu porque o morador olhou o desenho e reclamou.
+
+A saída foi apagar a porta e recriá-la com `into` apontando para dentro do
+banheiro.
+
+**Encurtaria:** `move` não mexer na orientação de uma abertura; e o dry run
+listar a mudança de `faces` como mudança, não como detalhe.
+
+## 34. O `fix` do `blocks_door` não resolve o `blocks_door`
+
+O erro vinha com a instrução embutida:
+
+```
+"A folha da porta bate em Lavatório social f814:
+ invertendo o lado da dobradiça ela abre livre."
+```
+
+Feito exatamente isso:
+
+```
+update(items=[{"id": "f1510", "hinge_right": true}])
+→ dry: {}          (nenhuma mudança prevista)
+→ aplicado: ok
+→ check_layout: blocks_door: f1510 + f814     (continua)
+```
+
+O dry devolveu um objeto vazio — nem "nada mudaria", nem erro. Aplicado, o
+conflito permaneceu. O que resolveu foi mover a porta, que a documentação não
+sugeria.
+
+**Encurtaria:** ou `hinge_right` faz efeito em abertura, ou o texto para de
+recomendá-lo.
+
 ---
 
 ## Sem como reproduzir agora
