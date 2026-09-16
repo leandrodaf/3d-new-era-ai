@@ -20,10 +20,12 @@ colunas de ventilação, 57 m de tubo traçados pelo `route`) e arquitetura.
 
 ## Rodada em aberto
 
-Oito casos novos, todos nascidos das ações desta rodada: fechar a hidráulica,
-completar o cabeamento estruturado, dimensionar o quadro e reaceitar o que a
-versão nova reabriu. Nenhum deles impediu o trabalho; todos custaram chamadas,
-leitura de código-fonte ou um passo desfeito.
+Dez casos novos, todos nascidos das ações desta rodada: fechar a hidráulica,
+completar o cabeamento estruturado, dimensionar o quadro, reaceitar o que a
+versão nova reabriu e, depois que o usuário desconfiou, auditar a planta peça
+por peça atrás do que estava solto no ar ou na camada errada. Nenhum deles
+impediu o trabalho; todos custaram chamadas, leitura de código-fonte, scripts
+auxiliares ou um passo desfeito.
 
 ## 48. A aceitação some quando a chave do achado muda de prefixo
 
@@ -130,6 +132,12 @@ dois ramais paralelos para cada ponto.
 
 Descobri comparando `polylines` do `/api/home` com os metros do check, e limpei
 com `delete(ids=["pl1615", …, "pl1622"])`.
+
+**E aconteceu de novo na elétrica, pior.** Depois de reassentar os pontos,
+rodei `route` de força, dados e TV. As 9 polilinhas `elec:cable` desenhadas à
+mão continuaram lá, agora apontando para coordenadas onde não há mais ponto
+nenhum — `[135,620]`, `[100,350]`, `[600,244]`. Cabos fantasmas para pontos que
+foram embora, invisíveis para o `check`, que só contou os 36,7 m do run novo.
 
 **Reproduzir:** desenhar um ramal com `cable`/polilinha, depois rodar `route`
 da mesma espécie.
@@ -245,6 +253,96 @@ o que aquilo não é.
 **Deveria:** a primeira mensagem já dizer o formato — *"give `from` as the id
 of the piece it starts from (a heater, a shaft, the column)"* —, como o `route`
 do `electrical` faz na descrição.
+
+## 56. Nada avisa que um ponto ficou solto no ar
+
+O usuário desconfiou que havia peças flutuando. Havia, e nenhuma ferramenta
+disse.
+
+Sonda: uma tomada pedida a 30 cm de qualquer parede.
+
+```
+place(cat="outlet-low", at=[400,40], name="PROBE")     → ok rev=39
+/api/home → {"id":"f1706","position":[400,40],"bounds":[[395,38],[405,42]]}
+```
+
+Ela ficou exatamente onde foi pedida, boiando. O `electrical(check)` contou-a
+como ponto existente, o `check_layout` não a listou, e a nota não se moveu.
+Medindo os 79 pontos de disciplina contra a face da parede mais próxima, com
+um script escrito para isso:
+
+| Situação | Pontos |
+|---|---|
+| a 4–7 cm da face da parede (toda a elétrica e a hidráulica de parede) | 45 |
+| sem nenhuma parede ao alcance, soltos no meio do cômodo | 4 |
+| dentro de um armário ou móvel, no ar | 3 |
+| pendurados abaixo do teto (Wi-Fi, sensor, relé) | 3 |
+
+Três exemplos do que isso significa na obra: a `Tomada — sala, parede oeste`
+estava a 96 cm da parede mais próxima, numa divisa que é vidro do escritório;
+o `Rede RJ45 — escritório` a 119 cm, no meio do cômodo; o relé inteligente
+dentro do armário aéreo da varanda, a 250 cm do piso.
+
+O `check_layout` tem `outside_rooms`, `in_wall`, `overlap` e `turned` — quatro
+relações — e nenhuma chamada "não está apoiado em nada". As 49 sobreposições
+que ele reporta são todas `nesting` esperado (o ponto de água dentro do
+lavatório, o cooktop dentro da bancada), o que torna a lista o lugar errado
+para procurar.
+
+**Custou:** um script de 40 linhas para medir ponto a ponto contra as paredes,
+outro para procurar apoio em piso, teto, parede ou peça, e 24 chamadas de
+`move`/`update` para assentar tudo.
+
+**Reproduzir:** `place` de qualquer ponto de parede com um `at` que não esteja
+exatamente na face.
+
+**Deveria:** o `place` assentar o ponto na estrutura — é o que
+`crates/newera-core/src/mounting.rs` faz no repositório (`seat`, commit
+`6b9f021`), e o app instalado aqui ainda não tem. Até chegar, o `check_layout`
+poderia ter uma relação `loose`: peça que não toca piso, teto, parede nem
+outra peça. Foi a pergunta que eu precisei responder, e a única forma foi por
+fora.
+
+## 57. A camada automática segue a primeira palavra do nome, não a peça
+
+O usuário apontou dois casos, e os dois eram o mesmo defeito.
+
+**O aéreo da geladeira não virou marcenaria.** `Aéreo geladeira — 79,9 cm;
+ventilação inferior preservada` é um armário planejado, e saiu em
+`plan_layer: "appliances"`. Em `crates/newera-core/src/layers.rs:166` as
+palavras de eletrodoméstico são testadas antes das de marcenaria, e
+"geladeira" ganha de "aereo".
+
+**O armário da coifa perde as laterais.** O grupo `f1067` — o caixote de
+madeira oliva que embute a coifa, com molduras iguais às dos aéreos — está em
+`joinery`, certo. Mas 14 das suas peças estão em `appliances`, porque o nome
+de cada uma começa com "Coifa —":
+
+```
+f1049 "Coifa — lateral oliva"          → appliances
+f1051 "Coifa — painel oliva rebaixado" → appliances
+f1063 "Coifa — veneziana superior oliva" → appliances
+f1056 "Coifa — puxador pequeno dourado" → appliances
+…
+f1052 "Coifa — moldura vertical oliva" → joinery   (só porque tem "moldura")
+```
+
+O efeito é visível: esconder a camada de eletrodomésticos tira as laterais, os
+painéis e a veneziana, e deixa as molduras penduradas no ar em volta da coifa.
+Um armário que some pela metade.
+
+A regra em `layer_in_group` diz que a peça com camada própria vence a do grupo
+— boa ideia para o forno embutido na torre. Mas a camada própria aqui foi
+adivinhada pelo nome, e o nome descreve *o que a peça embute*, não o que ela é.
+
+**Custou:** replicar `layer_of` num script para varrer as 213 peças, e um
+`update(layer=...)` com 19 ids.
+
+**Deveria:** dentro de um grupo, a peça só sair da camada do grupo quando a
+camada dela for escrita à mão (`plan:layer`), não quando for adivinhada pelo
+nome; e, fora de grupo, as palavras de marcenaria pesarem mais que as de
+eletrodoméstico quando as duas aparecem ("aéreo geladeira", "nicho do forno",
+"torre da lava-louças" são todos marcenaria).
 
 ---
 
