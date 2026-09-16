@@ -2211,6 +2211,38 @@ mod tests {
     }
 
     #[test]
+    fn the_load_schedule_opens_from_the_discipline_menu() {
+        let mut h = app_with_wall();
+        {
+            let document = h.state().document.clone();
+            let mut doc = document.write();
+            doc.set_active_discipline(Some(newera_core::Discipline::Electrical));
+            for (catalog, x, circuit) in
+                [("light-ceiling", 100.0, "C1"), ("outlet-low", 200.0, "C2")]
+            {
+                let id = doc.new_furniture_id();
+                let mut point = newera_catalog::find(catalog)
+                    .unwrap()
+                    .instantiate(id, Point2::new(x, 100.0));
+                point
+                    .properties
+                    .insert(newera_core::electrical::CIRCUIT_KEY.into(), circuit.into());
+                doc.execute(Command::insert(point)).unwrap();
+            }
+        }
+        h.run_steps(3);
+        // The discipline combo shows the project being edited as its value.
+        h.get_by(|node| node.value().is_some_and(|v| v.contains("Elétrica")))
+            .click();
+        h.run_steps(3);
+        h.get_by_label_contains("Quadro de cargas e NBR 5410")
+            .click();
+        h.run_steps(4);
+        h.get_by_label("C2");
+        h.get_by_label_contains("Total instalado:");
+    }
+
+    #[test]
     fn the_layers_menu_hides_lighting_from_the_plan() {
         let mut h = app_with_wall();
         {

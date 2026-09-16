@@ -50,6 +50,8 @@ pub(crate) enum Dialog {
     ModifyLevel(newera_core::Level),
     ModifyPolyline(newera_core::Polyline),
     Quantities(Vec<crate::tabs::QuantityRow>),
+    /// The load schedule and what NBR 5410 finds.
+    Electrical,
     ConfirmDeleteLevel {
         id: newera_core::LevelId,
         name: String,
@@ -1009,6 +1011,109 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                 DialogOutcome::Close
             } else {
                 DialogOutcome::Keep(Dialog::Quantities(rows))
+            }
+        }
+        Dialog::Electrical => {
+            let mut close = false;
+            let (circuits, findings, cables) = {
+                let doc = app.document.read();
+                let home = doc.home();
+                (
+                    newera_core::electrical::circuits(home),
+                    newera_core::electrical::check(home),
+                    newera_core::electrical::cable_lengths(home),
+                )
+            };
+            egui::Modal::new(egui::Id::new("electrical")).show(ctx, |ui| {
+                ui.set_min_width(560.0);
+                ui.heading(format!(
+                    "{} {}",
+                    icon::LIGHTNING,
+                    crate::i18n::tr("Quadro de cargas e NBR 5410")
+                ));
+                ui.add_space(6.0);
+                if circuits.is_empty() {
+                    ui.weak(crate::i18n::tr(
+                        "Nenhum circuito: atribua os pontos a circuitos (MCP electrical assign).",
+                    ));
+                } else {
+                    egui::Grid::new("load-schedule")
+                        .striped(true)
+                        .show(ui, |ui| {
+                            for head in [
+                                "Circuito",
+                                "Tipo",
+                                "Pontos",
+                                "VA",
+                                "V",
+                                "A",
+                                "Fio mm²",
+                                "Disjuntor",
+                                "DR",
+                            ] {
+                                ui.strong(crate::i18n::tr(head));
+                            }
+                            ui.end_row();
+                            for c in &circuits {
+                                ui.label(&c.name);
+                                ui.label(
+                                    c.kinds
+                                        .iter()
+                                        .map(|k| k.name())
+                                        .collect::<Vec<_>>()
+                                        .join("+"),
+                                );
+                                ui.label(c.points.len().to_string());
+                                ui.label(format!("{:.0}", c.va));
+                                ui.label(format!("{:.0}", c.volts));
+                                ui.label(newera_core::electrical::decimal(c.amps));
+                                ui.label(format!("{}", c.wire_mm2).replace('.', ","));
+                                ui.label(format!("{} A", c.breaker_a));
+                                ui.label(if c.rcd { "30 mA" } else { "—" });
+                                ui.end_row();
+                            }
+                        });
+                    let total: f64 = circuits.iter().map(|c| c.va).sum();
+                    ui.strong(format!(
+                        "{} {total:.0} VA",
+                        crate::i18n::tr("Total instalado:")
+                    ));
+                }
+                for (cable, metres) in &cables {
+                    ui.label(format!(
+                        "{}: {} m",
+                        cable.name(),
+                        newera_core::electrical::decimal(*metres)
+                    ));
+                }
+                ui.add_space(8.0);
+                if findings.is_empty() {
+                    ui.label(crate::i18n::tr("Nada a apontar."));
+                }
+                for f in &findings {
+                    let color = match f.severity {
+                        newera_core::electrical::Severity::Erro => {
+                            egui::Color32::from_rgb(200, 60, 50)
+                        }
+                        newera_core::electrical::Severity::Alerta => {
+                            egui::Color32::from_rgb(200, 140, 40)
+                        }
+                        newera_core::electrical::Severity::Dica => ui.visuals().weak_text_color(),
+                    };
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new(&f.place).strong().color(color));
+                        ui.label(&f.message);
+                    });
+                }
+                ui.add_space(6.0);
+                if ui.button(crate::i18n::tr("Fechar")).clicked() {
+                    close = true;
+                }
+            });
+            if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                DialogOutcome::Close
+            } else {
+                DialogOutcome::Keep(Dialog::Electrical)
             }
         }
         Dialog::ModifyPolyline(mut line) => {

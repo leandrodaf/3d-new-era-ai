@@ -264,6 +264,8 @@ fn disciplines(app: &mut NewEraApp, ui: &mut egui::Ui) {
     let mut choice = None;
     let mut toggle = None;
     let mut quantities = false;
+    #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
+    let mut electrical = false;
     egui::ComboBox::from_id_salt("discipline_select")
         .selected_text(label(active))
         .show_ui(ui, |ui| {
@@ -297,6 +299,17 @@ fn disciplines(app: &mut NewEraApp, ui: &mut egui::Ui) {
             {
                 quantities = true;
             }
+            #[cfg(not(target_arch = "wasm32"))]
+            if ui
+                .button(format!(
+                    "{} {}",
+                    icon::LIGHTNING,
+                    crate::i18n::tr("Quadro de cargas e NBR 5410")
+                ))
+                .clicked()
+            {
+                electrical = true;
+            }
         })
         .response
         .on_hover_text(crate::i18n::tr(
@@ -310,6 +323,9 @@ fn disciplines(app: &mut NewEraApp, ui: &mut egui::Ui) {
     }
     if let Some((d, visible)) = toggle {
         app.document.write().set_discipline_visible(d, visible);
+    }
+    if electrical {
+        app.set_dialog(Dialog::Electrical);
     }
     if quantities {
         let rows = quantity_rows(app.document.read().home());

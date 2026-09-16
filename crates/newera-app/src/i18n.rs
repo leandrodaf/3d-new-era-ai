@@ -132,6 +132,20 @@ fn english(pt: &str) -> Option<&'static str> {
         "Afastamento" => "Offset",
         "Afastar (Ctrl -)" => "Zoom out (Ctrl -)",
         "Ajuda" => "Help",
+        "Quadro de cargas e NBR 5410" => "Load schedule and NBR 5410",
+        "Nenhum circuito: atribua os pontos a circuitos (MCP electrical assign)." => {
+            "No circuits: assign the points to circuits (MCP electrical assign)."
+        }
+        "Circuito" => "Circuit",
+        "Pontos" => "Points",
+        "VA" => "VA",
+        "V" => "V",
+        "A" => "A",
+        "Fio mm²" => "Wire mm²",
+        "Disjuntor" => "Breaker",
+        "DR" => "RCD",
+        "Total instalado:" => "Installed total:",
+        "Nada a apontar." => "Nothing to point out.",
         "Camadas" => "Layers",
         "Iluminação" => "Lighting",
         "Eletrodomésticos" => "Appliances",
