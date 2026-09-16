@@ -1050,6 +1050,104 @@ pub fn dimensions_following(home: &Home) -> Vec<Dimension> {
     out
 }
 
+/// How far from a face a dimension end may have been left and still be read
+/// as meant for it, cm.
+const LOOSE_REACH: f64 = 40.0;
+
+/// A dimension that holds onto nothing and has one end left in the air.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LooseEnd {
+    /// `0` for the start, `1` for the end.
+    pub end: usize,
+    /// The face nearest to where that end was left.
+    pub near: Hold,
+    /// What the dimension would read with that end on that face, cm.
+    pub measured: f64,
+}
+
+/// The axis a dimension runs along, when it runs along one.
+fn dimension_axis(dim: &Dimension) -> Option<Axis> {
+    let (dx, dy) = (dim.end.x - dim.start.x, dim.end.y - dim.start.y);
+    if dy.abs() <= 0.5 && dx.abs() > 0.5 {
+        Some(Axis::X)
+    } else if dx.abs() <= 0.5 && dy.abs() > 0.5 {
+        Some(Axis::Y)
+    } else {
+        None
+    }
+}
+
+/// A dimension whose drawing moved out from under one of its ends.
+///
+/// One end still sits on a face; the other touches nothing, and a face is a
+/// few centimeters away along the dimension — a counter recessed 19 cm under
+/// the dimension of the corridor in front of it. The number on the plan is
+/// the old corridor. An end inside a solid (a wall's axis) or far from any
+/// face was drawn that way and is left alone.
+#[must_use]
+pub fn loose_end(home: &Home, dim: &Dimension) -> Option<LooseEnd> {
+    if dim.holds.is_some() {
+        return None;
+    }
+    let axis = dimension_axis(dim)?;
+    let ends = [dim.start, dim.end];
+    let touches = [
+        touching(home, dim.start, axis, dim.end).is_some(),
+        touching(home, dim.end, axis, dim.start).is_some(),
+    ];
+    let end = match touches {
+        [true, false] => 1,
+        [false, true] => 0,
+        _ => return None,
+    };
+    let (at, other) = (ends[end], ends[1 - end]);
+    let along = axis.of(at);
+    let across = match axis {
+        Axis::X => at.y,
+        Axis::Y => at.x,
+    };
+    let mut best: Option<(f64, f64, Hold)> = None;
+    for solid in obstacles(home, &|_| false) {
+        let (min, max) = bounds_of(&solid.outline);
+        let (lo, hi, across_lo, across_hi) = match axis {
+            Axis::X => (min.x, max.x, min.y, max.y),
+            Axis::Y => (min.y, max.y, min.x, max.x),
+        };
+        if across < across_lo - 1.0 || across > across_hi + 1.0 {
+            continue;
+        }
+        if along > lo + 1.0 && along < hi - 1.0 {
+            return None;
+        }
+        for (face, edge) in [(lo, -1.0), (hi, 1.0)] {
+            let away = (face - along).abs();
+            if away > LOOSE_REACH || best.as_ref().is_some_and(|(d, ..)| away >= *d) {
+                continue;
+            }
+            let edge = match (axis, edge > 0.0) {
+                (Axis::X, true) => "+x",
+                (Axis::X, false) => "-x",
+                (Axis::Y, true) => "+y",
+                (Axis::Y, false) => "-y",
+            };
+            best = Some((
+                away,
+                face,
+                Hold {
+                    id: solid.what.id(),
+                    edge: Some(edge.to_owned()),
+                },
+            ));
+        }
+    }
+    let (_, face, near) = best?;
+    Some(LooseEnd {
+        end,
+        near,
+        measured: ((face - axis.of(other)).abs() * 10.0).round() / 10.0,
+    })
+}
+
 /// Ties every axis-aligned dimension to whatever its ends touch right now, so
 /// that from here on it follows the drawing.
 ///
@@ -1063,12 +1161,7 @@ pub fn anchor_dimensions(home: &Home) -> Vec<Dimension> {
         if dim.holds.is_some() {
             continue;
         }
-        let (dx, dy) = (dim.end.x - dim.start.x, dim.end.y - dim.start.y);
-        let axis = if dy.abs() <= 0.5 && dx.abs() > 0.5 {
-            Axis::X
-        } else if dx.abs() <= 0.5 && dy.abs() > 0.5 {
-            Axis::Y
-        } else {
+        let Some(axis) = dimension_axis(dim) else {
             continue;
         };
         let (Some(start), Some(end)) = (
@@ -1233,6 +1326,9 @@ pub struct AnnotationCheck {
     pub stale: Vec<Stale>,
     /// Dimensions holding onto what they mark.
     pub dimensions: usize,
+    /// Dimensions holding onto nothing: only a loose end can be caught on
+    /// them, and a number that is wrong with both ends in place cannot.
+    pub unanchored: usize,
     /// Labels with sizes, compared with the piece they are about.
     pub labels: usize,
     /// Clauses of piece names with sizes, compared with the piece itself.
@@ -1287,6 +1383,21 @@ pub fn check_annotations(home: &Home) -> AnnotationCheck {
     let out = &mut report.stale;
     for dim in &home.dimensions {
         let Some(holds) = dim.holds.as_ref() else {
+            report.unanchored += 1;
+            if let Some(loose) = loose_end(home, dim) {
+                out.push(Stale {
+                    id: dim.id.into(),
+                    drawn: (dim.length() * 10.0).round() / 10.0,
+                    measured: loose.measured,
+                    against: Some(loose.near.id),
+                    text: format!(
+                        "its {} touches nothing; {} is {} cm from it",
+                        if loose.end == 0 { "start" } else { "end" },
+                        loose.near.id,
+                        (((dim.length() - loose.measured).abs()) * 10.0).round() / 10.0,
+                    ),
+                });
+            }
             continue;
         };
         report.dimensions += 1;

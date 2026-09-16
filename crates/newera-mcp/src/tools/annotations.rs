@@ -121,7 +121,7 @@ impl NewEraMcp {
         Ok(serde_json::json!({"active": home.active_discipline, "hidden": home.hidden_disciplines}).to_string())
     }
     #[tool(
-        description = "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, and dimensions whose anchor is gone: rows [id, written, measured, against, text]; checked {dims, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right. q=<text> searches label text. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs), legend (symbol legend with counts); bake=true turns the automatic chains into editable dimensions (ids returned). Otherwise returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
+        description = "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first. q=<text> searches label text. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs), legend (symbol legend with counts); bake=true turns the automatic chains into editable dimensions (ids returned). Otherwise returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
     )]
     pub(crate) fn annotations(
         &self,
@@ -132,11 +132,31 @@ impl NewEraMcp {
             let view = doc.home().level_view(doc.home().current_level());
             let held = newera_core::anchor_dimensions(&view);
             let ids: Vec<String> = held.iter().map(|d| d.id.to_string()).collect();
+            // Anchoring reads the drawing as the intent, so a dimension the
+            // drawing already moved away from is not tied to it: it is named,
+            // with what it would measure, to be fixed by hand first.
+            let left: Vec<serde_json::Value> = view
+                .dimensions
+                .iter()
+                .filter_map(|d| {
+                    let loose = newera_core::loose_end(&view, d)?;
+                    Some(serde_json::json!([
+                        d.id.to_string(),
+                        compact::num(d.length()),
+                        compact::num(loose.measured),
+                        loose.near.id.to_string(),
+                    ]))
+                })
+                .collect();
             if !held.is_empty() {
                 let commands = held.into_iter().map(Command::update).collect();
                 doc.execute(Command::Batch { commands }).map_err(core)?;
             }
-            return Ok(serde_json::json!({"anchored": ids}).to_string());
+            let mut out = serde_json::json!({"anchored": ids});
+            if !left.is_empty() {
+                out["left"] = serde_json::json!(left);
+            }
+            return Ok(out.to_string());
         }
         if p.stale.unwrap_or(false) || p.q.is_some() {
             let doc = self.document.read();
@@ -163,6 +183,7 @@ impl NewEraMcp {
                     "checked".to_owned(),
                     serde_json::json!({
                         "dims": check.dimensions,
+                        "dims_unanchored": check.unanchored,
                         "labels": check.labels,
                         "names": check.names,
                     }),
@@ -264,6 +285,77 @@ mod tests {
     use crate::tools::server;
 
     #[test]
+    fn a_dimension_the_counter_moved_away_from_is_caught_and_not_anchored() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[500,0],[500,400],[0,400]],"closed":true}],
+                    "dims":[{"a":[250,91.5],"b":[250,310]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        // An 84 cm counter on the top wall and a 60 cm one on the bottom
+        // wall: the dimension reads the corridor between them.
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"base-cabinet","at":[250,49.5],"w":300,"d":84,"h":90},
+                             {"cat":"base-cabinet","at":[250,340],"w":300,"d":60,"h":90,"angle":180}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let annotations = |json: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.annotations(Parameters(serde_json::from_str(json).unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        let before = annotations(r#"{"stale":true}"#);
+        assert_eq!(before["stale"], serde_json::json!([]), "{before}");
+        assert_eq!(before["checked"]["dims"], 0, "{before}");
+        assert_eq!(
+            before["checked"]["dims_unanchored"], 1,
+            "an empty list over an unanchored dimension says so: {before}"
+        );
+
+        // The counter is recessed to 65 cm; the dimension still says 218.5.
+        let (counter, dim) = {
+            let doc = s.document.read();
+            (
+                doc.home().furniture[0].id.to_string(),
+                doc.home().dimensions[0].id.to_string(),
+            )
+        };
+        s.update(Parameters(UpdateParams {
+            items: serde_json::from_str(&format!(
+                r#"[{{"id":"{counter}","d":65,"anchor":"back"}}]"#
+            ))
+            .unwrap(),
+            v: None,
+            dry: None,
+        }))
+        .unwrap();
+        let after = annotations(r#"{"stale":true}"#);
+        let row = &after["stale"][0];
+        assert_eq!(row[0], dim.as_str(), "{after}");
+        assert_eq!(row[1], 218.5, "{after}");
+        assert_eq!(row[2], 237.5, "what the corridor measures now: {after}");
+        assert_eq!(row[3], counter.as_str(), "{after}");
+
+        // Anchoring now would freeze the wrong number: it is left out, named.
+        let anchored = annotations(r#"{"anchor":true}"#);
+        assert_eq!(anchored["anchored"], serde_json::json!([]), "{anchored}");
+        assert_eq!(anchored["left"][0][0], dim.as_str(), "{anchored}");
+        assert_eq!(anchored["left"][0][2], 237.5, "{anchored}");
+        assert!(
+            s.document.read().home().dimensions[0].holds.is_none(),
+            "not tied to the wrong face"
+        );
+    }
+
+    #[test]
     fn stale_says_how_much_it_compared_and_reads_the_names() {
         let s = server();
         let annotations = |json: &str| -> serde_json::Value {
@@ -282,7 +374,7 @@ mod tests {
         assert_eq!(empty["stale"], serde_json::json!([]), "{empty}");
         assert_eq!(
             empty["checked"],
-            serde_json::json!({"dims": 0, "labels": 0, "names": 0}),
+            serde_json::json!({"dims": 0, "dims_unanchored": 0, "labels": 0, "names": 0}),
             "{empty}"
         );
 

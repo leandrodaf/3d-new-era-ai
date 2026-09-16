@@ -60,10 +60,10 @@ pub use levels::{FloorShape, floor_shapes, stair_holes};
 pub use lighting::{LampType, RoomLighting};
 pub use materials::{Material, Pattern, WALL_TYPES, WallFamily, WallType, wall_type};
 pub use measure::{
-    AnnotationCheck, Axis, Clearance, Dir, Obstacle, Solid, Span, Stale, anchor_dimensions,
-    built_frame, check_annotations, clearance, dimensions_following, element_bounds, facing,
-    facing_disagrees, free_span, hold_point, obstacles, plan_bounds, stale_annotations,
-    wall_bounds,
+    AnnotationCheck, Axis, Clearance, Dir, LooseEnd, Obstacle, Solid, Span, Stale,
+    anchor_dimensions, built_frame, check_annotations, clearance, dimensions_following,
+    element_bounds, facing, facing_disagrees, free_span, hold_point, loose_end, obstacles,
+    plan_bounds, stale_annotations, wall_bounds,
 };
 pub use project::{
     BundledFiles, PROJECT_EXTENSION, Project, ProjectError, cache_dir, from_project_json,
