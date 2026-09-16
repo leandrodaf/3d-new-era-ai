@@ -298,6 +298,77 @@ mod tests {
     use crate::tools::server;
 
     #[test]
+    fn a_dimension_anchored_on_a_part_of_a_group_is_alive_and_follows_it() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[500,0],[500,400],[0,400]],"closed":true}],
+                    "dims":[{"a":[250,7.5],"b":[250,98.5]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        // A pull-out broom cupboard grouped from drawn solids; its front is
+        // what the dimension ends on, 91 cm from the wall.
+        {
+            let mut doc = s.document.write();
+            let board = |id: u64, name: &str, y: f64, d: f64| newera_core::Furniture {
+                id: newera_core::FurnitureId(id),
+                catalog: "box".into(),
+                name: name.to_owned(),
+                position: newera_core::Point2::new(250.0, y),
+                width: 30.0,
+                depth: d,
+                height: 195.0,
+                ..newera_core::Furniture::default()
+            };
+            let mut cupboard = board(100, "vassoureiro", 60.0, 77.0);
+            cupboard.children = vec![
+                board(101, "corpo", 52.0, 89.0),
+                board(102, "frente 30 × 195", 97.5, 2.0),
+            ];
+            doc.execute(newera_core::Command::insert(cupboard)).unwrap();
+        }
+        let annotations = |json: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.annotations(Parameters(serde_json::from_str(json).unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        let anchored = annotations(r#"{"anchor":true}"#);
+        assert_eq!(
+            anchored["anchored"].as_array().unwrap().len(),
+            1,
+            "{anchored}"
+        );
+        let holds = s.document.read().home().dimensions[0]
+            .holds
+            .clone()
+            .unwrap();
+        assert!(
+            holds.iter().any(|h| h.id.to_string() == "f102"),
+            "{holds:?}"
+        );
+
+        let stale = annotations(r#"{"stale":true}"#);
+        assert_eq!(
+            stale["stale"],
+            serde_json::json!([]),
+            "the front is there: {stale}"
+        );
+        assert_eq!(stale["checked"]["dims"], 1, "{stale}");
+
+        // And it follows the front when the cupboard moves.
+        s.move_elements(Parameters(
+            serde_json::from_str(r#"{"ids":["f100"],"dy":10,"dx":0}"#).unwrap(),
+        ))
+        .unwrap();
+        let length = s.document.read().home().dimensions[0].length();
+        assert!((length - 101.0).abs() < 0.01, "{length}");
+    }
+
+    #[test]
     fn an_anchor_that_died_with_its_piece_is_tied_again_or_let_go() {
         let s = server();
         s.create(Parameters(

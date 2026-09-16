@@ -370,7 +370,8 @@ pub fn element_bounds(home: &Home, id: ElementId) -> Option<(Point2, Point2)> {
         (min, max)
     };
     match id {
-        ElementId::Furniture(f) => home.piece(f).map(plan_bounds),
+        // A part of a group is a piece too: dimensions hold onto a cabinet front.
+        ElementId::Furniture(f) => home.find_piece(f).map(plan_bounds),
         ElementId::Wall(w) => home.wall(w).map(|w| wall_bounds(home, w)),
         ElementId::Room(r) => home.room(r).map(|r| hull(&r.points)),
         ElementId::Dimension(d) => home.dimension(d).map(|d| hull(&[d.start, d.end])),
