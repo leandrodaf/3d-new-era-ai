@@ -10,6 +10,11 @@ BIN     := target/debug/newera
 RELEASE := target/release/newera
 LOG     ?= info,wgpu_core=warn,wgpu_hal=warn,naga=warn,rmcp=warn,egui_wgpu=warn
 
+# Local secrets — the Sentry DSN — live in a git-ignored .env.local, so a
+# build from this machine reports and the repository never carries them.
+-include .env.local
+export NEWERA_SENTRY_DSN
+
 export NEWERA_ADDR := $(ADDR)
 export NEWERA_LOG  := $(LOG)
 

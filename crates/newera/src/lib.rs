@@ -15,6 +15,9 @@ use anyhow::Context;
 use clap::{Parser, Subcommand};
 use newera_core::{Document, Home, SharedDocument};
 use tokio_util::sync::CancellationToken;
+use tracing_subscriber::Layer as _;
+use tracing_subscriber::layer::SubscriberExt as _;
+use tracing_subscriber::util::SubscriberInitExt as _;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -54,6 +57,12 @@ enum Mode {
     Serve,
     /// Serve MCP over stdin/stdout.
     Mcp,
+    /// Crash reports and usage notes: `status`, `on`, `off`, or `test` to send
+    /// one event and print its id.
+    Telemetry {
+        #[arg(default_value = "status")]
+        action: String,
+    },
 }
 
 /// Parses the command line and runs the chosen mode.
@@ -61,15 +70,44 @@ pub fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let mode = cli.command.unwrap_or(Mode::Gui { no_server: false });
 
+    // Crash reports first, so a failure opening the project is reported too.
+    // Kept to the end of `run`: dropping it sends what is pending.
+    let _telemetry = newera_telemetry::init(match mode {
+        Mode::Gui { .. } => "gui",
+        Mode::Serve => "serve",
+        Mode::Mcp => "mcp",
+        Mode::Telemetry { .. } => "cli",
+    });
+
     // stdout belongs to the protocol in stdio mode, so logs always go to stderr.
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_env("NEWERA_LOG").unwrap_or_else(|_| {
-                "info,wgpu_core=warn,wgpu_hal=warn,naga=warn,rmcp=warn,egui_wgpu=warn".into()
-            }),
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_filter(
+                    tracing_subscriber::EnvFilter::try_from_env("NEWERA_LOG").unwrap_or_else(
+                        |_| {
+                            "info,wgpu_core=warn,wgpu_hal=warn,naga=warn,rmcp=warn,egui_wgpu=warn"
+                                .into()
+                        },
+                    ),
+                ),
+        )
+        .with(
+            newera_telemetry::layer().with_filter(
+                tracing_subscriber::filter::Targets::new()
+                    .with_default(tracing::Level::INFO)
+                    .with_target("wgpu_core", tracing::Level::ERROR)
+                    .with_target("wgpu_hal", tracing::Level::ERROR)
+                    .with_target("naga", tracing::Level::ERROR)
+                    .with_target("rmcp", tracing::Level::WARN),
+            ),
         )
         .init();
+
+    if let Mode::Telemetry { action } = &mode {
+        return telemetry(action);
+    }
 
     let mut document = Document::new(if cli.demo {
         demo::sample_home()
@@ -92,7 +130,47 @@ pub fn run() -> anyhow::Result<()> {
         Mode::Mcp => runtime()?
             .block_on(newera_mcp::serve_stdio(document))
             .context("MCP stdio server failed"),
+        Mode::Telemetry { .. } => unreachable!("answered above"),
     }
+}
+
+/// `newera telemetry …`: see and change the switch, or prove it reports.
+fn telemetry(action: &str) -> anyhow::Result<()> {
+    match action {
+        "on" | "off" => {
+            newera_telemetry::set_enabled(action == "on")
+                .context("cannot save the telemetry setting")?;
+        }
+        "test" => {
+            anyhow::ensure!(
+                newera_telemetry::available(),
+                "this build has no Sentry DSN (NEWERA_SENTRY_DSN at build time)"
+            );
+            anyhow::ensure!(
+                newera_telemetry::enabled(),
+                "telemetry is off (newera telemetry on)"
+            );
+            let id = newera_telemetry::test_event();
+            println!("sent test event {id}");
+            return Ok(());
+        }
+        "status" => {}
+        other => anyhow::bail!("telemetry: status, on, off or test (not {other})"),
+    }
+    println!(
+        "telemetry {} (this build {} report)",
+        if newera_telemetry::enabled() {
+            "on"
+        } else {
+            "off"
+        },
+        if newera_telemetry::available() {
+            "can"
+        } else {
+            "cannot"
+        },
+    );
+    Ok(())
 }
 
 fn runtime() -> anyhow::Result<tokio::runtime::Runtime> {

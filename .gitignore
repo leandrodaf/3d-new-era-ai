@@ -1,4 +1,6 @@
 /target
+# Local secrets (Sentry DSN), read by the Makefile
+.env.local
 *.swp
 .DS_Store
 .idea/

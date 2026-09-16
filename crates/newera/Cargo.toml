@@ -37,6 +37,7 @@ newera-core.workspace = true
 newera-sh3d.workspace = true
 newera-mcp.workspace = true
 newera-server.workspace = true
+newera-telemetry.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true

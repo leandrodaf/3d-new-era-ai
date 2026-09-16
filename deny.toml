@@ -27,6 +27,9 @@ allow = [
   "OFL-1.1",
   "Ubuntu-font-1.0",
 ]
+# Mozilla's root certificates, which the crash reporter's TLS trusts: a
+# permissive data licence, allowed for that crate only.
+exceptions = [{ name = "webpki-roots", allow = ["CDLA-Permissive-2.0"] }]
 
 [bans]
 multiple-versions = "allow"

@@ -17,6 +17,7 @@ categories = ["graphics", "command-line-utilities"]
 # Internal crates
 newera-core = { path = "crates/newera-core", version = "1.0.0" }
 newera-mcp = { path = "crates/newera-mcp", version = "1.0.0" }
+newera-telemetry = { path = "crates/newera-telemetry", version = "1.0.0" }
 newera-server = { path = "crates/newera-server", version = "1.0.0" }
 newera-app = { path = "crates/newera-app", version = "1.0.0" }
 newera-draw = { path = "crates/newera-draw", version = "1.0.0" }

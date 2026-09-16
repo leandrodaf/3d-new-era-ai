@@ -1,0 +1,374 @@
+//! Crash reports and usage notes, sent to Sentry.
+//!
+//! On by default, off with one switch that is kept between runs and honoured
+//! at once — no restart. `NEWERA_TELEMETRY=0` turns it off for a run, for
+//! machines that cannot keep a setting.
+//!
+//! The DSN is baked in at build time from `NEWERA_SENTRY_DSN` (a CI secret;
+//! locally, a git-ignored `.env.local` the Makefile reads). A build without
+//! it sends nothing, so a clone of the repository reports to nobody. A DSN
+//! inside a shipped binary can be read out of it, as with every client-side
+//! Sentry key: it lets its holder *send* events, never read them, and Sentry's
+//! rate limits and inbound filters bound what that costs.
+//!
+//! What is sent: panics with their backtrace, `error!` logs as events, and the
+//! `warn!`/`info!` before them as breadcrumbs; the OS and app version. What is
+//! not: IP addresses and hostnames (`send_default_pii` off), the MCP token,
+//! and the plan itself.
+
+use std::io::Write as _;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Whether reports go out, read once from the settings file and then kept in
+/// memory so a switch in the menu applies to the very next event.
+static ENABLED: AtomicBool = AtomicBool::new(true);
+static LOADED: std::sync::Once = std::sync::Once::new();
+
+#[cfg(test)]
+static TEST_DIR: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+
+/// Where this app keeps its settings.
+fn config_dir() -> PathBuf {
+    #[cfg(test)]
+    if let Some(dir) = TEST_DIR.lock().ok().and_then(|d| d.clone()) {
+        return dir;
+    }
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("APPDATA").map(PathBuf::from))
+        .or_else(|| {
+            std::env::var_os("HOME").map(|home| {
+                let home = PathBuf::from(home);
+                if cfg!(target_os = "macos") {
+                    home.join("Library").join("Application Support")
+                } else {
+                    home.join(".config")
+                }
+            })
+        })
+        .unwrap_or_else(std::env::temp_dir);
+    base.join("3d-new-era-ai")
+}
+
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+struct Settings {
+    /// `None` until someone chooses: the default is on.
+    #[serde(default)]
+    telemetry: Option<bool>,
+}
+
+fn settings_path() -> PathBuf {
+    config_dir().join("telemetry.json")
+}
+
+fn off_by_environment() -> bool {
+    std::env::var("NEWERA_TELEMETRY").is_ok_and(|v| {
+        matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "0" | "off" | "false" | "no"
+        )
+    })
+}
+
+fn load() {
+    LOADED.call_once(|| {
+        let chosen = std::fs::read_to_string(settings_path())
+            .ok()
+            .and_then(|raw| serde_json::from_str::<Settings>(&raw).ok())
+            .and_then(|s| s.telemetry);
+        ENABLED.store(
+            chosen.unwrap_or(true) && !off_by_environment(),
+            Ordering::Relaxed,
+        );
+    });
+}
+
+/// Whether telemetry is on: the person's choice, on when never made.
+pub fn enabled() -> bool {
+    load();
+    ENABLED.load(Ordering::Relaxed)
+}
+
+/// Turns telemetry on or off, now and for the next runs.
+///
+/// # Errors
+/// When the choice cannot be written; it still applies to this run.
+pub fn set_enabled(on: bool) -> std::io::Result<()> {
+    load();
+    ENABLED.store(on, Ordering::Relaxed);
+    let path = settings_path();
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let json = serde_json::to_string_pretty(&Settings {
+        telemetry: Some(on),
+    })
+    .map_err(std::io::Error::other)?;
+    std::fs::write(path, json)
+}
+
+/// The DSN this build reports to, if it has one.
+fn dsn() -> Option<String> {
+    let given = |d: &String| !d.trim().is_empty();
+    std::env::var("NEWERA_SENTRY_DSN")
+        .ok()
+        .filter(given)
+        .or_else(|| option_env!("NEWERA_SENTRY_DSN").map(str::to_owned))
+        .filter(given)
+}
+
+/// Whether this build can report at all (it was built with a DSN).
+pub fn available() -> bool {
+    dsn().is_some()
+}
+
+/// Keeps the reporter alive: dropping it flushes what is pending.
+pub struct Guard {
+    #[cfg(not(target_arch = "wasm32"))]
+    _client: Option<sentry::ClientInitGuard>,
+}
+
+impl std::fmt::Debug for Guard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Guard").finish_non_exhaustive()
+    }
+}
+
+/// Starts reporting, when this build has a DSN. Call first thing in `main`
+/// and keep the guard until the program ends. `mode` names how the program
+/// runs (`gui`, `serve`, `mcp`) so reports can be told apart.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn init(mode: &str) -> Guard {
+    load();
+    let Some(dsn) = dsn() else {
+        return Guard { _client: None };
+    };
+    let secret = std::env::var("NEWERA_TOKEN").ok().filter(|t| !t.is_empty());
+    let mut options = sentry::ClientOptions::default();
+    options.release = Some(concat!("newera@", env!("CARGO_PKG_VERSION")).into());
+    options.environment = Some(
+        if cfg!(debug_assertions) {
+            "development"
+        } else {
+            "production"
+        }
+        .into(),
+    );
+    // No IP addresses, no hostnames: nobody's machine is named.
+    options.send_default_pii = false;
+    options.server_name = None;
+    options.attach_stacktrace = true;
+    options.before_send = Some(std::sync::Arc::new(move |mut event| {
+        if !ENABLED.load(Ordering::Relaxed) {
+            return None;
+        }
+        if let Some(secret) = &secret {
+            scrub(&mut event, secret);
+        }
+        Some(event)
+    }));
+    options.before_breadcrumb = Some(std::sync::Arc::new(|crumb| {
+        ENABLED.load(Ordering::Relaxed).then_some(crumb)
+    }));
+    let client = sentry::init((dsn, options));
+    sentry::configure_scope(|scope| scope.set_tag("mode", mode));
+    Guard {
+        _client: Some(client),
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn init(_mode: &str) -> Guard {
+    Guard {}
+}
+
+/// Sends one event that says it is a test, and returns its id.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn test_event() -> String {
+    let id = sentry::capture_message("telemetry test", sentry::Level::Info);
+    if let Some(client) = sentry::Hub::current().client() {
+        client.flush(Some(std::time::Duration::from_secs(10)));
+    }
+    id.simple().to_string()
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn test_event() -> String {
+    String::new()
+}
+
+/// Takes the MCP token out of anything an event says.
+#[cfg(not(target_arch = "wasm32"))]
+fn scrub(event: &mut sentry::protocol::Event<'static>, secret: &str) {
+    let clean = |text: &mut String| {
+        if text.contains(secret) {
+            *text = text.replace(secret, "[token]");
+        }
+    };
+    if let Some(message) = event.message.as_mut() {
+        clean(message);
+    }
+    if let Some(entry) = event.logentry.as_mut() {
+        clean(&mut entry.message);
+    }
+    for exception in &mut event.exception.values {
+        if let Some(value) = exception.value.as_mut() {
+            clean(value);
+        }
+    }
+    for crumb in &mut event.breadcrumbs.values {
+        if let Some(message) = crumb.message.as_mut() {
+            clean(message);
+        }
+    }
+}
+
+/// A `tracing` layer that turns `error!` into reports and earlier `warn!` and
+/// `info!` into their breadcrumbs. Inert while there is no reporter.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn layer<S>() -> impl tracing_subscriber::Layer<S>
+where
+    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+{
+    sentry::integrations::tracing::layer().event_filter(|meta| match *meta.level() {
+        tracing::Level::ERROR => sentry::integrations::tracing::EventFilter::Event,
+        tracing::Level::WARN | tracing::Level::INFO => {
+            sentry::integrations::tracing::EventFilter::Breadcrumb
+        }
+        _ => sentry::integrations::tracing::EventFilter::Ignore,
+    })
+}
+
+/// A note about what could work better, from whoever is using the program —
+/// an agent through MCP, typically.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Note {
+    /// `friction` (it worked, at a cost), `bug` (it answered wrong), `idea`.
+    pub kind: String,
+    /// What happened and what would have shortened it.
+    pub text: String,
+    /// The tool it is about, when there is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
+}
+
+/// Where a note ended up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Delivery {
+    /// Kept on this machine and sent to the project.
+    Sent,
+    /// Kept on this machine only: telemetry is off, or this build cannot send.
+    Kept,
+}
+
+/// The file every note is appended to, sent or not.
+pub fn notes_path() -> PathBuf {
+    config_dir().join("notes.jsonl")
+}
+
+/// Keeps a note on this machine and, with telemetry on, sends it.
+///
+/// # Errors
+/// When the note cannot be written locally; sending is best effort.
+pub fn note(note: &Note) -> std::io::Result<Delivery> {
+    let path = notes_path();
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let line = serde_json::to_string(note).map_err(std::io::Error::other)?;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)?;
+    writeln!(file, "{line}")?;
+    if !enabled() {
+        return Ok(Delivery::Kept);
+    }
+    Ok(send(note))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn send(note: &Note) -> Delivery {
+    let Some(client) = sentry::Hub::current().client() else {
+        return Delivery::Kept;
+    };
+    if !client.is_enabled() {
+        return Delivery::Kept;
+    }
+    let first_line = note.text.lines().next().unwrap_or_default();
+    let title: String = first_line.chars().take(120).collect();
+    sentry::with_scope(
+        |scope| {
+            scope.set_tag("note.kind", &note.kind);
+            if let Some(tool) = &note.tool {
+                scope.set_tag("note.tool", tool);
+            }
+            scope.set_extra("text", note.text.clone().into());
+            scope.set_fingerprint(Some(&[
+                "note",
+                &note.kind,
+                note.tool.as_deref().unwrap_or("-"),
+                &title,
+            ]));
+        },
+        || sentry::capture_message(&format!("[{}] {title}", note.kind), sentry::Level::Info),
+    );
+    Delivery::Sent
+}
+
+#[cfg(target_arch = "wasm32")]
+fn send(_note: &Note) -> Delivery {
+    Delivery::Kept
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Settings and notes go to a directory of the test's own.
+    fn isolated() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("newera-telemetry-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        *TEST_DIR.lock().unwrap() = Some(dir.join("3d-new-era-ai"));
+        dir
+    }
+
+    #[test]
+    fn on_by_default_off_with_one_switch_kept_between_runs_and_notes_kept() {
+        let dir = isolated();
+        assert!(enabled(), "never chosen: on");
+
+        set_enabled(false).unwrap();
+        assert!(!enabled(), "applies at once");
+        let saved = std::fs::read_to_string(dir.join("3d-new-era-ai/telemetry.json")).unwrap();
+        assert!(saved.contains("false"), "{saved}");
+
+        // Off, a note is kept here and not sent.
+        let delivery = note(&Note {
+            kind: "friction".into(),
+            text: "measure não enxerga o vassoureiro".into(),
+            tool: Some("measure".into()),
+        })
+        .unwrap();
+        assert_eq!(delivery, Delivery::Kept);
+        let kept = std::fs::read_to_string(notes_path()).unwrap();
+        assert!(
+            kept.contains("vassoureiro") && kept.contains("\"tool\":\"measure\""),
+            "{kept}"
+        );
+
+        set_enabled(true).unwrap();
+        assert!(enabled());
+        // Without a reporter running nothing can be sent, and saying so is
+        // the honest answer.
+        let delivery = note(&Note {
+            kind: "idea".into(),
+            text: "copiar peça".into(),
+            tool: None,
+        })
+        .unwrap();
+        assert_eq!(delivery, Delivery::Kept);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
