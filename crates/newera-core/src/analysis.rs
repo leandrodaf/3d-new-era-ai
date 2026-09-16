@@ -25,6 +25,10 @@ pub enum Overlap {
     Nesting,
     /// The pieces are on different storeys; they never meet in the building.
     CrossLevel,
+    /// A point of a project inside a piece, as designed: the water point in
+    /// the basin, the sewer under the toilet, the outlet behind the fridge
+    /// or set into a cabinet.
+    Served,
 }
 
 impl Overlap {
@@ -33,6 +37,7 @@ impl Overlap {
             Self::Collision => "collision",
             Self::Nesting => "nesting",
             Self::CrossLevel => "cross_level",
+            Self::Served => "served",
         }
     }
 
@@ -81,6 +86,9 @@ pub enum Issue {
     BlocksDoor { door: FurnitureId, by: FurnitureId },
     /// A piece is outside every room (only reported when rooms exist).
     OutsideRooms(FurnitureId),
+    /// A fixed point with nothing to be fixed to: loose in a room, on glass,
+    /// in an opening's span, hanging under the ceiling.
+    Loose { piece: FurnitureId, why: String },
     /// An appliance built into joinery that its host no longer holds: the
     /// niche was resized around it and nobody said anything, because a piece
     /// that is built in is excluded from every overlap check by design.
@@ -141,6 +149,7 @@ impl Issue {
             Self::OutsideRooms(f) | Self::LooseOpening(f) | Self::UnratedLight(f) => {
                 vec![(*f).into()]
             }
+            Self::Loose { piece, .. } => vec![(*piece).into()],
             Self::OutgrewNiche { piece, host, .. } => vec![(*piece).into(), (*host).into()],
             Self::Turned { piece, .. } | Self::UnclearFront { piece, .. } => {
                 vec![(*piece).into()]
@@ -167,6 +176,7 @@ impl Issue {
             Self::InWall(..) => "in_wall",
             Self::BlocksDoor { .. } => "blocks_door",
             Self::OutsideRooms(_) => "outside_rooms",
+            Self::Loose { .. } => "loose",
             Self::OutgrewNiche { .. } => "outgrew_niche",
             Self::LooseOpening(_) => "loose_opening",
             Self::Turned { .. } => "turned",
@@ -203,7 +213,8 @@ impl Issue {
     /// Whether an accepted key names a layout finding (and not an
     /// ergonomics one, which shares the project's list of acceptances).
     pub fn is_layout_key(key: &str) -> bool {
-        const FAMILIES: [&str; 11] = [
+        const FAMILIES: [&str; 12] = [
+            "loose",
             "unrated_light",
             "no_door",
             "unclear_front",
@@ -400,6 +411,8 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
             let extent = extent_of(&shared, a, b);
             let kind = if cross_level {
                 Overlap::CrossLevel
+            } else if let Some(kind) = point_in_piece(a, b) {
+                kind
             } else {
                 classify(a, b, area, extent, &footprints[i], &footprints[j])
             };
@@ -597,6 +610,20 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
             {
                 issues.push(Issue::UnratedLight(piece.id));
             }
+        }
+    }
+
+    // Fixed points with nothing to hold them, on the storey shown.
+    for (i, piece) in pieces.iter().enumerate() {
+        if levels[i] != home.current_level() || crate::mounting::mount_of(&piece.catalog).is_none()
+        {
+            continue;
+        }
+        if let Some(why) = crate::mounting::blocked(home, piece) {
+            issues.push(Issue::Loose {
+                piece: piece.id,
+                why,
+            });
         }
     }
 
@@ -810,6 +837,18 @@ fn extent_of(shared: &geo::MultiPolygon<f64>, a: &Furniture, b: &Furniture) -> [
     let ((a0, a1), (b0, b1)) = (a.height_range(), b.height_range());
     let z = (a1.min(b1) - a0.max(b0)).max(0.0);
     [plan[0], plan[1], z].map(|v| (v * 10.0).round() / 10.0)
+}
+
+/// When one of two overlapping pieces is a point of a project and the other
+/// is not, the point is where it was put on purpose: the water point in the
+/// basin, the sewer under the toilet, an outlet behind the fridge or set
+/// into a cabinet — a technique, not a clash. Loose points are said apart
+/// (`loose`), and whether a point can be set there by `mounting`.
+fn point_in_piece(a: &Furniture, b: &Furniture) -> Option<Overlap> {
+    match (a.discipline, b.discipline) {
+        (Some(_), None) | (None, Some(_)) => Some(Overlap::Served),
+        _ => None,
+    }
 }
 
 /// Is this overlap a defect, or is one piece simply built into the other?

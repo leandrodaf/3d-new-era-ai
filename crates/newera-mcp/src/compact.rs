@@ -486,7 +486,7 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
             ..
         } => 0,
         Issue::Overlap {
-            kind: Overlap::Nesting,
+            kind: Overlap::Nesting | Overlap::Served,
             ..
         } => 2,
         Issue::Overlap {
@@ -552,6 +552,14 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
                 ]),
             ),
             Issue::OutsideRooms(f) => push("outside_rooms", keyed(issue_ref(home, f.into()), &key)),
+            Issue::Loose { piece, why } => push(
+                "loose",
+                obj([
+                    ("key", json!(key)),
+                    ("piece", issue_ref(home, piece.into())),
+                    ("why", json!(why)),
+                ]),
+            ),
             Issue::LooseOpening(f) => push("loose_opening", keyed(issue_ref(home, f.into()), &key)),
             Issue::OutgrewNiche { piece, host, over } => push(
                 "outgrew_niche",

@@ -438,10 +438,10 @@ fn movable(f: &Furniture) -> bool {
         )
 }
 
-/// Why a wall point in its wall cannot be reached, if so: behind the leaf of
-/// a hinged door on its hinge side, or covered by a piece standing in front
-/// of it at its height — a wardrobe, a cabinet, a shelf. Appliances plug in
-/// behind themselves, and beds and seats leave an outlet behind within reach.
+/// Why a wall point in its wall is in the way, if so: behind the leaf of a
+/// hinged door on its hinge side. A point behind furniture or set into it is
+/// not a defect; a drain under a piece standing on the floor is, since it
+/// cannot be cleaned.
 pub fn hidden(home: &Home, piece: &Furniture) -> Option<String> {
     let view = home.level_view(home.current_level());
     if mount_of(&piece.catalog) == Some(Mount::Floor) {
@@ -480,100 +480,38 @@ pub fn hidden(home: &Home, piece: &Furniture) -> Option<String> {
         return None;
     }
     in_wall(&view, piece)?;
-    let (lo, hi) = (piece.elevation, piece.elevation + piece.height);
+    let lo = piece.elevation;
     for f in view
         .furniture
         .iter()
         .flat_map(Furniture::flatten)
         .filter(|f| f.id != piece.id)
     {
-        if let Some(opening) = f.opening.as_ref() {
-            if opening.kind == OpeningKind::Door && !opening.sliding && opening.leaves < 2 {
-                let (x, y) = f.to_local(piece.position);
-                let half = f.width / 2.0;
-                let beyond = if opening.hinge_right {
-                    x - half
-                } else {
-                    -half - x
-                };
-                if beyond > 0.0
-                    && beyond <= f.width
-                    && y.abs() <= f.depth / 2.0 + IN_WALL
-                    && lo < f.elevation + f.height
-                {
-                    return Some(format!(
-                        "{} {} fica atrás da folha aberta de {} ({}): ponha-o do lado da maçaneta.",
-                        piece.name, piece.id, f.name, f.id
-                    ));
-                }
-            }
-            continue;
-        }
-        if f.is_group() || f.discipline.is_some() || f.width.min(f.depth) <= 3.0 || f.height < 20.0
+        if let Some(opening) = f.opening.as_ref()
+            && opening.kind == OpeningKind::Door
+            && !opening.sliding
+            && opening.leaves < 2
         {
-            continue;
+            let (x, y) = f.to_local(piece.position);
+            let half = f.width / 2.0;
+            let beyond = if opening.hinge_right {
+                x - half
+            } else {
+                -half - x
+            };
+            if beyond > 0.0
+                && beyond <= f.width
+                && y.abs() <= f.depth / 2.0 + IN_WALL
+                && lo < f.elevation + f.height
+            {
+                return Some(format!(
+                    "{} {} fica atrás da folha aberta de {} ({}): ponha-o do lado da maçaneta.",
+                    piece.name, piece.id, f.name, f.id
+                ));
+            }
         }
-        let name = crate::annotations::fold(&f.name);
-        let free = [
-            "geladeira",
-            "refrigerador",
-            "maquina",
-            "lava",
-            "secadora",
-            "forno",
-            "micro",
-            "fogao",
-            "cooktop",
-            "tv",
-            "televis",
-            "coifa",
-            "cama",
-            "sofa",
-            "poltrona",
-            "cadeira",
-            "mesa",
-            "banco",
-            "puff",
-            "berco",
-        ]
-        .iter()
-        .any(|w| name.contains(w))
-            || matches!(
-                f.catalog.as_str(),
-                "fridge"
-                    | "washer"
-                    | "dryer"
-                    | "dishwasher"
-                    | "oven"
-                    | "microwave"
-                    | "stove"
-                    | "tv"
-                    | "hood"
-                    | "bed-single"
-                    | "bed-double"
-                    | "bed-queen"
-                    | "bed-king"
-                    | "sofa-2"
-                    | "sofa-3"
-                    | "sofa-l"
-                    | "armchair"
-                    | "chair"
-                    | "stool"
-                    | "crib"
-            );
-        if free {
-            continue;
-        }
-        let (flo, fhi) = f.height_range();
-        let mut near = f.clone();
-        near.width += 2.0;
-        near.depth += 2.0 * IN_WALL;
-        if near.contains(piece.position) && lo < fhi && hi > flo {
-            return Some(format!(
-                "{} {} fica escondido atrás de {} ({}): suba-o acima do móvel, tire-o de trás dele ou recorte o fundo.",
-                piece.name, piece.id, f.name, f.id
-            ));
-        }
+        // Behind or inside furniture is fine: an outlet behind a sofa, set
+        // into a cabinet or a countertop is a technique, not a defect.
     }
     None
 }
@@ -758,7 +696,7 @@ mod tests {
         outside.position = Point2::new(600.0, 150.0);
         assert!(seat(&home, &mut outside).is_err());
 
-        // Behind a wardrobe standing against the wall: hidden; above it, not.
+        // Behind a wardrobe or set into it: a technique, not a defect.
         home.furniture.push(Furniture {
             id: FurnitureId(50),
             catalog: "imported".into(),
@@ -769,18 +707,32 @@ mod tests {
             height: 220.0,
             ..Furniture::default()
         });
+        assert!(hidden(&home, &o).is_none());
+        assert!(blocked(&home, &o).is_none());
+
+        // check_layout: the outlet in the cabinet is served; a loose one is loose.
+        let mut outlet_piece = o.clone();
+        outlet_piece.discipline = Some(crate::style::Discipline::Electrical);
+        home.furniture.push(outlet_piece);
+        let mut floating = outlet(30.0, (200.0, 150.0));
+        floating.id = FurnitureId(70);
+        floating.discipline = Some(crate::style::Discipline::Electrical);
+        home.furniture.push(floating);
+        let issues = crate::analysis::check_layout(&home);
         assert!(
-            hidden(&home, &o)
-                .unwrap()
-                .contains("escondido atrás de Armário")
+            issues.iter().any(|i| matches!(
+                i,
+                crate::analysis::Issue::Overlap {
+                    kind: crate::analysis::Overlap::Served,
+                    ..
+                }
+            )),
+            "{issues:?}"
         );
-        let mut high = o.clone();
-        high.elevation = 230.0;
-        assert!(hidden(&home, &high).is_none());
-        home.furniture[0].name = "Geladeira".into();
         assert!(
-            hidden(&home, &o).is_none(),
-            "an appliance plugs in behind itself"
+            issues.iter().any(|i| matches!(i, crate::analysis::Issue::Loose { piece, .. } if *piece == FurnitureId(70))),
+            "{issues:?}"
         );
+        assert!(!issues.iter().any(|i| matches!(i, crate::analysis::Issue::Loose { piece, .. } if *piece == FurnitureId(10))));
     }
 }
