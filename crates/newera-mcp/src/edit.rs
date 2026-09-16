@@ -2251,7 +2251,14 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
             }
         }
         if let Some(why) = newera_core::mounting::blocked(context, &piece) {
-            return Err(why);
+            return Err(match newera_core::mounting::nearest_free(context, &piece) {
+                Some(free) => format!(
+                    "{why} O lugar livre mais próximo nesta parede: at=[{}, {}].",
+                    free.x.round(),
+                    free.y.round()
+                ),
+                None => why,
+            });
         }
         placed_here.push(piece.clone());
         ids.push(piece.id.to_string());

@@ -422,7 +422,8 @@ pub fn blocked(home: &Home, piece: &Furniture) -> Option<String> {
             piece.name, piece.id, wall.id
         ));
     }
-    view.furniture
+    let in_span = view
+        .furniture
         .iter()
         .flat_map(Furniture::flatten)
         .filter(|f| f.id != piece.id)
@@ -430,24 +431,126 @@ pub fn blocked(home: &Home, piece: &Furniture) -> Option<String> {
             let kind = f.opening.as_ref()?.kind;
             let mut span = f.clone();
             span.depth = span.depth.max(wall.thickness + 2.0 * IN_WALL);
+            // The frame and its trim take the first centimetres beside the
+            // span, and below a window its sill: the box keeps clear of both.
+            span.width += 2.0 * (JAMB_CLEAR + piece.width / 2.0);
             let top = if kind == OpeningKind::Passage {
                 f64::MAX
             } else {
-                f.elevation + f.height
+                f.elevation + f.height + SILL_CLEAR
             };
-            let overlaps = lo < top && hi > f.elevation;
+            let overlaps = lo < top && hi > f.elevation - SILL_CLEAR;
             (span.contains(piece.position) && overlaps).then(|| {
-                let what = match kind {
-                    OpeningKind::Door => "no vão da porta",
-                    OpeningKind::Window => "sobre o vidro da janela",
-                    OpeningKind::Passage => "no vão aberto",
+                let inside = {
+                    let mut bare = f.clone();
+                    bare.depth = span.depth;
+                    bare.contains(piece.position) && lo < f.elevation + f.height && hi > f.elevation
+                };
+                let what = match (kind, inside) {
+                    (OpeningKind::Door, true) => "no vão da porta",
+                    (OpeningKind::Window, true) => "sobre o vidro da janela",
+                    (OpeningKind::Passage, true) => "no vão aberto",
+                    (OpeningKind::Door | OpeningKind::Passage, false) => "colado ao batente da porta",
+                    (OpeningKind::Window, false) => "colado ao batente ou ao peitoril da janela",
                 };
                 format!(
-                    "{} {} está {what} {} ({}): não há parede ali para a caixa; mova-o para o lado do vão, ou abaixo do peitoril.",
-                    piece.name, piece.id, f.name, f.id
+                    "{} {} está {what} {} ({}): a caixa fica a pelo menos {} cm do vão, fora do batente e do alizar; mova-o para o lado ou abaixo do peitoril.",
+                    piece.name,
+                    piece.id,
+                    f.name,
+                    f.id,
+                    JAMB_CLEAR.round()
                 )
             })
+        });
+    if in_span.is_some() {
+        return in_span;
+    }
+    in_appliance(&view, piece)
+}
+
+/// How far a wall point's box keeps from a door or window span, cm: the frame
+/// and its trim (alizar, 5–7 cm) and the room to fit the plate beside them.
+pub const JAMB_CLEAR: f64 = 10.0;
+/// How far above or below a window's span a point keeps, cm: the sill.
+const SILL_CLEAR: f64 = 5.0;
+
+/// A point inside an appliance's body at its height: behind the fridge's
+/// shell, under the machine — no hand reaches it, and the plug has no room.
+fn in_appliance(view: &Home, piece: &Furniture) -> Option<String> {
+    let (lo, hi) = (piece.elevation, piece.elevation + piece.height);
+    view.furniture
+        .iter()
+        .flat_map(Furniture::flatten)
+        .filter(|f| f.id != piece.id && f.discipline.is_none() && f.opening.is_none() && is_appliance(f))
+        .find(|f| {
+            let (flo, fhi) = f.height_range();
+            f.contains(piece.position) && lo < fhi && hi > flo
         })
+        .map(|f| {
+            format!(
+                "{} {} está dentro de {} ({}): tomada de eletrodoméstico vai ao lado dele ou acima do seu topo ({} cm), onde a mão alcança.",
+                piece.name,
+                piece.id,
+                f.name,
+                f.id,
+                f.height_range().1.round()
+            )
+        })
+}
+
+/// Whether a piece is an appliance, by its catalog or its name.
+pub fn is_appliance(f: &Furniture) -> bool {
+    let name = crate::annotations::fold(&f.name);
+    matches!(
+        f.catalog.as_str(),
+        "fridge"
+            | "washer"
+            | "dryer"
+            | "dishwasher"
+            | "oven"
+            | "microwave"
+            | "stove"
+            | "hood"
+            | "tv"
+    ) || [
+        "geladeira",
+        "refrigerador",
+        "freezer",
+        "adega",
+        "maquina de lavar",
+        "lava e seca",
+        "lava-e-seca",
+        "lava-louca",
+        "lava louca",
+        "secadora",
+        "forno",
+        "micro-ondas",
+        "microondas",
+        "fogao",
+        "coifa",
+        "depurador",
+        "televis",
+    ]
+    .iter()
+    .any(|w| name.starts_with(w) || name.contains(&format!(" {w}")))
+}
+
+/// Where along its wall a refused point can go: the nearest place, within
+/// 1,5 m either way, that no opening, appliance or glass refuses.
+pub fn nearest_free(home: &Home, piece: &Furniture) -> Option<Point2> {
+    let view = home.level_view(home.current_level());
+    let wall = in_wall(&view, piece)?;
+    let (a, b) = (wall.start, wall.end);
+    let len = a.distance(b).max(1e-9);
+    let (ux, uy) = ((b.x - a.x) / len, (b.y - a.y) / len);
+    (1..=30).flat_map(|k| [k, -k]).find_map(|k| {
+        let step = f64::from(k) * 5.0;
+        let mut moved = piece.clone();
+        moved.position = Point2::new(piece.position.x + ux * step, piece.position.y + uy * step);
+        let t = (moved.position.x - a.x) * ux + (moved.position.y - a.y) * uy;
+        ((0.0..=len).contains(&t) && blocked(home, &moved).is_none()).then_some(moved.position)
+    })
 }
 
 fn in_wall<'a>(view: &'a Home, piece: &Furniture) -> Option<&'a crate::elements::Wall> {
@@ -923,5 +1026,78 @@ mod tests {
             "{issues:?}"
         );
         assert!(!issues.iter().any(|i| matches!(i, crate::analysis::Issue::Loose { piece, .. } if *piece == FurnitureId(10))));
+    }
+
+    #[test]
+    fn a_point_keeps_clear_of_door_frames_window_sills_and_appliances() {
+        let mut home = Home::default();
+        home.walls.push(Wall::new(
+            WallId(1),
+            Point2::new(0.0, 0.0),
+            Point2::new(600.0, 0.0),
+        ));
+        let mut door = Furniture {
+            id: FurnitureId(21),
+            catalog: "door".into(),
+            name: "Porta".into(),
+            position: Point2::new(300.0, 0.0),
+            width: 80.0,
+            depth: 15.0,
+            height: 210.0,
+            ..Furniture::default()
+        };
+        door.opening = Some(Opening::default());
+        let mut window = Furniture {
+            id: FurnitureId(22),
+            catalog: "window".into(),
+            name: "Janela".into(),
+            position: Point2::new(100.0, 0.0),
+            elevation: 110.0,
+            width: 120.0,
+            depth: 15.0,
+            height: 100.0,
+            ..Furniture::default()
+        };
+        window.opening = Some(Opening {
+            kind: OpeningKind::Window,
+            ..Opening::default()
+        });
+        home.furniture = vec![door, window];
+        // The door's edge is at 260: a box at 256 sits on its frame.
+        let framed = blocked(&home, &outlet(30.0, (253.0, 3.0))).unwrap();
+        assert!(framed.contains("batente da porta"), "{framed}");
+        assert!(
+            blocked(&home, &outlet(30.0, (240.0, 3.0))).is_none(),
+            "15 cm from the span"
+        );
+        // Under the sill at 110: a box at 100–110 is on the sill; at 30, fine.
+        assert!(
+            blocked(&home, &outlet(100.0, (100.0, 3.0)))
+                .unwrap()
+                .contains("peitoril")
+        );
+        assert!(blocked(&home, &outlet(30.0, (100.0, 3.0))).is_none());
+        // The nearest free place along the wall.
+        let free = nearest_free(&home, &outlet(30.0, (300.0, 3.0))).unwrap();
+        assert!((free.x - 300.0).abs() >= 55.0, "{free:?}");
+        assert!(blocked(&home, &outlet(30.0, (free.x, free.y))).is_none());
+
+        // Inside a washing machine standing against the wall: no.
+        home.furniture.push(Furniture {
+            id: FurnitureId(23),
+            catalog: "washer".into(),
+            name: "Máquina de lavar".into(),
+            position: Point2::new(450.0, 30.0),
+            width: 60.0,
+            depth: 60.0,
+            height: 85.0,
+            ..Furniture::default()
+        });
+        let inside = blocked(&home, &outlet(30.0, (450.0, 3.0))).unwrap();
+        assert!(inside.contains("dentro de Máquina de lavar"), "{inside}");
+        assert!(
+            blocked(&home, &outlet(110.0, (450.0, 3.0))).is_none(),
+            "above it"
+        );
     }
 }

@@ -1409,6 +1409,12 @@ mod tests {
         assert!(pane.message.contains("vidro da janela"), "{pane:?}");
         let door = place(r#"{"items":[{"cat":"switch","at":[300,3],"elev":30}]}"#).unwrap_err();
         assert!(door.message.contains("vão da porta"), "{door:?}");
+        // Beside the frame: refused, and the nearest free place is given.
+        let framed = place(r#"{"items":[{"cat":"outlet-low","at":[258,3]}]}"#).unwrap_err();
+        assert!(
+            framed.message.contains("batente") && framed.message.contains("at=["),
+            "{framed:?}"
+        );
         place(r#"{"items":[{"cat":"outlet-low","at":[100,3]}]}"#)
             .expect("under the sill is a wall");
     }
