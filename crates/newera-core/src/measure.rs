@@ -561,7 +561,8 @@ pub fn free_span(
 #[derive(Debug, Clone, PartialEq)]
 pub struct Clearance {
     pub dir: Dir,
-    /// Free centimeters from that face, capped at [`MAX_REACH`].
+    /// Free centimeters from that face, capped at [`MAX_REACH`]; negative
+    /// when what it faces reaches that far into the piece.
     pub cm: f64,
     /// `None` when nothing was found within reach.
     pub against: Option<Solid>,
@@ -652,8 +653,10 @@ pub fn clearance_against(solids: &[Obstacle], piece: &Furniture, dir: Dir, max: 
         } else {
             face - hi
         };
-        if d.max(0.0) < best {
-            best = d.max(0.0);
+        // Negative when it reaches past the face into the piece: touching
+        // and sitting 5 cm inside are opposite answers, not the same 0.
+        if d < best {
+            best = d;
             against = Some(o.what.clone());
             name.clone_from(&o.name);
         }
@@ -667,7 +670,7 @@ pub fn clearance_against(solids: &[Obstacle], piece: &Furniture, dir: Dir, max: 
 }
 
 /// Distance between two boxes along an axis: the gap between their facing
-/// sides, or `0` when they overlap along it.
+/// sides, or minus how far they overlap along it.
 pub fn gap(a: (Point2, Point2), b: (Point2, Point2), axis: Axis) -> f64 {
     let (a0, a1) = (axis.of(a.0), axis.of(a.1));
     let (b0, b1) = (axis.of(b.0), axis.of(b.1));
@@ -676,7 +679,7 @@ pub fn gap(a: (Point2, Point2), b: (Point2, Point2), axis: Axis) -> f64 {
     } else if a0 >= b1 {
         a0 - b1
     } else {
-        0.0
+        -(a1.min(b1) - a0.max(b0))
     }
 }
 
@@ -860,6 +863,36 @@ mod tests {
         let covered: f64 = spans.iter().filter(|s| !s.is_free()).map(Span::cm).sum();
         // 50 → 210 covered once, not 100 + 100 counted twice.
         assert!((covered - 160.0).abs() < 0.1, "{spans:?}");
+    }
+
+    #[test]
+    fn touching_and_sitting_inside_are_different_clearances() {
+        // Two stones side by side: 0 when they touch, minus the overlap when
+        // one is pushed 5.5 cm into the other — never the same number.
+        let mut home = Home::default();
+        home.furniture = vec![
+            piece(1, (50.0, 30.0), (100.0, 60.0, 90.0), 0.0),
+            piece(2, (130.0, 30.0), (60.0, 60.0, 90.0), 0.0),
+        ];
+        let left = Dir {
+            axis: Axis::X,
+            sign: -1.0,
+        };
+        let touching = clearance(&home, home.piece(FurnitureId(2)).unwrap(), left, MAX_REACH);
+        assert!(touching.cm.abs() < 0.05, "{touching:?}");
+        assert_eq!(touching.against, Some(Solid::Piece(FurnitureId(1))));
+
+        home.furniture[1].position.x -= 5.5;
+        let inside = clearance(&home, home.piece(FurnitureId(2)).unwrap(), left, MAX_REACH);
+        assert!((inside.cm + 5.5).abs() < 0.05, "{inside:?}");
+        assert_eq!(inside.against, Some(Solid::Piece(FurnitureId(1))));
+
+        let (a, b) = (
+            plan_bounds(home.piece(FurnitureId(1)).unwrap()),
+            plan_bounds(home.piece(FurnitureId(2)).unwrap()),
+        );
+        assert!((gap(a, b, Axis::X) + 5.5).abs() < 1e-9, "the tape agrees");
+        assert!((gap(b, a, Axis::X) + 5.5).abs() < 1e-9, "from either side");
     }
 
     #[test]
