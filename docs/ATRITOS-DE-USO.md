@@ -90,6 +90,47 @@ esgoto por louça, ralo em área molhada, caixa de gordura na cozinha, ramal
 chegando a cada ponto —, apoiado nas NBR 5626, 8160 e 13103, esta última já
 citada pelo `ergonomics`.
 
+## 45. Automação não existe no projeto elétrico
+
+O elétrico calcula bem o que é de norma. Testado na planta:
+
+```
+electrical(circuits)
+→ ["C5", ["TUG"], 4, 1900 VA, 127 V, 15,0 A, 2,5 mm², 16 A, DR true]
+   ["C8", ["TUE"], 1, 5500 VA, 220 V, 25,0 A, 4,0 mm², 25 A, DR true]
+   main_breaker: {a: 100, load_a: 90,4}
+```
+
+Bitola, disjuntor por circuito, DR onde há área molhada e disjuntor geral saem
+calculados. Uma carga dedicada é reconhecida sozinha: colocado um
+`shower-point`, o circuito virou TUE, passou a 220 V, subiu para 4,0 mm² e 25 A,
+e o geral foi de 80 para 100 A.
+
+O que não existe é a camada de automação. O catálogo `electrical` tem tomadas,
+interruptores, pontos de luz, quadros, rede, TV, Wi-Fi, campainha, ar e
+chuveiro — e mais nada:
+
+```
+catalog(q="rele automacao sonoff dimmer sensor") → {"items": []}
+```
+
+Numa reforma de hoje isso aparece antes da obra acabar: um relé atrás da
+luminária ou do interruptor, um interruptor inteligente, um dimmer, um sensor
+de presença no hall, uma fechadura eletrônica. Cada um desses muda o projeto de
+verdade — o relé precisa de neutro na caixa do interruptor, que a instalação
+antiga costuma não ter; o dimmer limita a carga que pode pendurar; o sensor
+quer altura e ângulo; e todos consomem em espera, o que entra no cálculo.
+
+Sem isso, o projeto sai "de norma" e ainda assim incompleto para quem vai
+morar: a decisão de automatizar acaba tomada na obra, com o eletricista, longe
+do desenho.
+
+**Deveria:** peças de automação no catálogo (relé, interruptor inteligente,
+dimmer, sensor de presença, fechadura), com o que cada uma exige — neutro na
+caixa, carga mínima e máxima, altura — entrando nas verificações como o resto
+já entra. E o `assign` aceitando o consumo de espera, para que apareça na carga
+total.
+
 ---
 
 ## Conferido nesta rodada
