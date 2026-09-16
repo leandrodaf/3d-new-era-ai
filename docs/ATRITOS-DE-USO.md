@@ -131,6 +131,53 @@ caixa, carga mínima e máxima, altura — entrando nas verificações como o re
 já entra. E o `assign` aceitando o consumo de espera, para que apareça na carga
 total.
 
+## 46. O ponto de Wi-Fi é um símbolo: não há cobertura, banda nem alimentação
+
+Colocado um access point no forro da sala:
+
+```
+place(cat="wifi-point", at=[300,600], elev=270)
+electrical(check) → points: {…, "Wi-Fi": 1}, findings: []
+```
+
+Ele é contado e mais nada. A peça guarda largura, altura, elevação e
+disciplina — nenhuma potência, nenhuma banda, nenhum padrão:
+
+```
+{catalog: "wifi-point", width: 16, depth: 16, height: 4,
+ elevation: 270, discipline: "electrical"}
+```
+
+Três perguntas que a planta não responde:
+
+**Onde pôr.** Qual cômodo cobre melhor os 65 m², quantos pontos são precisos,
+onde o sinal morre. A casa tem paredes de 11 a 20 cm, dois shafts de alvenaria
+e um box de vidro — cada um atenua de um jeito, e 2,4 GHz, 5 GHz e 6 GHz
+atravessam de forma bem diferente: a banda que dá velocidade é a que menos
+passa parede. Sem isso, decidir o lugar do roteador é chute.
+
+**O que ele precisa para funcionar.** O access point pediu, em silêncio, um
+cabo de dados e alimentação — PoE vindo do switch, ou uma tomada no forro. O
+`check` não cobrou nenhum dos dois, embora cobre cabo para cada ponto de rede e
+de TV (*"Pontos sem cabo chegando: f1555, f1550, f1567"*). O ponto de Wi-Fi
+ficou de fora dessa conta.
+
+**Com o que ele fala.** Não há onde registrar o padrão (Wi-Fi 5, 6, 6E, 7), a
+banda, o canal, nem se o backbone até ele é Cat 6 ou Cat 6A — que é o que
+decide se 6 GHz vale a pena.
+
+O contraste está dentro do próprio app: o `lighting` faz photometria de
+verdade — lança o fluxo de cada luminária, deixa as paredes fazerem sombra,
+soma a interreflexão e devolve lux e uniformidade por cômodo, contra a
+NBR 8995. Propagação de rádio com atenuação por parede é o mesmo problema, com
+outra constante; o motor que resolve um resolveria o outro.
+
+**Deveria:** `wifi-point` com padrão, banda e potência; uma cobertura por
+cômodo como a do `lighting` (dBm em vez de lux, atenuação por material da
+parede, por banda); o `check` cobrando cabo de dados e alimentação do access
+point como já cobra dos outros pontos; e o cabeamento sabendo distinguir Cat 6
+de Cat 6A, que é o que sustenta as bandas altas.
+
 ---
 
 ## Conferido nesta rodada
