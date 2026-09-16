@@ -2243,6 +2243,28 @@ mod tests {
     }
 
     #[test]
+    fn choosing_architecture_hides_the_electrical_project() {
+        let mut h = app_with_wall();
+        h.state()
+            .document
+            .write()
+            .choose_view(Some(newera_core::Discipline::Electrical));
+        h.run_steps(3);
+        h.get_by(|node| node.value().is_some_and(|v| v.contains("Elétrica")))
+            .click();
+        h.run_steps(3);
+        h.get_by_label_contains("Arquitetura").click();
+        h.run_steps(3);
+        let doc = h.state().document.read();
+        assert_eq!(doc.home().active_discipline, None);
+        assert!(
+            doc.home()
+                .hidden_disciplines
+                .contains(&newera_core::Discipline::Electrical)
+        );
+    }
+
+    #[test]
     fn the_layers_menu_hides_lighting_from_the_plan() {
         let mut h = app_with_wall();
         {
@@ -2259,16 +2281,32 @@ mod tests {
         h.run_steps(3);
         h.get_by_label_contains("Iluminação · 1").click();
         h.run_steps(3);
+        {
+            let doc = h.state().document.read();
+            assert!(
+                doc.home()
+                    .hidden_layers
+                    .contains(&newera_core::PlanLayer::Lighting)
+            );
+            assert_eq!(doc.home().furniture.len(), 1, "the piece is still there");
+            assert!(
+                !doc.home()
+                    .shown_in_3d(None, Some(newera_core::PlanLayer::Lighting)),
+                "and gone from the 3D too"
+            );
+        }
+        if h.query_by_label_contains("Mostrar tudo no 3D").is_none() {
+            h.get_by_label_contains("Camadas").click();
+            h.run_steps(3);
+        }
+        h.get_by_label_contains("Mostrar tudo no 3D").click();
+        h.run_steps(3);
         let doc = h.state().document.read();
+        assert!(doc.home().show_all_in_3d);
         assert!(
             doc.home()
-                .hidden_layers
-                .contains(&newera_core::PlanLayer::Lighting)
-        );
-        assert_eq!(
-            doc.home().furniture.len(),
-            1,
-            "the piece is still there, for the 3D"
+                .shown_in_3d(None, Some(newera_core::PlanLayer::Lighting)),
+            "shown all, it is back in 3D"
         );
     }
 

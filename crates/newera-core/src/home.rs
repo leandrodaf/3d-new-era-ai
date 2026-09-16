@@ -75,6 +75,10 @@ pub struct Home {
     /// Layers hidden from the plan drawing; the 3D keeps showing them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hidden_layers: Vec<crate::layers::PlanLayer>,
+    /// The 3D shows everything, ignoring hidden layers and projects: the
+    /// whole building at once. Off, the 3D hides what the plan hides.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub show_all_in_3d: bool,
     #[serde(default, skip_serializing_if = "Properties::is_empty")]
     pub properties: Properties,
     /// Next number handed out for any id. Monotonic, so ids an agent saw
@@ -109,6 +113,7 @@ impl Default for Home {
             active_discipline: None,
             hidden_disciplines: Vec::new(),
             hidden_layers: Vec::new(),
+            show_all_in_3d: false,
             annotations: crate::annotations::PlanAnnotations::default(),
             properties: Properties::new(),
             next_id: 1,
@@ -267,6 +272,18 @@ impl Home {
             .or_else(|| self.base_level())
     }
 
+    /// Whether a piece, a line or a note of this discipline and layer is
+    /// shown in 3D: what the plan shows, unless the 3D is set to show all.
+    pub fn shown_in_3d(
+        &self,
+        discipline: Option<crate::style::Discipline>,
+        layer: Option<crate::layers::PlanLayer>,
+    ) -> bool {
+        self.show_all_in_3d
+            || (discipline.is_none_or(|d| !self.hidden_disciplines.contains(&d))
+                && layer.is_none_or(|l| !self.hidden_layers.contains(&l)))
+    }
+
     /// The level currently shown and edited.
     pub fn current_level(&self) -> Option<LevelId> {
         self.resolve_level(self.selected_level)
@@ -367,6 +384,7 @@ impl Home {
             annotations: self.annotations,
             hidden_disciplines: self.hidden_disciplines.clone(),
             hidden_layers: self.hidden_layers.clone(),
+            show_all_in_3d: self.show_all_in_3d,
             properties: self.properties.clone(),
             next_id: self.next_id,
             polylines: self

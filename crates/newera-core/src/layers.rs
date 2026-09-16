@@ -94,7 +94,31 @@ const APPLIANCE_CATALOG: [&str; 9] = [
     "washer",
     "dryer",
 ];
-const APPLIANCE_WORDS: [&str; 16] = [
+/// Words that make a piece joinery even when it names an appliance: the
+/// separator above a cooktop's drawers, the stone over a dishwasher.
+const JOINERY_STRONG: [&str; 16] = [
+    "arremate",
+    "roda-teto",
+    "rodateto",
+    "montante",
+    "separador",
+    "moldura",
+    "gavet",
+    "tampo",
+    "bancada",
+    "peninsula",
+    "embutid",
+    "planejad",
+    "basculante",
+    "nicho",
+    "marcenaria",
+    "armario",
+];
+const APPLIANCE_WORDS: [&str; 20] = [
+    "tv ",
+    "televis",
+    "soundbar",
+    "subwoofer",
     "geladeira",
     "refrigerador",
     "freezer",
@@ -152,6 +176,9 @@ pub fn layer_of(piece: &Furniture) -> Option<PlanLayer> {
     if piece.light.is_some() || LIGHTING_CATALOG.contains(&catalog) || has(&LIGHTING_WORDS) {
         return Some(PlanLayer::Lighting);
     }
+    if has(&JOINERY_STRONG) {
+        return Some(PlanLayer::Joinery);
+    }
     if APPLIANCE_CATALOG.contains(&catalog) || has(&APPLIANCE_WORDS) {
         return Some(PlanLayer::Appliances);
     }
@@ -196,6 +223,39 @@ mod tests {
     }
 
     #[test]
+    fn choosing_architecture_shows_architecture_and_a_project_shows_itself() {
+        use crate::style::Discipline;
+        let mut doc = crate::Document::default();
+        doc.choose_view(Some(Discipline::Electrical));
+        assert_eq!(doc.home().active_discipline, Some(Discipline::Electrical));
+        assert!(
+            !doc.home()
+                .hidden_disciplines
+                .contains(&Discipline::Electrical)
+        );
+
+        doc.choose_view(None);
+        assert_eq!(doc.home().active_discipline, None);
+        assert!(
+            doc.home()
+                .hidden_disciplines
+                .contains(&Discipline::Electrical)
+        );
+        assert!(
+            doc.home()
+                .hidden_disciplines
+                .contains(&Discipline::Plumbing)
+        );
+        assert!(!doc.home().shown_in_3d(Some(Discipline::Electrical), None));
+
+        doc.set_show_all_in_3d(true);
+        assert!(
+            doc.home()
+                .shown_in_3d(Some(Discipline::Electrical), Some(PlanLayer::Joinery))
+        );
+    }
+
+    #[test]
     fn pieces_are_born_in_their_layer() {
         assert_eq!(
             layer_of(&piece(1, "pendant", "Pendente")),
@@ -222,6 +282,44 @@ mod tests {
             Some(PlanLayer::Joinery)
         );
         assert_eq!(layer_of(&piece(7, "sofa-3", "Sofá")), None);
+        // Names from a real plan.
+        for joinery in [
+            "Arremate em madeira junto ao teto",
+            "Roda-teto do vassoureiro — face do corredor",
+            "Mesa embutida — montante esquerdo fixo",
+            "Cooktop — separador superior dos gavetões",
+            "Península — pedra sobre lava-louças 60,5 cm",
+            "Tampo contínuo sobre lava e seca até fachada",
+            "Lavanderia — gavetões de roupas e cestos",
+            "Mesa basculante FECHADA — oliva",
+            "Armário 63,8 × 57 × 87 cm",
+        ] {
+            assert_eq!(
+                layer_of(&piece(20, "imported", joinery)),
+                Some(PlanLayer::Joinery),
+                "{joinery}"
+            );
+        }
+        for appliance in [
+            "LG WD18GNTS6BA — Lava e Seca 18 kg",
+            "Micro-ondas Brastemp BMG45AE",
+            "Cooktop Brastemp BDS62AE — 4 bocas",
+            "TV sala — fixada na parede sem pés",
+        ] {
+            assert_eq!(
+                layer_of(&piece(21, "imported", appliance)),
+                Some(PlanLayer::Appliances),
+                "{appliance}"
+            );
+        }
+        for neither in [
+            "Sofá Milano",
+            "Cadeira Dover",
+            "Box social — folhas de correr",
+            "Persiana integrada",
+        ] {
+            assert_eq!(layer_of(&piece(22, "imported", neither)), None, "{neither}");
+        }
 
         // Chosen by hand, it wins either way.
         let mut sofa = piece(8, "sofa-3", "Sofá");

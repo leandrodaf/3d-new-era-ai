@@ -48,6 +48,9 @@ pub(crate) struct AnnotationParams {
 pub(crate) struct DisciplineParams {
     /// `active` (default), `select`, `show`, `hide`, `quantities`.
     action: Option<String>,
+    /// Whether the 3D shows everything (true) or hides what the plan hides
+    /// (false). Applies with any action.
+    show_all_3d: Option<bool>,
     /// `electrical`, `plumbing` or `architecture`; for show/hide also a
     /// plan layer: `lighting`, `appliances` or `joinery`.
     d: Option<String>,
@@ -55,7 +58,7 @@ pub(crate) struct DisciplineParams {
 #[tool_router(router = annotations_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Electrical and plumbing projects over the plan. active (default) reports {active, hidden}. select {d: electrical|plumbing|architecture}: new symbols (catalog cat electrical/plumbing) and lines go there and the rest is dimmed. show/hide {d}, where d can also be a layer of the plan — lighting (lamps, spots, LED), appliances (fridge, stove, oven, hood, washer…) or joinery (cabinets, wardrobes, countertops): hidden from the plan and its exports only, the 3D keeps them. Pieces are in a layer by what they are, from the moment they are placed; update(layer=lighting|appliances|joinery|none) overrides it, and an empty layer goes back to the automatic one. active also reports layers {key:{pieces, hidden}}. quantities: {electrical:[[name,count]], plumbing:[...], lines_cm:{...}}."
+        description = "Electrical and plumbing projects over the plan. active (default) reports {active, hidden}. select {d: electrical|plumbing|architecture}: new symbols (catalog cat electrical/plumbing) and lines go there and the rest is dimmed. select architecture shows architecture: it hides the electrical and plumbing projects (show brings one back); select a project shows it with the architecture dimmed. The 3D follows the plan — hidden projects and layers leave it too — unless show_all_3d=true, which makes the 3D show everything. show/hide {d}, where d can also be a layer of the plan — lighting (lamps, spots, LED), appliances (fridge, stove, oven, hood, washer…) or joinery (cabinets, wardrobes, countertops): hidden from the plan, its exports and the 3D. Pieces are in a layer by what they are, from the moment they are placed; update(layer=lighting|appliances|joinery|none) overrides it, and an empty layer goes back to the automatic one. active also reports layers {key:{pieces, hidden}}. quantities: {electrical:[[name,count]], plumbing:[...], lines_cm:{...}}."
     )]
     pub(crate) fn disciplines(
         &self,
@@ -73,19 +76,19 @@ impl NewEraMcp {
                 )),
             }
         };
+        if let Some(all) = p.show_all_3d {
+            doc.set_show_all_in_3d(all);
+        }
         match p.action.as_deref().unwrap_or("active") {
             "active" => {}
             "select" => {
                 let d = parse(p.d.as_deref())?;
-                doc.set_active_discipline(d);
-                if let Some(d) = d {
-                    doc.set_discipline_visible(d, true);
-                }
+                doc.choose_view(d);
             }
             "show" | "hide" => {
                 let visible = p.action.as_deref() == Some("show");
                 // Layers of the plan — lighting, appliances, joinery — hide
-                // from the drawing only; the 3D keeps them.
+                // from the drawing and, unless it shows all, from the 3D.
                 if let Some(layer) = p.d.as_deref().and_then(newera_core::PlanLayer::parse) {
                     doc.set_layer_visible(layer, visible);
                 } else {
@@ -157,6 +160,7 @@ impl NewEraMcp {
             "active": home.active_discipline,
             "hidden": home.hidden_disciplines,
             "layers": layers,
+            "show_all_3d": home.show_all_in_3d,
         })
         .to_string())
     }
@@ -889,6 +893,7 @@ mod tests {
         s.disciplines(Parameters(DisciplineParams {
             action: Some("select".into()),
             d: Some("electrical".into()),
+            show_all_3d: None,
         }))
         .unwrap();
         let params: PlaceParams = serde_json::from_str(
@@ -905,6 +910,7 @@ mod tests {
             .disciplines(Parameters(DisciplineParams {
                 action: Some("quantities".into()),
                 d: None,
+                show_all_3d: None,
             }))
             .unwrap();
         assert!(q.contains(r#"["Tomada baixa (30 cm)",2]"#), "{q}");
@@ -1014,6 +1020,29 @@ mod tests {
         assert_eq!(active["layers"]["lighting"]["pieces"], 1, "{active}");
         assert_eq!(active["layers"]["appliances"]["pieces"], 1, "{active}");
         assert_eq!(active["layers"]["joinery"]["pieces"], 1, "{active}");
+
+        // Architecture shows architecture: the electrical project steps out,
+        // from the plan and the 3D, until it is chosen or shown again.
+        disciplines(r#"{"action":"select","d":"electrical"}"#);
+        let architecture = disciplines(r#"{"action":"select","d":"architecture"}"#);
+        assert_eq!(
+            architecture["active"],
+            serde_json::Value::Null,
+            "{architecture}"
+        );
+        assert!(
+            architecture["hidden"].to_string().contains("electrical"),
+            "{architecture}"
+        );
+        let all = disciplines(r#"{"show_all_3d":true}"#);
+        assert_eq!(all["show_all_3d"], true, "{all}");
+        assert!(
+            s.document
+                .read()
+                .home()
+                .shown_in_3d(Some(newera_core::Discipline::Electrical), None)
+        );
+        disciplines(r#"{"show_all_3d":false}"#);
 
         let hidden = disciplines(r#"{"action":"hide","d":"lighting"}"#);
         assert_eq!(hidden["layers"]["lighting"]["hidden"], true, "{hidden}");
@@ -1163,6 +1192,7 @@ mod tests {
         s.disciplines(Parameters(DisciplineParams {
             action: Some("select".into()),
             d: Some("electrical".into()),
+            show_all_3d: None,
         }))
         .unwrap();
         s.place(Parameters(

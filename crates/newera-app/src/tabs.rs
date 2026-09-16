@@ -206,6 +206,8 @@ fn layers(app: &mut NewEraApp, ui: &mut egui::Ui) {
         (home.hidden_layers.clone(), counts)
     };
     let mut toggle = None;
+    let mut all_3d = None;
+    let showing_all = app.document.read().home().show_all_in_3d;
     let title = if hidden.is_empty() {
         format!("{} {}", icon::STACK, crate::i18n::tr("Camadas"))
     } else {
@@ -235,14 +237,29 @@ fn layers(app: &mut NewEraApp, ui: &mut egui::Ui) {
                 toggle = Some((layer, visible));
             }
         }
+        ui.separator();
+        let mut all = showing_all;
+        if ui
+            .checkbox(
+                &mut all,
+                format!("{} {}", icon::CUBE, crate::i18n::tr("Mostrar tudo no 3D")),
+            )
+            .on_hover_text(crate::i18n::tr(
+                "Ligado, o 3D mostra a obra inteira; desligado, esconde o que a planta esconde",
+            ))
+            .changed()
+        {
+            all_3d = Some(all);
+        }
     })
     .response
-    .on_hover_text(crate::i18n::tr(
-        "Mostrar ou esconder na planta; no 3D tudo continua aparecendo",
-    ));
+    .on_hover_text(crate::i18n::tr("Mostrar ou esconder na planta e no 3D"));
     if let Some((layer, visible)) = toggle {
         app.document.write().set_layer_visible(layer, visible);
         app.plan.invalidate_scene();
+    }
+    if let Some(all) = all_3d {
+        app.document.write().set_show_all_in_3d(all);
     }
 }
 
@@ -316,10 +333,10 @@ fn disciplines(app: &mut NewEraApp, ui: &mut egui::Ui) {
             "Projeto em edição: novos símbolos e linhas vão para ele",
         ));
     if let Some(d) = choice {
-        app.document.write().set_active_discipline(d);
-        if let Some(d) = d {
-            app.document.write().set_discipline_visible(d, true);
-        }
+        // Architecture shows architecture; a project shows itself. The plan
+        // and the 3D follow.
+        app.document.write().choose_view(d);
+        app.plan.invalidate_scene();
     }
     if let Some((d, visible)) = toggle {
         app.document.write().set_discipline_visible(d, visible);

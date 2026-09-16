@@ -176,6 +176,33 @@ impl Document {
         }
     }
 
+    /// Switches the view: architecture, or one technical project.
+    ///
+    /// Architecture shows architecture — choosing it hides the electrical
+    /// and plumbing projects, which stay one checkbox away — and a technical
+    /// project is shown the moment it is chosen, with the architecture
+    /// stepping back behind it. The plan and the 3D follow the same view.
+    pub fn choose_view(&mut self, discipline: Option<crate::style::Discipline>) {
+        self.set_active_discipline(discipline);
+        match discipline {
+            None => {
+                for d in crate::style::Discipline::ALL {
+                    self.set_discipline_visible(d, false);
+                }
+            }
+            Some(d) => self.set_discipline_visible(d, true),
+        }
+    }
+
+    /// Makes the 3D show everything, or only what the plan shows.
+    pub fn set_show_all_in_3d(&mut self, all: bool) {
+        let home = &mut self.current_mut().home;
+        if home.show_all_in_3d != all {
+            home.show_all_in_3d = all;
+            self.revision += 1;
+        }
+    }
+
     /// Shows or hides a technical project.
     pub fn set_discipline_visible(&mut self, discipline: crate::style::Discipline, visible: bool) {
         let home = &mut self.current_mut().home;

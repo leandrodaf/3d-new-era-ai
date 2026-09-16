@@ -241,29 +241,28 @@ impl Mesh {
                 let selected = selection.contains(&ElementId::Wall(wall.id));
                 mesh.add_wall(&outline, wall, wall_cuts, base, selected);
             }
-            for line in view.polylines.iter().filter(|l| {
-                l.elevation.is_some()
-                    && l.discipline
-                        .is_none_or(|d| !home.hidden_disciplines.contains(&d))
-            }) {
+            // The 3D shows what the plan shows — the view chosen, the layers
+            // left on — unless it is set to show everything.
+            for line in view
+                .polylines
+                .iter()
+                .filter(|l| l.elevation.is_some() && home.shown_in_3d(l.discipline, None))
+            {
                 mesh.add_polyline(line, base);
             }
             for top in &view.furniture {
                 let highlight = selection.contains(&ElementId::Furniture(top.id));
-                if top
-                    .discipline
-                    .is_some_and(|d| home.hidden_disciplines.contains(&d))
-                {
+                if !home.shown_in_3d(top.discipline, None) {
                     continue;
                 }
-                for piece in top.visible_leaves() {
+                for piece in top.visible_leaves().into_iter().filter(|leaf| {
+                    home.shown_in_3d(leaf.discipline, newera_core::layer_in_group(top, leaf))
+                }) {
                     let local = models(piece).unwrap_or_else(|| newera_catalog::piece_mesh(piece));
                     mesh.add_piece(piece, &local, base, highlight);
                 }
             }
-            let shown = |d: Option<newera_core::Discipline>| {
-                d.is_none_or(|d| !home.hidden_disciplines.contains(&d))
-            };
+            let shown = |d: Option<newera_core::Discipline>| home.shown_in_3d(d, None);
             for label in view
                 .labels
                 .iter()
@@ -1284,6 +1283,43 @@ mod tests {
         let wall_end =
             holed.indices.len() - newera_catalog::piece_mesh(&home.furniture[0]).indices.len();
         assert!(!hits(&holed, 6..wall_end), "wall has a hole there");
+    }
+
+    #[test]
+    fn the_3d_hides_what_the_plan_hides_unless_it_shows_all() {
+        let mut home = wall_home();
+        let add = |home: &mut Home, catalog: &str, x: f64| {
+            let id = home.new_furniture_id();
+            let piece = newera_catalog::find(catalog)
+                .unwrap()
+                .instantiate(id, Point2::new(x, 200.0));
+            home.furniture.push(piece);
+        };
+        add(&mut home, "base-cabinet", 100.0);
+        add(&mut home, "fridge", 300.0);
+        add(&mut home, "outlet-low", 500.0);
+        let full = build(&home).vertices.len();
+        let count = |home: &Home| build(home).vertices.len();
+        let without = |home: &Home, catalog: &str| {
+            let mut other = home.clone();
+            other.furniture.retain(|f| f.catalog != catalog);
+            count(&other)
+        };
+
+        // Joinery hidden: the cabinet leaves the 3D, the rest stays.
+        let mut no_joinery = home.clone();
+        no_joinery.hidden_layers = vec![newera_core::PlanLayer::Joinery];
+        assert_eq!(count(&no_joinery), without(&home, "base-cabinet"));
+
+        // The electrical project hidden — the architecture view — takes its points out.
+        let mut architecture = home.clone();
+        architecture.hidden_disciplines = vec![newera_core::Discipline::Electrical];
+        assert_eq!(count(&architecture), without(&home, "outlet-low"));
+
+        // Showing all brings everything back, whatever is hidden.
+        no_joinery.hidden_disciplines = vec![newera_core::Discipline::Electrical];
+        no_joinery.show_all_in_3d = true;
+        assert_eq!(count(&no_joinery), full);
     }
 
     #[test]

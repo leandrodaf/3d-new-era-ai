@@ -150,8 +150,10 @@ fn english(pt: &str) -> Option<&'static str> {
         "Iluminação" => "Lighting",
         "Eletrodomésticos" => "Appliances",
         "Marcenaria" => "Joinery",
-        "Mostrar ou esconder na planta; no 3D tudo continua aparecendo" => {
-            "Show or hide on the plan; the 3D keeps showing everything"
+        "Mostrar ou esconder na planta e no 3D" => "Show or hide on the plan and in 3D",
+        "Mostrar tudo no 3D" => "Show everything in 3D",
+        "Ligado, o 3D mostra a obra inteira; desligado, esconde o que a planta esconde" => {
+            "On, the 3D shows the whole building; off, it hides what the plan hides"
         }
         "Enviar relatórios de erro" => "Send error reports",
         "Falhas e notas de uso vão para os desenvolvedores, sem o seu projeto, sem IP e sem nome da máquina." => {
