@@ -38,6 +38,7 @@ pub enum PointKind {
     Valve,
     GreaseTrap,
     InspectionBox,
+    Vent,
     WaterMeter,
     Gas,
 }
@@ -52,6 +53,7 @@ impl PointKind {
             Self::Valve => "Registro",
             Self::GreaseTrap => "Caixa de gordura",
             Self::InspectionBox => "Caixa de inspeção",
+            Self::Vent => "Ventilação",
             Self::WaterMeter => "Hidrômetro",
             Self::Gas => "Gás",
         }
@@ -66,6 +68,7 @@ impl PointKind {
             "valve" => Self::Valve,
             "grease-trap" => Self::GreaseTrap,
             "inspection-box" => Self::InspectionBox,
+            "vent-pipe" => Self::Vent,
             "water-meter" => Self::WaterMeter,
             "gas-point" => Self::Gas,
             _ => return None,
@@ -96,6 +99,7 @@ pub enum Fixture {
     Washer,
     LaundrySink,
     Dishwasher,
+    Bidet,
 }
 
 impl Fixture {
@@ -109,6 +113,7 @@ impl Fixture {
             Self::Washer => "máquina de lavar",
             Self::LaundrySink => "tanque",
             Self::Dishwasher => "lava-louças",
+            Self::Bidet => "bidê",
         }
     }
 
@@ -116,27 +121,39 @@ impl Fixture {
     fn takes_hot(self) -> bool {
         matches!(
             self,
-            Self::Basin | Self::KitchenSink | Self::Shower | Self::Bathtub
+            Self::Basin | Self::KitchenSink | Self::Shower | Self::Bathtub | Self::Bidet
         )
     }
 
     /// Whether a floor drain (a trap box) may take its waste instead of a
-    /// sewer point of its own.
+    /// sewer point of its own: basins, bidets, tubs and showers of the same
+    /// unit (NBR 8160 4.2.2.3), and a laundry sink, whose 40 mm branch fits
+    /// the box's inlets. A washing machine's 50 mm branch does not: it takes
+    /// its own point with a trap (4.2.2.6, 5.1.1.1 b).
     fn drains_to_floor(self) -> bool {
         matches!(
             self,
-            Self::Basin | Self::Shower | Self::Bathtub | Self::Washer | Self::LaundrySink
+            Self::Basin | Self::Shower | Self::Bathtub | Self::LaundrySink | Self::Bidet
         )
     }
 
-    /// The smallest discharge branch, mm, as the installers' tables from
-    /// NBR 8160 give it: 100 for a toilet, 50 for a kitchen sink or a
-    /// machine, 40 for the rest.
+    /// Hunter's contribution units, NBR 8160 table 3.
+    pub fn uhc(self) -> u32 {
+        match self {
+            Self::Toilet => 6,
+            Self::KitchenSink | Self::Washer | Self::LaundrySink => 3,
+            Self::Shower | Self::Bathtub | Self::Dishwasher => 2,
+            Self::Basin | Self::Bidet => 1,
+        }
+    }
+
+    /// The smallest discharge branch, mm, NBR 8160 table 3: 100 for a
+    /// toilet, 50 for a kitchen sink or a machine, 40 for the rest.
     pub fn sewer_mm(self) -> u32 {
         match self {
             Self::Toilet => 100,
             Self::KitchenSink | Self::Washer | Self::Dishwasher => 50,
-            Self::Basin | Self::Shower | Self::Bathtub | Self::LaundrySink => 40,
+            Self::Basin | Self::Shower | Self::Bathtub | Self::LaundrySink | Self::Bidet => 40,
         }
     }
 
@@ -183,6 +200,8 @@ impl Fixture {
             Some(Self::Dishwasher)
         } else if starts(&["maquina de lavar", "lava e seca", "lava-e-seca", "lavadora"]) {
             Some(Self::Washer)
+        } else if starts(&["bide"]) {
+            Some(Self::Bidet)
         } else if starts(&["tanque"]) {
             Some(Self::LaundrySink)
         } else {
@@ -339,11 +358,29 @@ pub fn served_by(home: &Home, at: Point2) -> Option<Fixture> {
         .map(|(x, _)| x)
 }
 
-/// The discharge diameter a sewer point takes, mm: its fixture's, a trap box
-/// for a floor drain (outlet 50), and 50 when nothing says.
+/// The UHC a floor drain's trap box receives: the fixtures of its room that
+/// may drain into it.
+pub fn drain_uhc(home: &Home, point: &Point) -> u32 {
+    let view = home.level_view(home.current_level());
+    let Some(room) = point
+        .room
+        .and_then(|id| view.rooms.iter().find(|r| r.id == id))
+    else {
+        return 0;
+    };
+    fixtures(home)
+        .iter()
+        .filter(|(x, f)| x.drains_to_floor() && inside(&room.points, f.position))
+        .map(|(x, _)| x.uhc())
+        .sum()
+}
+
+/// The discharge diameter a sewer point takes, mm: its fixture's; for a
+/// floor drain, its outlet by the UHC it receives (NBR 8160 table 4: 50 up
+/// to 6, 75 above); and 50 when nothing says.
 pub fn sewer_mm(home: &Home, point: &Point) -> u32 {
     if point.kind == PointKind::Drain {
-        return 50;
+        return if drain_uhc(home, point) <= 6 { 50 } else { 75 };
     }
     let name = crate::annotations::fold(&point.name);
     if name.contains("vaso") || name.contains("bacia") {
@@ -352,8 +389,8 @@ pub fn sewer_mm(home: &Home, point: &Point) -> u32 {
     served_by(home, point.at).map_or(50, Fixture::sewer_mm)
 }
 
-/// Minimum slope of a horizontal sewer pipe, per unit: 2 % up to 75 mm, 1 %
-/// above.
+/// Minimum slope NBR 8160 4.2.3.2 recommends for a horizontal sewer pipe,
+/// per unit: 2 % up to 75 mm, 1 % from 100.
 pub fn slope(mm: u32) -> f64 {
     if mm <= 75 { 0.02 } else { 0.01 }
 }
@@ -433,24 +470,64 @@ pub fn check(home: &Home) -> Vec<Finding> {
             });
         }
     }
-    // A bathroom's wet floor drains through a trap box.
+    // Every bathroom, kitchen, copa and laundry takes water off its floor
+    // (São Paulo's sanitary code, Decreto 12.342/78 art. 15 II); where there
+    // is a shower or a tub it is a trap box (NBR 8160).
     for room in view.rooms.iter().filter(|r| r.points.len() >= 3) {
-        let wet = fixtures.iter().any(|(x, f)| {
-            matches!(x, Fixture::Shower | Fixture::Bathtub) && inside(&room.points, f.position)
-        });
-        if wet
-            && !all
-                .iter()
-                .any(|p| p.kind == PointKind::Drain && p.room == Some(room.id))
-        {
+        let name = crate::annotations::fold(&room.name);
+        let wet_name = [
+            "banh",
+            "wc",
+            "lavabo",
+            "sanitario",
+            "cozinha",
+            "copa",
+            "lavanderia",
+            "servico",
+        ]
+        .iter()
+        .any(|w| name.contains(w));
+        let in_room: Vec<Fixture> = fixtures
+            .iter()
+            .filter(|(_, f)| inside(&room.points, f.position))
+            .map(|(x, _)| *x)
+            .collect();
+        let showers = in_room
+            .iter()
+            .any(|x| matches!(x, Fixture::Shower | Fixture::Bathtub));
+        let drains: Vec<&Point> = all
+            .iter()
+            .filter(|p| p.kind == PointKind::Drain && p.room == Some(room.id))
+            .collect();
+        let place = format!("{} {}", room.name, room.id);
+        if (wet_name || !in_room.is_empty()) && drains.is_empty() {
             out.push(Finding {
                 key: format!("plumb:drain:{}", room.id),
                 accepted: None,
                 severity: Severity::Alerta,
-                place: format!("{} {}", room.name, room.id),
-                message:
-                    "Sem ralo: a área do box pede um ralo sifonado, que também recebe o lavatório."
-                        .into(),
+                place: place.clone(),
+                message: if showers {
+                    "Sem ralo: a área do box pede um ralo sifonado (caixa sifonada), que também recebe o lavatório.".into()
+                } else {
+                    "Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).".into()
+                },
+                source: if showers { "nbr8160" } else { "coe-municipal" },
+            });
+        }
+        let uhc: u32 = in_room
+            .iter()
+            .filter(|x| x.drains_to_floor())
+            .map(|x| x.uhc())
+            .sum();
+        if !drains.is_empty() && uhc > 15 {
+            out.push(Finding {
+                key: format!("plumb:drain-load:{}", room.id),
+                accepted: None,
+                severity: Severity::Alerta,
+                place,
+                message: format!(
+                    "{uhc} UHC para a caixa sifonada: acima de 15 nenhuma caixa de 150 mm atende; divida entre duas caixas ou leve aparelhos a ramais próprios."
+                ),
                 source: "nbr8160",
             });
         }
@@ -461,9 +538,83 @@ pub fn check(home: &Home) -> Vec<Finding> {
             accepted: None,
             severity: Severity::Dica,
             place: "Pia de cozinha".into(),
-            message: "Sem caixa de gordura: numa casa ela fica entre a pia e a rede; em prédio costuma ser a coletiva do térreo — se for o caso, aceite com esse motivo.".into(),
+            message: "Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.".into(),
             source: "nbr8160",
         });
+    }
+    // Vents: at least one pipe carried above the roof, and every trap
+    // within table 1's distance of one (NBR 8160 4.3.11).
+    let traps: Vec<&Point> = all
+        .iter()
+        .filter(|p| matches!(p.kind, PointKind::Sewer | PointKind::Drain))
+        .collect();
+    let vents: Vec<&Point> = all.iter().filter(|p| p.kind == PointKind::Vent).collect();
+    if !traps.is_empty() && vents.is_empty() {
+        out.push(Finding {
+            key: "plumb:vent".into(),
+            accepted: None,
+            severity: Severity::Alerta,
+            place: "Esgoto".into(),
+            message: "Sem ventilação: o esgoto pede ao menos um tubo ventilador prolongado acima da cobertura (em prédio, a coluna de ventilação no shaft); sem ele os fechos hídricos se rompem e o cheiro volta.".into(),
+            source: "nbr8160",
+        });
+    }
+    if !vents.is_empty() {
+        for trap in &traps {
+            let mm = sewer_mm(home, trap);
+            let limit = match mm {
+                0..=40 => 100.0,
+                41..=50 => 120.0,
+                51..=75 => 180.0,
+                _ => 240.0,
+            };
+            let nearest = vents
+                .iter()
+                .map(|v| v.at.distance(trap.at))
+                .fold(f64::MAX, f64::min);
+            if nearest > limit {
+                out.push(Finding {
+                    key: format!("plumb:vent-far:{}", trap.id),
+                    accepted: None,
+                    severity: Severity::Dica,
+                    place: format!("{} {}", trap.name, trap.id),
+                    message: format!(
+                        "A {} cm do tubo ventilador mais próximo: um ramal de {mm} mm pede ventilação a até {} cm (em linha reta; confira pelo percurso).",
+                        nearest.round(),
+                        limit.round()
+                    ),
+                    source: "nbr8160",
+                });
+            }
+        }
+    }
+    let boxes: Vec<&Point> = all
+        .iter()
+        .filter(|p| p.kind == PointKind::InspectionBox)
+        .collect();
+    if !boxes.is_empty() {
+        for p in all.iter().filter(|p| {
+            matches!(p.kind, PointKind::Drain | PointKind::GreaseTrap)
+                || (p.kind == PointKind::Sewer && sewer_mm(home, p) >= 100)
+        }) {
+            let nearest = boxes
+                .iter()
+                .map(|b| b.at.distance(p.at))
+                .fold(f64::MAX, f64::min);
+            if nearest > 1000.0 {
+                out.push(Finding {
+                    key: format!("plumb:inspection-far:{}", p.id),
+                    accepted: None,
+                    severity: Severity::Alerta,
+                    place: format!("{} {}", p.name, p.id),
+                    message: format!(
+                        "A {} m da caixa de inspeção: vaso, caixa sifonada e caixa de gordura ficam a até 10 m de um dispositivo de inspeção.",
+                        crate::electrical::decimal(nearest / 100.0)
+                    ),
+                    source: "nbr8160",
+                });
+            }
+        }
     }
     // The premises: where the water comes from and where the sewer goes.
     if all
@@ -596,17 +747,21 @@ pub fn refuses(pipe: Pipe, via: Via) -> Option<&'static str> {
     }
 }
 
-/// The height a sewer run needs under the floor, cm: the fall of its longest
-/// branch at its slope, the pipe itself and 2 cm to lay it on.
-pub fn sewer_depth(route: &Route, trunk_mm: u32) -> f64 {
-    let longest = route
+/// The height a sewer run needs under the floor, cm: the largest fall of a
+/// branch — its whole length at its own diameter's slope, which is on the
+/// safe side where it joins a larger trunk —, the trunk pipe itself and 2 cm
+/// to lay it on. `sizes` are the points' diameters, in the route's order.
+pub fn sewer_depth(route: &Route, sizes: &[u32]) -> f64 {
+    let trunk = sizes.iter().copied().max().unwrap_or(50);
+    let fall = route
         .terminals
         .iter()
         .zip(&route.reach)
         .skip(1)
-        .map(|(t, cm)| cm - t.z.max(0.0) - route.terminals[0].z.max(0.0))
+        .zip(sizes)
+        .map(|((t, cm), mm)| (cm - t.z.max(0.0) - route.terminals[0].z.max(0.0)) * slope(*mm))
         .fold(0.0, f64::max);
-    let cm = longest * slope(trunk_mm) + f64::from(trunk_mm) / 10.0 + 2.0;
+    let cm = fall + f64::from(trunk) / 10.0 + 2.0;
     (cm * 10.0).round() / 10.0
 }
 
@@ -661,7 +816,7 @@ pub fn materials(
                     "Tubo CPVC 22 mm (água quente)",
                     3.0,
                     "CPVC 22 mm",
-                    "Conector CPVC 22 mm × 1/2\" com rosca metálica",
+                    "Joelho 90° de transição CPVC 22 mm × 1/2\"",
                 ),
             };
             let metres = metres(route.length() * 1.1);
@@ -675,7 +830,7 @@ pub fn materials(
             out.push(item(format!("Tê {size}"), route.branches as f64, "un"));
             out.push(item(thread.into(), n as f64, "un"));
             out.push(item(
-                format!("Registro de gaveta {size} (um por ambiente)"),
+                format!("Registro de gaveta {size} (um por ambiente: boa prática; a NBR 5626 exige ao menos um antes dos sub-ramais de um ambiente sanitário)"),
                 rooms.max(1) as f64,
                 "un",
             ));
@@ -710,8 +865,10 @@ pub fn materials(
             }
             let mut bars = horizontal;
             for (mm, cm) in &by_mm {
+                // Machines and sinks discharge hot water: série reforçada.
+                let series = if *mm == 50 { "reforçada" } else { "normal" };
                 out.push(item(
-                    format!("Tubo PVC esgoto série normal {mm} mm (descidas aos pontos)"),
+                    format!("Tubo PVC esgoto série {series} {mm} mm (descidas aos pontos)"),
                     metres(*cm),
                     "m",
                 ));
@@ -729,10 +886,24 @@ pub fn materials(
             if source_split > 0 {
                 *junctions.entry(trunk).or_default() += source_split;
             }
+            // A Y is not made smaller than 50: a 40 mm branch joins through
+            // a 50 Y and a 50 × 40 bushing.
+            let mut bushings = 0;
             for (mm, count) in junctions {
+                let branch = mm.max(50);
                 out.push(item(
-                    format!("Junção simples 45° (Y) {trunk} × {mm} mm"),
+                    format!("Junção simples 45° (Y) {} × {branch} mm", trunk.max(50)),
                     count as f64,
+                    "un",
+                ));
+                if mm < 50 {
+                    bushings += count;
+                }
+            }
+            if bushings > 0 {
+                out.push(item(
+                    "Bucha de redução longa 50 × 40 mm".into(),
+                    bushings as f64,
                     "un",
                 ));
             }
@@ -765,16 +936,18 @@ pub fn materials(
                     "un",
                 ));
             }
-            let drains = points
-                .iter()
-                .filter(|(k, _)| *k == PointKind::Drain)
-                .count();
-            if drains > 0 {
-                out.push(item(
-                    "Caixa sifonada 150×150×50 mm com grelha".into(),
-                    drains as f64,
-                    "un",
-                ));
+            for (size, outlet) in [("150×150×50", 50), ("150×185×75", 75)] {
+                let drains = points
+                    .iter()
+                    .filter(|(k, mm)| *k == PointKind::Drain && *mm == outlet)
+                    .count();
+                if drains > 0 {
+                    out.push(item(
+                        format!("Caixa sifonada {size} mm com grelha"),
+                        drains as f64,
+                        "un",
+                    ));
+                }
             }
             out.push(item(
                 "Pasta lubrificante para junta elástica 400 g".into(),
@@ -1007,13 +1180,17 @@ mod tests {
         );
         let sizes: Vec<(PointKind, u32)> =
             ends.iter().map(|p| (p.kind, sewer_mm(&home, p))).collect();
-        let depth = sewer_depth(&route, 100);
-        // 1 % over the longest branch, the 10 cm pipe and 2 cm under it.
+        let mms: Vec<u32> = sizes.iter().map(|(_, mm)| *mm).collect();
+        let depth = sewer_depth(&route, &mms);
+        // The drain's 50 mm branch falls at 2 %, more than the toilet's at 1 %:
+        // the depth follows it, plus the 10 cm trunk and 2 cm under it.
         let longest = route.reach.iter().copied().fold(0.0, f64::max);
         assert!(
-            depth >= 12.0 && depth <= longest * 0.01 + 12.1,
+            depth > 12.0 && depth <= longest * 0.02 + 12.1,
             "{depth} for {longest}"
         );
+        let trunk_only = sewer_depth(&route, &[100, 100]);
+        assert!(depth > trunk_only, "{depth} > {trunk_only}");
         let bill = materials(&route, Pipe::Sewer, &sizes, 1);
         let text = format!("{bill:?}");
         assert!(text.contains("série normal 100 mm (ramal)"), "{bill:#?}");
@@ -1060,5 +1237,106 @@ mod tests {
         assert_eq!(get("Tê PVC"), route.branches as f64);
         assert_eq!(get("Registro de gaveta"), 1.0);
         assert!(get("Barras de 6 m") * 6.0 >= get("Tubo PVC soldável 25 mm"));
+    }
+
+    #[test]
+    fn the_norm_texts_hold_washer_floor_drains_vents_trap_boxes_and_inspection() {
+        let mut home = bathroom();
+        // A laundry with a washing machine: its 50 mm branch never goes to a
+        // floor drain, and the room takes water off its floor (SP code).
+        home.rooms.push(Room::new(
+            RoomId(12),
+            "Lavanderia",
+            vec![
+                Point2::new(0.0, 300.0),
+                Point2::new(200.0, 300.0),
+                Point2::new(200.0, 450.0),
+                Point2::new(0.0, 450.0),
+            ],
+        ));
+        home.furniture.extend([
+            piece(50, "washer", "Máquina", (50.0, 400.0), (60.0, 60.0, 85.0)),
+            point(51, "floor-drain", "Ralo lavanderia", (60.0, 430.0), 0.0),
+            point(52, "cold-water", "AF máquina", (50.0, 440.0), 90.0),
+        ]);
+        let keys = |home: &Home| check(home).into_iter().map(|f| f.key).collect::<Vec<_>>();
+        let k = keys(&home);
+        assert!(
+            k.contains(&"plumb:sewer:f50".to_owned()),
+            "a floor drain does not take the washer: {k:?}"
+        );
+        assert!(!k.contains(&"plumb:drain:r12".to_owned()), "{k:?}");
+
+        let mut kitchen = Home::default();
+        kitchen.rooms.push(Room::new(
+            RoomId(3),
+            "Cozinha",
+            vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(300.0, 0.0),
+                Point2::new(300.0, 300.0),
+                Point2::new(0.0, 300.0),
+            ],
+        ));
+        let dry = check(&kitchen);
+        let drain = dry
+            .iter()
+            .find(|f| f.key == "plumb:drain:r3")
+            .expect("a kitchen with no drain");
+        assert_eq!(drain.source, "coe-municipal", "{drain:?}");
+
+        // Vents: none at all, then one too far from a 40 mm trap.
+        let mut home = bathroom();
+        home.furniture.extend([
+            point(30, "sewer", "Esgoto vaso", (50.0, 10.0), 0.0),
+            point(34, "floor-drain", "Ralo", (150.0, 200.0), 0.0),
+            point(36, "inspection-box", "CI", (0.0, 125.0), 0.0),
+        ]);
+        assert!(keys(&home).contains(&"plumb:vent".to_owned()));
+        home.furniture
+            .push(point(37, "vent-pipe", "TV", (40.0, 5.0), 0.0));
+        let k = keys(&home);
+        assert!(!k.contains(&"plumb:vent".to_owned()), "{k:?}");
+        assert!(
+            k.contains(&"plumb:vent-far:f34".to_owned()),
+            "the drain is 2 m from the vent: {k:?}"
+        );
+        assert!(
+            !k.contains(&"plumb:vent-far:f30".to_owned()),
+            "the toilet is within 2,4 m: {k:?}"
+        );
+
+        // The trap box grows with its load: basin 1 + shower 2 + tub 2 + bidet 1
+        // + laundry sink 3 = 9 UHC takes a 75 mm outlet.
+        home.furniture.extend([
+            piece(
+                60,
+                "bathtub",
+                "Banheira",
+                (100.0, 150.0),
+                (70.0, 150.0, 55.0),
+            ),
+            piece(61, "imported", "Bidê", (100.0, 60.0), (36.0, 50.0, 40.0)),
+            piece(
+                62,
+                "laundry-sink",
+                "Tanque",
+                (30.0, 150.0),
+                (50.0, 50.0, 85.0),
+            ),
+        ]);
+        let drain = points(&home)
+            .into_iter()
+            .find(|p| p.id == FurnitureId(34))
+            .unwrap();
+        assert_eq!(drain_uhc(&home, &drain), 9);
+        assert_eq!(sewer_mm(&home, &drain), 75);
+
+        // Inspection within 10 m.
+        home.furniture.retain(|f| f.id != FurnitureId(36));
+        home.furniture
+            .push(point(36, "inspection-box", "CI", (1300.0, 125.0), 0.0));
+        let k = keys(&home);
+        assert!(k.contains(&"plumb:inspection-far:f30".to_owned()), "{k:?}");
     }
 }

@@ -231,6 +231,7 @@ pub enum PointSymbol {
     Valve,
     GreaseTrap,
     InspectionBox,
+    VentPipe,
     WaterMeter,
     Gas,
 }
@@ -1593,6 +1594,15 @@ pub static CATALOG: &[CatalogItem] = &[
         [150, 150, 145],
         Model::Point(PointSymbol::GreaseTrap),
         "caixa gordura grease trap",
+    ),
+    item(
+        "vent-pipe",
+        "Tubo de ventilação",
+        C::Plumbing,
+        [10.0, 10.0, 10.0],
+        [120, 90, 60],
+        Model::Point(PointSymbol::VentPipe),
+        "tubo ventilacao ventilador coluna respiro esgoto vent",
     ),
     item(
         "inspection-box",

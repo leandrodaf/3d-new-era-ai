@@ -339,6 +339,12 @@ fn point_symbol(s: &mut Sym, symbol: crate::PointSymbol, size: f64) {
             s.line(square, true, true);
             s.line(rect(-r * 0.7, -r * 0.7, r * 0.7, r * 0.7), true, false);
         }
+        P::VentPipe => {
+            // A ring with a cross: the vent stack seen from above.
+            s.line(circle(0.0, 0.0, r * 0.7), true, true);
+            s.line(vec![(-r, 0.0), (r, 0.0)], false, true);
+            s.line(vec![(0.0, -r), (0.0, r)], false, true);
+        }
         P::WaterMeter => {
             s.fill(circle(0.0, 0.0, r), false);
             s.line(circle(0.0, 0.0, r), true, true);

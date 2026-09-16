@@ -222,6 +222,9 @@ impl NewEraMcp {
             })
             .collect();
         let trunk = sizes.iter().map(|(_, mm)| *mm).max().unwrap_or(50);
+        let feeds_toilet = wanted
+            .iter()
+            .any(|pt| plumbing::served_by(home, pt.at) == Some(plumbing::Fixture::Toilet));
         let laid: Vec<(Via, routing::Route)> = [Via::Ceiling, Via::Floor, Via::Wall]
             .into_iter()
             .map(|via| (via, routing::lay_out(&view, source, &points, via, storey)))
@@ -250,7 +253,8 @@ impl NewEraMcp {
             if pipe == Pipe::Sewer
                 && let Some(depth) = p.depth
             {
-                let needs = plumbing::sewer_depth(route, trunk);
+                let mms: Vec<u32> = sizes.iter().map(|(_, mm)| *mm).collect();
+                let needs = plumbing::sewer_depth(route, &mms);
                 if needs > depth {
                     return Some(format!(
                         "o ramal precisa de {needs} cm sob o piso ({trunk} mm com caimento de {} %) e há {depth}: aproxime os pontos da prumada, divida em ramais, ou aumente o rebaixo",
@@ -357,10 +361,16 @@ impl NewEraMcp {
             "materials": bill.iter().map(|m| serde_json::json!([m.item, m.quantity, m.unit])).collect::<Vec<_>>(),
             "rev": doc.revision(),
         });
+        if pipe == Pipe::Cold && feeds_toilet {
+            reply["notes"] = serde_json::json!([
+                "25 mm vale para bacia com caixa acoplada; válvula de descarga pede ramal exclusivo de 50 mm (1½\") e reservatório ou pressão que a atenda."
+            ]);
+        }
         if pipe == Pipe::Sewer {
             reply["trunk_mm"] = serde_json::json!(trunk);
             reply["slope_pct"] = serde_json::json!(plumbing::slope(trunk) * 100.0);
-            reply["needs_depth_cm"] = serde_json::json!(plumbing::sewer_depth(&route, trunk));
+            let mms: Vec<u32> = sizes.iter().map(|(_, mm)| *mm).collect();
+            reply["needs_depth_cm"] = serde_json::json!(plumbing::sewer_depth(&route, &mms));
         }
         Ok(reply.to_string())
     }
