@@ -9,11 +9,52 @@ use super::NewEraMcp;
 use super::reply::invalid;
 use crate::compact;
 
+/// Who lives there, as far as this call says; the rest is the project's.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct People {
+    /// People living in the home (default 2).
+    occupants: Option<u32>,
+    /// Of them, children (sleep in single beds or cribs).
+    children: Option<u32>,
+    /// Of them, elderly people.
+    elderly: Option<u32>,
+    /// Someone uses a wheelchair: NBR 9050 turning space, doors and reach.
+    wheelchair: Option<bool>,
+    /// Height of the main cook, cm, to size the countertop (default 165).
+    stature: Option<f64>,
+    /// City whose building code applies for this call only, e.g.
+    /// `sao-paulo`; `set_home(city=…)` keeps it with the project.
+    city: Option<String>,
+}
+
+impl People {
+    fn given(&self) -> bool {
+        self.occupants.is_some()
+            || self.children.is_some()
+            || self.elderly.is_some()
+            || self.wheelchair.is_some()
+            || self.stature.is_some()
+    }
+
+    /// The project's people with what this call says on top.
+    fn over(&self, home: &newera_core::Home) -> newera_ergonomics::Profile {
+        let kept = newera_ergonomics::Profile::of(home);
+        newera_ergonomics::Profile {
+            occupants: self.occupants.unwrap_or(kept.occupants),
+            children: self.children.unwrap_or(kept.children),
+            elderly: self.elderly.unwrap_or(kept.elderly),
+            wheelchair: self.wheelchair.unwrap_or(kept.wheelchair),
+            stature: self.stature.or(kept.stature),
+            city: self.city.clone(),
+        }
+    }
+}
+
 /// Who lives there, plus what has already been looked at.
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct ErgonomicsParams {
     #[serde(flatten)]
-    pub(crate) profile: newera_ergonomics::Profile,
+    pub(crate) people: People,
     /// Findings already analysed: `[[key, reason]]`. They keep showing, with
     /// the reason, and stop costing score. An empty reason takes it back.
     #[serde(default)]
@@ -47,9 +88,27 @@ fn round2(v: f64) -> f64 {
 #[tool_router(router = check_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Ergonomics and habitability review for the people living there. It never blocks anything: it reads the drawing and says what it finds, and the drawing stays the user's — somebody sketching to learn or to see an idea is not stopped by a standard. (occupants, children, elderly, wheelchair, stature cm, city): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen (work triangle, counter heights, Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. Reply {score, capacity, findings:[{sev, place, msg, key, weight, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. weight is what the score would gain if that one went away, so a score that moved can be read; key names the finding for accept. src is the source the finding stands on, empty when it is common practice; resolve it in sources instead of asking. tier is the reliability ladder A obliges (Brazilian standard, municipal code) · B references (foreign standard) · C doctrine · D measured · E survey — and it is why a finding is an error or only a tip. fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap). city, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against a standard the more restrictive one wins — set it once with set_home(city=…) so dry runs and check_layout weigh the same rules. accept=[[key, reason]] marks findings already looked at: they stay in the report with their reason and stop costing score, which is what lets a correct plan reach zero pendencies honestly; accept=[[key, empty]] takes it back. orphaned [[key, reason]] lists acceptances no current finding answers to, on any storey, for these people — the problem was fixed, and would come back already silenced; prune=true drops them."
+        description = "Ergonomics and habitability review for the people living there. It never blocks anything: it reads the drawing and says what it finds, and the drawing stays the user's — somebody sketching to learn or to see an idea is not stopped by a standard. (occupants, children, elderly, wheelchair, stature cm, city; the people given are kept with the project and used when a later call or a dry run gives none, so a dry run's score is the one this review gives): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen (work triangle, counter heights, Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. Reply {score, capacity, findings:[{sev, place, msg, key, weight, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. weight is what the score would gain if that one went away, so a score that moved can be read; key names the finding for accept. src is the source the finding stands on, empty when it is common practice; resolve it in sources instead of asking. tier is the reliability ladder A obliges (Brazilian standard, municipal code) · B references (foreign standard) · C doctrine · D measured · E survey — and it is why a finding is an error or only a tip. fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap). city, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against a standard the more restrictive one wins — set it once with set_home(city=…) so dry runs and check_layout weigh the same rules. accept=[[key, reason]] marks findings already looked at: they stay in the report with their reason and stop costing score, which is what lets a correct plan reach zero pendencies honestly; accept=[[key, empty]] takes it back. orphaned [[key, reason]] lists acceptances no current finding answers to, on any storey, for these people — the problem was fixed, and would come back already silenced; prune=true drops them."
     )]
     pub(crate) fn ergonomics(&self, Parameters(p): Parameters<ErgonomicsParams>) -> String {
+        let profile = p.people.over(self.document.read().home());
+        if p.people.given() {
+            // The people a review is conducted for become the project's, so
+            // the next dry run scores for them too.
+            let mut doc = self.document.write();
+            let kept = newera_ergonomics::Profile {
+                city: None,
+                ..profile.clone()
+            };
+            if newera_ergonomics::Profile::of(doc.home()) != kept {
+                let mut properties = doc.home().properties.clone();
+                properties.insert(
+                    newera_ergonomics::PEOPLE.to_owned(),
+                    serde_json::to_string(&kept).unwrap_or_default(),
+                );
+                let _ = doc.execute(newera_core::Command::SetProperties { properties });
+            }
+        }
         if !p.accept.is_empty() || p.prune {
             let mut doc = self.document.write();
             let mut accepted = doc.home().accepted.clone();
@@ -61,7 +120,7 @@ impl NewEraMcp {
                 };
             }
             if p.prune {
-                for (key, _) in newera_ergonomics::orphaned(doc.home(), &p.profile) {
+                for (key, _) in newera_ergonomics::orphaned(doc.home(), &profile) {
                     accepted.remove(&key);
                 }
             }
@@ -70,8 +129,8 @@ impl NewEraMcp {
             }
         }
         let doc = self.document.read();
-        let report = newera_ergonomics::review(doc.home(), &p.profile);
-        let orphaned: Vec<[String; 2]> = newera_ergonomics::orphaned(doc.home(), &p.profile)
+        let report = newera_ergonomics::review(doc.home(), &profile);
+        let orphaned: Vec<[String; 2]> = newera_ergonomics::orphaned(doc.home(), &profile)
             .into_iter()
             .map(|(key, why)| [key, why])
             .collect();
@@ -276,6 +335,57 @@ mod tests {
         let bg = doc.home().background.as_ref().unwrap();
         assert!(!bg.visible && (bg.opacity - 0.2).abs() < 1e-9);
     }
+    #[test]
+    fn a_dry_run_scores_for_the_people_the_review_is_for() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}],"rooms":[{"name":"Quarto","at":[200,150]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(r#"{"items":[{"cat":"bed-double","wall":"w1","along":90}]}"#)
+                .unwrap(),
+        ))
+        .unwrap();
+        let review = |json: &str| -> serde_json::Value {
+            serde_json::from_str(&s.ergonomics(Parameters(serde_json::from_str(json).unwrap())))
+                .unwrap()
+        };
+        let for_two = review("{}")["score"].as_u64().unwrap();
+        let for_four = review(r#"{"occupants":4,"children":1}"#)["score"]
+            .as_u64()
+            .unwrap();
+        assert_ne!(for_two, for_four, "four people need more beds");
+        assert_eq!(
+            review("{}")["score"].as_u64().unwrap(),
+            for_four,
+            "the people stay with the project"
+        );
+
+        // A dry run that moves the score starts from the review's number.
+        let bed = s.document.read().home().furniture[0].id.to_string();
+        let dry: serde_json::Value = serde_json::from_str(
+            &s.move_elements(Parameters(
+                serde_json::from_str(&format!(
+                    r#"{{"ids":["{bed}"],"dx":100,"dy":0,"dry":true}}"#
+                ))
+                .unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(dry["score"][0].as_u64(), Some(for_four), "{dry}");
+
+        // And a call can still ask about someone else, which then sticks.
+        assert_eq!(
+            review(r#"{"occupants":2,"children":0}"#)["score"].as_u64(),
+            Some(for_two)
+        );
+    }
+
     #[test]
     fn an_acceptance_outliving_its_finding_is_listed_and_can_be_pruned() {
         let s = server();

@@ -223,7 +223,9 @@ pub(super) fn preview_with(
         object.insert("issues_changed".to_owned(), serde_json::json!(changed));
     }
 
-    let profile = newera_ergonomics::Profile::default();
+    // Scored for the people the project is reviewed for, so the number is
+    // the one the review gives and not the score of two default occupants.
+    let profile = newera_ergonomics::Profile::of(&before);
     let (was, now) = (
         newera_ergonomics::review(&before, &profile),
         newera_ergonomics::review(&after, &profile),

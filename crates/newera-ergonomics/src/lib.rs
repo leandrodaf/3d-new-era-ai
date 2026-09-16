@@ -73,6 +73,24 @@ impl Default for Profile {
     }
 }
 
+/// Where the project keeps who lives there, as JSON in its properties.
+pub const PEOPLE: &str = "ergonomics:people";
+
+impl Profile {
+    /// The people the project was last reviewed for, or the defaults.
+    ///
+    /// A dry run scores a change for someone, and a score for two occupants
+    /// cannot be compared with the 91 of a review conducted for three: the
+    /// people belong to the project, like its city.
+    #[must_use]
+    pub fn of(home: &Home) -> Self {
+        home.properties
+            .get(PEOPLE)
+            .and_then(|raw| serde_json::from_str(raw).ok())
+            .unwrap_or_default()
+    }
+}
+
 /// How much a finding matters.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
