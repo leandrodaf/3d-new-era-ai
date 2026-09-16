@@ -681,9 +681,10 @@ pub(crate) struct UpdateSpec {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gap: Option<f64>,
     /// Furniture: `true` fixed joinery (a top that can host a built-in
-    /// outlet), `false` free-standing, when its name does not say.
+    /// outlet), `false` free-standing, when its name does not say; `""`
+    /// takes the declaration back and lets the name decide again.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub fixed: Option<bool>,
+    pub fixed: Option<Fixed>,
     /// Move the element to this level id (e.g. `lv2`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub level: Option<String>,
@@ -1028,9 +1029,18 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                     f.properties
                         .insert(newera_core::guard::GAP_KEY.into(), gap.to_string());
                 }
-                if let Some(fixed) = spec.fixed {
-                    f.properties
-                        .insert(newera_core::mounting::FIXED_KEY.into(), fixed.to_string());
+                match &spec.fixed {
+                    Some(Fixed::Declared(fixed)) => {
+                        f.properties
+                            .insert(newera_core::mounting::FIXED_KEY.into(), fixed.to_string());
+                    }
+                    Some(Fixed::Cleared(raw)) if raw.trim().is_empty() => {
+                        f.properties.remove(newera_core::mounting::FIXED_KEY);
+                    }
+                    Some(Fixed::Cleared(raw)) => {
+                        return Err(format!("fixed: true, false, or \"\" to clear (not {raw})"));
+                    }
+                    None => {}
                 }
                 Element::Furniture(f)
             }
@@ -1117,6 +1127,14 @@ pub(crate) fn rename(doc: &mut Document, spec: &RenameSpec) -> EditResult<()> {
 /// Fields a part of a group takes on its own: what it is called and what it
 /// is, never where it is or how big — the group owns that and rebuilds it.
 const PART_FIELDS: [&str; 6] = ["id", "name", "brand", "model_name", "url", "layer"];
+
+/// A piece declared fixed or free-standing, or `""` to clear it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub(crate) enum Fixed {
+    Declared(bool),
+    Cleared(String),
+}
 
 /// Puts a piece in a plan layer by hand, or back in the one it is in by itself.
 fn set_layer(piece: &mut newera_core::Furniture, raw: &str) -> EditResult<()> {

@@ -287,6 +287,16 @@ pub(crate) fn piece(
     if !f.visible {
         v["visible"] = json!(false);
     }
+    // Declared fixed or free-standing (`update fixed`), so the change is seen.
+    match f
+        .properties
+        .get(newera_core::mounting::FIXED_KEY)
+        .map(String::as_str)
+    {
+        Some("true") => v["fixed"] = json!(true),
+        Some("false") => v["fixed"] = json!(false),
+        _ => {}
+    }
     // Which jamb a hinged leaf turns on: a flip of it is a change, and a dry
     // run that answered `{}` for one looked like a flip that did nothing.
     // Always said, true or false: a flip read as `true → null` looked like

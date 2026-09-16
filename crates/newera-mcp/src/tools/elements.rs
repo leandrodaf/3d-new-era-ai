@@ -82,11 +82,22 @@ fn unchanged(
         .flatten()
         .filter_map(|c| c.as_str().or_else(|| c["id"].as_str()).map(str::to_owned))
         .collect();
+    // The compact form leaves out what it does not draw (a piece's
+    // properties, like `piece:fixed`): the piece itself says if it changed.
+    let piece = |home: &newera_core::Home, id: newera_core::ElementId| match id {
+        newera_core::ElementId::Furniture(f) => home
+            .find_piece(f)
+            .and_then(|p| serde_json::to_value(p).ok()),
+        _ => None,
+    };
     asked
         .iter()
         .filter(|id| !moved.contains(*id))
         .filter_map(|raw| {
             let id: newera_core::ElementId = raw.parse().ok()?;
+            if piece(before, id) != piece(after, id) {
+                return None;
+            }
             let now = crate::compact::element(after, id)?;
             Some(serde_json::json!({"id": raw, "now": now}))
         })
@@ -535,6 +546,43 @@ mod tests {
             applied.contains("unchanged") && applied.contains("already had"),
             "{applied}"
         );
+    }
+
+    #[test]
+    fn declaring_a_piece_fixed_is_said_as_a_change_and_can_be_taken_back() {
+        let s = server();
+        s.place(Parameters(
+            serde_json::from_str(r#"{"items":[{"cat":"chair","at":[100,100]}]}"#).unwrap(),
+        ))
+        .unwrap();
+        let id = s.document.read().home().furniture[0].id.to_string();
+        let set = |fixed: &str| {
+            s.update(Parameters(UpdateParams {
+                items: serde_json::from_str(&format!(r#"[{{"id":"{id}","fixed":{fixed}}}]"#))
+                    .unwrap(),
+                rename: None,
+                v: None,
+                dry: None,
+            }))
+        };
+        let prop = || {
+            s.document.read().home().furniture[0]
+                .properties
+                .get(newera_core::mounting::FIXED_KEY)
+                .cloned()
+        };
+        let reply = set("true").unwrap();
+        assert!(
+            !reply.contains("unchanged") && reply.contains("\"fixed\""),
+            "{reply}"
+        );
+        assert_eq!(prop().as_deref(), Some("true"));
+        let reply = set("true").unwrap();
+        assert!(reply.contains("unchanged"), "asked again: {reply}");
+        let reply = set(r#""""#).unwrap();
+        assert!(!reply.contains("unchanged"), "{reply}");
+        assert_eq!(prop(), None, "cleared");
+        assert!(set(r#""maybe""#).is_err());
     }
 
     #[test]
