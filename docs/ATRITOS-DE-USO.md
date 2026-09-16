@@ -37,19 +37,21 @@ Nada anotado ainda.
 
 ---
 
-## Ainda de pé da rodada anterior
+## Corrigidos, a conferir em uso
 
 Enviados pelo `feedback`; o texto completo está em
-`git show 87083ec:docs/ATRITOS-DE-USO.md`.
+`git show 87083ec:docs/ATRITOS-DE-USO.md`. Corrigidos no código, com teste que
+reproduz o caso; saem daqui quando conferidos na planta.
 
-| # | O que dói | Onde | Reproduz com |
+| # | O que doía | Corrigido em | Conferir com |
 |---|---|---|---|
-| 32 | Cômodo sem porta não entra em relatório nenhum — um dormitório lacrado ainda tira nota 99 | `check_layout`, `ergonomics` | `delete` da porta do quarto, depois `check_layout()` |
-| 34 | `hinge_right` responde ok e não faz nada, e é o que o erro do `blocks_door` recomenda | `update` | `update(hinge_right=true)` numa porta, e reler a peça |
+| 32 | Cômodo sem porta não entrava em relatório nenhum — um dormitório lacrado tirava nota 99 | `3f63d0e`: `ergonomics` dá erro "Sem acesso" e `check_layout` traz `no_door` (cômodo e vãos); sala, cozinha e varanda abertas não entram | `delete` da porta do quarto, depois `check_layout()` e `ergonomics()` |
+| 34 | `hinge_right` respondia ok e parecia não fazer nada | `e82752e`: a porta já estava com `hinge_right: true`; agora o `update` lista em `unchanged` o que já tinha o valor pedido, com o valor atual, e o `blocks_door` diz o valor a usar | `update(hinge_right=<o valor que a porta já tem>)` |
 
-Sem como reproduzir agora: o `fix` que tirava a lava-louças do nicho e melhorava
-a nota (a planta não oferece `fix` hoje), e as anotações que sumiram uma vez
-sem que comando nenhum mencionasse.
+Os que não se reproduziam: o `fix` que tirava a lava-louças do nicho deixou de
+ser oferecido quando a peça perde o encosto do nicho (`187cf25`); e toda
+escrita, dry run, undo e lote pelo REST passaram a nomear mudanças nas
+anotações e nas properties (`afc3d42`), para que um sumiço não passe calado.
 
 ## O que já caiu
 
