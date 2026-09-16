@@ -20,10 +20,17 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
-      # Outside the clone, so the script takes the release download path.
+      # A clone is a developer's machine: found there, the script builds the
+      # source in hand instead of downloading, and it looks for one next to
+      # itself as well as in the current folder. So the installer is copied
+      # out of the clone first — that is the script people actually run, the
+      # one that comes down a pipe with no source code anywhere near it, and
+      # the release download path is the one being tested here.
+      - name: The installer, away from the clone
+        run: cp "$GITHUB_WORKSPACE/scripts/install-macos.sh" "$RUNNER_TEMP/"
       - name: Install
         working-directory: ${{ runner.temp }}
-        run: bash "$GITHUB_WORKSPACE/scripts/install-macos.sh" < /dev/null
+        run: bash ./install-macos.sh < /dev/null
       - name: Check
         run: |
           app="$HOME/Applications/3D New Era AI.app"
@@ -37,11 +44,11 @@ jobs:
         working-directory: ${{ runner.temp }}
         env:
           NEWERA_LANG: pt_BR
-        run: bash "$GITHUB_WORKSPACE/scripts/install-macos.sh" < /dev/null | tee out.txt && grep -q "já instalado" out.txt
+        run: bash ./install-macos.sh < /dev/null | tee out.txt && grep -q "já instalado" out.txt
       - name: Uninstall
         working-directory: ${{ runner.temp }}
         run: |
-          bash "$GITHUB_WORKSPACE/scripts/install-macos.sh" --uninstall
+          bash ./install-macos.sh --uninstall
           test ! -e "$HOME/Applications/3D New Era AI.app"
 
   windows:
