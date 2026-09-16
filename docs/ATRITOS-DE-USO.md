@@ -190,6 +190,50 @@ os comandos abaixo, na mesma planta.
 | 44 | `plumbing()` e `plumbing(action="route", kind="cold"\|"hot"\|"sewer")` | Numa cópia desta planta o check dá 4 pendências reais: os dois lavatórios sem água quente, a premissa do esgoto (caixa de inspeção ou tubo de queda) e a caixa de gordura. O `route` de água fria sai com tubo, barras, tês, joelhos e registro por ambiente; o de esgoto só por baixo do piso, com caimento, junção 45° (Y) em vez de tê, e com `depth` recusa rebaixo raso dizendo quanto precisa. (`3440f64`, `e96c598`) |
 | 45 (parte) | `electrical(action="circuits")` com o chuveiro | O `main_breaker: {a: 100, load_a: 90,4}` monofásico não sai mais: a carga escolhe o fornecimento, `{a, phases, load_a_per_phase}` — um circuito de 220 V numa rede de 127 V já pede duas fases. (`1f02f28`) |
 
+## 47. O quadro não tem capacidade, e a proteção para no disjuntor
+
+O quadro de distribuição da planta guarda só o tamanho da caixa:
+
+```
+{catalog: "electrical-panel", width: 40, depth: 10, height: 60, elevation: 150}
+```
+
+Nenhuma capacidade em módulos DIN — e nada cobra isso. Levados os circuitos de
+7 para 10, um ponto em cada novo:
+
+```
+electrical(circuits) → 10 circuitos, main_breaker 80 A, e mais nada
+```
+
+Nenhuma menção ao quadro. Ninguém somou o que aquilo ocupa: dez disjuntores
+monopolares valem dez módulos, cada DR bipolar vale dois — os cinco da planta,
+dez —, e o geral mais dois. São 22 módulos numa caixa de 40 × 60, que na
+prática comporta de 24 a 32 conforme o modelo. Estamos no limite e o desenho
+não sabe.
+
+Isso não é detalhe de acabamento: é o que decide se o quadro previsto na
+parede serve ou se vai virar um segundo quadro na obra — com parede aberta,
+alimentador novo e o lugar já ocupado por outra coisa. E é uma decisão que muda
+conforme o projeto cresce: cada carga dedicada que entra come dois módulos.
+
+**A proteção também para cedo.** O que já sai calculado é bom: disjuntor por
+circuito, bitola, DR onde há molhado, disjuntor geral que subiu sozinho de 80
+para 100 A quando entrou um chuveiro. O que não existe:
+
+- **DPS**, que a NBR 5410 exige na entrada em boa parte dos casos — não há no
+  catálogo nem no cálculo
+- **aterramento**: esquema (TN-S, TT), barramento de terra, condutor de
+  proteção por circuito — nada disso aparece
+- **capacidade de interrupção** do disjuntor em kA, que depende do curto
+  presumido no ponto de entrega
+- **seletividade** entre o geral e os parciais, para que uma falta no chuveiro
+  não apague a casa
+
+**Deveria:** o `electrical-panel` ter capacidade em módulos, e `circuits`
+somar o que os dispositivos ocupam, avisando quando não cabe — no mesmo tom do
+`no_door`, que hoje diz que um cômodo ficou sem acesso. E a proteção seguir
+até onde a norma vai: DPS, aterramento, kA e seletividade.
+
 ---
 
 ## Conferido nesta rodada
