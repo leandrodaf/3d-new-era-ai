@@ -28,6 +28,11 @@ pub(crate) struct CheckParams {
     /// Storey to check: an id like `lv3`, or `all` for every storey that is
     /// not a reference layer. Default: the storey being shown.
     pub(crate) level: Option<String>,
+    /// Pairs already looked at: `[[key, reason]]`, key as the report names
+    /// it (`overlap:f817+f830`, or just `f817+f830`). An empty reason takes
+    /// it back.
+    #[serde(default)]
+    pub(crate) accept: Vec<Vec<String>>,
 }
 /// A server on an empty document, for the domain modules' tests.
 fn round2(v: f64) -> f64 {
@@ -87,12 +92,26 @@ impl NewEraMcp {
         .to_string()
     }
     #[tool(
-        description = "Layout problems: overlap, blocked, in_wall, blocks_door, turned, loose_opening, outgrew_niche, outside_rooms; {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing."
+        description = "Layout problems: overlap, blocked, in_wall, blocks_door, turned, loose_opening, outgrew_niche, outside_rooms; {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. Overlap rows carry their key; any other finding is keyed family:ids sorted (in_wall:f3+w1). accept=[[key, reason]] marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed under accepted {key, kind, why, extent} with its reason, kept in the project; accept=[[key, \"\"]] takes it back. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing."
     )]
     pub(crate) fn check_layout(
         &self,
         Parameters(p): Parameters<CheckParams>,
     ) -> Result<String, ErrorData> {
+        if !p.accept.is_empty() {
+            let mut doc = self.document.write();
+            let mut accepted = doc.home().accepted.clone();
+            for pair in &p.accept {
+                let key =
+                    newera_core::Issue::normalize_key(pair.first().map_or("", String::as_str));
+                match pair.get(1).map(|why| why.trim()) {
+                    None | Some("") => accepted.remove(&key),
+                    Some(why) => accepted.insert(key, why.to_owned()),
+                };
+            }
+            doc.execute(newera_core::Command::SetAccepted { accepted })
+                .map_err(super::reply::core)?;
+        }
         let doc = self.document.read();
         let (view, scope) = match p.level.as_deref() {
             Some("all") => (doc.home().clone(), newera_core::Storeys::All),
@@ -170,6 +189,7 @@ mod tests {
             &s.check_layout(Parameters(CheckParams {
                 areas: Some([("sala".to_owned(), 10.0), ("Cozinha".to_owned(), 8.0)].into()),
                 level: None,
+                accept: Vec::new(),
             }))
             .unwrap(),
         )
@@ -220,6 +240,80 @@ mod tests {
         let doc = s.document.read();
         let bg = doc.home().background.as_ref().unwrap();
         assert!(!bg.visible && (bg.opacity - 0.2).abs() < 1e-9);
+    }
+    #[test]
+    fn a_clash_looked_at_can_be_accepted_with_its_reason() {
+        let s = server();
+        // A 70 cm sink model whose box is a whole stone, 5.4 cm over the
+        // dishwasher in the niche beside it: the drawing is right, the box
+        // is not the piece.
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"box","name":"cuba","at":[35,30],"w":70,"d":60,"h":92},
+                             {"cat":"box","name":"lava-louças","at":[94.5,30],"w":59.8,"d":58,"h":85}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let (sink, washer) = {
+            let doc = s.document.read();
+            let f = &doc.home().furniture;
+            (f[0].id.to_string(), f[1].id.to_string())
+        };
+        let check = |json: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.check_layout(Parameters(serde_json::from_str(json).unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        let pending = |doc: &newera_core::Document| {
+            newera_core::check_layout(doc.home())
+                .iter()
+                .filter(|i| i.is_pending(doc.home()))
+                .count()
+        };
+        let report = check("{}");
+        let clash = &report["overlap"][0];
+        assert_eq!(clash["kind"], "collision", "{report}");
+        let key = format!("overlap:{sink}+{washer}");
+        assert_eq!(clash["key"], key.as_str(), "{report}");
+        assert_eq!(pending(&s.document.read()), 1);
+
+        // Accepted by the pair written either way round.
+        let report = check(&format!(
+            r#"{{"accept":[["{washer}+{sink}","caixa do modelo; a cuba cabe no nicho"]]}}"#
+        ));
+        assert!(report.get("overlap").is_none(), "{report}");
+        assert!(report.get("overlap_kinds").is_none(), "{report}");
+        let accepted = &report["accepted"][0];
+        assert_eq!(accepted["key"], key.as_str(), "{report}");
+        assert_eq!(accepted["kind"], "collision", "{report}");
+        assert_eq!(accepted["why"], "caixa do modelo; a cuba cabe no nicho");
+        assert_eq!(accepted["extent"][0], 5.4, "{report}");
+        assert_eq!(pending(&s.document.read()), 0, "the variant badge agrees");
+        assert!(check("{}").get("overlap").is_none(), "it is remembered");
+
+        // A dry run no longer calls it new when the pair is touched.
+        let dry: serde_json::Value = serde_json::from_str(
+            &s.move_elements(Parameters(
+                serde_json::from_str(&format!(
+                    r#"{{"ids":["{washer}"],"dx":-1,"dy":0,"dry":true}}"#
+                ))
+                .unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(dry.get("issues_changed").is_none(), "{dry}");
+        assert!(dry.get("issues_new").is_none(), "{dry}");
+
+        // It is one undoable step, and an empty reason takes it back.
+        let report = check(&format!(r#"{{"accept":[["{key}",""]]}}"#));
+        assert_eq!(report["overlap"][0]["kind"], "collision", "{report}");
+        assert!(report.get("accepted").is_none(), "{report}");
+        s.document.write().undo().unwrap();
+        assert_eq!(check("{}")["accepted"][0]["key"], key.as_str());
     }
     #[test]
     fn ergonomics_reviews_the_plan_for_its_people() {

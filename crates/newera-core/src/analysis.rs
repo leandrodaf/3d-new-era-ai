@@ -144,6 +144,37 @@ impl Issue {
         }
     }
 
+    /// The name it is accepted by: its family and its ids, sorted, so the
+    /// same pair keeps the same name whichever piece the check met first —
+    /// `overlap:f817+f830`.
+    pub fn key(&self) -> String {
+        let mut ids: Vec<String> = self.ids().iter().map(ToString::to_string).collect();
+        ids.sort();
+        format!("{}:{}", self.family(), ids.join("+"))
+    }
+
+    /// The reason it was accepted with, when someone looked at it and
+    /// decided the drawing is right — a model whose box is bigger than the
+    /// piece it draws, say.
+    pub fn accepted<'a>(&self, home: &'a Home) -> Option<&'a str> {
+        home.accepted.get(&self.key()).map(String::as_str)
+    }
+
+    /// A defect nobody has accepted yet: what a count of things to fix means.
+    pub fn is_pending(&self, home: &Home) -> bool {
+        self.is_defect() && self.accepted(home).is_none()
+    }
+
+    /// Writes a key the way [`Issue::key`] does, so `f830+f817` and a bare
+    /// pair of ids name the same overlap.
+    pub fn normalize_key(raw: &str) -> String {
+        let raw = raw.trim();
+        let (family, ids) = raw.split_once(':').unwrap_or(("overlap", raw));
+        let mut ids: Vec<&str> = ids.split('+').map(str::trim).collect();
+        ids.sort_unstable();
+        format!("{}:{}", family.trim(), ids.join("+"))
+    }
+
     /// What it is, as precisely as a word says it: an overlap answers with
     /// its classification (`collision`, `nesting`, `cross_level`), anything
     /// else with its family.

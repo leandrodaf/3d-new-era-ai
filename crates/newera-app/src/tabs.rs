@@ -29,11 +29,11 @@ pub(crate) fn stats(name: &str, active: bool, home: &Home) -> VariantStats {
         rooms: home.rooms.len(),
         area: home.rooms.iter().map(newera_core::Room::area).sum(),
         furniture: home.furniture.len(),
-        // Built-in pieces and layered storeys are classified, not counted:
+        // Built-in pieces, layered storeys and accepted pairs are not counted:
         // the badge only ever means "this many things need fixing".
         issues: newera_core::check_layout(home)
             .iter()
-            .filter(|i| i.is_defect())
+            .filter(|i| i.is_pending(home))
             .count(),
     }
 }

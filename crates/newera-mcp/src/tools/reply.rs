@@ -165,7 +165,7 @@ pub(super) fn preview_with(
         |home: &newera_core::Home| -> std::collections::BTreeMap<String, serde_json::Value> {
             newera_core::check_layout(&home.level_view(home.current_level()))
                 .into_iter()
-                .filter(newera_core::Issue::is_defect)
+                .filter(|i| i.is_pending(home))
                 .map(|i| {
                     let ids = i
                         .ids()

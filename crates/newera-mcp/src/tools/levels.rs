@@ -158,6 +158,7 @@ mod tests {
             &s.check_layout(Parameters(CheckParams {
                 level: Some("all".into()),
                 areas: None,
+                accept: Vec::new(),
             }))
             .unwrap(),
         )
@@ -183,6 +184,7 @@ mod tests {
             &s.check_layout(Parameters(CheckParams {
                 level: Some("all".into()),
                 areas: None,
+                accept: Vec::new(),
             }))
             .unwrap(),
         )

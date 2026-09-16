@@ -468,12 +468,28 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
     });
     let mut counts: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
     for issue in found {
+        // Looked at and accepted: out of the sections that mean "fix this",
+        // still in the report with the reason, so it stays reviewable.
+        if let Some(why) = issue.accepted(home) {
+            let mut row = obj([
+                ("key", json!(issue.key())),
+                ("kind", json!(issue.kind_name())),
+                ("why", json!(why)),
+            ]);
+            if let Issue::Overlap { extent, .. } = &issue {
+                row["extent"] = json!(extent.map(num));
+            }
+            push("accepted", row);
+            continue;
+        }
         match issue {
             Issue::Overlap { a, b, kind, extent } => {
                 *counts.entry(kind.name()).or_default() += 1;
+                let key = issue.key();
                 push(
                     "overlap",
                     obj([
+                        ("key", json!(key)),
                         ("a", issue_ref(home, a.into())),
                         ("b", issue_ref(home, b.into())),
                         ("kind", json!(kind.name())),
@@ -649,7 +665,7 @@ pub(crate) fn variants(doc: &newera_core::Document) -> Value {
                     home.furniture.len(),
                     newera_core::check_layout(home)
                         .iter()
-                        .filter(|i| i.is_defect())
+                        .filter(|i| i.is_pending(home))
                         .count()
                 ])
             })
