@@ -229,6 +229,16 @@ fn telecom_outlets(room: &Room, bathroom: bool) -> Option<(usize, usize)> {
     }
 }
 
+/// Whether a point stands in a wet room — a bathroom by what it holds or
+/// its name — or outdoors.
+pub fn in_wet_room(home: &Home, point: &Point) -> bool {
+    let view = home.level_view(home.current_level());
+    point
+        .room
+        .and_then(|id| view.rooms.iter().find(|r| r.id == id))
+        .is_some_and(|r| matches!(class_in(&view, r), Wet::Bathroom | Wet::Outdoor))
+}
+
 /// Whether a room is one people stay in, where a network point belongs.
 fn long_stay(room: &Room) -> bool {
     let name = crate::annotations::fold(&room.name);

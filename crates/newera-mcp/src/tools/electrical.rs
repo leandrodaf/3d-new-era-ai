@@ -74,7 +74,7 @@ pub(crate) struct ElectricalParams {
 #[tool_router(router = electrical_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Electrical and telecom project, NBR 5410 and NBR 16264 (residential cabling). Points are the electrical pieces (catalog electrical: outlets, switches, lighting points, panel, network-outlet RJ45, tv-outlet, wifi-point, telecom-panel) plus every fixture that lights. check (default): {points:{kind:count}, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — accept=[[key, reason]] with any action marks findings looked at (they stay listed with the reason and stop counting in pending), an empty reason takes one back, orphaned lists acceptances whose finding is gone and prune=true drops them — a ceiling lighting point per room, general-use outlets per room (kitchens and laundries one per 3.5 m of perimeter, bathrooms one by the basin, living rooms and bedrooms one per 5 m), RJ45 and TV outlets per room as NBR 16264 table 1 recommends (2 RJ45 and 1 TV in bedrooms, living rooms, offices, kitchens and laundries; 3 and 2 in a home theater; 1 and 1 elsewhere; a Wi-Fi point is not an RJ45 outlet), a power outlet by the telecom panel, a distribution and a telecom panel, points without a circuit, lighting and outlets sharing a circuit, a dedicated load not alone. circuits: rows [name, kinds, points, VA, V, A, wire mm², breaker A, DR] and main_breaker {a, phases, load_a_per_phase}: the supply to ask for, by Enel SP's categories on 127/220 V (single-phase up to 12 kW with no 220 V circuit, two-phase up to 20 kW, three-phase up to 75 kW) and the smallest of its fixed entry breakers (50, 63, 80, 100… A) — power by NBR 5410 (lighting per room by area: 100 VA up to 6 m² and 60 VA per whole 4 m² beyond, shared by its points; 600 VA for each of the first three outlets of a kitchen, laundry or bathroom, 100 VA after and elsewhere; dedicated points at their rated power, a shower 7500 W and air conditioning 1500 until written) unless set; the section is the smallest from 1.5 mm² (lighting) or 2.5 (with outlets) whose capacity, corrected for the circuits sharing its conduit on the laid-out runs (table 42, or grouping written on the project), admits a breaker between the current and it; DR on every point of a room with a bath or shower, on kitchen, laundry, service and garage points (lighting at 2.50 m or higher excepted) and on outdoor and balcony outlets; a shower over 4.4 kVA runs on 220 V. check also says lighting and outlets sharing a circuit only when NBR 5410 9.5.3.3 forbids it (over 16 A, or all lighting or all outlets on shared circuits), kitchen and laundry outlets sharing with anything else, equipment over 10 A not alone, and a voltage drop over 4 % to the farthest point of a laid-out run. assign {ids, circuit, va?} — or the whole division at once, circuits {\"C1\": [ids], \"C2\": [ids]} — writes the circuits (and power, and volts 127|220 per point — a 220 V outlet makes its circuit 220 V) on points in one undoable step. voltage {volts?, short_ka?, earthing?: TN-S|TN-C-S|TT}. circuits also gives panel {devices: [[device, count, DIN modules]], modules {used, capacity, capacity_written, spare}, dps, earthing, icn_ka, selective}: one-pole breakers for 127 V circuits and two-pole for 220 V between phases, a two-pole DR per circuit that needs one, the main breaker, the surge protector (DPS class II, a module per phase and neutral) and NBR 5410's spare ways (2 up to 6 circuits, 3 up to 12, 4 up to 30, 15 % above); capacity is the panel's modules (assign modules on it) or a guess from its size, and check says when it does not fit, when the main breaker is under twice the largest partial (selectivity) and when the short-circuit level was assumed. cable {kind: power|data|tv, pts} (with ids or circuit instead of pts, it is a route): draws a run of the electrical project, told apart on the plan (power solid, network dashed, TV dash-dot); check then reports cables_m, the length by kind with a tenth for the drops, and network or TV points no run reaches, or a telecom panel none reaches. route {kind: power|data|tv, ids? | circuit?, via?: ceiling|floor|wall, cat?: cat5e|cat6|cat6a, from?}: lays the run the way it is built, along the walls and inside them (or in the slab), from the nearest panel of its kind to the points (all of the kind when none given), sharing the trunk, and draws it replacing the earlier run of the same circuit and the cables drawn by hand to its points (listed in replaced_drawn); replies {via, suggested, length_m {horizontal, vertical, total}, by_premise_m, bends, materials: [[item, qty, unit]]} — conduit, boxes, wire by conductor, cable, connectors. Without via it takes the cheapest premise that can be built; a via that cannot reach a point (wall with a point out of every wall; ceiling with a low point out of every wall, nowhere to drop) is refused naming the points. Automation (catalog smart-relay, smart-switch, dimmer, presence-sensor, smart-lock): each draws its standby on its circuit (assign standby_w; relay, dimmer and sensor 1 W, smart switch 1.2 by default, from manufacturers' sheets), circuits reports standby_w, and check asks a relay or smart switch for a neutral in its box, a dimmer for the room's lighting to fit its max_w (default 1.1 A at the supply voltage, some 140 W at 127 V) and pass 10 W, a ceiling sensor to be between 2.2 and 3 m (manufacturers install at about 2.4) and to see the room's far corner (about 1.45 × its height), a lock to sit on a door. wifi {ids?, standard?: wifi5|wifi6|wifi6e|wifi7, poe?, band?: 2.4|5|6}: writes the standard and PoE on access points (wifi-point) when given, and replies {access_points: [[id, standard, bands, uplink]], coverage: [[room, band, median dBm, worst dBm (9 places in 10), share at -67 dBm or better, grade]], suggested: {standard, band, points: [[x, y, z, room]], short: [rooms still under -67 dBm]}} — signal estimated from free-space loss, distance and each wall crossed by its material and thickness (a door or window where the path goes through one), per band; the suggestion is the fewest ceiling points (up to four) at room centres covering the rooms people use. check also asks each access point for its data cable, power (an outlet within 1.5 m or poe) and a cable category that carries its uplink (uplink up to 2.5 GbE: Cat 5e; 5 GbE: Cat 6; 10 GbE: Cat 6A). Circuit numbers are drawn next to the points on the plan, and with annotations(legend=true) the load schedule under the legend."
+        description = "Electrical and telecom project, NBR 5410 and NBR 16264 (residential cabling). Points are the electrical pieces (catalog electrical: outlets, switches, lighting points, panel, network-outlet RJ45, tv-outlet, wifi-point, telecom-panel) plus every fixture that lights. check (default): {points:{kind:count}, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — accept=[[key, reason]] with any action marks findings looked at (they stay listed with the reason and stop counting in pending), an empty reason takes one back, orphaned lists acceptances whose finding is gone and prune=true drops them — a ceiling lighting point per room, general-use outlets per room (kitchens and laundries one per 3.5 m of perimeter, bathrooms one by the basin, living rooms and bedrooms one per 5 m), RJ45 and TV outlets per room as NBR 16264 table 1 recommends (2 RJ45 and 1 TV in bedrooms, living rooms, offices, kitchens and laundries; 3 and 2 in a home theater; 1 and 1 elsewhere; a Wi-Fi point is not an RJ45 outlet), a power outlet by the telecom panel, a distribution and a telecom panel, points without a circuit, lighting and outlets sharing a circuit, a dedicated load not alone. circuits: rows [name, kinds, points, VA, V, A, wire mm², breaker A, DR] and main_breaker {a, phases, load_a_per_phase}: the supply to ask for, by Enel SP's categories on 127/220 V (single-phase up to 12 kW with no 220 V circuit, two-phase up to 20 kW, three-phase up to 75 kW) and the smallest of its fixed entry breakers (50, 63, 80, 100… A) — power by NBR 5410 (lighting per room by area: 100 VA up to 6 m² and 60 VA per whole 4 m² beyond, shared by its points; 600 VA for each of the first three outlets of a kitchen, laundry or bathroom, 100 VA after and elsewhere; dedicated points at their rated power, a shower 7500 W and air conditioning 1500 until written) unless set; the section is the smallest from 1.5 mm² (lighting) or 2.5 (with outlets) whose capacity, corrected for the circuits sharing its conduit on the laid-out runs (table 42, or grouping written on the project), admits a breaker between the current and it; DR on every point of a room with a bath or shower, on kitchen, laundry, service and garage points (lighting at 2.50 m or higher excepted) and on outdoor and balcony outlets; a shower over 4.4 kVA runs on 220 V. check also says lighting and outlets sharing a circuit only when NBR 5410 9.5.3.3 forbids it (over 16 A, or all lighting or all outlets on shared circuits), kitchen and laundry outlets sharing with anything else, equipment over 10 A not alone, and a voltage drop over 4 % to the farthest point of a laid-out run. assign {ids, circuit, va?} — or the whole division at once, circuits {\"C1\": [ids], \"C2\": [ids]} — writes the circuits (and power, and volts 127|220 per point — a 220 V outlet makes its circuit 220 V) on points in one undoable step. voltage {volts?, short_ka?, earthing?: TN-S|TN-C-S|TT}. circuits also gives panel {devices: [[device, count, DIN modules]], modules {used, capacity, capacity_written, spare}, dps, earthing, icn_ka, selective}: one-pole breakers for 127 V circuits and two-pole for 220 V between phases, a two-pole DR per circuit that needs one, the main breaker, the surge protector (DPS class II, a module per phase and neutral) and NBR 5410's spare ways (2 up to 6 circuits, 3 up to 12, 4 up to 30, 15 % above); capacity is the panel's modules (assign modules on it) or a guess from its size, and check says when it does not fit, when the main breaker is under twice the largest partial (selectivity) and when the short-circuit level was assumed. cable {kind: power|data|tv, pts} (with ids or circuit instead of pts, it is a route): draws a run of the electrical project, told apart on the plan (power solid, network dashed, TV dash-dot); check then reports cables_m, the length by kind with a tenth for the drops, and network or TV points no run reaches, or a telecom panel none reaches. route {kind: power|data|tv, ids? | circuit?, via?: ceiling|floor|wall|tape, cat?: cat5e|cat6|cat6a, from?}: lays the run the way it is built, along the walls and inside them (or in the slab), from the nearest panel of its kind to the points (all of the kind when none given), sharing the trunk, and draws it replacing the earlier run of the same circuit and the cables drawn by hand to its points (listed in replaced_drawn); replies {via, suggested, length_m {horizontal, vertical, total}, by_premise_m, bends, materials: [[item, qty, unit]]} — conduit, boxes, wire by conductor, cable, connectors. via=tape lays adhesive flat wiring tape (Eletrofitas) on the surface of walls and ceiling for power only: the model by the load and whether any point is a socket (sockets take the earthed EF18.9.18), refused over its rating or in a bathroom or outdoors, bought as Leroy Merlin kits by piece (codes, prices, splices) with tape {model, tracks, rated_a, load_a, earthed, pieces_m, splices, total_brl, notes}. Without via it takes the cheapest premise that can be built; a via that cannot reach a point (wall with a point out of every wall; ceiling with a low point out of every wall, nowhere to drop) is refused naming the points. Automation (catalog smart-relay, smart-switch, dimmer, presence-sensor, smart-lock): each draws its standby on its circuit (assign standby_w; relay, dimmer and sensor 1 W, smart switch 1.2 by default, from manufacturers' sheets), circuits reports standby_w, and check asks a relay or smart switch for a neutral in its box, a dimmer for the room's lighting to fit its max_w (default 1.1 A at the supply voltage, some 140 W at 127 V) and pass 10 W, a ceiling sensor to be between 2.2 and 3 m (manufacturers install at about 2.4) and to see the room's far corner (about 1.45 × its height), a lock to sit on a door. wifi {ids?, standard?: wifi5|wifi6|wifi6e|wifi7, poe?, band?: 2.4|5|6}: writes the standard and PoE on access points (wifi-point) when given, and replies {access_points: [[id, standard, bands, uplink]], coverage: [[room, band, median dBm, worst dBm (9 places in 10), share at -67 dBm or better, grade]], suggested: {standard, band, points: [[x, y, z, room]], short: [rooms still under -67 dBm]}} — signal estimated from free-space loss, distance and each wall crossed by its material and thickness (a door or window where the path goes through one), per band; the suggestion is the fewest ceiling points (up to four) at room centres covering the rooms people use. check also asks each access point for its data cable, power (an outlet within 1.5 m or poe) and a cable category that carries its uplink (uplink up to 2.5 GbE: Cat 5e; 5 GbE: Cat 6; 10 GbE: Cat 6A). Circuit numbers are drawn next to the points on the plan, and with annotations(legend=true) the load schedule under the legend."
     )]
     pub(crate) fn electrical(
         &self,
@@ -401,9 +401,26 @@ impl NewEraMcp {
                     .map_or(280.0, |l| l.height);
                 let (best, all_routes) =
                     newera_core::routing::cheapest(&view, source, &points, storey);
+                // Adhesive tape runs on the surface of the walls or the ceiling.
+                let tape = p.via.as_deref() == Some("tape");
+                if tape && cable != electrical::Cable::Power {
+                    return Err(invalid(
+                        "via tape: the adhesive tape carries power only; network and TV go in cable",
+                    ));
+                }
                 let via = match p.via.as_deref() {
+                    Some("tape") => all_routes
+                        .iter()
+                        .filter(|(v, r)| {
+                            *v != newera_core::routing::Via::Floor && r.impossible.is_empty()
+                        })
+                        .min_by(|a, b| a.1.length().total_cmp(&b.1.length()))
+                        .map(|(v, _)| *v)
+                        .ok_or_else(|| {
+                            invalid("via tape: some point is in no wall and below the ceiling; the tape runs on walls and ceilings only")
+                        })?,
                     Some(raw) => newera_core::routing::Via::parse(raw)
-                        .ok_or_else(|| invalid("via: ceiling, floor or wall"))?,
+                        .ok_or_else(|| invalid("via: ceiling, floor, wall or tape"))?,
                     None => best,
                 };
                 let route = all_routes
@@ -443,7 +460,83 @@ impl NewEraMcp {
                         }
                     }
                 };
-                let bill = electrical::materials(&route, cable, section, category, &kinds);
+                let mut bill = electrical::materials(&route, cable, section, category, &kinds);
+                let mut tape_reply = serde_json::Value::Null;
+                if tape {
+                    use newera_core::tape;
+                    let wet: Vec<String> = wanted
+                        .iter()
+                        .filter(|pt| electrical::in_wet_room(home, pt))
+                        .map(|pt| pt.id.to_string())
+                        .collect();
+                    if !wet.is_empty() {
+                        return Err(invalid(format!(
+                            "via tape: {} in a bathroom or outdoors, where the maker gives the tape no rating; run it in wire and conduit",
+                            wet.join(", ")
+                        )));
+                    }
+                    let volts = electrical::circuits(home)
+                        .iter()
+                        .filter(|c| wanted.iter().any(|pt| c.points.contains(&pt.id)))
+                        .map(|c| c.volts)
+                        .fold(0.0, f64::max);
+                    let volts = if volts > 0.0 { volts } else { 127.0 };
+                    let amps = wanted.iter().map(|pt| pt.va).sum::<f64>() / volts;
+                    let needs_earth = kinds.iter().any(|k| {
+                        matches!(
+                            k,
+                            electrical::PointKind::Outlet | electrical::PointKind::Dedicated
+                        )
+                    });
+                    let model = tape::model_for(amps, needs_earth).map_err(invalid)?;
+                    // A piece per link, with its share of the drops and 20 cm at each end.
+                    let links = route.paths.len().max(1);
+                    #[allow(clippy::cast_precision_loss)]
+                    let drop_share = route.vertical / links as f64;
+                    let pieces: Vec<f64> = route
+                        .paths
+                        .iter()
+                        .map(|path| {
+                            path.windows(2).map(|w| w[0].distance(w[1])).sum::<f64>()
+                                + drop_share
+                                + 2.0 * tape::PER_CONNECTION_CM
+                        })
+                        .collect();
+                    let (buy, splices) = tape::purchase(model, &pieces);
+                    let total: f64 = buy
+                        .iter()
+                        .map(|b| f64::from(b.quantity) * b.unit_price)
+                        .sum();
+                    bill = buy
+                        .iter()
+                        .map(|b| newera_core::electrical::Material {
+                            item: format!(
+                                "{} (Leroy {}, R$ {})",
+                                b.item,
+                                b.code,
+                                format!("{:.2}", b.unit_price).replace('.', ",")
+                            ),
+                            quantity: f64::from(b.quantity),
+                            unit: "un",
+                        })
+                        .collect();
+                    tape_reply = serde_json::json!({
+                        "model": model.model,
+                        "tracks": model.tracks,
+                        "rated_a": model.amps,
+                        "load_a": compact::num(amps),
+                        "earthed": model.earthed(),
+                        "pieces_m": pieces.iter().map(|cm| compact::num(cm / 100.0)).collect::<Vec<_>>(),
+                        "splices": splices,
+                        "total_brl": compact::num(total),
+                        "notes": [
+                            format!("Disjuntor do circuito de no máximo {} A, a corrente da fita.", model.amps),
+                            "Fita sempre coberta: malha de fibra de vidro, massa acrílica numa faixa de uns 50 cm, depois pintura; nunca aparente.",
+                            "A fita não é um condutor previsto na NBR 5410 e não tem certificação Inmetro: combine com o responsável técnico antes de usar.",
+                            "Uma pista danificada é a fita inteira trocada e o acabamento refeito.",
+                        ],
+                    });
+                }
                 // Replaces the run drawn before for the same thing.
                 // Named by what it serves, so routing the same points again
                 // replaces it and routing others adds a run beside it.
@@ -527,6 +620,10 @@ impl NewEraMcp {
                     "materials": bill.iter().map(|m| serde_json::json!([m.item, m.quantity, m.unit])).collect::<Vec<_>>(),
                 });
                 let mut reply = reply;
+                if tape {
+                    reply["via"] = serde_json::json!("tape");
+                    reply["tape"] = tape_reply;
+                }
                 // A network link past 90 m (the permanent link, NBR 16264 /
                 // TIA-568), counting the slack left at the rack and the outlet
                 // does not carry its category: say which points.
@@ -1301,5 +1398,75 @@ mod tests {
         assert!(door.message.contains("vão da porta"), "{door:?}");
         place(r#"{"items":[{"cat":"outlet-low","at":[100,3]}]}"#)
             .expect("under the sill is a wall");
+    }
+
+    #[test]
+    fn a_run_in_adhesive_tape_picks_its_model_and_buys_its_kits() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true},{"pts":[[400,0],[600,0],[600,300],[400,300]]}],
+                    "rooms":[{"name":"Sala","at":[200,150]},{"name":"Banheiro","at":[500,150]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let reply = s
+            .place(Parameters(
+                serde_json::from_str(
+                    r#"{"items":[{"cat":"electrical-panel","at":[10,150]},{"cat":"outlet-low","at":[200,5]},{"cat":"outlet-low","at":[390,150]},
+                                 {"cat":"outlet-mid","at":[590,150]},{"cat":"network-outlet","at":[200,295]}]}"#,
+                )
+                .unwrap(),
+            ))
+            .unwrap();
+        let ids: Vec<String> = reply
+            .rsplit("ids=")
+            .next()
+            .unwrap()
+            .split(',')
+            .map(|s| s.trim().to_owned())
+            .collect();
+        let electrical = |json: &str| {
+            s.electrical(Parameters(serde_json::from_str(json).unwrap()))
+                .map(|r| serde_json::from_str(&r).unwrap_or(serde_json::Value::String(r)))
+        };
+        let run = electrical(&format!(
+            r#"{{"action":"route","kind":"power","ids":["{}","{}"],"via":"tape"}}"#,
+            ids[1], ids[2]
+        ))
+        .unwrap();
+        assert_eq!(run["via"], "tape", "{run}");
+        assert_eq!(
+            run["tape"]["model"], "EF18.9.18",
+            "sockets take the earthed tape: {run}"
+        );
+        let bill = run["materials"].to_string();
+        assert!(
+            bill.contains("Leroy 9192080") || bill.contains("Leroy 91920815"),
+            "{run}"
+        );
+        assert!(!bill.contains("Eletroduto"), "no conduit on tape: {run}");
+        assert!(run["tape"]["total_brl"].as_f64().unwrap() > 0.0);
+        // In the bathroom, and for network: refused.
+        let wet = electrical(&format!(
+            r#"{{"action":"route","kind":"power","ids":["{}"],"via":"tape"}}"#,
+            ids[3]
+        ))
+        .unwrap_err();
+        assert!(wet.message.contains("bathroom"), "{wet:?}");
+        assert!(electrical(r#"{"action":"route","kind":"data","via":"tape"}"#).is_err());
+        // A load past 20 A: refused, pointing to wire.
+        electrical(&format!(
+            r#"{{"action":"assign","ids":["{}"],"va":3500}}"#,
+            ids[1]
+        ))
+        .unwrap();
+        let heavy = electrical(&format!(
+            r#"{{"action":"route","kind":"power","ids":["{}","{}"],"via":"tape"}}"#,
+            ids[1], ids[2]
+        ))
+        .unwrap_err();
+        assert!(heavy.message.contains("fio"), "{heavy:?}");
     }
 }

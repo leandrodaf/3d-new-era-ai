@@ -36,6 +36,7 @@ mod roof_fit;
 pub mod routing;
 pub mod standards;
 mod style;
+pub mod tape;
 mod units;
 pub mod vfs;
 mod wallrun;
