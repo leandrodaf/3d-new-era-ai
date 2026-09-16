@@ -410,6 +410,8 @@ pub fn drawn_runs(home: &Home, cable: Cable, ends: &[Point2]) -> Vec<crate::ids:
         .collect()
 }
 
+/// The points a laid-out run serves, ids joined by commas.
+pub const ENDS_KEY: &str = "elec:ends";
 /// Where a routed run keeps the length to its farthest point, cm.
 pub const RUN_FAR_KEY: &str = "elec:run_far_cm";
 /// Where a routed data run keeps its cable category.
@@ -1688,8 +1690,14 @@ pub fn check(home: &Home) -> Vec<Finding> {
             .iter()
             .filter(|p| kinds.contains(&p.kind))
             .filter(|p| {
-                home.find_piece(p.id)
-                    .is_some_and(|f| !runs.iter().any(|l| reaches(l, f.position)))
+                home.find_piece(p.id).is_some_and(|f| {
+                    !runs.iter().any(|l| {
+                        reaches(l, f.position)
+                            || l.properties
+                                .get(ENDS_KEY)
+                                .is_some_and(|ends| ends.split(',').any(|e| e == p.id.to_string()))
+                    })
+                })
             })
             .map(|p| p.id.to_string())
             .collect();

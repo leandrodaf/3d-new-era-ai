@@ -581,6 +581,14 @@ impl NewEraMcp {
                         .insert(electrical::CABLE_KEY.into(), cable.key().into());
                     line.properties
                         .insert(electrical::RUN_KEY.into(), run.clone());
+                    line.properties.insert(
+                        electrical::ENDS_KEY.into(),
+                        wanted
+                            .iter()
+                            .map(|pt| pt.id.to_string())
+                            .collect::<Vec<_>>()
+                            .join(","),
+                    );
                     if cable == electrical::Cable::Data {
                         line.properties
                             .insert(electrical::CATEGORY_KEY.into(), category.key().into());

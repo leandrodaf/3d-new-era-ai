@@ -137,7 +137,7 @@ impl NewEraMcp {
         let home = doc.home();
         let view = home.level_view(home.current_level());
         let all = plumbing::points(home);
-        let wanted: Vec<&plumbing::Point> = if p.ids.is_empty() {
+        let mut wanted: Vec<&plumbing::Point> = if p.ids.is_empty() {
             all.iter().filter(|pt| pipe.serves(pt.kind)).collect()
         } else {
             p.ids
@@ -160,6 +160,36 @@ impl NewEraMcp {
                 "route: no {} points (place them first, or give ids)",
                 pipe.key()
             )));
+        }
+        // Points an earlier run of this pipe already serves: that run is laid
+        // again with them, never a second run stacked beside it.
+        let asked: std::collections::BTreeSet<String> =
+            wanted.iter().map(|pt| pt.id.to_string()).collect();
+        let mut merged_into: Option<String> = None;
+        if !p.ids.is_empty() {
+            let superset = home
+                .polylines
+                .iter()
+                .filter(|l| plumbing::pipe_of(l) == Some(pipe))
+                .filter_map(|l| {
+                    let ends: std::collections::BTreeSet<String> = l
+                        .properties
+                        .get(plumbing::ENDS_KEY)?
+                        .split(',')
+                        .filter(|e| !e.is_empty())
+                        .map(str::to_owned)
+                        .collect();
+                    (ends.is_superset(&asked) && ends.len() > asked.len())
+                        .then(|| (l.properties.get(plumbing::RUN_KEY).cloned(), ends))
+                })
+                .max_by_key(|(_, ends)| ends.len());
+            if let Some((run, ends)) = superset {
+                wanted = all
+                    .iter()
+                    .filter(|pt| ends.contains(&pt.id.to_string()))
+                    .collect();
+                merged_into = run;
+            }
         }
         let first = wanted[0].at;
         let nearest = |kinds: &[PointKind]| {
@@ -345,11 +375,24 @@ impl NewEraMcp {
         let mut ends: Vec<newera_core::Point2> = wanted.iter().map(|pt| pt.at).collect();
         ends.push(source.at);
         let replaced = plumbing::drawn_runs(home, pipe, &ends);
+        // An earlier run of the same pipe whose points this one takes all.
+        let now: std::collections::BTreeSet<String> =
+            wanted.iter().map(|pt| pt.id.to_string()).collect();
+        let covered = |l: &newera_core::Polyline| {
+            plumbing::pipe_of(l) == Some(pipe)
+                && l.properties.get(plumbing::ENDS_KEY).is_some_and(|ends| {
+                    ends.split(',')
+                        .filter(|e| !e.is_empty())
+                        .all(|e| now.contains(e))
+                })
+        };
         let mut commands: Vec<newera_core::Command> = home
             .polylines
             .iter()
             .filter(|l| {
-                l.properties.get(plumbing::RUN_KEY) == Some(&run) || replaced.contains(&l.id)
+                l.properties.get(plumbing::RUN_KEY) == Some(&run)
+                    || replaced.contains(&l.id)
+                    || covered(l)
             })
             .map(|l| newera_core::Command::remove(newera_core::ElementId::Polyline(l.id)))
             .collect();
@@ -364,6 +407,14 @@ impl NewEraMcp {
                 .insert(plumbing::PIPE_KEY.into(), pipe.key().into());
             line.properties
                 .insert(plumbing::RUN_KEY.into(), run.clone());
+            line.properties.insert(
+                plumbing::ENDS_KEY.into(),
+                wanted
+                    .iter()
+                    .map(|pt| pt.id.to_string())
+                    .collect::<Vec<_>>()
+                    .join(","),
+            );
             line.properties
                 .insert(plumbing::RUN_CM_KEY.into(), route.length().to_string());
             line.properties.insert("plumb:via".into(), via.key().into());
@@ -386,6 +437,7 @@ impl NewEraMcp {
         let mut reply = serde_json::json!({
             "run": run,
             "replaced_drawn": replaced.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            "merged_into": merged_into,
             "via": via.key(),
             "suggested": suggested.map(Via::key),
             "length_m": {
@@ -597,6 +649,22 @@ mod tests {
             serde_json::from_str(r#"{"items":[{"cat":"vent-pipe","at":[10,60]}]}"#).unwrap(),
         ))
         .unwrap();
+        // A vent branch for one trap, then for all: the second takes the
+        // first's place, not a run stacked on it.
+        let traps: Vec<String> = s
+            .document
+            .read()
+            .home()
+            .furniture
+            .iter()
+            .filter(|f| matches!(f.catalog.as_str(), "sewer" | "floor-drain"))
+            .map(|f| f.id.to_string())
+            .collect();
+        plumbing(&format!(
+            r#"{{"action":"route","kind":"vent","ids":["{}"]}}"#,
+            traps[0]
+        ))
+        .unwrap();
         let vent = plumbing(r#"{"action":"route","kind":"vent"}"#).unwrap();
         assert_ne!(vent["via"], "floor", "{vent}");
         assert!(
@@ -610,6 +678,49 @@ mod tests {
             !plumbing("{}").unwrap()["findings"]
                 .to_string()
                 .contains("plumb:vent-far")
+        );
+        let runs: std::collections::BTreeSet<String> = s
+            .document
+            .read()
+            .home()
+            .polylines
+            .iter()
+            .filter(|l| {
+                l.properties
+                    .get(newera_core::plumbing::PIPE_KEY)
+                    .map(String::as_str)
+                    == Some("vent")
+            })
+            .filter_map(|l| l.properties.get(newera_core::plumbing::RUN_KEY).cloned())
+            .collect();
+        assert_eq!(runs.len(), 1, "the one-trap run was replaced: {runs:?}");
+        // Routing one of its traps again lays that same run, not a second one.
+        let again = plumbing(&format!(
+            r#"{{"action":"route","kind":"vent","ids":["{}"]}}"#,
+            traps[0]
+        ))
+        .unwrap();
+        assert!(again["merged_into"].is_string(), "{again}");
+        let count = s
+            .document
+            .read()
+            .home()
+            .polylines
+            .iter()
+            .filter(|l| {
+                l.properties
+                    .get(newera_core::plumbing::PIPE_KEY)
+                    .map(String::as_str)
+                    == Some("vent")
+            })
+            .filter_map(|l| l.properties.get(newera_core::plumbing::RUN_KEY).cloned())
+            .collect::<std::collections::BTreeSet<_>>()
+            .len();
+        assert_eq!(count, 1);
+        assert!(
+            !plumbing("{}").unwrap()["findings"]
+                .to_string()
+                .contains("plumb:unreached:vent")
         );
 
         // Hot water has no heater: asked where it comes from.

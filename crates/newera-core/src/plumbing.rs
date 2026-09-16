@@ -27,6 +27,17 @@ pub const PIPE_KEY: &str = "plumb:pipe";
 pub const RUN_KEY: &str = "plumb:run";
 /// The run's real length, drops included, cm.
 pub const RUN_CM_KEY: &str = "plumb:run_cm";
+/// The points a laid-out run serves, ids joined by commas: reached by it
+/// whatever the distance from the wall's axis it runs in.
+pub const ENDS_KEY: &str = "plumb:ends";
+
+/// Whether a line of the plan serves a point: it lists it, or passes by it.
+pub fn serves_point(line: &Polyline, id: crate::ids::FurnitureId, at: Point2) -> bool {
+    line.properties
+        .get(ENDS_KEY)
+        .is_some_and(|ends| ends.split(',').any(|e| e == id.to_string()))
+        || reaches(line, at)
+}
 
 /// What a plumbing point is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -745,6 +756,13 @@ pub fn check(home: &Home) -> Vec<Finding> {
                     Point2::new(a.x + t * dx, a.y + t * dy).distance(trap.at)
                 })
                 .fold(f64::MAX, f64::min);
+            let listed = view.polylines.iter().any(|l| {
+                pipe_of(l) == Some(Pipe::Vent)
+                    && l.properties
+                        .get(ENDS_KEY)
+                        .is_some_and(|ends| ends.split(',').any(|e| e == trap.id.to_string()))
+            });
+            let by_branch = if listed { 0.0 } else { by_branch };
             let nearest = vents
                 .iter()
                 .map(|v| v.at.distance(trap.at))
@@ -897,7 +915,8 @@ pub fn check(home: &Home) -> Vec<Finding> {
         });
     }
     // Where pipes are drawn, each point of their kind needs one reaching it.
-    for pipe in Pipe::ALL {
+    // Venting is asked trap by trap (vent-far), not of every trap.
+    for pipe in [Pipe::Cold, Pipe::Hot, Pipe::Sewer] {
         let runs: Vec<&Polyline> = view
             .polylines
             .iter()
@@ -908,7 +927,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
         }
         let unreached: Vec<String> = all
             .iter()
-            .filter(|p| pipe.serves(p.kind) && !runs.iter().any(|l| reaches(l, p.at)))
+            .filter(|p| pipe.serves(p.kind) && !runs.iter().any(|l| serves_point(l, p.id, p.at)))
             .map(|p| p.id.to_string())
             .collect();
         if !unreached.is_empty() {
