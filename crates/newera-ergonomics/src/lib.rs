@@ -838,7 +838,8 @@ impl Review<'_, '_> {
                     severity: Severity::Erro,
                     place: door_name,
                     message: format!(
-                        "A folha da porta bate em {by}: invertendo o lado da dobradiça ela abre livre."
+                        "A folha da porta bate em {by}: com a dobradiça do outro lado ela abre livre (hinge_right hoje {}, use {right}).",
+                        !right
                     ),
                     reference: None,
                     fix: Some(serde_json::json!({
@@ -3133,6 +3134,15 @@ mod tests {
             .find(|f| f.message.contains("A folha da porta bate"))
             .unwrap_or_else(|| panic!("{report:#?}"));
         let fix = door.fix.clone().expect("a fix");
+        if fix["tool"] == "update" {
+            // The flip names the value to set, not only "the other side".
+            let right = fix["items"][0]["hinge_right"].as_bool().unwrap();
+            assert!(
+                door.message
+                    .contains(&format!("hinge_right hoje {}, use {right}", !right)),
+                "{door:#?}"
+            );
+        }
         let mut fixed = blocked.clone();
         match fix["tool"].as_str() {
             Some("update") => {

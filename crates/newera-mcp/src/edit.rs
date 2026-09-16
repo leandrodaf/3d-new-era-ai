@@ -565,7 +565,7 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
 
 /// Fields that can be changed on an element. Each applies only to the kinds
 /// that have it; anything else is rejected so mistakes are loud.
-#[derive(Debug, Default, Deserialize, serde::Serialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Deserialize, serde::Serialize, JsonSchema)]
 pub(crate) struct UpdateSpec {
     #[serde(skip_serializing)]
     pub id: String,

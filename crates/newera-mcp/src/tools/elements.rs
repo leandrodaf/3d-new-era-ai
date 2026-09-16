@@ -57,6 +57,56 @@ pub(crate) struct SplitParams {
     /// Split position along the wall, 0..1 (default 0.5).
     t: Option<f64>,
 }
+/// The ids asked for whose element came out exactly as it was.
+///
+/// `hinge_right: true` on a door already hinged right answered `ok` and a dry
+/// run `{}` — which read as "nothing to change here" when the request had
+/// simply asked for what was already there. Named, with the current values,
+/// it is a sentence instead of a silence.
+fn unchanged(
+    before: &newera_core::Home,
+    after: &newera_core::Home,
+    asked: &[String],
+) -> Vec<serde_json::Value> {
+    let diff = crate::compact::diff(before, after);
+    let moved: std::collections::BTreeSet<String> = ["changed", "added", "gone"]
+        .iter()
+        .filter_map(|k| diff.get(*k).and_then(|v| v.as_array()))
+        .flatten()
+        .filter_map(|c| c.as_str().or_else(|| c["id"].as_str()).map(str::to_owned))
+        .collect();
+    asked
+        .iter()
+        .filter(|id| !moved.contains(*id))
+        .filter_map(|raw| {
+            let id: newera_core::ElementId = raw.parse().ok()?;
+            let now = crate::compact::element(after, id)?;
+            Some(serde_json::json!({"id": raw, "now": now}))
+        })
+        .collect()
+}
+
+/// A reply with `unchanged` added: the requests that were already so.
+fn with_unchanged(reply: &str, still: &[serde_json::Value]) -> String {
+    if still.is_empty() {
+        return reply.to_owned();
+    }
+    let note = "these already had the values asked for; nothing was changed on them";
+    match reply.find('{') {
+        Some(at) => {
+            let (head, body) = reply.split_at(at);
+            let mut json: serde_json::Value = serde_json::from_str(body).unwrap_or_default();
+            json["unchanged"] = serde_json::json!(still);
+            json["unchanged_note"] = serde_json::json!(note);
+            format!("{head}{json}")
+        }
+        None => format!(
+            "{reply} {}",
+            serde_json::json!({"unchanged": still, "unchanged_note": note})
+        ),
+    }
+}
+
 #[tool_router(router = elements_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
@@ -98,18 +148,25 @@ impl NewEraMcp {
             }
             Ok(())
         };
+        let asked: Vec<String> = p.items.iter().map(|i| i.id.clone()).collect();
         if Dry::on(p.dry.as_ref()) {
             let doc = self.document.read();
+            let before = doc.home().clone();
             let (items, rename) = (p.items, p.rename);
-            return reply::preview_with(&doc, Dry::brief(p.dry.as_ref()), move |scratch| {
+            let mut scratch = newera_core::Document::new(before.clone());
+            apply(&mut scratch, items.clone(), rename.as_ref())?;
+            let still = unchanged(&before, scratch.home(), &asked);
+            let answer = reply::preview_with(&doc, Dry::brief(p.dry.as_ref()), move |scratch| {
                 apply(scratch, items, rename.as_ref())
-            });
+            })?;
+            return Ok(with_unchanged(&answer, &still));
         }
         let mut doc = self.document.write();
         on_variant(&mut doc, p.v)?;
         let before = doc.home().clone();
         apply(&mut doc, p.items, p.rename.as_ref())?;
-        Ok(applied(&doc, &before))
+        let still = unchanged(&before, doc.home(), &asked);
+        Ok(with_unchanged(&applied(&doc, &before), &still))
     }
     #[tool(
         description = "Delete elements by id, atomically. Labels left pointing at a deleted piece — about it, or standing on it — are named in the reply as labels_left [[id, text]], since an index code over what is now another piece is found by nobody; labels=true deletes them in the same step."
@@ -369,6 +426,34 @@ mod tests {
             &changed["to"]["hinge_right"],
         );
         assert_ne!(from, to, "the hinge is named as what moved: {dry}");
+
+        // Asking for the hinge it already has is said, not answered with a
+        // silent ok or an empty dry run.
+        let current = !right;
+        let same = format!(r#"[{{"id":"{id}","hinge_right":{current}}}]"#);
+        let dry: serde_json::Value = serde_json::from_str(
+            &s.update(Parameters(UpdateParams {
+                items: serde_json::from_str(&same).unwrap(),
+                rename: None,
+                v: None,
+                dry: Some(Dry::All(true)),
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(dry["unchanged"][0]["id"], id.as_str(), "{dry}");
+        let applied = s
+            .update(Parameters(UpdateParams {
+                items: serde_json::from_str(&same).unwrap(),
+                rename: None,
+                v: None,
+                dry: None,
+            }))
+            .unwrap();
+        assert!(
+            applied.contains("unchanged") && applied.contains("already had"),
+            "{applied}"
+        );
     }
 
     #[test]
