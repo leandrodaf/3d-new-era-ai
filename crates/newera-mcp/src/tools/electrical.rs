@@ -141,10 +141,8 @@ impl NewEraMcp {
                     })
                     .collect();
                 let pending = findings.iter().filter(|f| f.accepted.is_none()).count();
-                let orphaned: Vec<[String; 2]> = electrical::orphaned(home)
-                    .into_iter()
-                    .map(|(k, why)| [k, why])
-                    .collect();
+                let live: Vec<String> = findings.iter().map(|f| f.key.clone()).collect();
+                let orphaned = super::orphan_rows(electrical::orphaned(home), &live);
                 let cables: serde_json::Map<String, serde_json::Value> =
                     electrical::cable_lengths(home)
                         .into_iter()

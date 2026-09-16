@@ -100,10 +100,8 @@ impl NewEraMcp {
                     })
                     .collect();
                 let pending = findings.iter().filter(|f| f.accepted.is_none()).count();
-                let orphaned: Vec<[String; 2]> = plumbing::orphaned(home)
-                    .into_iter()
-                    .map(|(k, why)| [k, why])
-                    .collect();
+                let live: Vec<String> = findings.iter().map(|f| f.key.clone()).collect();
+                let orphaned = super::orphan_rows(plumbing::orphaned(home), &live);
                 let pipes: serde_json::Map<String, serde_json::Value> =
                     plumbing::pipe_lengths(home)
                         .into_iter()

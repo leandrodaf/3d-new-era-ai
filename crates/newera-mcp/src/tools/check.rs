@@ -130,10 +130,8 @@ impl NewEraMcp {
         }
         let doc = self.document.read();
         let report = newera_ergonomics::review(doc.home(), &profile);
-        let orphaned: Vec<[String; 2]> = newera_ergonomics::orphaned(doc.home(), &profile)
-            .into_iter()
-            .map(|(key, why)| [key, why])
-            .collect();
+        let live: Vec<String> = report.findings.iter().map(|f| f.key.clone()).collect();
+        let orphaned = super::orphan_rows(newera_ergonomics::orphaned(doc.home(), &profile), &live);
         let findings: Vec<serde_json::Value> = report
             .findings
             .iter()

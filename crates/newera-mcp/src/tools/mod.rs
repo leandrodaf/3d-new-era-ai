@@ -148,6 +148,38 @@ impl ServerHandler for NewEraMcp {
 /// not inside every sentence. Named `sources`, not `refs`: the annotations
 /// tool already calls its room reference tags `refs`, and one word with two
 /// meanings on the same surface costs an agent a wrong guess.
+/// Orphaned acceptances as rows, each with the live finding that probably
+/// took its place: the same thing — the part after the rule — under
+/// another key, when there is one. `[key, reason]` or `[key, reason, successor]`.
+pub(crate) fn orphan_rows(
+    orphaned: Vec<(String, String)>,
+    live: &[String],
+) -> Vec<serde_json::Value> {
+    let tail = |k: &str| k.rsplit(':').next().unwrap_or(k).to_owned();
+    let after_rule = |k: &str| k.split_once(':').map(|(_, rest)| rest.to_owned());
+    orphaned
+        .into_iter()
+        .map(|(key, why)| {
+            let successor = live
+                .iter()
+                .find(|l| {
+                    **l != key && after_rule(l).is_some() && after_rule(l) == after_rule(&key)
+                })
+                .or_else(|| {
+                    live.iter().find(|l| {
+                        **l != key
+                            && tail(l) == tail(&key)
+                            && l.split(':').next() == key.split(':').next()
+                    })
+                });
+            match successor {
+                Some(s) => serde_json::json!([key, why, s]),
+                None => serde_json::json!([key, why]),
+            }
+        })
+        .collect()
+}
+
 pub(crate) fn sources(codes: &[&str]) -> serde_json::Value {
     let map: serde_json::Map<String, serde_json::Value> = codes
         .iter()
@@ -217,5 +249,24 @@ trace_background,undo,update,variants,video";
         }
         let update = tools.iter().find(|t| t.name == "update").unwrap();
         println!("{}", serde_json::to_string(&update.input_schema).unwrap());
+    }
+
+    #[test]
+    fn an_orphan_points_to_the_finding_that_took_its_place() {
+        let live = vec![
+            "nbr15575g:f807:livres-frente".to_owned(),
+            "plumb:vent-far:f1601".to_owned(),
+        ];
+        let rows = super::orphan_rows(
+            vec![
+                ("-:f807:livres-frente".to_owned(), "motivo".to_owned()),
+                ("plumb:vent:f1601".to_owned(), "outro".to_owned()),
+                ("plumb:grease".to_owned(), "prédio".to_owned()),
+            ],
+            &live,
+        );
+        assert_eq!(rows[0][2], "nbr15575g:f807:livres-frente");
+        assert_eq!(rows[1][2], "plumb:vent-far:f1601");
+        assert!(rows[2].get(2).is_none());
     }
 }
