@@ -8,7 +8,11 @@ inteira pode não ter nenhum. Redimensionar a peça deixa o nome mentindo, em
 silêncio, e quem vai cortar a chapa lê o nome.
 
 Lê o estado pela API REST do editor (sem gastar contexto do agente) e aponta
-cada nome cuja medida não bate com a geometria.
+cada nome cuja medida não bate com a geometria — descendo nos grupos, que é
+onde a marcenaria de verdade mora: nesta planta, 23 dos móveis são grupos, e um
+"tampo aberto 110 × 30" com 119 cm de largura só aparece se o script entrar
+neles. Peças dentro de um grupo não podem sequer ser renomeadas pelo MCP
+(`edit the group instead`), então o aviso é o que resta.
 
     python3 conferir-medidas-nos-nomes.py [--url http://127.0.0.1:7878/api/home]
                                           [--nivel lv3] [--tol 1.0]
@@ -44,10 +48,34 @@ def medidas_do_nome(nome):
     return [cm(m.group(1)) for m in UMA_MEDIDA.finditer(nome)]
 
 
-def bate(valor, peca, tol):
-    """A medida aparece em alguma dimensão da peça (ou na soma de um vão)?"""
-    for dimensao in (peca["width"], peca["depth"], peca["height"]):
-        if abs(dimensao - valor) <= tol:
+def todas(items, ancestrais=()):
+    """Cada peça, e as de dentro dos grupos, com a linhagem que a contém."""
+    for peca in items:
+        yield peca, ancestrais
+        for chave in ("children", "furniture", "parts"):
+            if peca.get(chave):
+                yield from todas(peca[chave], (*ancestrais, peca))
+
+
+def bate(valor, peca, ancestrais, tol):
+    """A medida aparece em alguma dimensão da peça — ou do grupo que a contém?
+
+    Uma parte herda o nome do grupo inteiro ("Gabinete de 80,5 cm — montante"),
+    então o número quase sempre é do grupo, não dela. Conferir a linhagem é o
+    que separa o herdado do que realmente mente.
+    """
+    for alvo in (peca, *ancestrais):
+        elev = alvo.get("elevation", 0.0)
+        candidatos = (
+            alvo["width"],
+            alvo["depth"],
+            alvo["height"],
+            # "prateleira a 112 cm" é onde ela está, não o tamanho dela — e o
+            # nome costuma citar o topo (elevação + espessura), não a base.
+            elev,
+            elev + alvo["height"],
+        )
+        if any(abs(c - valor) <= tol for c in candidatos):
             return True
     return False
 
@@ -66,15 +94,17 @@ def main():
         sys.exit(f"não consegui ler {args.url}: {erro}\n(o editor está aberto?)")
 
     suspeitas = []
-    for peca in casa["furniture"]:
-        if args.nivel and peca.get("level") != args.nivel:
+    for peca, ancestrais in todas(casa["furniture"]):
+        # Uma peça de dentro herda o nível do grupo, que já foi filtrado.
+        if args.nivel and not ancestrais and peca.get("level") != args.nivel:
             continue
         nome = peca.get("name") or ""
         valores = medidas_do_nome(nome)
         if not valores:
             continue
-        soltos = [v for v in valores if not bate(v, peca, args.tol)]
+        soltos = [v for v in valores if not bate(v, peca, ancestrais, args.tol)]
         if soltos:
+            peca["_dentro"] = bool(ancestrais)
             suspeitas.append((peca, soltos))
 
     if not suspeitas:
@@ -84,7 +114,8 @@ def main():
     print(f"{len(suspeitas)} peça(s) cujo nome afirma medida que não está nela:\n")
     for peca, soltos in suspeitas:
         d = (peca["width"], peca["depth"], peca["height"])
-        print(f"  {peca['id']:>6}  {peca['name']}")
+        dentro = "  ↳ " if peca.get("_dentro") else "  "
+        print(f"{dentro}{peca['id']:>6}  {peca['name']}")
         print(f"         é {d[0]:g} × {d[1]:g} × {d[2]:g} cm; sem par para: "
               f"{', '.join(f'{v:g}' for v in soltos)}")
 

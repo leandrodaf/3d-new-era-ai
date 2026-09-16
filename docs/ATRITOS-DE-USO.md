@@ -13,7 +13,141 @@ se possa reproduzir.
 
 ## Rodada em aberto
 
-Nada anotado ainda.
+Versão com os fixes, mesma planta, continuando a marcenaria da península.
+
+### O que caiu
+
+Conferido em uso, não por leitura do changelog:
+
+- **1 — o dry run diz o tipo.** `"issues_new": [{"ids": "f1042", "kind": "turned"}]`.
+- **2 — folga negativa.** `"+y": [-58, "f830", …]` onde antes vinha `0`.
+- **4 — `ergonomics` usa a face construída.** O gabinete da pia, que relatava
+  "1 cm livres à frente" medindo contra o próprio tampo, agora relata os
+  75,2 cm do corredor, que é para onde ele abre.
+- **6 — a folga vem com a extensão.** `"54 cm livres à frente em 34,5 dos
+  185 cm"`. Era o que faltava para ler um aperto: 34,5 cm de 185 é a quina da
+  mesa de cabeceira, não um armário que não abre. Três justificativas escritas
+  à mão na rodada anterior, com sonda, agora vêm prontas na mensagem.
+- **8 — as análises no REST**, com `bounds` já girado.
+- **9 — `accept` em `check_layout`**, com `orphaned` junto.
+- **11 — aceites órfãos aparecem.** `"orphaned": [["nbr15575g:f848:…", "…"]]`.
+  O aceite que sobrevivia ao próprio achado agora se anuncia.
+- **12a — `catalog(scope=project)` respeita o `q`.** Quatro linhas no lugar de
+  duzentas.
+
+O 7 e o 10 foram além do pedido: `annotations(stale=true)` agora **confere os
+nomes das peças** e **diz o que conferiu** —
+
+```
+"checked": {"dims": 19, "dims_unanchored": 10, "labels": 0, "names": 59}
+```
+
+`dims_unanchored: 10` é exatamente a resposta que faltava: dez cotas que ninguém
+está vigiando, em vez de um `[]` que parecia um atestado de saúde.
+
+## 15. O parser de medidas não entende a vírgula decimal
+
+A checagem de nomes, recém-chegada, devolveu 50 achados nesta planta. **28
+deles** são isto:
+
+```
+f954  escrito=5   medido=56,8   "48 — Gabinete do tanque integrado — 80,5 cm, duas portas"
+f849  escrito=75  medido=70,8   "Aéreo lavanderia — módulo 70,75 cm; limpeza"
+f831  escrito=9   medido=35     "Aéreo geladeira — 79,9 cm; ventilação inferior preservada"
+f1043 escrito=9   medido=30,7   "Micro-ondas … 53,9 × 43 × 30,7"
+```
+
+`80,5` foi lido como `5`; `70,75` como `75`; `79,9` como `9`. O parser quebra no
+separador decimal brasileiro e fica com o que vem depois da vírgula.
+
+Num software que mede em centímetros, cita ABNT e tem a interface em português,
+é o formato que a planta inteira usa. O efeito é pior do que não ter a
+checagem: 28 alarmes falsos afogam os reais — havia um só, `f1035`, "tampo
+aberto 110 × 30" com 119 cm de largura.
+
+**Encurtaria:** aceitar `,` como separador decimal ao ler o número.
+
+## 16. Redimensionar um grupo inverte a face que ele declara
+
+Ampliar a mesa basculante de 110 para 119 cm — mudança só em `x` — fez a peça
+trocar de lado:
+
+```
+"from": {… "faces": "+y", "wdh": [110, 36, 29]}
+"to":   {… "faces": "-y", "wdh": [119, 36, 29]}
+```
+
+A geometria em `y` é idêntica antes e depois (o tampo segue projetando de 485 a
+515, para a sala). Só a face declarada girou, e com ela veio um `turned` novo
+no relatório.
+
+Pior, não há como desfazer só a declaração: `arrange flip` acerta o `faces`
+mas **espelha o conteúdo** — o tampo saltou de 485-515 para 479-509, entrando
+6 cm dentro do móvel —, e `angle` gira o grupo inteiro. Foi preciso dar undo e
+deixar a peça com o metadado errado.
+
+**Encurtaria:** o resize não recalcular a face; ou um jeito de corrigir a
+declaração sem mover nada.
+
+## 17. Grupo só sabe encolher junto
+
+A face da península tinha 180 cm: montante de 5,8, a mesa de 110, e 63,8 cm de
+trecho cheio. O vão virou 131 cm, e o que se queria era manter os montantes e
+**crescer** a mesa até a torre quente.
+
+`update(w=131)` no grupo escala tudo pelo mesmo fator: montante 5,8 → 4,2, mesa
+110 → 80,3. O oposto do pedido. Um vão de marcenaria não encolhe assim — os
+montantes têm a espessura que têm, e quem cresce é o vão entre eles.
+
+A saída foi `arrange ungroup`, editar as sete peças à mão com as contas
+refeitas, e deixar desagrupado.
+
+**Encurtaria:** uma forma de dizer o que estica e o que fica.
+
+## 18. Parte de grupo não pode ser renomeada, e é a parte que mente
+
+Depois do resize, `f1035` continua se chamando "tampo aberto 110 × 30" com
+119 cm. Corrigir é recusado:
+
+```
+f1035 … is a part of f1042; edit f1042 instead
+```
+
+Mas editar `f1042` renomeia o grupo, não a parte. O nome errado é o da peça de
+dentro — a mesma que o `stale` novo acusa, com razão, e a única que não se pode
+consertar. O achado real fica para sempre na lista.
+
+**Encurtaria:** permitir `name` em parte de grupo. É metadado, não geometria.
+
+## 19. A sonda do `measure` não vê um armário de 280 cm
+
+Sondando a bancada da lavanderia:
+
+```
+measure(axis="x", at=450, range=[612, 650], z=[0, 280])
+→ spans: [[612, 613, "f1080", "Torre — rodapé recuado"], [613, 650, null, ""]]
+```
+
+De 613 a 650 estaria vazio. Não está: o vassoureiro `f988` ocupa 615-645, com a
+lateral `f957` em 615-617 subindo de z 0 a 280. A sonda atravessa um armário
+inteiro como se fosse ar — e reporta, na mesma resposta, uma peça vizinha
+(`f1080`) que também é parte de um grupo.
+
+O mesmo `measure`, perguntado de outro jeito, acerta:
+
+```
+measure(from="f988") → "+x": [50, "f955", …]
+```
+
+A consequência apareceu sozinha: `annotations(stale=true)` marcou a cota `d106`
+("passagem de 50 cm") como errada, dizendo que a ponta dela não toca nada e
+que `f1080` está 32 cm adiante — porque a ancoragem enxerga o mesmo vazio. A
+cota está certa; quem não vê é a sonda.
+
+**Encurtaria:** a sonda ler as partes de todo grupo, como `from` já faz. É a
+ferramenta que responde "o que tem aqui" — e um armário que some dela some
+também da ancoragem que depende dela.
+
 
 <!--
   Modelo de uma entrada:
