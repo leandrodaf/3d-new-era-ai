@@ -131,3 +131,19 @@ Nada liga a órfã ao achado que ocupou o lugar dela.
 o motivo, dizendo que a chave mudou — ou, no mínimo, apontar no `orphaned` o
 achado que provavelmente o sucedeu. A chave é identidade; se ela carrega a
 fonte, ela muda quando a fonte muda.
+
+---
+
+## Resolvido no código, a conferir na planta
+
+Tudo abaixo está no app reinstalado: 425 testes do workspace passando e clippy
+limpo. Cada caso foi reproduzido numa cópia desta planta antes do commit, com o
+comando do relato. Quando conferir, tire o caso daqui.
+
+| # | Como conferir | O que deve voltar |
+|---|---|---|
+| 50 | Tirar a aceitação do sofá (`f933`) e rodar `ergonomics` | Na cópia: *"36 cm livres à frente…; afaste 14 cm. Não cabem os dois: afastar isso cria «71 cm livres à frente… f933 14 cm» em Península — pedra sobre lava-louças 60,5 cm f1068; a posição atual é a melhor das duas"*. O que faltava: o achado do sofá não tinha `fix`, e agora o movimento que o conselho implica também é testado. Quando um `fix` leva a um achado já aceito, a mensagem diz *"Isso deixa «…», já aceito"*. (`4294502`) |
+| 58 | `plumbing(route, kind="vent", ids=[f1591,f1598,f1589,f1596,f1594,f1601], via="wall")` e depois `plumbing()` | Nenhum `plumb:unreached:vent`. As linhas traçadas guardam os pontos que atendem (`plumb:ends`/`elec:ends`), e o check os aceita a qualquer distância do eixo da parede. A ventilação é cobrada só por `vent-far`. Um segundo `route` com `ids=[f1598,f1596]` responde `merged_into` e traça de novo o mesmo run: na cópia, `pipes_m.vent` ficou em 20,4, não 24,0. (`bb3bb9c`) |
+| 48 | `plumbing(check, accept=[["plumb:vent:f1601","x"]])` com `plumb:vent-far:f1601` vivo | `orphaned: [["plumb:vent:f1601","x","plumb:vent-far:f1601"]]`: o terceiro elemento é o achado vivo da mesma coisa sob outra chave. Na ergonomia, a aceitação com prefixo antigo já passava ao achado novo (`accepted_as`). (`c9a7329`, `e4d58b4`) |
+| — | `place(cat="outlet-low", at=…)` a menos de 10 cm do batente de uma porta, ou dentro de um eletrodoméstico | Recusado, *"colado ao batente da porta… a caixa fica a pelo menos 10 cm do vão"* ou *"está dentro de Máquina de lavar… vai ao lado dele ou acima do seu topo"*, com o lugar livre mais próximo na mesma parede (`at=[x, y]`). Janela: 5 cm do peitoril. O check aponta os que já existem (`loose`). (`6e3d69b`) |
+| — | `catalog(q="gradil")`, `catalog(q="fechamento vidro sacada")`; `ergonomics` | Três peças diferentes, cada uma com seu 3D: `railing` (gradil de barras, vão de 9,5 cm), `glass-railing` (vidro laminado entre montantes, com corrimão) e `balcony-glazing` (fechamento retrátil, folhas de ~60 cm). O caso mais comum é gradil + fechamento. Também reconhecidas pelo nome quando importadas. O check cobra: 1,10 m de guarda-corpo, vão até 11 cm (NBR 14718); vidro laminado no guarda-corpo (NBR 7199); fechamento em vidro de segurança que nunca é o guarda-corpo sozinho, e mureta sob ele com 1,10 m (NBR 16259). `place`/`update` aceitam `glass=` e `gap=`. Ponto nenhum vai em gradil, guarda-corpo ou fechamento. Na cópia, o "Fechamento da varanda" sobre a mureta não gerou achado, e a grelha "…fechamento da varanda" deixou de ser lida como fechamento. (`56f2109`) |
