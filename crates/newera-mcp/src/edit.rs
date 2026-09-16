@@ -2243,6 +2243,12 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
         };
         if spec.wall.is_none() && source.is_none() {
             newera_core::mounting::seat(context, &mut piece)?;
+            // Behind a counter, an outlet or a network point goes above its top.
+            if spec.elev.is_none()
+                && let Some(top) = newera_core::mounting::counter_in_front(context, &piece)
+            {
+                piece.elevation = top + 15.0;
+            }
         }
         if let Some(why) = newera_core::mounting::blocked(context, &piece) {
             return Err(why);

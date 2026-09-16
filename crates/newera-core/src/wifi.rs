@@ -22,6 +22,9 @@ use crate::materials::WallFamily;
 pub const STANDARD_KEY: &str = "wifi:standard";
 /// An access point's wired uplink, Gbps: `1`, `2.5`, `5` or `10`.
 pub const UPLINK_KEY: &str = "wifi:uplink";
+/// The bands an access point radiates, when not all its generation's:
+/// `2.4,5` for a dual-band Wi-Fi 7.
+pub const BANDS_KEY: &str = "wifi:bands";
 /// Whether a window's glazing is low-e or solar control: `true`.
 pub const LOW_E_KEY: &str = "glass:low_e";
 /// Whether an access point is fed by its data cable (PoE): `true`/`false`.
@@ -191,6 +194,18 @@ pub struct AccessPoint {
     pub uplink_gbps: f64,
     /// Slabs between it and the storey shown.
     pub floors: u32,
+    /// Bands written on the point, when fewer than its generation's.
+    pub bands: Option<Vec<Band>>,
+}
+
+impl AccessPoint {
+    /// Whether it radiates on `band`.
+    pub fn radiates(&self, band: Band) -> bool {
+        self.bands.as_ref().map_or_else(
+            || self.standard.bands().contains(&band),
+            |b| b.contains(&band),
+        )
+    }
 }
 
 /// The access points on the storey shown.
@@ -217,6 +232,10 @@ pub fn access_points(home: &Home) -> Vec<AccessPoint> {
                     .and_then(|v| v.replace(',', ".").parse::<f64>().ok())
                     .unwrap_or_else(|| standard.usual_uplink()),
                 floors: 0,
+                bands: f
+                    .properties
+                    .get(BANDS_KEY)
+                    .map(|raw| raw.split(',').filter_map(Band::parse).collect()),
             }
         })
         .collect()
@@ -397,7 +416,7 @@ pub fn coverage(home: &Home, aps: &[AccessPoint]) -> Vec<RoomCoverage> {
     let mut out = Vec::new();
     let bands: Vec<Band> = Band::ALL
         .into_iter()
-        .filter(|b| aps.iter().any(|ap| ap.standard.bands().contains(b)))
+        .filter(|b| aps.iter().any(|ap| ap.radiates(*b)))
         .collect();
     for room in view.rooms.iter().filter(|r| r.points.len() >= 3) {
         let places = samples(&room.points);
@@ -409,7 +428,7 @@ pub fn coverage(home: &Home, aps: &[AccessPoint]) -> Vec<RoomCoverage> {
                 .iter()
                 .map(|p| {
                     aps.iter()
-                        .filter(|ap| ap.standard.bands().contains(band))
+                        .filter(|ap| ap.radiates(*band))
                         .map(|ap| signal(&view, ap, *p, 100.0, *band))
                         .fold(f64::MIN, f64::max)
                 })
@@ -488,6 +507,7 @@ pub fn suggest(
                     standard,
                     uplink_gbps: standard.usual_uplink(),
                     floors: 0,
+                    bands: None,
                 },
                 r.name.clone(),
             )
@@ -603,6 +623,7 @@ mod tests {
             standard,
             uplink_gbps: standard.usual_uplink(),
             floors: 0,
+            bands: None,
         }
     }
 
@@ -779,5 +800,15 @@ mod tests {
         assert_eq!(near[0].floors, 1);
         assert!((near[0].z - 510.0).abs() < 1e-9, "{:?}", near[0]);
         assert!(!coverage(&home, &near).is_empty());
+    }
+
+    #[test]
+    fn a_dual_band_wifi_7_point_radiates_only_what_it_is_written_to() {
+        let mut a = ap(0.0, 0.0, Standard::Wifi7);
+        assert!(a.radiates(Band::G6));
+        a.bands = Some(vec![Band::G2_4, Band::G5]);
+        assert!(!a.radiates(Band::G6) && a.radiates(Band::G5));
+        let rooms = coverage(&flat(None), &[a]);
+        assert!(rooms.iter().all(|r| r.band != Band::G6), "{rooms:#?}");
     }
 }

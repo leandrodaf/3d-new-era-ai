@@ -417,6 +417,7 @@ impl NewEraMcp {
                 .collect();
             let mut notes = vec![
                 "Piso com caimento para o ralo: 1,5 % a 2,5 % dentro do box, 0,5 % no resto da área molhada (NBR 13753).".to_owned(),
+                "Tubulação com o caimento mínimo; nos subcoletores e no coletor predial, no máximo 5 % (NBR 8160 4.2.5.2).".to_owned(),
             ];
             if !loose.is_empty() {
                 notes.push(format!(

@@ -65,6 +65,9 @@ pub(crate) struct ElectricalParams {
     standard: Option<String>,
     /// For `wifi`: the access points' wired uplink, Gbps (1, 2.5, 5, 10).
     uplink: Option<f64>,
+    /// For `wifi`: the bands they radiate when fewer than their generation's,
+    /// e.g. `2.4,5` for a dual-band Wi-Fi 7.
+    bands: Option<String>,
     /// For `wifi`: whether `ids` are fed by their data cable (`PoE`).
     poe: Option<bool>,
     /// For `wifi`: the band the suggestion aims at, `2.4`, `5` (default) or `6`.
@@ -663,7 +666,10 @@ impl NewEraMcp {
                 };
                 let mut doc = self.document.write();
                 if !p.ids.is_empty()
-                    && (standard.is_some() || p.poe.is_some() || p.uplink.is_some())
+                    && (standard.is_some()
+                        || p.poe.is_some()
+                        || p.uplink.is_some()
+                        || p.bands.is_some())
                 {
                     let mut commands = Vec::new();
                     for raw in &p.ids {
@@ -680,6 +686,11 @@ impl NewEraMcp {
                             piece
                                 .properties
                                 .insert(wifi::STANDARD_KEY.into(), s.key().into());
+                        }
+                        if let Some(bands) = &p.bands {
+                            piece
+                                .properties
+                                .insert(wifi::BANDS_KEY.into(), bands.replace(' ', ""));
                         }
                         if let Some(gbps) = p.uplink {
                             piece
@@ -732,7 +743,7 @@ impl NewEraMcp {
                     "access_points": aps.iter().map(|a| serde_json::json!([
                         a.id.map(|i| i.to_string()),
                         a.standard.key(),
-                        a.standard.bands().iter().map(|b| b.key()).collect::<Vec<_>>(),
+                        wifi::Band::ALL.iter().filter(|b| a.radiates(**b)).map(|b| b.key()).collect::<Vec<_>>(),
                         format!("{} GbE", a.uplink_gbps),
                     ])).collect::<Vec<_>>(),
                     "coverage": rows,
@@ -1497,6 +1508,21 @@ mod tests {
             (tower.elevation - 90.0).abs() < 1e-9,
             "{reply}: seated on the top"
         );
+        // A network point asked behind the counter comes out above its top.
+        s.place(Parameters(
+            serde_json::from_str(r#"{"items":[{"cat":"network-outlet","at":[150,5]}]}"#).unwrap(),
+        ))
+        .unwrap();
+        let rj = s
+            .document
+            .read()
+            .home()
+            .furniture
+            .iter()
+            .find(|f| f.catalog == "network-outlet")
+            .unwrap()
+            .clone();
+        assert!((rj.elevation - 105.0).abs() < 1e-9, "{}", rj.elevation);
         let loose = s
             .place(Parameters(
                 serde_json::from_str(r#"{"items":[{"cat":"outlet-tower","at":[150,200]}]}"#)

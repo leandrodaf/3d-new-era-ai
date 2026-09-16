@@ -265,6 +265,37 @@ pub fn seat(home: &Home, piece: &mut Furniture) -> Result<(), String> {
     }
 }
 
+/// The top of a counter standing against the wall in front of a wall point
+/// set lower than it: where the point belongs, above the top, instead of
+/// hidden in the cabinet.
+pub fn counter_in_front(home: &Home, piece: &Furniture) -> Option<f64> {
+    if !matches!(
+        piece.catalog.as_str(),
+        "outlet-low" | "outlet-mid" | "network-outlet" | "data-outlet" | "tv-outlet"
+    ) {
+        return None;
+    }
+    let view = home.level_view(home.current_level());
+    view.furniture
+        .iter()
+        .flat_map(Furniture::flatten)
+        .filter(|f| {
+            f.id != piece.id && f.opening.is_none() && f.discipline.is_none() && !f.is_group()
+        })
+        .filter(|f| {
+            let (_, top) = f.height_range();
+            (75.0..=110.0).contains(&top) && f.depth >= 40.0 && !movable(f)
+        })
+        .filter(|f| {
+            let mut near = (*f).clone();
+            near.depth += 2.0 * IN_WALL;
+            near.width += 2.0;
+            near.contains(piece.position) && piece.elevation < f.height_range().1
+        })
+        .map(|f| f.height_range().1)
+        .reduce(f64::max)
+}
+
 /// Whether a catalog piece is set into a wall.
 pub fn wall_mounted(catalog: &str) -> bool {
     matches!(
