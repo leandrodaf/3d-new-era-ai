@@ -279,11 +279,49 @@ silenciosamente descartado.
 dry, então o número que ele devolve não é comparável com o da revisão que se
 está conduzindo. Dá para usar o *sinal* (subiu/desceu), nunca o valor.
 
+## 13. A âncora morre com a peça, e `anchor` não a ressuscita
+
+Ancorar as cotas (atrito 10) funcionou: ao remover o nicho da lixeira, o
+`stale` acusou sozinho, sem que ninguém precisasse olhar o desenho —
+
+```
+["d95", 141.5, 141.5, "f817", "f817 is gone; this no longer marks anything"]
+```
+
+Repare nos dois números: **escrito 141,5, medido 141,5**. A cota está certa. O
+que morreu foi a âncora, junto com a peça em que ela se apoiava.
+
+E não há como religá-la. Rodar `annotations(anchor=true)` de novo respondeu
+`{"anchored": []}` — a cota continuou presa ao fantasma e continuou aparecendo
+como stale a cada revisão, com o número correto. A saída foi apagar as duas
+cotas e desenhá-las de novo nas mesmas coordenadas; aí sim `anchor=true` pegou
+uma delas (a que toca parede e gabinete) e o `stale` ficou limpo.
+
+Uma cota permanentemente stale é pior que uma sem âncora: ela treina quem lê o
+relatório a ignorar a lista.
+
+**Encurtaria:** `anchor=true` reancorar o que perdeu a âncora, em vez de pular.
+
+## 14. Apagar a peça deixa o rótulo dela no desenho
+
+Removido o nicho da lixeira, o rótulo `[09]` que o apontava continuou onde
+estava — agora sobre a pia, chamando para o índice um item que não existe mais.
+Nenhuma ferramenta o mencionou: não é `stale` (é label sem `about`, ver atrito
+7), não é `outside_rooms`, não é nada. Foi achado no render, a olho.
+
+Num desenho com 99 rótulos numerados amarrados a um índice, cada peça removida
+deixa uma dessas para trás.
+
+**Encurtaria:** `delete` avisar quais rótulos ficaram apontando para o vazio —
+ou o `stale` cobrir também o rótulo cujo alvo sumiu, que é o mesmo tipo de
+mentira que ele já procura nas cotas.
+
 ---
 
 ## O que a revisão fez na planta
 
-De 50 para 97 de nota, sem esconder nada — cada aceite carrega a medida que o
+De 50 para 98 de nota, com o código de obras de São Paulo aplicado e sem
+esconder nada — cada aceite carrega a medida que o
 justifica, e os que deixaram de fazer sentido foram removidos.
 
 - **Choque real na bancada** (o único `collision` da planta): era a caixa do
@@ -300,10 +338,16 @@ justifica, e os que deixaram de fazer sentido foram removidos.
 - **Camada de referência**: a planta antiga estava na mesma elevação da nova e
   entrava nos checks.
 
+- **Cozinha, COE-SP**: com `city=sao-paulo`, o código municipal (Lei
+  16.642/2017) entrou como **erro** de peso 12 — pedia um círculo livre de 120
+  cm no piso e cabiam 100,1. O que travava era o nicho aberto da lixeira, de 49
+  cm: removido, com a lixeira passando a embutida no gavetão em U da pia, o
+  círculo foi a ~141 cm. A pedra da pia foi estendida para fechar o vão e os
+  nomes que falavam de "bancada de 180 cm" e "pedra de 55 cm" foram corrigidos
+  para 131 e 60,5.
+
 ## O que ficou por decidir (não é atrito, é do morador)
 
-- **Cidade**: não há pista dela em lugar nenhum do projeto, e chutar faria o
-  código de obras errado julgar a planta. `set_home(city=...)`.
 - **Terceiro lugar na sala**: 10,2 m² não comportam uma poltrona solta —
   testada em três posições, todas estrangulam a passagem diante do sofá. O
   caminho é trocar o retrátil de 2 lugares por um de 3 no mesmo vão de 200 cm.
