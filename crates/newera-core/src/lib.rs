@@ -31,6 +31,7 @@ pub mod ops;
 pub mod progress;
 mod project;
 mod roof_fit;
+pub mod routing;
 pub mod standards;
 mod style;
 mod units;
