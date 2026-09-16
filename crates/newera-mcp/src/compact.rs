@@ -562,6 +562,7 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
                     ("over", json!(over.map(num))),
                 ]),
             ),
+            Issue::UnratedLight(f) => push("unrated_light", keyed(issue_ref(home, f.into()), &key)),
             Issue::NoDoor { room, passages } => push(
                 "no_door",
                 obj([

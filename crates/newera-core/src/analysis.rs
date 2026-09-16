@@ -106,6 +106,10 @@ pub enum Issue {
         /// Where `angle` says the piece looks.
         placed: &'static str,
     },
+    /// A light fixture with no rated output — neither lumens nor watts, only
+    /// the relative power an import carries — so every illuminance computed
+    /// from it is a guess, and a plan that looks lit can be dark.
+    UnratedLight(FurnitureId),
     /// A bedroom or a bathroom with no door: reached only through open
     /// passages, or not reached at all. Only said once the storey has doors
     /// somewhere — a sketch with no openings yet is not a sealed flat.
@@ -134,7 +138,9 @@ impl Issue {
             Self::Blocked { piece, against, .. } => vec![(*piece).into(), *against],
             Self::InWall(f, w) => vec![(*f).into(), (*w).into()],
             Self::BlocksDoor { door, by } => vec![(*door).into(), (*by).into()],
-            Self::OutsideRooms(f) | Self::LooseOpening(f) => vec![(*f).into()],
+            Self::OutsideRooms(f) | Self::LooseOpening(f) | Self::UnratedLight(f) => {
+                vec![(*f).into()]
+            }
             Self::OutgrewNiche { piece, host, .. } => vec![(*piece).into(), (*host).into()],
             Self::Turned { piece, .. } | Self::UnclearFront { piece, .. } => {
                 vec![(*piece).into()]
@@ -166,6 +172,7 @@ impl Issue {
             Self::Turned { .. } => "turned",
             Self::UnclearFront { .. } => "unclear_front",
             Self::NoDoor { .. } => "no_door",
+            Self::UnratedLight(_) => "unrated_light",
         }
     }
 
@@ -196,7 +203,8 @@ impl Issue {
     /// Whether an accepted key names a layout finding (and not an
     /// ergonomics one, which shares the project's list of acceptances).
     pub fn is_layout_key(key: &str) -> bool {
-        const FAMILIES: [&str; 10] = [
+        const FAMILIES: [&str; 11] = [
+            "unrated_light",
             "no_door",
             "unclear_front",
             "overlap",
@@ -576,6 +584,18 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
                     candidates,
                     placed: crate::measure::facing(group),
                 });
+            }
+        }
+    }
+
+    // Fixtures that light with a guessed output.
+    for top in home.furniture.iter().filter(|f| wanted(f.level)) {
+        for piece in top.visible_leaves() {
+            if let Some(light) = &piece.light
+                && light.lumens.is_none()
+                && light.watts.is_none()
+            {
+                issues.push(Issue::UnratedLight(piece.id));
             }
         }
     }
