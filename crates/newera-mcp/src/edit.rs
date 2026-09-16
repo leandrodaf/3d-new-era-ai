@@ -1965,7 +1965,31 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
             commands.push(Command::insert(piece));
             continue;
         }
-        let copied = match &spec.copy {
+        // The two ways an agent reaches for a piece already in the project
+        // before finding `copy`: the model path `catalog(scope=project)`
+        // gives — embedded in the project, not a file on disk — and the id
+        // itself in `cat`. Both mean "this one again".
+        let source_id = spec.copy.clone().or_else(|| {
+            let home = doc.home();
+            let pieces = || {
+                home.furniture
+                    .iter()
+                    .flat_map(newera_core::Furniture::flatten)
+            };
+            if let Some(model) = &spec.model
+                && !doc.resolve_asset(model).exists()
+            {
+                return pieces()
+                    .find(|f| f.model.as_deref() == Some(model.as_str()))
+                    .map(|f| f.id.to_string());
+            }
+            (spec.model.is_none() && newera_catalog::find(&spec.cat).is_none())
+                .then(|| spec.cat.parse::<newera_core::FurnitureId>().ok())
+                .flatten()
+                .and_then(|id| home.find_piece(id))
+                .map(|f| f.id.to_string())
+        });
+        let copied = match &source_id {
             Some(raw) => {
                 let id: newera_core::FurnitureId = raw.parse().map_err(|e| format!("copy: {e}"))?;
                 let mut piece = doc
@@ -1987,7 +2011,12 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
         } else if let Some(model) = &spec.model {
             let path = doc.resolve_asset(model);
             let loaded = newera_catalog::load_model(&path)
-                .map_err(|e| format!("{}: {e}", path.display()))?;
+                .map_err(|e| {
+                    format!(
+                        "{}: {e} (a model embedded in the project is repeated with copy=<id of a piece using it>)",
+                        path.display()
+                    )
+                })?;
             let name = path
                 .file_stem()
                 .map_or_else(|| "Modelo".to_owned(), |n| n.to_string_lossy().into_owned());
@@ -2011,7 +2040,10 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
             }
         } else {
             let item = newera_catalog::find(&spec.cat).ok_or_else(|| {
-                format!("unknown catalog id `{}` (use the catalog tool)", spec.cat)
+                format!(
+                    "unknown catalog id `{}` (use the catalog tool; to repeat a piece already in the project, copy=<its id>)",
+                    spec.cat
+                )
             })?;
             item.instantiate(doc.new_furniture_id(), spec.at.unwrap_or_default())
         };

@@ -317,6 +317,31 @@ mod tests {
             (home.furniture[1].children[0].position.x - 1.0).abs() < 1e-9,
             "original untouched"
         );
+        drop(doc);
+
+        // The two ways reached for first mean the same copy: the embedded
+        // model path catalog(scope=project) gives, and the id in `cat`.
+        place(r#"{"items":[{"model":"51/crown.obj","at":[100,300]},{"cat":"f2","at":[30,300]}]}"#);
+        let doc = s.document.read();
+        let home = doc.home();
+        assert_eq!(home.furniture.len(), 6);
+        assert_eq!(home.furniture[4].model.as_deref(), Some("51/crown.obj"));
+        assert!(
+            (home.furniture[4].width - 200.0).abs() < 1e-9,
+            "the size of the piece copied"
+        );
+        assert_eq!(
+            home.furniture[5].children.len(),
+            2,
+            "the tower with its parts"
+        );
+        drop(doc);
+        let err = s
+            .place(Parameters(
+                serde_json::from_str(r#"{"items":[{"cat":"f999","at":[0,0]}]}"#).unwrap(),
+            ))
+            .unwrap_err();
+        assert!(err.message.contains("copy=<its id>"), "{err:?}");
     }
 
     #[test]
