@@ -275,7 +275,7 @@ impl NewEraMcp {
         compact::materials().to_string()
     }
     #[tool(
-        description = "Find catalog items: rows [id,name,w,d,h] in cm. scope=project lists what this plan already uses instead — catalog id or imported model, with how many there are and one id to copy from — which is how a new piece matches the drawing rather than reintroducing a generic one."
+        description = "Find catalog items: rows [id,name,w,d,h] in cm. scope=project lists what this plan already uses instead — catalog id or imported model, with how many there are and one id to copy from, narrowed by q over the entry and its pieces' names — which is how a new piece matches the drawing rather than reintroducing a generic one."
     )]
     pub(crate) fn catalog(&self, Parameters(p): Parameters<CatalogParams>) -> String {
         if p.scope.as_deref().map(str::trim) == Some("project") {
@@ -283,7 +283,16 @@ impl NewEraMcp {
             let home = doc.home();
             // By what a piece actually is: an imported model is its file,
             // everything else its catalog entry.
-            let mut used: std::collections::BTreeMap<String, (usize, String, String)> =
+            // `q` narrows it as it narrows the catalog: every word has to be
+            // in the entry or in the name of one of its pieces.
+            let words: Vec<String> =
+                p.q.as_deref()
+                    .map(newera_core::fold)
+                    .unwrap_or_default()
+                    .split_whitespace()
+                    .map(str::to_owned)
+                    .collect();
+            let mut used: std::collections::BTreeMap<String, (usize, String, String, String)> =
                 std::collections::BTreeMap::new();
             for piece in home
                 .furniture
@@ -294,14 +303,23 @@ impl NewEraMcp {
                 if what.is_empty() {
                     continue;
                 }
-                let row = used
-                    .entry(what)
-                    .or_insert((0, piece.name.clone(), piece.id.to_string()));
+                let row = used.entry(what.clone()).or_insert_with(|| {
+                    (
+                        0,
+                        piece.name.clone(),
+                        piece.id.to_string(),
+                        newera_core::fold(&what),
+                    )
+                });
                 row.0 += 1;
+                row.3.push(' ');
+                row.3.push_str(&newera_core::fold(&piece.name));
             }
             let rows: Vec<serde_json::Value> = used
                 .into_iter()
-                .map(|(what, (count, name, id))| serde_json::json!([what, name, count, id]))
+                .filter(|(_, (.., text))| words.iter().all(|w| text.contains(w.as_str())))
+                .take(p.limit.unwrap_or(usize::MAX))
+                .map(|(what, (count, name, id, _))| serde_json::json!([what, name, count, id]))
                 .collect();
             return serde_json::json!({ "used": rows }).to_string();
         }
@@ -313,6 +331,42 @@ impl NewEraMcp {
 mod tests {
     use super::*;
     use crate::tools::server;
+
+    #[test]
+    fn what_the_project_uses_is_narrowed_by_the_same_words() {
+        let s = server();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"sofa-3","at":[100,100]},
+                             {"cat":"box","name":"Janela da sala","at":[300,0],"w":120,"d":10,"h":110},
+                             {"cat":"box","name":"Pétala de flor","at":[400,100],"w":5,"d":5,"h":5},
+                             {"cat":"bed-double","at":[600,300]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let catalog = |json: &str| -> serde_json::Value {
+            serde_json::from_str(&s.catalog(Parameters(serde_json::from_str(json).unwrap())))
+                .unwrap()
+        };
+        let all = catalog(r#"{"scope":"project"}"#);
+        assert_eq!(all["used"].as_array().unwrap().len(), 3, "{all}");
+
+        // A word in a piece's name finds its entry, accents or not.
+        let windows = catalog(r#"{"scope":"project","q":"janela"}"#);
+        let rows = windows["used"].as_array().unwrap();
+        assert_eq!(rows.len(), 1, "{windows}");
+        assert_eq!(rows[0][0], "box", "{windows}");
+        let petal = catalog(r#"{"scope":"project","q":"petala"}"#);
+        assert_eq!(petal["used"].as_array().unwrap().len(), 1, "{petal}");
+        // And the entry itself.
+        let sofa = catalog(r#"{"scope":"project","q":"sofa"}"#);
+        assert_eq!(sofa["used"][0][0], "sofa-3", "{sofa}");
+        let none = catalog(r#"{"scope":"project","q":"geladeira"}"#);
+        assert_eq!(none["used"], serde_json::json!([]), "{none}");
+        let one = catalog(r#"{"scope":"project","limit":1}"#);
+        assert_eq!(one["used"].as_array().unwrap().len(), 1, "{one}");
+    }
 
     #[test]
     fn reads_answer_by_id_room_and_rectangle_instead_of_dumping_everything() {
