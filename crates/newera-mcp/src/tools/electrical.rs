@@ -74,7 +74,7 @@ pub(crate) struct ElectricalParams {
 #[tool_router(router = electrical_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Electrical and telecom project, NBR 5410 and NBR 16264 (residential cabling). Points are the electrical pieces (catalog electrical: outlets, switches, lighting points, panel, network-outlet RJ45, tv-outlet, wifi-point, telecom-panel) plus every fixture that lights. check (default): {points:{kind:count}, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — accept=[[key, reason]] with any action marks findings looked at (they stay listed with the reason and stop counting in pending), an empty reason takes one back, orphaned lists acceptances whose finding is gone and prune=true drops them — a ceiling lighting point per room, general-use outlets per room (kitchens and laundries one per 3.5 m of perimeter, bathrooms one by the basin, living rooms and bedrooms one per 5 m), RJ45 and TV outlets per room as NBR 16264 table 1 recommends (2 RJ45 and 1 TV in bedrooms, living rooms, offices, kitchens and laundries; 3 and 2 in a home theater; 1 and 1 elsewhere; a Wi-Fi point is not an RJ45 outlet), a power outlet by the telecom panel, a distribution and a telecom panel, points without a circuit, lighting and outlets sharing a circuit, a dedicated load not alone. circuits: rows [name, kinds, points, VA, V, A, wire mm², breaker A, DR] and main_breaker {a, phases, load_a_per_phase}: the supply to ask for, by Enel SP's categories on 127/220 V (single-phase up to 12 kW with no 220 V circuit, two-phase up to 20 kW, three-phase up to 75 kW) and the smallest of its fixed entry breakers (50, 63, 80, 100… A) — power by NBR 5410 (lighting per room by area: 100 VA up to 6 m² and 60 VA per whole 4 m² beyond, shared by its points; 600 VA for each of the first three outlets of a kitchen, laundry or bathroom, 100 VA after and elsewhere; dedicated points at their rated power, a shower 7500 W and air conditioning 1500 until written) unless set; the section is the smallest from 1.5 mm² (lighting) or 2.5 (with outlets) whose capacity, corrected for the circuits sharing its conduit on the laid-out runs (table 42, or grouping written on the project), admits a breaker between the current and it; DR on every point of a room with a bath or shower, on kitchen, laundry, service and garage points (lighting at 2.50 m or higher excepted) and on outdoor and balcony outlets; a shower over 4.4 kVA runs on 220 V. check also says lighting and outlets sharing a circuit only when NBR 5410 9.5.3.3 forbids it (over 16 A, or all lighting or all outlets on shared circuits), kitchen and laundry outlets sharing with anything else, equipment over 10 A not alone, and a voltage drop over 4 % to the farthest point of a laid-out run. assign {ids, circuit, va?} — or the whole division at once, circuits {\"C1\": [ids], \"C2\": [ids]} — writes the circuits (and power, and volts 127|220 per point — a 220 V outlet makes its circuit 220 V) on points in one undoable step. voltage {volts?, short_ka?, earthing?: TN-S|TN-C-S|TT}. circuits also gives panel {devices: [[device, count, DIN modules]], modules {used, capacity, capacity_written, spare}, dps, earthing, icn_ka, selective}: one-pole breakers for 127 V circuits and two-pole for 220 V between phases, a two-pole DR per circuit that needs one, the main breaker, the surge protector (DPS class II, a module per phase and neutral) and NBR 5410's spare ways (2 up to 6 circuits, 3 up to 12, 4 up to 30, 15 % above); capacity is the panel's modules (assign modules on it) or a guess from its size, and check says when it does not fit, when the main breaker is under twice the largest partial (selectivity) and when the short-circuit level was assumed. cable {kind: power|data|tv, pts} (with ids or circuit instead of pts, it is a route): draws a run of the electrical project, told apart on the plan (power solid, network dashed, TV dash-dot); check then reports cables_m, the length by kind with a tenth for the drops, and network or TV points no run reaches, or a telecom panel none reaches. route {kind: power|data|tv, ids? | circuit?, via?: ceiling|floor|wall, cat?: cat5e|cat6|cat6a, from?}: lays the run the way it is built, along the walls and inside them (or in the slab), from the nearest panel of its kind to the points (all of the kind when none given), sharing the trunk, and draws it replacing the earlier run of the same circuit; replies {via, suggested, length_m {horizontal, vertical, total}, by_premise_m, bends, materials: [[item, qty, unit]]} — conduit, boxes, wire by conductor, cable, connectors. Without via it takes the cheapest premise that can be built; a via that cannot reach a point (wall with a point out of every wall; ceiling with a low point out of every wall, nowhere to drop) is refused naming the points. Automation (catalog smart-relay, smart-switch, dimmer, presence-sensor, smart-lock): each draws its standby on its circuit (assign standby_w; relay, dimmer and sensor 1 W, smart switch 1.2 by default, from manufacturers' sheets), circuits reports standby_w, and check asks a relay or smart switch for a neutral in its box, a dimmer for the room's lighting to fit its max_w (default 1.1 A at the supply voltage, some 140 W at 127 V) and pass 10 W, a ceiling sensor to be between 2.2 and 3 m (manufacturers install at about 2.4) and to see the room's far corner (about 1.45 × its height), a lock to sit on a door. wifi {ids?, standard?: wifi5|wifi6|wifi6e|wifi7, poe?, band?: 2.4|5|6}: writes the standard and PoE on access points (wifi-point) when given, and replies {access_points: [[id, standard, bands, uplink]], coverage: [[room, band, median dBm, worst dBm (9 places in 10), share at -67 dBm or better, grade]], suggested: {standard, band, points: [[x, y, z, room]], short: [rooms still under -67 dBm]}} — signal estimated from free-space loss, distance and each wall crossed by its material and thickness (a door or window where the path goes through one), per band; the suggestion is the fewest ceiling points (up to four) at room centres covering the rooms people use. check also asks each access point for its data cable, power (an outlet within 1.5 m or poe) and a cable category that carries its uplink (uplink up to 2.5 GbE: Cat 5e; 5 GbE: Cat 6; 10 GbE: Cat 6A). Circuit numbers are drawn next to the points on the plan, and with annotations(legend=true) the load schedule under the legend."
+        description = "Electrical and telecom project, NBR 5410 and NBR 16264 (residential cabling). Points are the electrical pieces (catalog electrical: outlets, switches, lighting points, panel, network-outlet RJ45, tv-outlet, wifi-point, telecom-panel) plus every fixture that lights. check (default): {points:{kind:count}, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — accept=[[key, reason]] with any action marks findings looked at (they stay listed with the reason and stop counting in pending), an empty reason takes one back, orphaned lists acceptances whose finding is gone and prune=true drops them — a ceiling lighting point per room, general-use outlets per room (kitchens and laundries one per 3.5 m of perimeter, bathrooms one by the basin, living rooms and bedrooms one per 5 m), RJ45 and TV outlets per room as NBR 16264 table 1 recommends (2 RJ45 and 1 TV in bedrooms, living rooms, offices, kitchens and laundries; 3 and 2 in a home theater; 1 and 1 elsewhere; a Wi-Fi point is not an RJ45 outlet), a power outlet by the telecom panel, a distribution and a telecom panel, points without a circuit, lighting and outlets sharing a circuit, a dedicated load not alone. circuits: rows [name, kinds, points, VA, V, A, wire mm², breaker A, DR] and main_breaker {a, phases, load_a_per_phase}: the supply to ask for, by Enel SP's categories on 127/220 V (single-phase up to 12 kW with no 220 V circuit, two-phase up to 20 kW, three-phase up to 75 kW) and the smallest of its fixed entry breakers (50, 63, 80, 100… A) — power by NBR 5410 (lighting per room by area: 100 VA up to 6 m² and 60 VA per whole 4 m² beyond, shared by its points; 600 VA for each of the first three outlets of a kitchen, laundry or bathroom, 100 VA after and elsewhere; dedicated points at their rated power, a shower 7500 W and air conditioning 1500 until written) unless set; the section is the smallest from 1.5 mm² (lighting) or 2.5 (with outlets) whose capacity, corrected for the circuits sharing its conduit on the laid-out runs (table 42, or grouping written on the project), admits a breaker between the current and it; DR on every point of a room with a bath or shower, on kitchen, laundry, service and garage points (lighting at 2.50 m or higher excepted) and on outdoor and balcony outlets; a shower over 4.4 kVA runs on 220 V. check also says lighting and outlets sharing a circuit only when NBR 5410 9.5.3.3 forbids it (over 16 A, or all lighting or all outlets on shared circuits), kitchen and laundry outlets sharing with anything else, equipment over 10 A not alone, and a voltage drop over 4 % to the farthest point of a laid-out run. assign {ids, circuit, va?} — or the whole division at once, circuits {\"C1\": [ids], \"C2\": [ids]} — writes the circuits (and power, and volts 127|220 per point — a 220 V outlet makes its circuit 220 V) on points in one undoable step. voltage {volts?, short_ka?, earthing?: TN-S|TN-C-S|TT}. circuits also gives panel {devices: [[device, count, DIN modules]], modules {used, capacity, capacity_written, spare}, dps, earthing, icn_ka, selective}: one-pole breakers for 127 V circuits and two-pole for 220 V between phases, a two-pole DR per circuit that needs one, the main breaker, the surge protector (DPS class II, a module per phase and neutral) and NBR 5410's spare ways (2 up to 6 circuits, 3 up to 12, 4 up to 30, 15 % above); capacity is the panel's modules (assign modules on it) or a guess from its size, and check says when it does not fit, when the main breaker is under twice the largest partial (selectivity) and when the short-circuit level was assumed. cable {kind: power|data|tv, pts} (with ids or circuit instead of pts, it is a route): draws a run of the electrical project, told apart on the plan (power solid, network dashed, TV dash-dot); check then reports cables_m, the length by kind with a tenth for the drops, and network or TV points no run reaches, or a telecom panel none reaches. route {kind: power|data|tv, ids? | circuit?, via?: ceiling|floor|wall, cat?: cat5e|cat6|cat6a, from?}: lays the run the way it is built, along the walls and inside them (or in the slab), from the nearest panel of its kind to the points (all of the kind when none given), sharing the trunk, and draws it replacing the earlier run of the same circuit and the cables drawn by hand to its points (listed in replaced_drawn); replies {via, suggested, length_m {horizontal, vertical, total}, by_premise_m, bends, materials: [[item, qty, unit]]} — conduit, boxes, wire by conductor, cable, connectors. Without via it takes the cheapest premise that can be built; a via that cannot reach a point (wall with a point out of every wall; ceiling with a low point out of every wall, nowhere to drop) is refused naming the points. Automation (catalog smart-relay, smart-switch, dimmer, presence-sensor, smart-lock): each draws its standby on its circuit (assign standby_w; relay, dimmer and sensor 1 W, smart switch 1.2 by default, from manufacturers' sheets), circuits reports standby_w, and check asks a relay or smart switch for a neutral in its box, a dimmer for the room's lighting to fit its max_w (default 1.1 A at the supply voltage, some 140 W at 127 V) and pass 10 W, a ceiling sensor to be between 2.2 and 3 m (manufacturers install at about 2.4) and to see the room's far corner (about 1.45 × its height), a lock to sit on a door. wifi {ids?, standard?: wifi5|wifi6|wifi6e|wifi7, poe?, band?: 2.4|5|6}: writes the standard and PoE on access points (wifi-point) when given, and replies {access_points: [[id, standard, bands, uplink]], coverage: [[room, band, median dBm, worst dBm (9 places in 10), share at -67 dBm or better, grade]], suggested: {standard, band, points: [[x, y, z, room]], short: [rooms still under -67 dBm]}} — signal estimated from free-space loss, distance and each wall crossed by its material and thickness (a door or window where the path goes through one), per band; the suggestion is the fewest ceiling points (up to four) at room centres covering the rooms people use. check also asks each access point for its data cable, power (an outlet within 1.5 m or poe) and a cable category that carries its uplink (uplink up to 2.5 GbE: Cat 5e; 5 GbE: Cat 6; 10 GbE: Cat 6A). Circuit numbers are drawn next to the points on the plan, and with annotations(legend=true) the load schedule under the legend."
     )]
     pub(crate) fn electrical(
         &self,
@@ -461,10 +461,16 @@ impl NewEraMcp {
                         }
                     })
                 );
+                let mut ends: Vec<newera_core::Point2> = points.iter().map(|t| t.at).collect();
+                ends.push(source.at);
+                let replaced = electrical::drawn_runs(home, cable, &ends);
                 let mut commands: Vec<newera_core::Command> = home
                     .polylines
                     .iter()
-                    .filter(|l| l.properties.get(electrical::RUN_KEY) == Some(&run))
+                    .filter(|l| {
+                        l.properties.get(electrical::RUN_KEY) == Some(&run)
+                            || replaced.contains(&l.id)
+                    })
                     .map(|l| newera_core::Command::remove(newera_core::ElementId::Polyline(l.id)))
                     .collect();
                 let (dash, color) = cable.style();
@@ -508,6 +514,7 @@ impl NewEraMcp {
                     .collect();
                 let reply = serde_json::json!({
                     "run": run,
+                    "replaced_drawn": replaced.iter().map(ToString::to_string).collect::<Vec<_>>(),
                     "via": via.key(),
                     "suggested": best.key(),
                     "length_m": {
@@ -981,8 +988,44 @@ mod tests {
         .unwrap();
         assert!(by_ids["materials"].to_string().contains("RJ45"), "{by_ids}");
 
+        // A network cable drawn by hand to the outlet goes when data is routed.
+        let (rack, outlet) = {
+            let doc = s.document.read();
+            let at = |cat: &str| {
+                doc.home()
+                    .furniture
+                    .iter()
+                    .find(|f| f.catalog == cat)
+                    .unwrap()
+                    .position
+            };
+            (at("telecom-panel"), at("network-outlet"))
+        };
+        electrical(&format!(
+            r#"{{"action":"cable","kind":"data","pts":[[{},{}],[{},{}]]}}"#,
+            rack.x, rack.y, outlet.x, outlet.y
+        ))
+        .unwrap();
+        let hand = s
+            .document
+            .read()
+            .home()
+            .polylines
+            .last()
+            .unwrap()
+            .id
+            .to_string();
         // Network in star from the telecom panel, Cat 6A as asked.
         let data = electrical(r#"{"action":"route","kind":"data","cat":"cat6a"}"#).unwrap();
+        assert!(data["replaced_drawn"].to_string().contains(&hand), "{data}");
+        assert!(
+            !s.document
+                .read()
+                .home()
+                .polylines
+                .iter()
+                .any(|l| l.id.to_string() == hand)
+        );
         let bill = data["materials"].to_string();
         assert!(bill.contains("Cat 6A") && bill.contains("RJ45"), "{data}");
         assert!(!bill.contains("750 V"), "{data}");

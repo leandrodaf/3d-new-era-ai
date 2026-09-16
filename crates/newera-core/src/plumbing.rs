@@ -632,6 +632,29 @@ pub fn check(home: &Home) -> Vec<Finding> {
             });
         }
     }
+    // Lines of the project that are no pipe: they count nowhere.
+    let untyped: Vec<String> = view
+        .polylines
+        .iter()
+        .filter(|l| {
+            l.discipline == Some(crate::style::Discipline::Plumbing) && pipe_of(l).is_none()
+        })
+        .map(|l| l.id.to_string())
+        .collect();
+    if !untyped.is_empty() {
+        out.push(Finding {
+            key: "plumb:untyped-lines".into(),
+            accepted: None,
+            severity: Severity::Dica,
+            place: "Hidráulica".into(),
+            message: format!(
+                "{} linha(s) desenhadas à mão sem dizer se são água fria, quente ou esgoto ({}): não entram nos metros de tubo; trace com route (que as substitui) ou apague.",
+                untyped.len(),
+                untyped.join(", ")
+            ),
+            source: "nbr8160",
+        });
+    }
     // The premises: where the water comes from and where the sewer goes.
     if all
         .iter()
@@ -706,6 +729,25 @@ pub fn orphaned(home: &Home) -> Vec<(String, String)> {
         .iter()
         .filter(|(key, _)| key.starts_with("plumb:") && !live.contains(*key))
         .map(|(key, why)| (key.clone(), why.clone()))
+        .collect()
+}
+
+/// Lines drawn by hand that a laid-out run of `pipe` replaces: plumbing
+/// lines of no run that are of this pipe and reach one of `ends`, or that say
+/// no pipe and start and finish at them (so a sewer line drawn beside a
+/// water point is never taken for the water's).
+pub fn drawn_runs(home: &Home, pipe: Pipe, ends: &[Point2]) -> Vec<crate::ids::PolylineId> {
+    let near = |p: Point2| ends.iter().any(|e| e.distance(p) <= 30.0);
+    home.level_view(home.current_level())
+        .polylines
+        .iter()
+        .filter(|l| l.discipline == Some(crate::style::Discipline::Plumbing))
+        .filter(|l| !l.properties.contains_key(RUN_KEY) && l.points.len() >= 2)
+        .filter(|l| match pipe_of(l) {
+            Some(p) => p == pipe && ends.iter().any(|e| reaches(l, *e)),
+            None => near(l.points[0]) && near(l.points[l.points.len() - 1]),
+        })
+        .map(|l| l.id)
         .collect()
 }
 

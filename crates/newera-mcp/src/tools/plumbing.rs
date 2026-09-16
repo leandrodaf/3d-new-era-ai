@@ -41,7 +41,7 @@ pub(crate) struct PlumbingParams {
 #[tool_router(router = plumbing_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Plumbing project, NBR 5626 (cold and hot water) and NBR 8160 (sewer). Points are the plumbing pieces (catalog plumbing: cold-water, hot-water, sewer, floor-drain, valve, grease-trap, inspection-box, water-meter, gas-point) and what a point is comes from its catalog, never its name; fixtures are the pieces that use water (toilet, basin, kitchen sink, shower, bathtub, washer, laundry sink, dishwasher). check (default): {points:{kind:count}, pipes_m, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — a cold-water point by every fixture and a sewer point (or a floor drain for basin, shower, tub and machines) within reach, the discharge diameter it needs (toilet 100 mm, kitchen sink and machines 50, others 40); hot water where the project has any; a floor drain where there is a shower or tub; a grease trap for a kitchen sink; the premises — where the water comes from (water-meter or valve) and where the sewer goes (inspection-box or stack); points no drawn pipe of their kind reaches. accept=[[key, reason]] and prune=true as in electrical. route {kind: cold|hot|sewer, ids?, via?: ceiling|floor|wall, from?, depth?}: lays the run from its source to the points along the walls and inside them, or through the ceiling or under the floor, sharing the trunk, draws it (replacing the earlier run of the same points) and replies {via, suggested, length_m, by_premise_m, bends, branches, materials: [[item, qty, unit]]} — water: pipe and bars, 90° elbows, tees, threaded elbows at the points, a gate valve per room, adhesive; sewer: the branch at the largest diameter it takes, the drops at each point's own, a 45° Y junction at each branch (never a 90° tee), two 45° elbows per turn, sealing rings, trap boxes. Sewer runs only under the floor, by gravity, with 2 % fall up to 75 mm and 1 % above: the reply says needs_depth_cm, and with depth a run that does not fit is refused saying how much it needs. Without via the cheapest premise that can be built is taken; one that cannot (a point in no wall; from the ceiling a low point in no wall, nowhere to drop; sewer up to the ceiling or lying in a wall) is refused with why."
+        description = "Plumbing project, NBR 5626 (cold and hot water) and NBR 8160 (sewer). Points are the plumbing pieces (catalog plumbing: cold-water, hot-water, sewer, floor-drain, valve, grease-trap, inspection-box, water-meter, gas-point) and what a point is comes from its catalog, never its name; fixtures are the pieces that use water (toilet, basin, kitchen sink, shower, bathtub, washer, laundry sink, dishwasher). check (default): {points:{kind:count}, pipes_m, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — a cold-water point by every fixture and a sewer point (or a floor drain for basin, shower, tub and machines) within reach, the discharge diameter it needs (toilet 100 mm, kitchen sink and machines 50, others 40); hot water where the project has any; a floor drain where there is a shower or tub; a grease trap for a kitchen sink; the premises — where the water comes from (water-meter or valve) and where the sewer goes (inspection-box or stack); points no drawn pipe of their kind reaches. accept=[[key, reason]] and prune=true as in electrical. route {kind: cold|hot|sewer, ids?, via?: ceiling|floor|wall, from?, depth?}: lays the run from its source to the points along the walls and inside them, or through the ceiling or under the floor, sharing the trunk, draws it (replacing the earlier run of the same points and the lines drawn by hand to them, listed in replaced_drawn) and replies {via, suggested, length_m, by_premise_m, bends, branches, materials: [[item, qty, unit]]} — water: pipe and bars, 90° elbows, tees, threaded elbows at the points, a gate valve per room, adhesive; sewer: the branch at the largest diameter it takes, the drops at each point's own, a 45° Y junction at each branch (never a 90° tee), two 45° elbows per turn, sealing rings, trap boxes. Sewer runs only under the floor, by gravity, with 2 % fall up to 75 mm and 1 % above: the reply says needs_depth_cm, and with depth a run that does not fit is refused saying how much it needs. Without via the cheapest premise that can be built is taken; one that cannot (a point in no wall; from the ceiling a low point in no wall, nowhere to drop; sewer up to the ceiling or lying in a wall) is refused with why."
     )]
     pub(crate) fn plumbing(
         &self,
@@ -314,10 +314,15 @@ impl NewEraMcp {
                 }
             )
         };
+        let mut ends: Vec<newera_core::Point2> = wanted.iter().map(|pt| pt.at).collect();
+        ends.push(source.at);
+        let replaced = plumbing::drawn_runs(home, pipe, &ends);
         let mut commands: Vec<newera_core::Command> = home
             .polylines
             .iter()
-            .filter(|l| l.properties.get(plumbing::RUN_KEY) == Some(&run))
+            .filter(|l| {
+                l.properties.get(plumbing::RUN_KEY) == Some(&run) || replaced.contains(&l.id)
+            })
             .map(|l| newera_core::Command::remove(newera_core::ElementId::Polyline(l.id)))
             .collect();
         let (dash, color) = pipe.style();
@@ -352,6 +357,7 @@ impl NewEraMcp {
             .collect();
         let mut reply = serde_json::json!({
             "run": run,
+            "replaced_drawn": replaced.iter().map(ToString::to_string).collect::<Vec<_>>(),
             "via": via.key(),
             "suggested": suggested.map(Via::key),
             "length_m": {
@@ -466,8 +472,68 @@ mod tests {
                 .contains("gravidade")
         );
 
+        // Lines drawn by hand before: the one from the meter to a cold point
+        // goes when cold water is routed; the one to the inspection box stays.
+        let (meter, tap, stack, drain) = {
+            let doc = s.document.read();
+            let at = |cat: &str| {
+                doc.home()
+                    .furniture
+                    .iter()
+                    .find(|f| f.catalog == cat)
+                    .unwrap()
+                    .position
+            };
+            (
+                at("water-meter"),
+                at("cold-water"),
+                at("inspection-box"),
+                at("floor-drain"),
+            )
+        };
+        s.create(Parameters(
+            serde_json::from_str(&format!(
+                r#"{{"polylines":[{{"pts":[[{},{}],[{},{}]]}},{{"pts":[[{},{}],[{},{}]]}}]}}"#,
+                meter.x, meter.y, tap.x, tap.y, stack.x, stack.y, drain.x, drain.y
+            ))
+            .unwrap(),
+        ))
+        .unwrap();
+        let drawn: Vec<String> = s
+            .document
+            .read()
+            .home()
+            .polylines
+            .iter()
+            .filter(|l| !l.properties.contains_key(newera_core::plumbing::RUN_KEY))
+            .map(|l| l.id.to_string())
+            .collect();
+        assert_eq!(drawn.len(), 2, "both drawn in the plumbing project");
+        assert!(
+            plumbing("{}").unwrap()["findings"]
+                .to_string()
+                .contains("plumb:untyped-lines")
+        );
+
         // Cold water: the cheapest premise, tees and elbows, a valve.
         let cold = plumbing(r#"{"action":"route","kind":"cold"}"#).unwrap();
+        assert_eq!(
+            cold["replaced_drawn"],
+            serde_json::json!([drawn[0]]),
+            "{cold}"
+        );
+        let left: Vec<String> = s
+            .document
+            .read()
+            .home()
+            .polylines
+            .iter()
+            .map(|l| l.id.to_string())
+            .collect();
+        assert!(
+            !left.contains(&drawn[0]) && left.contains(&drawn[1]),
+            "{left:?}"
+        );
         let bill = cold["materials"].to_string();
         assert!(
             bill.contains("PVC soldável 25 mm") && bill.contains("Registro de gaveta"),

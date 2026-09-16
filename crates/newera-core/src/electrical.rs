@@ -365,6 +365,24 @@ pub fn cable_lengths(home: &Home) -> Vec<(Cable, f64)> {
         .collect()
 }
 
+/// Lines drawn by hand that a laid-out run of `cable` replaces: electrical
+/// lines of no run that carry this cable and reach one of `ends`, or say no
+/// cable and start and finish at them.
+pub fn drawn_runs(home: &Home, cable: Cable, ends: &[Point2]) -> Vec<crate::ids::PolylineId> {
+    let near = |p: Point2| ends.iter().any(|e| e.distance(p) <= 30.0);
+    home.level_view(home.current_level())
+        .polylines
+        .iter()
+        .filter(|l| l.discipline == Some(Discipline::Electrical))
+        .filter(|l| !l.properties.contains_key(RUN_KEY) && l.points.len() >= 2)
+        .filter(|l| match cable_of(l) {
+            Some(c) => c == cable && ends.iter().any(|e| reaches(l, *e)),
+            None => near(l.points[0]) && near(l.points[l.points.len() - 1]),
+        })
+        .map(|l| l.id)
+        .collect()
+}
+
 /// Where a routed run keeps the length to its farthest point, cm.
 pub const RUN_FAR_KEY: &str = "elec:run_far_cm";
 /// Where a routed data run keeps its cable category.
