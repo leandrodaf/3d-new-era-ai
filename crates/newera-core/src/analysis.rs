@@ -129,6 +129,30 @@ impl Issue {
             _ => true,
         }
     }
+
+    /// The report section it belongs to: `overlap`, `blocked`, `in_wall`…
+    pub fn family(&self) -> &'static str {
+        match self {
+            Self::Overlap { .. } => "overlap",
+            Self::Blocked { .. } => "blocked",
+            Self::InWall(..) => "in_wall",
+            Self::BlocksDoor { .. } => "blocks_door",
+            Self::OutsideRooms(_) => "outside_rooms",
+            Self::OutgrewNiche { .. } => "outgrew_niche",
+            Self::LooseOpening(_) => "loose_opening",
+            Self::Turned { .. } => "turned",
+        }
+    }
+
+    /// What it is, as precisely as a word says it: an overlap answers with
+    /// its classification (`collision`, `nesting`, `cross_level`), anything
+    /// else with its family.
+    pub fn kind_name(&self) -> &'static str {
+        match self {
+            Self::Overlap { kind, .. } => kind.name(),
+            _ => self.family(),
+        }
+    }
 }
 
 /// Area below which a contact is ignored (touching pieces are fine), cm².

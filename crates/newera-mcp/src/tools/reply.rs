@@ -157,30 +157,70 @@ pub(super) fn preview_with(
         );
     }
 
-    // Which findings it would settle, and which it would create.
-    let defects = |home: &newera_core::Home| -> std::collections::BTreeSet<String> {
-        newera_core::check_layout(&home.level_view(home.current_level()))
-            .into_iter()
-            .filter(newera_core::Issue::is_defect)
-            .map(|i| {
-                i.ids()
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join("+")
-            })
-            .collect()
-    };
+    // Which findings it would settle, and which it would create — each with
+    // what it is and how big, as `check_layout` reports it: trading a clash
+    // for another clash and trading it for a piece resting in place are
+    // different decisions, and a pair of ids alone reads the same for both.
+    let defects =
+        |home: &newera_core::Home| -> std::collections::BTreeMap<String, serde_json::Value> {
+            newera_core::check_layout(&home.level_view(home.current_level()))
+                .into_iter()
+                .filter(newera_core::Issue::is_defect)
+                .map(|i| {
+                    let ids = i
+                        .ids()
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join("+");
+                    let mut row = serde_json::json!({"ids": ids, "kind": i.kind_name()});
+                    match &i {
+                        newera_core::Issue::Overlap { extent, .. } => {
+                            row["extent"] = serde_json::json!(extent.map(compact::num));
+                        }
+                        newera_core::Issue::Blocked { cm, .. } => {
+                            row["cm"] = compact::num(*cm);
+                        }
+                        newera_core::Issue::OutgrewNiche { over, .. } => {
+                            row["over"] = serde_json::json!(over.map(compact::num));
+                        }
+                        _ => {}
+                    }
+                    (format!("{}:{ids}", i.family()), row)
+                })
+                .collect()
+        };
     let (was, now) = (defects(&before), defects(&after));
-    for (key, list) in [
-        ("issues_resolved", was.difference(&now).collect::<Vec<_>>()),
-        ("issues_new", now.difference(&was).collect()),
-    ] {
+    let object = out.as_object_mut().expect("object");
+    for (key, from, other) in [("issues_resolved", &was, &now), ("issues_new", &now, &was)] {
+        let list: Vec<&serde_json::Value> = from
+            .iter()
+            .filter(|(k, _)| !other.contains_key(*k))
+            .map(|(_, row)| row)
+            .collect();
         if !list.is_empty() {
-            out.as_object_mut()
-                .expect("object")
-                .insert(key.to_owned(), serde_json::json!(list));
+            object.insert(key.to_owned(), serde_json::json!(list));
         }
+    }
+    // A clash that stays but grows or shrinks is neither new nor resolved,
+    // and it is the number a nudge was made for.
+    let changed: Vec<serde_json::Value> = now
+        .iter()
+        .filter_map(|(k, row)| {
+            let old = was.get(k)?;
+            (old != row).then(|| {
+                let mut row = row.clone();
+                for field in ["extent", "cm", "over"] {
+                    if let Some(v) = old.get(field) {
+                        row[format!("{field}_was")] = v.clone();
+                    }
+                }
+                row
+            })
+        })
+        .collect();
+    if !changed.is_empty() {
+        object.insert("issues_changed".to_owned(), serde_json::json!(changed));
     }
 
     let profile = newera_ergonomics::Profile::default();

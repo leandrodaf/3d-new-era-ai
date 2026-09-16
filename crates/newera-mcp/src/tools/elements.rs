@@ -64,7 +64,7 @@ impl NewEraMcp {
         Ok(ok(&doc, &ids))
     }
     #[tool(
-        description = "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto, polyline divider). anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. dry=true answers what it would do — changed fields, clearances around each piece it touches, findings resolved and created — without writing anything, so a size can be tried before it is applied; dry=\"summary\" answers the same decision without listing the parts a group rebuilds. Otherwise the reply names what changed."
+        description = "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto, polyline divider). anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. dry=true answers what it would do — changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), findings resolved and created as issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the same kind check_layout gives (only real defects: a piece resting or built in is never listed), and issues_changed for a clash that stays but grows or shrinks (extent_was) — without writing anything, so a size can be tried before it is applied; dry=\"summary\" answers the same decision without listing the parts a group rebuilds. Otherwise the reply names what changed."
     )]
     pub(crate) fn update(
         &self,
@@ -190,7 +190,8 @@ mod tests {
             (dry["clearances"]["f6"]["+y"][0].as_f64().unwrap() - 220.0).abs() < 0.5,
             "{dry}"
         );
-        assert_eq!(dry["issues_new"][0], "f6+w1", "{dry}");
+        assert_eq!(dry["issues_new"][0]["ids"], "f6+w1", "{dry}");
+        assert_eq!(dry["issues_new"][0]["kind"], "in_wall", "{dry}");
         assert_eq!(
             s.document.read().revision(),
             rev,
@@ -214,6 +215,72 @@ mod tests {
             serde_json::from_str(&reply[reply.find('{').expect("a diff")..]).unwrap();
         assert_eq!(diff["changed"][0]["id"], "f6", "{reply}");
         assert_eq!(diff["changed"][0]["from"]["wdh"][1], 60.0, "{reply}");
+    }
+    #[test]
+    fn a_dry_move_says_what_kind_of_clash_it_trades_for() {
+        let s = server();
+        // Two stones of a peninsula that touch, end to end.
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"box","name":"pedra esquerda","at":[50,30],"w":100,"d":60,"h":90},
+                             {"cat":"box","name":"pedra direita","at":[130,30],"w":60,"d":60,"h":90}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let (left, right) = {
+            let doc = s.document.read();
+            let f = &doc.home().furniture;
+            (f[0].id.to_string(), f[1].id.to_string())
+        };
+        let nudge = |dx: f64| -> serde_json::Value {
+            serde_json::from_str(
+                &s.move_elements(Parameters(
+                    serde_json::from_str(&format!(
+                        r#"{{"ids":["{right}"],"dx":{dx},"dy":0,"dry":true}}"#
+                    ))
+                    .unwrap(),
+                ))
+                .unwrap(),
+            )
+            .unwrap()
+        };
+
+        // 5.5 cm into the other stone: a real clash, measured, and a
+        // clearance that says "inside", not "touching".
+        let dry = nudge(-5.5);
+        let new = &dry["issues_new"][0];
+        assert_eq!(new["ids"], format!("{left}+{right}"), "{dry}");
+        assert_eq!(new["kind"], "collision", "{dry}");
+        assert_eq!(new["extent"], serde_json::json!([5.5, 60, 90]), "{dry}");
+        let side = &dry["clearances"][right.as_str()]["-x"];
+        assert!((side[0].as_f64().unwrap() + 5.5).abs() < 0.05, "{dry}");
+        assert_eq!(side[1], left.as_str(), "{dry}");
+
+        // Once applied, pushing it further is not a new clash but a worse
+        // one, and the dry run says by how much.
+        s.move_elements(Parameters(
+            serde_json::from_str(&format!(r#"{{"ids":["{right}"],"dx":-5.5,"dy":0}}"#)).unwrap(),
+        ))
+        .unwrap();
+        let dry = nudge(-4.5);
+        assert!(dry.get("issues_new").is_none(), "{dry}");
+        let grown = &dry["issues_changed"][0];
+        assert_eq!(grown["kind"], "collision", "{dry}");
+        assert_eq!(grown["extent_was"][0], 5.5, "{dry}");
+        assert_eq!(grown["extent"][0], 10, "{dry}");
+
+        // And backing out settles it, named as what it was.
+        let dry = nudge(5.5);
+        assert_eq!(dry["issues_resolved"][0]["kind"], "collision", "{dry}");
+        assert!(
+            dry["clearances"][right.as_str()]["-x"][0]
+                .as_f64()
+                .unwrap()
+                .abs()
+                < 0.05,
+            "{dry}"
+        );
     }
     #[test]
     fn a_resize_can_hold_one_face_instead_of_growing_around_the_center() {
