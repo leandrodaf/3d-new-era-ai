@@ -4,313 +4,18 @@ O que ainda dói quando um agente conduz uma planta real pelo MCP, do lado de fo
 
 Cada caso traz **o que aconteceu**, com a resposta literal que serve de prova,
 **como reproduzir** em um comando, e **o que deveria acontecer**. O banco de
-provas é sempre a mesma planta — um apartamento de 65 m² com marcenaria
+provas é a mesma planta desde o começo — um apartamento de 65 m² com marcenaria
 desenhada módulo a módulo, hoje em nota 99 e zero colisões.
 
-Os casos resolvidos saem daqui conforme caem; o histórico fica no git.
+A partir desta rodada existe o `feedback`, que leva o caso direto aos
+desenvolvedores com os mesmos campos que este arquivo vinha guardando à mão. Os
+dois casos abertos abaixo já foram enviados por lá.
 
 ---
 
-## 26. O `turned` parou de avisar, e a face continua errada
+## 34. `hinge_right` não faz efeito, e o erro do `blocks_door` o recomenda
 
-O mais sério da lista, porque apagou o próprio alarme.
-
-O vassoureiro extraível abre para `-y`, o corredor da cozinha: é lá que estão a
-frente, o puxador e 67,6 cm livres. Do outro lado há 0,9 cm, contra o próprio
-roda-teto.
-
-```
-get_home(ids=["f1218"])   → "faces": "+y"
-measure(from="f1218")     → "faces": "+y",  "-y": [67.6, "f829", …]
-check_layout()            → turned: f901, f909, f1130, f1165   (f1218 não está)
-```
-
-Na versão anterior ele aparecia em `turned` com `built: -y, placed: +y` — a
-face **certa** e o ângulo errado, com o aviso apontando a divergência. Agora as
-duas ferramentas concordam **no valor errado**, e por concordarem o `turned`
-deixou de apontar. Era o único lugar onde isso aparecia.
-
-A peça foi montada com `arrange group` sobre sólidos desenhados: não tem painel
-de porta que o motor reconheça como frente.
-
-**Reproduzir:** `measure(from="f1218")` — compare o `faces` com onde estão a
-frente e o puxador (`get_home(ids=["f1210","f1212"])`, y 415,6–419,1).
-
-**Deveria:** derivar a face das frentes quando houver; quando não houver, dizer
-que não sabe em vez de escolher um lado — e continuar sinalizando.
-
-## 27. O `anchor` enxerga dentro dos grupos; o `stale` não
-
-Descoberto agora, ancorando as cotas soltas da planta.
-
-```
-annotations(anchor=true)   → {"anchored": ["d104", "d105"]}
-annotations(stale=true)    → ["d105", 91, 91, "f1210",
-                              "f1210 is gone; this no longer marks anything"]
-```
-
-Repare nos números: **escrito 91, medido 91** — a cota está certa. E `f1210`
-não sumiu:
-
-```
-get_home(ids=["f1210"])
-→ "Vassoureiro extraível — frente 30 × 195 cm", bounds [[615,417.1],[645,419.1]]
-```
-
-Ela existe: é **parte do grupo** `f1218`. O `anchor` desceu no grupo e amarrou a
-cota nela; o `stale` só procura no nível de cima, não acha, e declara a âncora
-morta. A cota fica permanentemente stale, com o número correto, a cada revisão.
-
-É o mesmo efeito do antigo caso 13 — cota travada em estado de erro — mas por
-outra causa, e esta reproduz em um par de comandos.
-
-**Reproduzir:** os dois comandos acima, nesta ordem.
-
-**Deveria:** o `stale` procurar a âncora também dentro dos grupos, como o
-`anchor` já faz.
-
-## 17. Grupo só sabe escalar tudo junto
-
-Um armário de 30 cm que precisa virar 40 cm não engorda as chapas: os montantes
-continuam com 2 cm e quem cresce é o vão entre eles.
-
-```
-update(items=[{"id": "f1218", "w": 40}], dry=true)
-→ f957  lateral:    2 cm  → 2,7 cm
-→ f1214 corrediça:  1,5   → 2
-→ f1216 fundo:      26    → 34,7
-```
-
-Fator 1,333 aplicado a tudo. Chapa de 15 mm não vira 20 mm porque o armário
-ficou mais largo, e corrediça telescópica é comprada em medidas de catálogo.
-
-O mesmo apareceu na moldura da mesa basculante: levar a face de 180 para 131 cm
-**encolhia** a mesa de 110 para 80, quando o pedido era manter os montantes e
-crescer a mesa até a torre. A saída foi `ungroup`, refazer as sete peças na mão
-e deixar desagrupado.
-
-**Reproduzir:** o `update` acima, em dry.
-
-**Deveria:** haver como dizer o que estica e o que fica — ou espessuras de
-chapa e ferragem serem preservadas por padrão.
-
-## 25. `joinery` não tem `anchor`, e o armário se descola da parede
-
-```
-joinery(id="f1291", p={"d": 55})
-antes:  bounds y 699–756   (encostado na parede)
-depois: bounds y 700–755   (1 cm de vão atrás)
-```
-
-Encolhe pela frente **e** pelo fundo. Nenhum armário de parede tem vão atrás, e
-o problema não aparece em render nenhum de frente — só medindo.
-
-O `update` resolve isso desde sempre, e a documentação dele explica exatamente
-este caso: *"anchor … holds one face still … so a run of joinery keeps its back
-on the wall"*. Mas `anchor` é de `update`, e mudar parâmetro de build é
-`joinery`.
-
-**Reproduzir:** o comando acima, seguido de `get_home(ids=["f1291"])`.
-
-**Deveria:** `anchor` em `joinery` com o mesmo significado — ou o fundo ficar
-parado por padrão, já que o `cabinet_run` sabe em que parede pôs o módulo.
-
-## 23. Não há como reusar um modelo que já está no projeto
-
-Para repetir o arremate de madeira da cozinha em mais cinco lugares:
-
-```
-place(items=[{"model": "51/crown.obj", …}])
-→ "51/crown.obj: could not read the file: No such file or directory"
-
-place(items=[{"cat": "f832", …}])
-→ "unknown catalog id `f832` (use the catalog tool)"
-```
-
-O caminho `51/crown.obj` é exatamente o que `catalog(scope="project")` devolve
-para aquela peça, mas nomeia um modelo **embutido no projeto**, não um arquivo
-em disco — o original pode ter vindo de um `.sh3d` importado meses atrás.
-
-O `catalog(scope="project")` até anuncia a intenção certa — *"one id to copy
-from"* — mas não existe o "copiar esta peça". O contorno foi `arrange array`
-com `dy: 1000`, para jogar as cópias fora da casa, e `update` em cada uma para
-trazê-la de volta. Oito peças de roda-teto nasceram assim.
-
-**Reproduzir:** qualquer um dos dois comandos acima.
-
-**Deveria:** `place` aceitar o id de uma peça existente como fonte, ou um
-`copy` em `arrange` que não precise arremessar as cópias para longe primeiro.
-
-## 21. `accept` no `check_layout` ainda não vale para `in_wall`
-
-O `accept` chegou e funciona: `overlap`, `outside_rooms` e `turned` trazem
-`key`, e `orphaned` avisa quando o motivo deixa de valer.
-
-`in_wall` não tem `key`:
-
-```
-check_layout()
-→ in_wall:        [[{bounds, id, level, name, z}, …]]        sem key
-→ outside_rooms:  [{bounds, id, key, level, name, z}, …]     com key
-```
-
-São as duas persianas de rolo integradas, que estão dentro da espessura da
-parede porque é ali que uma persiana de rolo fica. Duas linhas que voltam a
-cada revisão sem como dizer "visto, está correto".
-
-**Reproduzir:** `check_layout()` e comparar as chaves das duas listas.
-
-**Deveria:** `key` em `in_wall` também.
-
-## 28. Limpar a herança de uma importação é trabalho de garimpo
-
-A planta veio de um `.sh3d` e trouxe junto: 14 properties de interface do
-SweetHome3D (posição da janela, divisor de painel, escala do plano, tamanho da
-tela), um `sh3d:id` em cada nível, **73 rótulos `[NN]`** numerando peças à mão,
-**21 rótulos `L1`–`L21`** numerando luminárias, **13 cotas** de ambiente e
-**59 nomes** de peça começando com o número do índice antigo.
-
-Tudo isso o app já resolve nativamente: `references` numera 126 peças por
-cômodo com nome e medidas, e `auto_dimensions` cota os ambientes. Os dois
-estavam ligados — então a planta carregava **duas numerações simultâneas e
-divergentes**, a manual e a nativa, sobrepostas no mesmo desenho. Na cama
-apareciam `[20]` e `4` lado a lado.
-
-Limpar isso levou a sequência inteira abaixo, e cada passo esbarrou em algo:
-
-**Não há ferramenta para properties.** Nenhum tool MCP toca as properties do
-projeto ou dos níveis. Foi preciso ler `crates/newera-core/src/command.rs` para
-descobrir que `/api/commands` existe, que os comandos são tagueados por `op`, e
-que `Element` é tagueado por `kind`. Um agente sem o código-fonte à mão não
-chega lá — e o erro que guia até isso é só `missing field 'op'`.
-
-**O REST não enxerga partes de grupos.** O mesmo `update` que renomeia uma peça
-de topo responde `f935 not found` para uma parte. A operação é uma só, e
-precisa de dois caminhos: REST para o topo, MCP para dentro dos grupos.
-
-**Não há edição em massa.** Os 59 renomes seguiam uma regra de uma linha
-(remover o prefixo `NN — `). Os 53 que estavam dentro de grupos tiveram que
-passar **inteiros pelo contexto do agente**, em três chamadas, porque só o MCP
-os alcança. E no REST o `update` exige o elemento **completo**, não um patch:
-baixar tudo, alterar um campo, devolver tudo.
-
-**Não há busca por padrão.** Para achar os 73 rótulos `[NN]` foi preciso baixar
-o JSON e passar um regex. O `annotations(q=…)` acha texto literal
-(`q="Vidro"` → o rótulo certo), mas `q="[0"` devolve vazio, então não serve
-para varrer uma convenção de nomenclatura.
-
-**Encurtaria:** um `update` que aceite um filtro e uma transformação — ou ao
-menos que alcance partes de grupo pelo REST, onde o lote é possível.
-
-## 29. Ligar um modo de anotação custa 6 mil tokens da mesma lista
-
-`annotations` responde sempre a mesma coisa, independentemente do que se pediu:
-
-```
-annotations(refs=true)    → schedule de 126 itens  (~6k tokens)
-annotations(legend=true)  → o mesmo schedule de 126 itens
-annotations(dims=true)    → o mesmo schedule de 126 itens
-```
-
-Ligar os três modos custou 18 mil tokens da mesma lista repetida, e em nenhuma
-delas apareceu o que se pediu: nem as cadeias de cota (`dims`), nem a legenda
-de símbolos com contagem que a documentação promete para `legend`
-(*"Legend of electrical/plumbing symbols with counts"*).
-
-Para saber se `dims` tinha surtido efeito, o caminho foi renderizar a planta e
-procurar a olho um "345" que aparecia duas vezes no dormitório — a cota manual
-e a automática, sobrepostas.
-
-**Encurtaria:** responder o que foi pedido, e confirmar a mudança de modo com
-uma linha em vez do schedule inteiro.
-
-## 30. As anotações do plano sumiram, uma vez, sem aviso
-
-Depois da sequência de limpeza, `annotations` estava `None` — os 126 números do
-desenho tinham desaparecido, e só percebi porque renderizei a planta para
-conferir o resultado.
-
-Tentei isolar o culpado e **não reproduzi**: `set_properties` (com o mesmo
-conteúdo, adicionando chave e removendo chave), `update` de nível (um e os
-três), `update` de móvel pelo REST — nenhum apaga. A sequência original tinha,
-entre esses, dois `delete` em massa pelo MCP (73 + 21 labels, 13 cotas) e três
-`update` de 19 partes pelo MCP.
-
-Fica registrado como observado uma vez, porque é perda silenciosa de
-configuração: nada no retorno de nenhum comando mencionou as anotações.
-
-**Encurtaria:** qualquer comando que zere `annotations` dizer isso no retorno.
-
-## 31. MCP e JSON usam nomes diferentes para o mesmo campo
-
-Detalhe pequeno que confunde toda inspeção pelo REST:
-
-| no MCP | no JSON |
-|---|---|
-| `dims` | `auto_dimensions` |
-| `refs` | `references` |
-| `details` | `reference_details` |
-| `legend` | `legend` |
-
-Ao conferir pelo `/api/home` se um modo ficou ligado, é preciso traduzir de
-cabeça — e `dims`/`auto_dimensions` é justamente o que não se parece.
-
-## 32. Quatro cômodos sem porta, e nada avisou
-
-Dormitório, suíte, banho social e banho da suíte não tinham porta. Tinham um
-**vão livre** (`passage`, que corta a parede e não fecha nada) e, ao lado dele,
-um **painel desenhado** simulando a folha aberta encostada na parede —
-"Porta dormitório — aberta junto à parede", 78 × 6 × 208, sem `opening`.
-
-```
-f794  Passagem                              opening: passage
-f853  Porta dormitório — aberta junto…      opening: —
-```
-
-Herança da importação do `.sh3d`. O efeito: quatro cômodos sem privacidade, o
-schedule listando "Porta" e "Passagem" como coisas separadas, nenhum arco de
-abertura no desenho, e as verificações que dependem de porta — `blocks_door`
-entre elas — sem nada para verificar.
-
-Nenhuma ferramenta apontou. `loose_opening` existe para o caso vizinho ("a door
-or window in no wall — a passage drawn as a panel"), mas não pega este: aqui o
-painel não é uma abertura órfã, é um móvel com nome de porta, e o vão ao lado é
-uma passagem legítima. Os dois, isolados, são válidos.
-
-Convertidos em portas de verdade, o `blocks_door` imediatamente acusou o que
-estava escondido havia o projeto inteiro: **a folha do banho social batia no
-lavatório**.
-
-**Encurtaria:** um aviso para cômodo de dormir ou banheiro cujo único acesso é
-`passage` — ou para móvel com "porta" no nome parado ao lado de um vão.
-
-## 33. Mover uma porta 4 cm inverte o lado que ela abre
-
-Para afastar a folha do lavatório, movi a porta do banheiro quatro
-centímetros ao longo da própria parede:
-
-```
-move(ids=["f1510"], dy=-4)
-from: {"angle": 90,  "faces": "-x", …}
-to:   {"angle": 270, "faces": "+x", …}
-```
-
-Um deslocamento de 4 cm **girou a porta em 180°**. Ela passou a abrir para a
-cozinha — porta de banheiro abrindo para a área de preparo de comida. O dry run
-anunciou o movimento como bom: resolveu o `blocks_door` e levou a nota de 87
-para 99, sem mencionar a inversão.
-
-Só apareceu porque o morador olhou o desenho e reclamou.
-
-A saída foi apagar a porta e recriá-la com `into` apontando para dentro do
-banheiro.
-
-**Encurtaria:** `move` não mexer na orientação de uma abertura; e o dry run
-listar a mudança de `faces` como mudança, não como detalhe.
-
-## 34. O `fix` do `blocks_door` não resolve o `blocks_door`
-
-O erro vinha com a instrução embutida:
+O `check_layout` acusa o choque e instrui o caminho:
 
 ```
 "A folha da porta bate em Lavatório social f814:
@@ -320,71 +25,76 @@ O erro vinha com a instrução embutida:
 Feito exatamente isso:
 
 ```
-update(items=[{"id": "f1510", "hinge_right": true}])
-→ dry: {}          (nenhuma mudança prevista)
-→ aplicado: ok
-→ check_layout: blocks_door: f1510 + f814     (continua)
+update(items=[{"id": "f1508", "hinge_right": true}], dry=true)
+→ {"dry": true}                     objeto vazio: nem mudança, nem erro
+
+update(items=[{"id": "f1508", "hinge_right": true}])
+→ ok rev=4
+   mirrored: None  →  None
+   angle:      90  →  90
+   blocks_door: continua f1510 + f814
 ```
 
-O dry devolveu um objeto vazio — nem "nada mudaria", nem erro. Aplicado, o
-conflito permaneceu. O que resolveu foi mover a porta, que a documentação não
-sugeria.
+Nada muda, e nada diz que nada mudou. O dry devolver vazio é o pior caso:
+parece "não há o que mudar" quando é "não sei fazer isso".
 
-**Encurtaria:** ou `hinge_right` faz efeito em abertura, ou o texto para de
-recomendá-lo.
+O que resolveu foi mover a porta 4 cm ao longo da parede — caminho que o erro
+não sugere.
 
-## 35. O número que vai para a marcenaria muda sozinho
+**Reproduzir:** os dois comandos acima, e reler a peça pelo `/api/home`.
 
-O `references` numera as peças de 1 a N, por cômodo. É esse número que aparece
-no desenho, no schedule e, portanto, no orçamento que chega ao marceneiro.
+**Deveria:** `hinge_right` ter efeito em peça com `opening`; ou `update`
+recusar o campo com erro, e o texto do `blocks_door` parar de recomendá-lo.
 
-Ele é derivado da lista, e a lista se renumera inteira a cada peça que entra ou
-sai. Convertendo quatro vãos em portas — oito peças removidas, quatro criadas —
-tudo que vinha depois deslizou:
+## 32. Cômodo sem porta não entra em relatório nenhum
 
-| peça | antes | depois |
-|---|---|---|
-| Mesa Dover | 79 | 75 |
-| Aéreo da cozinha | 92 | 88 |
-| Arremate da cozinha | 93 | 89 |
-| último item | 126 | 118 |
+A planta veio do `.sh3d` com dormitório, suíte, banho social e banho da suíte
+**sem porta**: cada um tinha um vão livre (`passage`) e, ao lado, um painel
+decorativo chamado "Porta dormitório — aberta junto à parede" (78 × 6 × 208,
+sem `opening`), fingindo a folha encostada na parede.
 
-Nada mudou nessas peças. Mudou o que veio antes delas na fila.
+Nenhuma verificação mencionou, o projeto inteiro. E o teste extremo também
+passa em branco:
 
-Duas impressões da mesma planta, feitas com uma semana de diferença, têm
-numerações incompatíveis — e nada no desenho diz qual versão é qual. Quem
-recebeu "item 92, aéreo da cozinha" e volta à obra encontra o 92 apontando
-para outra coisa.
+```
+delete(ids=["f1508"])        # dormitório fica sem vão e sem porta
+check_layout()  → in_wall, outside_rooms, overlap, turned — nada
+ergonomics(…)   → score 99, só a dica da NBR 13103 sobre gás
+```
 
-**Isto reenquadra o atrito 28.** Os 73 rótulos `[NN]` que limpamos da planta,
-herdados da importação, não eram teimosia de quem desenhou: eram um número
-**estável**, escrito à mão justamente porque o número derivado não para
-quieto. Ao remover a duplicação, ficamos com a numeração automática — mais
-limpa, mais completa e que se atualiza sozinha — e perdemos a única coisa que
-os rótulos manuais tinham de bom.
+Um quarto sem acesso nenhum, nota 99.
 
-**Encurtaria:** o número ficar preso à peça uma vez atribuído — novas peças
-pegam o próximo livre, e as que saem deixam o buraco. Ou, ao menos, o
-schedule declarar a revisão a que pertence, para que duas impressões não se
-confundam em silêncio.
+Foi o morador que viu, olhando o desenho. E, no instante em que os quatro vãos
+viraram portas de verdade, o `blocks_door` acusou que a folha do banho social
+batia no lavatório — defeito que estava lá desde sempre, invisível enquanto a
+porta era só um móvel desenhado.
+
+**Reproduzir:** o `delete` acima, seguido de `check_layout` e `ergonomics`.
+
+**Deveria:** quarto ou banheiro cujo único acesso é `passage`, ou que não tem
+acesso algum, entrar no relatório. Cuidando para não pegar sala, cozinha e
+varanda, onde `passage` é o certo.
 
 ---
 
 ## Sem como reproduzir agora
 
-**O `fix` que desmancha o móvel** (antigo caso 5). Na versão anterior, o `fix`
-de um alerta mandava mover a lava-louças 17 cm — para fora do nicho de
-marcenaria em que estava embutida — e isso *melhorava* a nota, sem que
-`outgrew_niche` fosse consultado. Hoje a planta não tem nenhum finding com
-`fix` oferecido, então não dá para dizer se mudou. Fica anotado para a próxima
-planta que ofereça um.
+**O `fix` que desmancha o móvel** (antigo caso 5): o `fix` de um alerta mandava
+mover a lava-louças 17 cm, para fora do nicho em que estava embutida, e isso
+*melhorava* a nota sem que `outgrew_niche` fosse consultado. A planta hoje não
+oferece `fix` em nenhum finding, então não dá para dizer se mudou.
+
+**As anotações que sumiram** (antigo caso 30): depois de uma sequência de
+limpeza, `annotations` estava `None` e os números tinham sumido do desenho.
+Não reproduzido: `set_properties`, `update` de nível e `update` de móvel, todos
+testados, não apagam.
 
 ---
 
 ## O que já caiu
 
-Verificado em uso, não no changelog. O texto de cada um está no histórico do
-git, com os números e as respostas literais.
+Verificado em uso, não no changelog — cada um testado na planta com o comando
+que o reproduzia. O texto integral de cada caso está no histórico do git.
 
 | # | O que doía | Caiu em |
 |---|---|---|
@@ -404,8 +114,18 @@ git, com os números e as respostas literais.
 | 14 | Rótulo ficava apontando para o vazio após `delete` | `labels_left` |
 | 15 | "80,5 cm" era lido como `5` — 28 de 50 achados falsos | vírgula decimal |
 | 16 | Resize de grupo invertia a face declarada | face preservada |
+| 17 | Grupo escalava as chapas junto: lateral 2 cm → 2,7 | espessura mantida, vão cresce |
 | 18 | Parte de grupo não podia ser renomeada | `name` aceito |
 | 19 | A sonda atravessava um armário de 280 cm | lê as partes |
 | 20 | `cut_list` só enxergava o que o `joinery` fez | `drawn` + `skipped` |
+| 21 | `accept` sem chave para `in_wall` | `key` em tudo |
 | 22 | Erro de tipo não dizia qual campo | nomeia o campo |
+| 23 | Não havia como reusar um modelo do projeto | `cat` aceita id de peça |
 | 24 | Peça a 2,72 m avaliada como obstáculo de circulação | ignora o que está alto |
+| 25 | `joinery` encolhia pela frente e pelo fundo | fundo fica na parede |
+| 26 | `turned` parou de avisar com a face errada | face certa, aviso de volta |
+| 27 | `anchor` via dentro dos grupos, `stale` não | `stale` desce nos grupos |
+| 28 | Sem busca por padrão; REST não via partes de grupo | `q` acha `[0`; REST alcança |
+| 29 | Ligar um modo custava 6k tokens da mesma lista | cada modo responde o seu |
+| 33 | Mover uma porta 4 cm a girava 180° | move não gira mais |
+| 35 | O número da peça mudava sozinho a cada inserção | número preso à peça |
