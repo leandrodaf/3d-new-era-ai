@@ -44,8 +44,15 @@ pub(crate) struct DeleteParams {
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct MoveParams {
     ids: Vec<String>,
+    /// Shift in x, cm (with `dy`).
+    #[serde(default)]
     dx: f64,
+    /// Shift in y, cm (with `dx`).
+    #[serde(default)]
     dy: f64,
+    /// Instead of dx/dy: where the first id goes, [x,y] as reads give it
+    /// (a piece's or a label's center); the others keep their offsets.
+    to: Option<newera_core::Point2>,
     /// Drag endpoints of walls joined to moved walls (default true).
     joined: Option<bool>,
     /// Try it without applying; see `update`.
@@ -229,7 +236,7 @@ impl NewEraMcp {
     }
     #[tool(
         name = "move",
-        description = "Move elements by dx,dy cm. dry=true answers what it would do without writing anything, dry=\"summary\" answers it short; see `update`."
+        description = "Move elements by dx,dy cm, or to=[x,y]: the first id (a piece or a label) goes there and the rest keep their offsets. dry=true answers what it would do without writing anything, dry=\"summary\" answers it short; see `update`."
     )]
     pub(crate) fn move_elements(
         &self,
@@ -237,15 +244,35 @@ impl NewEraMcp {
     ) -> Result<String, ErrorData> {
         let ids = edit::parse_ids(&p.ids).map_err(invalid)?;
         let joined = p.joined.unwrap_or(true);
+        let (dx, dy) = match p.to {
+            None => (p.dx, p.dy),
+            Some(to) => {
+                let doc = self.document.read();
+                let home = doc.home();
+                let from = match ids.first() {
+                    Some(newera_core::ElementId::Furniture(id)) => {
+                        home.find_piece(*id).map(|f| f.position)
+                    }
+                    Some(newera_core::ElementId::Label(id)) => {
+                        home.labels.iter().find(|l| l.id == *id).map(|l| l.position)
+                    }
+                    _ => None,
+                }
+                .ok_or_else(|| {
+                    invalid("move takes dx/dy, or to=[x,y] with a piece or a label as the first id")
+                })?;
+                (to.x - from.x, to.y - from.y)
+            }
+        };
         if Dry::on(p.dry.as_ref()) {
             let doc = self.document.read();
             return reply::preview_with(&doc, Dry::brief(p.dry.as_ref()), move |scratch| {
-                ops::translate(scratch, &ids, p.dx, p.dy, joined).map_err(core)
+                ops::translate(scratch, &ids, dx, dy, joined).map_err(core)
             });
         }
         let mut doc = self.document.write();
         let before = doc.home().clone();
-        ops::translate(&mut doc, &ids, p.dx, p.dy, joined).map_err(core)?;
+        ops::translate(&mut doc, &ids, dx, dy, joined).map_err(core)?;
         Ok(applied(&doc, &before))
     }
     #[tool(description = "Split a wall into two joined walls at t (0..1).")]
@@ -283,6 +310,56 @@ mod tests {
     use crate::tools::furniture::PlaceParams;
     use crate::tools::read::GetHomeParams;
     use crate::tools::server;
+
+    #[test]
+    fn move_takes_a_place_as_well_as_a_shift() {
+        let s = server();
+        let reply = s
+            .place(Parameters(
+                serde_json::from_str(
+                    r#"{"items":[{"cat":"armchair","at":[100,100]},{"cat":"side-table","at":[160,100]}]}"#,
+                )
+                .unwrap(),
+            ))
+            .unwrap();
+        let ids: Vec<String> = reply
+            .rsplit("ids=")
+            .next()
+            .unwrap()
+            .split(',')
+            .map(|s| s.trim().to_owned())
+            .collect();
+        s.move_elements(Parameters(
+            serde_json::from_str(&format!(
+                r#"{{"ids":["{}","{}"],"to":[515,616]}}"#,
+                ids[0], ids[1]
+            ))
+            .unwrap(),
+        ))
+        .unwrap();
+        let home = s.document.read().home().clone();
+        let chair = home
+            .furniture
+            .iter()
+            .find(|f| f.id.to_string() == ids[0])
+            .unwrap();
+        let table = home
+            .furniture
+            .iter()
+            .find(|f| f.id.to_string() == ids[1])
+            .unwrap();
+        assert!((chair.position.x - 515.0).abs() < 1e-9 && (chair.position.y - 616.0).abs() < 1e-9);
+        assert!(
+            (table.position.x - 575.0).abs() < 1e-9,
+            "the rest keeps its offset"
+        );
+        let wall_first = s
+            .move_elements(Parameters(
+                serde_json::from_str(r#"{"ids":["w1"],"to":[0,0]}"#).unwrap(),
+            ))
+            .unwrap_err();
+        assert!(wall_first.message.contains("dx/dy"), "{wall_first:?}");
+    }
 
     #[test]
     fn a_dry_write_answers_the_question_without_touching_the_plan() {
