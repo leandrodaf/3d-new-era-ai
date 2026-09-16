@@ -1154,11 +1154,37 @@ pub fn loose_end(home: &Home, dim: &Dimension) -> Option<LooseEnd> {
 /// Run while the drawing and its dimensions still agree: this reads the
 /// current geometry as the intent. Dimensions that already hold onto
 /// something, and ends that touch nothing, are left as they are.
+///
+/// A dimension whose hold died with the piece it held is not left holding a
+/// ghost: it is tied again to what its ends touch now, or, touching nothing,
+/// let go — returned with no hold — so it stops being reported as stale on
+/// every review for a number that may well be right.
 #[must_use]
 pub fn anchor_dimensions(home: &Home) -> Vec<Dimension> {
     let mut out = Vec::new();
     for dim in &home.dimensions {
-        if dim.holds.is_some() {
+        let dead = dim
+            .holds
+            .as_ref()
+            .is_some_and(|holds| holds.iter().any(|h| element_bounds(home, h.id).is_none()));
+        if dim.holds.is_some() && !dead {
+            continue;
+        }
+        if dead {
+            let unheld = Dimension {
+                holds: None,
+                ..dim.clone()
+            };
+            let tied = dimension_axis(&unheld).and_then(|axis| {
+                Some([
+                    touching(home, unheld.start, axis, unheld.end)?,
+                    touching(home, unheld.end, axis, unheld.start)?,
+                ])
+            });
+            out.push(Dimension {
+                holds: tied,
+                ..unheld
+            });
             continue;
         }
         let Some(axis) = dimension_axis(dim) else {

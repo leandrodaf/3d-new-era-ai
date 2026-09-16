@@ -121,7 +121,7 @@ impl NewEraMcp {
         Ok(serde_json::json!({"active": home.active_discipline, "hidden": home.hidden_disciplines}).to_string())
     }
     #[tool(
-        description = "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first. q=<text> searches label text. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs), legend (symbol legend with counts); bake=true turns the automatic chains into editable dimensions (ids returned). Otherwise returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
+        description = "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first; one whose anchor died with a deleted piece is tied again to what it touches now, or else released (no anchor) instead of staying stale. q=<text> searches label text. Set any of dims (engineering dimension chains), refs (room reference schedule with tags), details (brand/model/link in refs), legend (symbol legend with counts); bake=true turns the automatic chains into editable dimensions (ids returned). Otherwise returns {dims,refs,details,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. Give pieces brand/model/url via update."
     )]
     pub(crate) fn annotations(
         &self,
@@ -131,7 +131,17 @@ impl NewEraMcp {
             let mut doc = self.document.write();
             let view = doc.home().level_view(doc.home().current_level());
             let held = newera_core::anchor_dimensions(&view);
-            let ids: Vec<String> = held.iter().map(|d| d.id.to_string()).collect();
+            let ids: Vec<String> = held
+                .iter()
+                .filter(|d| d.holds.is_some())
+                .map(|d| d.id.to_string())
+                .collect();
+            // Held a piece that is gone and touch nothing now: let go.
+            let released: Vec<String> = held
+                .iter()
+                .filter(|d| d.holds.is_none())
+                .map(|d| d.id.to_string())
+                .collect();
             // Anchoring reads the drawing as the intent, so a dimension the
             // drawing already moved away from is not tied to it: it is named,
             // with what it would measure, to be fixed by hand first.
@@ -153,6 +163,9 @@ impl NewEraMcp {
                 doc.execute(Command::Batch { commands }).map_err(core)?;
             }
             let mut out = serde_json::json!({"anchored": ids});
+            if !released.is_empty() {
+                out["released"] = serde_json::json!(released);
+            }
             if !left.is_empty() {
                 out["left"] = serde_json::json!(left);
             }
@@ -283,6 +296,99 @@ mod tests {
     use crate::tools::read::GetHomeParams;
     use crate::tools::render::RenderParams;
     use crate::tools::server;
+
+    #[test]
+    fn an_anchor_that_died_with_its_piece_is_tied_again_or_let_go() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[500,0],[500,400],[0,400]],"closed":true}],
+                    "dims":[{"a":[250,70],"b":[250,310]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let place = || {
+            s.place(Parameters(
+                serde_json::from_str(
+                    r#"{"items":[{"cat":"base-cabinet","at":[250,40],"w":300,"d":60,"h":90}]}"#,
+                )
+                .unwrap(),
+            ))
+            .unwrap();
+            s.document
+                .read()
+                .home()
+                .furniture
+                .last()
+                .unwrap()
+                .id
+                .to_string()
+        };
+        let first = place();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"base-cabinet","at":[250,340],"w":300,"d":60,"h":90,"angle":180}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let annotations = |json: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.annotations(Parameters(serde_json::from_str(json).unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        let dim = s.document.read().home().dimensions[0].id.to_string();
+        assert_eq!(
+            annotations(r#"{"anchor":true}"#)["anchored"][0],
+            dim.as_str()
+        );
+
+        // The cabinet goes and a new one takes its place: the number is right,
+        // only the anchor is dead.
+        s.delete(Parameters(
+            serde_json::from_str(&format!(r#"{{"ids":["{first}"]}}"#)).unwrap(),
+        ))
+        .unwrap();
+        let dead = annotations(r#"{"stale":true}"#);
+        assert!(
+            dead["stale"][0][4].as_str().unwrap().contains("is gone"),
+            "{dead}"
+        );
+        let second = place();
+        let again = annotations(r#"{"anchor":true}"#);
+        assert_eq!(again["anchored"][0], dim.as_str(), "tied again: {again}");
+        let clean = annotations(r#"{"stale":true}"#);
+        assert_eq!(clean["stale"], serde_json::json!([]), "{clean}");
+        let holds = s.document.read().home().dimensions[0]
+            .holds
+            .clone()
+            .unwrap();
+        assert!(
+            holds.iter().any(|h| h.id.to_string() == second),
+            "{holds:?}"
+        );
+
+        // Gone with nothing in its place: let go, not stale forever.
+        s.delete(Parameters(
+            serde_json::from_str(&format!(r#"{{"ids":["{second}"]}}"#)).unwrap(),
+        ))
+        .unwrap();
+        let released = annotations(r#"{"anchor":true}"#);
+        assert_eq!(released["released"][0], dim.as_str(), "{released}");
+        let after = annotations(r#"{"stale":true}"#);
+        assert!(
+            after["stale"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|r| !r[4].as_str().unwrap().contains("is gone")),
+            "{after}"
+        );
+        assert_eq!(after["checked"]["dims_unanchored"], 1, "{after}");
+    }
 
     #[test]
     fn a_dimension_the_counter_moved_away_from_is_caught_and_not_anchored() {
