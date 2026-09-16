@@ -37,6 +37,9 @@ pub(crate) struct AnnotationParams {
     details: Option<bool>,
     /// Convert the automatic dimension chains into editable dimensions.
     bake: Option<bool>,
+    /// Number the schedule again in reading order, closing the gaps pieces
+    /// left behind. Numbers are otherwise kept by each piece for good.
+    renumber: Option<bool>,
     /// Legend of electrical/plumbing symbols with counts.
     legend: Option<bool>,
 }
@@ -124,7 +127,7 @@ impl NewEraMcp {
         Ok(serde_json::json!({"active": home.active_discipline, "hidden": home.hidden_disciplines}).to_string())
     }
     #[tool(
-        description = "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first; one whose anchor died with a deleted piece is tied again to what it touches now, or else released (no anchor) instead of staying stale. q=<text> searches label text. Set any of dims (engineering dimension chains; auto_dimensions in the project JSON), refs (room reference schedule with tags; references), details (brand/model/link in refs; reference_details), legend (symbol legend with counts): a switch answers with the modes, changed, and what it shows — chains [[from,to,cm]] for dims, symbols {discipline:[[name,count]]} for legend — not the schedule; refs=true, or no switch at all, returns {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. bake=true turns the automatic chains into editable dimensions (ids returned). Give pieces brand/model/url via update."
+        description = "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first; one whose anchor died with a deleted piece is tied again to what it touches now, or else released (no anchor) instead of staying stale. q=<text> searches label text. Set any of dims (engineering dimension chains; auto_dimensions in the project JSON), refs (room reference schedule with tags; references — a tag, once given, stays with its piece: new pieces take the next free number and removed ones leave a gap, so a print and the plan a week later agree; renumber=true numbers them again in reading order), details (brand/model/link in refs; reference_details), legend (symbol legend with counts): a switch answers with the modes, changed, and what it shows — chains [[from,to,cm]] for dims, symbols {discipline:[[name,count]]} for legend — not the schedule; refs=true, or no switch at all, returns {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. bake=true turns the automatic chains into editable dimensions (ids returned). Give pieces brand/model/url via update."
     )]
     pub(crate) fn annotations(
         &self,
@@ -240,6 +243,13 @@ impl NewEraMcp {
             commands.push(Command::SetAnnotations { annotations });
             doc.execute(Command::Batch { commands }).map_err(core)?;
             return Ok(ok(&doc, &ids));
+        }
+        if p.renumber.unwrap_or(false) {
+            let cleared = newera_core::cleared_references(doc.home());
+            if !cleared.is_empty() {
+                let commands = cleared.into_iter().map(Command::update).collect();
+                doc.execute(Command::Batch { commands }).map_err(core)?;
+            }
         }
         let was = doc.home().annotations;
         let mut next = was;
@@ -932,6 +942,89 @@ mod tests {
     }
 
     #[test]
+    fn a_reference_number_stays_with_its_piece() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[600,0],[600,400],[0,400]],"closed":true}],"rooms":[{"name":"Cozinha","at":[300,200]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"box","name":"mesa","at":[100,100]},{"cat":"box","name":"aéreo","at":[300,100]},{"cat":"box","name":"arremate","at":[500,100]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let annotations = |json: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &s.annotations(Parameters(serde_json::from_str(json).unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        let tags = |report: &serde_json::Value| -> Vec<(String, u64)> {
+            report["rooms"][0][1]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|r| (r[1].as_str().unwrap().to_owned(), r[0].as_u64().unwrap()))
+                .collect()
+        };
+        let first = tags(&annotations(r#"{"refs":true}"#));
+        assert_eq!(
+            first,
+            vec![
+                ("mesa".into(), 1),
+                ("aéreo".into(), 2),
+                ("arremate".into(), 3)
+            ]
+        );
+
+        // The table goes; the others keep their numbers, gap and all.
+        let table = s.document.read().home().furniture[0].id.to_string();
+        s.delete(Parameters(
+            serde_json::from_str(&format!(r#"{{"ids":["{table}"]}}"#)).unwrap(),
+        ))
+        .unwrap();
+        // A new piece, placed before them in reading order, takes the next number.
+        s.place(Parameters(
+            serde_json::from_str(r#"{"items":[{"cat":"box","name":"banco","at":[50,50]}]}"#)
+                .unwrap(),
+        ))
+        .unwrap();
+        let later = tags(&annotations(r#"{"refs":true}"#));
+        assert_eq!(
+            later,
+            vec![
+                ("banco".into(), 4),
+                ("aéreo".into(), 2),
+                ("arremate".into(), 3)
+            ]
+        );
+
+        // Undoing the new piece takes its number with it.
+        s.document.write().undo().unwrap();
+        assert!(
+            s.document
+                .read()
+                .home()
+                .furniture
+                .iter()
+                .all(|f| f.name != "banco")
+        );
+
+        // Asked for, the gaps close in reading order.
+        let renumbered = tags(&annotations(r#"{"refs":true,"renumber":true}"#));
+        assert_eq!(
+            renumbered,
+            vec![("aéreo".into(), 1), ("arremate".into(), 2)]
+        );
+    }
+
+    #[test]
     fn a_mode_switch_answers_with_what_it_shows_not_the_schedule() {
         let s = server();
         s.create(Parameters(
@@ -1026,6 +1119,7 @@ mod tests {
                 details: Some(true),
                 bake: None,
                 legend: None,
+                renumber: None,
             }))
             .unwrap();
         assert!(reply.contains(r#""rooms":[["Sala",[[1,"#), "{reply}");

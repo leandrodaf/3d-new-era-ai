@@ -230,9 +230,99 @@ pub struct RoomReference {
     pub items: Vec<ReferenceItem>,
 }
 
+/// Where a piece keeps its reference number once it has one.
+pub const TAG_KEY: &str = "ref:tag";
+
+/// The reference number stored on a piece.
+fn stored_tag(piece: &Furniture) -> Option<usize> {
+    piece.properties.get(TAG_KEY)?.parse().ok()
+}
+
+/// Pieces listed in the schedule that have no number yet, numbered: the next
+/// free numbers after the highest in use, in reading order.
+///
+/// The number is what goes to the joiner and into the quote, so it has to
+/// stay with the piece. Derived from the list it moved whenever anything
+/// before it came or went — item 92, the kitchen wall cabinet, became 88 —
+/// and two prints a week apart disagreed in silence. Once given, a number is
+/// the piece's: new pieces take the next one, removed pieces leave a gap.
+#[must_use]
+pub fn untagged_references(home: &Home) -> Vec<Furniture> {
+    if !home.annotations.references {
+        return Vec::new();
+    }
+    let mut next = home
+        .furniture
+        .iter()
+        .filter_map(stored_tag)
+        .max()
+        .unwrap_or(0);
+    let mut out = Vec::new();
+    for group in derived_references(home) {
+        for item in group.items {
+            let Some(piece) = home.piece(item.piece) else {
+                continue;
+            };
+            if stored_tag(piece).is_some() {
+                continue;
+            }
+            next += 1;
+            let mut tagged = piece.clone();
+            tagged
+                .properties
+                .insert(TAG_KEY.to_owned(), next.to_string());
+            out.push(tagged);
+        }
+    }
+    out
+}
+
+/// Every listed piece with its number taken away, to number them again in
+/// reading order — the explicit, visible way to close the gaps.
+#[must_use]
+pub fn cleared_references(home: &Home) -> Vec<Furniture> {
+    home.furniture
+        .iter()
+        .filter(|f| f.properties.contains_key(TAG_KEY))
+        .map(|f| {
+            let mut cleared = f.clone();
+            cleared.properties.remove(TAG_KEY);
+            cleared
+        })
+        .collect()
+}
+
 /// Rooms (smallest containing room wins) with the furniture inside, tagged
 /// in reading order. Doors, windows and technical points are left out.
+///
+/// A piece that keeps a number ([`untagged_references`]) is listed with it;
+/// the others are numbered after the highest kept, in reading order.
 pub fn room_references(home: &Home) -> Vec<RoomReference> {
+    let mut groups = derived_references(home);
+    let mut next = home
+        .furniture
+        .iter()
+        .filter_map(stored_tag)
+        .max()
+        .unwrap_or(0);
+    let kept = next > 0;
+    for group in &mut groups {
+        for item in &mut group.items {
+            match home.piece(item.piece).and_then(stored_tag) {
+                Some(tag) => item.tag = tag,
+                None if kept => {
+                    next += 1;
+                    item.tag = next;
+                }
+                None => {}
+            }
+        }
+    }
+    groups
+}
+
+/// The schedule numbered by reading order alone.
+fn derived_references(home: &Home) -> Vec<RoomReference> {
     let mut groups: Vec<RoomReference> = home
         .rooms
         .iter()

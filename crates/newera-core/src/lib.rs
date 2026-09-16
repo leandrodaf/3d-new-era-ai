@@ -39,7 +39,8 @@ pub use analysis::{
     Issue, Overlap, Storeys, check_layout, check_layout_in, door_blocked_by, door_swing,
 };
 pub use annotations::{
-    PlanAnnotations, ReferenceItem, RoomReference, auto_dimensions, fold, room_references,
+    PlanAnnotations, ReferenceItem, RoomReference, TAG_KEY, auto_dimensions, cleared_references,
+    fold, room_references, untagged_references,
 };
 pub use command::Command;
 pub use detect::{detect_room, detect_room_with_dividers, interior_point, rooms_following_walls};

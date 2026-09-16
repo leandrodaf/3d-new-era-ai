@@ -1804,7 +1804,8 @@ mod reference_tests {
         assert!(t.iter().any(|t| t.starts_with("QUARTO — ")), "{t:?}");
         assert!(!t.iter().any(|t| t.starts_with("SALA — ")), "{t:?}");
 
-        // A new piece in the living room takes number 1 (reading order).
+        // A new piece in the living room takes the next free number, 2: the
+        // sofa keeps the 1 it was given, as the joiner's quote does.
         let lamp = Furniture {
             id: doc.new_furniture_id(),
             catalog: "floor-lamp".into(),
@@ -1814,8 +1815,8 @@ mod reference_tests {
         };
         doc.execute(Command::insert(lamp)).unwrap();
         let t = texts(&doc);
-        assert!(t.iter().any(|t| t.contains("1  Luminária")), "{t:?}");
-        assert!(t.iter().any(|t| t.contains("2  Sofá")), "{t:?}");
+        assert!(t.iter().any(|t| t.contains("2  Luminária")), "{t:?}");
+        assert!(t.iter().any(|t| t.contains("1  Sofá")), "{t:?}");
 
         // Renaming a room renames its schedule title.
         let mut room = doc.home().rooms[1].clone();

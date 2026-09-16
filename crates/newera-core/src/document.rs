@@ -248,6 +248,24 @@ impl Document {
                 };
             }
         }
+        // Pieces that joined the schedule get the next free reference number,
+        // in the same undo step, and keep it from then on.
+        let untagged = crate::annotations::untagged_references(&variant.home);
+        if !untagged.is_empty() {
+            let mut undo_tags = Vec::new();
+            for piece in untagged {
+                if let Ok(previous) = Command::update(piece).apply(&mut variant.home) {
+                    undo_tags.push(previous);
+                }
+            }
+            if !undo_tags.is_empty() {
+                undo_tags.reverse();
+                undo_tags.push(inverse);
+                inverse = Command::Batch {
+                    commands: undo_tags,
+                };
+            }
+        }
         // Walls and panels that follow the roof, in the same undo step.
         let follows = |home: &Home| {
             home.walls
