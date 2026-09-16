@@ -78,6 +78,7 @@ apartment through the MCP server (`docs/ATRITOS-DE-USO.md`).
   follow it; reference numbers stay with their piece; a door nudged along its wall keeps
   its side.
 - A painted wall no longer covers the door in it; the load schedule's findings scroll.
+- The repository checks out on Windows again (`scripts/aux` was a reserved name there).
 
 ## [1.2.0] - 2026-09-15
 
