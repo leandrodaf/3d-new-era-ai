@@ -142,6 +142,10 @@ impl Surface {
 /// catalog generator.
 pub type ModelSource<'a> = &'a dyn Fn(&Furniture) -> Option<newera_catalog::Mesh>;
 
+/// How far a wall face may lean off the wall's line, as the sine of the
+/// angle, and still be the long face its openings are cut in (about 3°).
+const ALONG_WALL: f64 = 0.05;
+
 impl Mesh {
     pub fn from_home(home: &Home, selection: &Selection, models: ModelSource<'_>) -> Self {
         let mut mesh = Self::default();
@@ -626,7 +630,8 @@ impl Mesh {
                 Some(left) => self.wall_surface(wall, left, p, q, selected),
                 None => plain,
             };
-            let parallel_edge = ((q.x - p.x) * dir.1 - (q.y - p.y) * dir.0).abs() / edge_len < 1e-3;
+            let parallel_edge =
+                ((q.x - p.x) * dir.1 - (q.y - p.y) * dir.0).abs() / edge_len < ALONG_WALL;
             if let Some(left) = side
                 && parallel_edge
                 && let Some(board) = if left {
@@ -637,7 +642,13 @@ impl Mesh {
             {
                 baseboards.push((p, q, board.clone()));
             }
-            let parallel = ((q.x - p.x) * dir.1 - (q.y - p.y) * dir.0).abs() / edge_len < 1e-3;
+            // Joining walls of different thickness, a few millimetres off
+            // each other's line, leaves the long faces leaning a little — 1 cm
+            // over 1.4 m in a real plan — and a face that only counted as
+            // parallel when exact ran whole across the door in it. A long face
+            // within a few degrees of the wall is split at its openings.
+            let parallel =
+                ((q.x - p.x) * dir.1 - (q.y - p.y) * dir.0).abs() / edge_len < ALONG_WALL;
             if cuts.is_empty() || !parallel || wall.is_arc() {
                 self.add_side_sloped(p, q, bottom, top_at(p), top_at(q), &surface);
                 continue;
@@ -1273,6 +1284,62 @@ mod tests {
         let wall_end =
             holed.indices.len() - newera_catalog::piece_mesh(&home.furniture[0]).indices.len();
         assert!(!hits(&holed, 6..wall_end), "wall has a hole there");
+    }
+
+    #[test]
+    fn a_painted_wall_meeting_a_thinner_one_still_opens_for_its_door() {
+        // From a real plan: a 13 cm wall painted red on one side meets a
+        // 12 cm one 5 mm off its line, so its joined faces lean 1 cm over
+        // 1.4 m — and a door in it was covered by the red face.
+        let mut home = Home::default();
+        for (a, b, t) in [
+            ((0.0, 495.5), (255.5, 495.5), 11.0),
+            ((0.0, 360.5), (256.0, 360.5), 11.0),
+            ((255.5, 495.5), (255.5, 360.5), 13.0),
+            ((256.0, 360.5), (256.0, 257.0), 12.0),
+            ((256.0, 257.0), (703.5, 257.0), 14.0),
+            ((256.0, 257.0), (256.0, 0.0), 12.0),
+        ] {
+            let id = home.new_wall_id();
+            let mut wall = Wall::new(id, Point2::new(a.0, a.1), Point2::new(b.0, b.1));
+            wall.thickness = t;
+            wall.right_side = Some(newera_core::Material::paint([160, 78, 57]));
+            home.walls.push(wall);
+        }
+        let wall = home.walls[2].clone();
+        let id = home.new_furniture_id();
+        let mut door = newera_catalog::find("door")
+            .unwrap()
+            .instantiate(id, Point2::new(0.0, 0.0));
+        door.width = 80.0;
+        align_to_wall(&mut door, &wall, 87.5);
+        home.furniture.push(door);
+        let mesh = build(&home);
+        let wall_end =
+            mesh.indices.len() - newera_catalog::piece_mesh(&home.furniture[0]).indices.len();
+        // The middle of the door's hole: x = 255.5 cm, 100 cm up, y = 408 cm.
+        let hole = Vec3::new(2.555, 1.0, 4.08);
+        let covered: Vec<[Vec3; 3]> = mesh.indices[6..wall_end]
+            .chunks(3)
+            .map(|tri| [0, 1, 2].map(|k| Vec3::from(mesh.vertices[tri[k] as usize].position)))
+            .filter(|[a, b, c]| [a, b, c].iter().all(|p| (p.x - hole.x).abs() < 0.1))
+            .filter(|&[a, b, c]| point_in_triangle_zy(hole, a, b, c))
+            .collect();
+        assert!(
+            covered.is_empty(),
+            "a wall face runs across the door: {covered:?}"
+        );
+    }
+
+    /// Whether `p` lies inside triangle abc seen along x.
+    fn point_in_triangle_zy(p: Vec3, a: Vec3, b: Vec3, c: Vec3) -> bool {
+        let sign = |p1: Vec3, p2: Vec3, p3: Vec3| {
+            (p1.z - p3.z) * (p2.y - p3.y) - (p2.z - p3.z) * (p1.y - p3.y)
+        };
+        let (d1, d2, d3) = (sign(p, a, b), sign(p, b, c), sign(p, c, a));
+        let neg = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
+        let pos = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
+        !(neg && pos)
     }
 
     /// Whether `p` lies inside triangle abc on a vertical plane facing ±z.
