@@ -178,7 +178,11 @@ impl NewEraMcp {
                     at: f.position,
                     z: f.elevation + f.height / 2.0,
                 })
-                .ok_or_else(|| invalid(format!("from: {raw} is not a piece of this storey")))?
+                .ok_or_else(|| {
+                    invalid(format!(
+                        "from: {raw} is not a piece of this storey; from is a piece id such as \"f801\", not coordinates"
+                    ))
+                })?
         } else {
             match pipe {
                 Pipe::Cold => nearest(&[PointKind::WaterMeter, PointKind::Valve]).ok_or_else(|| {
@@ -196,7 +200,7 @@ impl NewEraMcp {
                         z: f.elevation + f.height / 2.0,
                     })
                     .ok_or_else(|| {
-                        invalid("route hot: where does hot water come from? name the heater (aquecedor) or give from")
+                        invalid("route hot: where does hot water come from? name the heater (aquecedor), or give from as the id of the piece it starts from (a heater, a shaft, a column), e.g. from=\"f801\"")
                     })?,
                 Pipe::Sewer => nearest(&[PointKind::InspectionBox]).ok_or_else(|| {
                     invalid("route sewer: where does it go? place the inspection-box (in a flat, the stack in the shaft), or give from")
