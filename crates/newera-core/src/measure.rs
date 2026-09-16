@@ -1402,6 +1402,27 @@ fn named_sizes(clause: &str) -> Vec<Vec<f64>> {
     sizes
 }
 
+/// The clauses of a name: split where the writer paused — `;`, `|`, a dash,
+/// brackets, and a comma — but never inside a number, where the comma is the
+/// decimal point this plan is written with (`80,5 cm`, `53,9 × 43 × 30,7`).
+fn clauses(name: &str) -> Vec<&str> {
+    let chars: Vec<(usize, char)> = name.char_indices().collect();
+    let mut out = Vec::new();
+    let mut start = 0;
+    for (k, &(at, c)) in chars.iter().enumerate() {
+        let decimal = c == ','
+            && k > 0
+            && chars[k - 1].1.is_ascii_digit()
+            && chars.get(k + 1).is_some_and(|(_, n)| n.is_ascii_digit());
+        if matches!(c, ';' | '|' | '(' | ')' | '—' | '/') || (c == ',' && !decimal) {
+            out.push(&name[start..at]);
+            start = at + c.len_utf8();
+        }
+    }
+    out.push(&name[start..]);
+    out
+}
+
 /// Every annotation checked against the drawing, with how many were.
 #[must_use]
 pub fn check_annotations(home: &Home) -> AnnotationCheck {
@@ -1516,7 +1537,7 @@ pub fn check_annotations(home: &Home) -> AnnotationCheck {
     // The names: where a plan drawn by a joiner keeps its sizes.
     for piece in home.furniture.iter().flat_map(Furniture::flatten) {
         let actual = [piece.width, piece.depth, piece.height];
-        for clause in piece.name.split([';', ',', '|', '(', ')', '—', '/']) {
+        for clause in clauses(&piece.name) {
             let sizes = named_sizes(clause);
             if sizes.is_empty() {
                 continue;
@@ -1616,6 +1637,49 @@ fn written_sizes(text: &str) -> Vec<Vec<f64>> {
 #[cfg(test)]
 mod stale_tests {
     use super::*;
+
+    #[test]
+    fn a_name_keeps_its_decimal_commas() {
+        let piece = |name: &str, w: f64, d: f64, h: f64| Furniture {
+            id: crate::ids::FurnitureId(1),
+            name: name.to_owned(),
+            width: w,
+            depth: d,
+            height: h,
+            ..Furniture::default()
+        };
+        for right in [
+            piece(
+                "48 — Gabinete do tanque integrado — 80,5 cm, duas portas",
+                80.5,
+                56.8,
+                85.0,
+            ),
+            piece(
+                "Aéreo geladeira — 79,9 cm; ventilação inferior preservada",
+                79.9,
+                35.0,
+                40.0,
+            ),
+            piece("Micro-ondas embutido 53,9 × 43 × 30,7", 53.9, 43.0, 30.7),
+        ] {
+            let mut home = Home::default();
+            home.furniture = vec![right.clone()];
+            let check = check_annotations(&home);
+            assert_eq!(check.stale, Vec::new(), "{}", right.name);
+            assert_eq!(check.names, 1, "{}", right.name);
+        }
+        // And the one that is really wrong is still caught.
+        let mut home = Home::default();
+        home.furniture = vec![piece("tampo aberto 110 × 30", 119.0, 30.0, 3.0)];
+        let check = check_annotations(&home);
+        assert_eq!(check.stale.len(), 1);
+        assert!((check.stale[0].drawn - 110.0).abs() < 1e-9);
+        assert_eq!(
+            clauses("módulo 70,75 cm; limpeza, duas portas"),
+            vec!["módulo 70,75 cm", " limpeza", " duas portas"]
+        );
+    }
 
     #[test]
     fn written_sizes_reads_notes_the_way_a_joiner_writes_them() {
