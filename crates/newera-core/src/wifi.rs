@@ -22,6 +22,8 @@ use crate::materials::WallFamily;
 pub const STANDARD_KEY: &str = "wifi:standard";
 /// An access point's wired uplink, Gbps: `1`, `2.5`, `5` or `10`.
 pub const UPLINK_KEY: &str = "wifi:uplink";
+/// Whether a window's glazing is low-e or solar control: `true`.
+pub const LOW_E_KEY: &str = "glass:low_e";
 /// Whether an access point is fed by its data cable (PoE): `true`/`false`.
 pub const POE_KEY: &str = "wifi:poe";
 
@@ -70,6 +72,26 @@ impl Band {
             Self::G2_4 => 20.0,
             Self::G5 => 23.0,
             Self::G6 => 21.0,
+        }
+    }
+
+    /// Loss of a reinforced concrete slab between storeys, dB: ITU-R P.1238
+    /// table 3 for apartments (2.4 GHz 10, 5.2 GHz 13); 6 GHz takes the
+    /// 5.2 GHz figure, the nearest published.
+    fn floor_db(self) -> f64 {
+        match self {
+            Self::G2_4 => 10.0,
+            Self::G5 | Self::G6 => 13.0,
+        }
+    }
+
+    /// Low-e or solar-control glazing, dB: its metal coating blocks radio
+    /// (some 30 dB measured at 6.75 GHz).
+    fn low_e_db(self) -> f64 {
+        match self {
+            Self::G2_4 => 25.0,
+            Self::G5 => 30.0,
+            Self::G6 => 33.0,
         }
     }
 
@@ -167,6 +189,8 @@ pub struct AccessPoint {
     pub standard: Standard,
     /// Its wired uplink, Gbps.
     pub uplink_gbps: f64,
+    /// Slabs between it and the storey shown.
+    pub floors: u32,
 }
 
 /// The access points on the storey shown.
@@ -192,9 +216,45 @@ pub fn access_points(home: &Home) -> Vec<AccessPoint> {
                     .get(UPLINK_KEY)
                     .and_then(|v| v.replace(',', ".").parse::<f64>().ok())
                     .unwrap_or_else(|| standard.usual_uplink()),
+                floors: 0,
             }
         })
         .collect()
+}
+
+/// Access points on every storey, placed relative to the one shown: their
+/// height from its floor and the slabs between.
+pub fn access_points_near(home: &Home) -> Vec<AccessPoint> {
+    if home.levels.is_empty() {
+        return access_points(home);
+    }
+    let floor = home.elevation_of(home.current_level());
+    let mut elevations: Vec<f64> = home.levels.iter().map(|l| l.elevation).collect();
+    elevations.sort_by(f64::total_cmp);
+    elevations.dedup_by(|a, b| (*a - *b).abs() < 1.0);
+    let mut out = Vec::new();
+    for level in &home.levels {
+        if home.is_reference_level(Some(level.id)) {
+            continue;
+        }
+        let mut shown = home.clone();
+        shown.selected_level = Some(level.id);
+        let at = level.elevation;
+        let (lo, hi) = (at.min(floor), at.max(floor));
+        let floors = u32::try_from(
+            elevations
+                .iter()
+                .filter(|e| **e > lo + 1.0 && **e <= hi + 1.0)
+                .count(),
+        )
+        .unwrap_or(0);
+        for mut ap in access_points(&shown) {
+            ap.z += at - floor;
+            ap.floors = if (at - floor).abs() < 1.0 { 0 } else { floors };
+            out.push(ap);
+        }
+    }
+    out
 }
 
 /// Signal at a place from one access point, dBm.
@@ -203,7 +263,11 @@ pub fn signal(home: &Home, ap: &AccessPoint, at: Point2, z: f64, band: Band) -> 
     let at_one_metre = 20.0 * band.mhz().log10() - 27.55;
     // Past the first metre indoors the signal falls a little faster than in
     // free space (exponent 2.2); the walls are counted apart.
-    band.eirp() - at_one_metre - 22.0 * metres.log10() - obstacles(home, ap.at, at, band)
+    band.eirp()
+        - at_one_metre
+        - 22.0 * metres.log10()
+        - obstacles(home, ap.at, at, band)
+        - f64::from(ap.floors) * band.floor_db()
 }
 
 /// What the straight path between two places crosses, dB: each wall by its
@@ -238,8 +302,16 @@ fn obstacles(home: &Home, a: Point2, b: Point2, band: Band) -> f64 {
                 widened.depth = widened.depth.max(w.thickness + 10.0);
                 widened.contains(cross)
             });
+            let low_e = through.is_some_and(|o| {
+                let name = crate::annotations::fold(&o.name);
+                o.properties.get(LOW_E_KEY).map(String::as_str) == Some("true")
+                    || ["low-e", "lowe", "controle solar", "refletivo"]
+                        .iter()
+                        .any(|w| name.contains(w))
+            });
             Some(
                 match through.and_then(|o| o.opening.as_ref().map(|op| op.kind)) {
+                    Some(OpeningKind::Window) if low_e => band.low_e_db(),
                     Some(OpeningKind::Passage) => 0.0,
                     Some(OpeningKind::Door) => band.wall_db(WallFamily::Wood),
                     Some(OpeningKind::Window) => band.wall_db(WallFamily::Glass),
@@ -415,6 +487,7 @@ pub fn suggest(
                     z: storey - 10.0,
                     standard,
                     uplink_gbps: standard.usual_uplink(),
+                    floors: 0,
                 },
                 r.name.clone(),
             )
@@ -529,6 +602,7 @@ mod tests {
             z: 270.0,
             standard,
             uplink_gbps: standard.usual_uplink(),
+            floors: 0,
         }
     }
 
@@ -624,5 +698,86 @@ mod tests {
             Band::G6.mhz() >= 5925.0 && Band::G6.mhz() <= 6425.0,
             "Brazil's 6 GHz band"
         );
+    }
+
+    #[test]
+    fn a_slab_and_low_e_glass_cost_the_signal_what_they_should() {
+        let home = flat(None);
+        let mut above = ap(200.0, 200.0, Standard::Wifi6);
+        let here = signal(&home, &above, Point2::new(250.0, 200.0), 100.0, Band::G5);
+        above.floors = 1;
+        let through = signal(&home, &above, Point2::new(250.0, 200.0), 100.0, Band::G5);
+        assert!((here - through - 13.0).abs() < 1e-9, "{here} {through}");
+
+        let mut glazed = flat(None);
+        let mut window = Furniture {
+            id: FurnitureId(31),
+            catalog: "window".into(),
+            name: "Janela".into(),
+            position: Point2::new(400.0, 200.0),
+            angle: 90.0,
+            width: 120.0,
+            depth: 15.0,
+            height: 120.0,
+            ..Furniture::default()
+        };
+        window.opening = Some(crate::furniture::Opening {
+            kind: OpeningKind::Window,
+            ..crate::furniture::Opening::default()
+        });
+        glazed.furniture.push(window);
+        let a = ap(200.0, 200.0, Standard::Wifi6);
+        let clear = signal(&glazed, &a, Point2::new(600.0, 200.0), 100.0, Band::G5);
+        glazed.furniture[0]
+            .properties
+            .insert(LOW_E_KEY.into(), "true".into());
+        let coated = signal(&glazed, &a, Point2::new(600.0, 200.0), 100.0, Band::G5);
+        assert!(clear - coated > 20.0, "{clear} {coated}");
+    }
+
+    #[test]
+    fn an_access_point_upstairs_reaches_down_through_one_slab() {
+        use crate::elements::Level;
+        use crate::ids::LevelId;
+        let mut home = flat(None);
+        home.levels = vec![
+            Level {
+                id: LevelId(1),
+                name: "Térreo".into(),
+                elevation: 0.0,
+                height: 250.0,
+                floor_thickness: 12.0,
+                ..Default::default()
+            },
+            Level {
+                id: LevelId(2),
+                name: "Superior".into(),
+                elevation: 262.0,
+                height: 250.0,
+                floor_thickness: 12.0,
+                ..Default::default()
+            },
+        ];
+        home.selected_level = Some(LevelId(1));
+        let mut up = Furniture {
+            id: FurnitureId(40),
+            catalog: "wifi-point".into(),
+            name: "AP".into(),
+            position: Point2::new(200.0, 200.0),
+            elevation: 246.0,
+            width: 16.0,
+            depth: 16.0,
+            height: 4.0,
+            level: Some(LevelId(2)),
+            ..Furniture::default()
+        };
+        up.level = Some(LevelId(2));
+        home.furniture.push(up);
+        assert!(access_points(&home).is_empty(), "not on the storey shown");
+        let near = access_points_near(&home);
+        assert_eq!(near.len(), 1);
+        assert_eq!(near[0].floors, 1);
+        assert!((near[0].z - 510.0).abs() < 1e-9, "{:?}", near[0]);
+        assert!(!coverage(&home, &near).is_empty());
     }
 }

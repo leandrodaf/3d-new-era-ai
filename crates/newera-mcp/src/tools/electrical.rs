@@ -712,7 +712,9 @@ impl NewEraMcp {
                         band.key()
                     )));
                 }
-                let rows: Vec<serde_json::Value> = wifi::coverage(home, &aps)
+                // Access points on other storeys reach this one through the slab.
+                let near = wifi::access_points_near(home);
+                let rows: Vec<serde_json::Value> = wifi::coverage(home, &near)
                     .iter()
                     .map(|r| {
                         serde_json::json!([
