@@ -603,13 +603,126 @@ pub fn plan_scene(home: &Home, options: &SceneOptions) -> Scene {
     if home.compass.visible {
         compass_items(&mut scene, &home.compass, palette.compass);
     }
+    // The circuit of each point, beside it: what an electrician reads first.
+    if !home
+        .hidden_disciplines
+        .contains(&newera_core::Discipline::Electrical)
+    {
+        circuit_tags(&mut scene, home, options);
+    }
     if home.annotations.references {
         reference_items(&mut scene, home, options);
     }
     if home.annotations.legend {
         legend_items(&mut scene, home, options);
+        if !home
+            .hidden_disciplines
+            .contains(&newera_core::Discipline::Electrical)
+        {
+            load_schedule_items(&mut scene, home);
+        }
     }
     scene
+}
+
+/// The circuit written on each electrical point, as a small tag beside it.
+fn circuit_tags(scene: &mut Scene, home: &Home, options: &SceneOptions) {
+    let color = discipline_color(newera_core::Discipline::Electrical);
+    for point in newera_core::electrical::points(home) {
+        let Some(circuit) = &point.circuit else {
+            continue;
+        };
+        let Some(piece) = home.find_piece(point.id) else {
+            continue;
+        };
+        let (_, max) = newera_core::plan_bounds(piece);
+        scene.push(
+            Some(point.id.into()),
+            Primitive::Text {
+                text: circuit.clone(),
+                position: Point2::new(max.x + 3.0, max.y + 3.0),
+                size: Size::Cm(9.0 * EM_TO_HEIGHT),
+                color,
+                align: Align::BaselineLeft,
+                angle: 0.0,
+                look: TextLook {
+                    bold: true,
+                    italic: false,
+                    outline: Some(options.palette.paper),
+                },
+            },
+        );
+    }
+}
+
+/// The load schedule beside the plan, under the legend: every circuit with
+/// its load, current, wire, breaker and DR.
+fn load_schedule_items(scene: &mut Scene, home: &Home) {
+    let circuits = newera_core::electrical::circuits(home);
+    if circuits.is_empty() {
+        return;
+    }
+    let Some((min, max)) = scene.bounds() else {
+        return;
+    };
+    let ink = Color::rgb(40, 44, 52);
+    let mut text = |content: String, at: Point2, size: f64, bold: bool| {
+        scene.push(
+            None,
+            Primitive::Text {
+                text: content,
+                position: at,
+                size: Size::Cm(size * EM_TO_HEIGHT),
+                color: ink,
+                align: Align::BaselineLeft,
+                angle: 0.0,
+                look: TextLook {
+                    bold,
+                    italic: false,
+                    outline: None,
+                },
+            },
+        );
+    };
+    let (x, mut y) = (min.x, max.y + 90.0);
+    text("QUADRO DE CARGAS".to_owned(), Point2::new(x, y), 22.0, true);
+    y += 40.0;
+    text(
+        "Circuito   Tipo   Pontos   VA   V   A   Fio mm²   Disjuntor   DR".to_owned(),
+        Point2::new(x, y),
+        13.0,
+        true,
+    );
+    y += 34.0;
+    let mut total = 0.0;
+    for c in &circuits {
+        total += c.va;
+        let kinds: Vec<&str> = c.kinds.iter().map(|k| k.name()).collect();
+        text(
+            format!(
+                "{}   {}   {}   {:.0}   {:.0}   {}   {}   {} A   {}",
+                c.name,
+                kinds.join("+"),
+                c.points.len(),
+                c.va,
+                c.volts,
+                newera_core::electrical::decimal(c.amps),
+                format!("{}", c.wire_mm2).replace('.', ","),
+                c.breaker_a,
+                if c.rcd { "30 mA" } else { "—" }
+            ),
+            Point2::new(x, y),
+            13.0,
+            false,
+        );
+        y += 32.0;
+    }
+    text(
+        format!("Total instalado: {total:.0} VA"),
+        Point2::new(x, y),
+        13.0,
+        true,
+    );
 }
 
 /// Architectural symbol of a piece, placed and rotated on the plan.
@@ -1731,6 +1844,78 @@ mod furniture_tests {
             .filter(|i| i.owner == Some(door_id.into()))
             .count();
         assert!(door_lines >= 3, "leaf, arc and jambs");
+    }
+}
+
+#[cfg(test)]
+mod electrical_plot_tests {
+    use super::*;
+    use newera_core::{Discipline, FurnitureId};
+
+    #[test]
+    fn a_circuit_is_written_by_its_point_and_the_schedule_beside_the_plan() {
+        let mut home = Home::default();
+        let point = |id: u64, catalog: &str, x: f64, circuit: &str| {
+            let mut f = Furniture {
+                id: FurnitureId(id),
+                catalog: catalog.into(),
+                name: catalog.into(),
+                position: Point2::new(x, 100.0),
+                width: 10.0,
+                depth: 4.0,
+                height: 10.0,
+                discipline: Some(Discipline::Electrical),
+                ..Furniture::default()
+            };
+            f.properties
+                .insert(newera_core::electrical::CIRCUIT_KEY.into(), circuit.into());
+            f
+        };
+        home.furniture = vec![
+            point(1, "light-ceiling", 50.0, "C1"),
+            point(2, "outlet-low", 150.0, "C2"),
+        ];
+        let texts = |home: &Home| -> Vec<String> {
+            plan_scene(home, &SceneOptions::default())
+                .items
+                .iter()
+                .filter_map(|i| match &i.primitive {
+                    Primitive::Text { text, .. } => Some(text.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        let plain = texts(&home);
+        assert!(
+            plain.contains(&"C1".to_owned()) && plain.contains(&"C2".to_owned()),
+            "{plain:?}"
+        );
+        assert!(
+            !plain.iter().any(|t| t == "QUADRO DE CARGAS"),
+            "only with the legend on"
+        );
+
+        home.annotations.legend = true;
+        let with_legend = texts(&home);
+        assert!(
+            with_legend.iter().any(|t| t == "QUADRO DE CARGAS"),
+            "{with_legend:?}"
+        );
+        assert!(
+            with_legend
+                .iter()
+                .any(|t| t.starts_with("C2   TUG   1   100")),
+            "{with_legend:?}"
+        );
+        assert!(
+            with_legend.iter().any(|t| t == "Total instalado: 200 VA"),
+            "{with_legend:?}"
+        );
+
+        // The electrical project hidden, its tags go with it.
+        home.hidden_disciplines = vec![Discipline::Electrical];
+        let hidden = texts(&home);
+        assert!(!hidden.contains(&"C1".to_owned()), "{hidden:?}");
     }
 }
 

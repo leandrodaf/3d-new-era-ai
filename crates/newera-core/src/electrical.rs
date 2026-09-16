@@ -322,13 +322,21 @@ pub fn circuits(home: &Home) -> Vec<Circuit> {
                 .copied()
                 .find(|b| f64::from(*b) >= amps && f64::from(*b) <= capacity)
                 .unwrap_or(BREAKERS[BREAKERS.len() - 1]);
+            // DR 30 mA: every circuit reaching a room with a shower or a
+            // bath, and the outlet circuits of kitchens, laundries and
+            // balconies.
             let rcd = mine.iter().any(|p| {
-                p.kind.loads()
-                    && p.room
-                        .and_then(|id| view.rooms.iter().find(|r| r.id == id))
-                        .is_some_and(|r| {
-                            matches!(room_class(r), Wet::Kitchen | Wet::Bathroom | Wet::Balcony)
-                        })
+                let class = p
+                    .room
+                    .and_then(|id| view.rooms.iter().find(|r| r.id == id))
+                    .map(room_class);
+                match class {
+                    Some(Wet::Bathroom) => p.kind.loads(),
+                    Some(Wet::Kitchen | Wet::Balcony) => {
+                        matches!(p.kind, PointKind::Outlet | PointKind::Dedicated)
+                    }
+                    _ => false,
+                }
             });
             Circuit {
                 name,
@@ -343,6 +351,11 @@ pub fn circuits(home: &Home) -> Vec<Circuit> {
             }
         })
         .collect()
+}
+
+/// A number with one decimal, written the Brazilian way: `13,4`.
+pub fn decimal(value: f64) -> String {
+    format!("{value:.1}").replace('.', ",")
 }
 
 /// Sorts `C2` before `C10`.
@@ -417,11 +430,11 @@ pub fn check(home: &Home) -> Vec<Finding> {
         let have = count(room.id, PointKind::Outlet);
         if have < needed {
             let why = match class {
-                Wet::Kitchen => format!("um a cada 3,5 m de perímetro ({per:.1} m)"),
+                Wet::Kitchen => format!("um a cada 3,5 m de perímetro ({} m)", decimal(per)),
                 Wet::Bathroom => "um junto ao lavatório".into(),
                 Wet::Balcony => "ao menos um".into(),
                 _ if area <= 6.0 => "ao menos um".into(),
-                _ => format!("um a cada 5 m de perímetro ({per:.1} m)"),
+                _ => format!("um a cada 5 m de perímetro ({} m)", decimal(per)),
             };
             out.push(Finding {
                 severity: Severity::Erro,
@@ -589,6 +602,14 @@ mod tests {
         assert!(
             c1.wire_mm2 == 1.5 && c1.kinds == [PointKind::Lighting],
             "{c1:?}"
+        );
+        assert!(
+            !c1.rcd,
+            "a kitchen's lighting needs no DR, its outlets do: {c1:?}"
+        );
+        assert!(
+            findings.iter().any(|f| f.message.contains("(12,0 m)")),
+            "{findings:#?}"
         );
         let shower = schedule.iter().find(|c| c.name == "C4").unwrap();
         // 5500 W at 220 V: 25 A, 4 mm², 25 A breaker.
