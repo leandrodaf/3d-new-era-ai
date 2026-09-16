@@ -37,25 +37,26 @@ Nada anotado ainda.
 
 ---
 
-## Corrigidos, a conferir em uso
+## Conferidos na planta real
 
-Enviados pelo `feedback`; o texto completo está em
-`git show 87083ec:docs/ATRITOS-DE-USO.md`. Corrigidos no código, com teste que
-reproduz o caso; saem daqui quando conferidos na planta.
+Os dois que restavam foram conferidos com o app instalado, sobre uma cópia da
+planta de 65 m² tirada da sessão aberta, com os mesmos comandos do relato:
 
-| # | O que doía | Corrigido em | Conferir com |
-|---|---|---|---|
-| 32 | Cômodo sem porta não entrava em relatório nenhum — um dormitório lacrado tirava nota 99 | `3f63d0e`: `ergonomics` dá erro "Sem acesso" e `check_layout` traz `no_door` (cômodo e vãos); sala, cozinha e varanda abertas não entram | `delete` da porta do quarto, depois `check_layout()` e `ergonomics()` |
-| 34 | `hinge_right` respondia ok e parecia não fazer nada | `e82752e`: a porta já estava com `hinge_right: true`; agora o `update` lista em `unchanged` o que já tinha o valor pedido, com o valor atual, e o `blocks_door` diz o valor a usar | `update(hinge_right=<o valor que a porta já tem>)` |
+| # | O que doía | Resultado |
+|---|---|---|
+| 32 | Cômodo sem porta não entrava em relatório nenhum | Com as portas: `no_door` vazio, nota 99. `delete` da porta do dormitório (`f1546`): `no_door: Dormitório`, `ergonomics` com erro "Sem acesso", nota 87. (`3f63d0e`) |
+| 34 | `hinge_right` respondia ok e parecia não fazer nada | A porta já tinha `hinge_right: true`. Pedir o mesmo valor agora responde `unchanged` com o valor atual, no dry e aplicado; pedir o oposto mostra `true → false`. (`e82752e`, e o `false` explícito no diff) |
 
-Os que não se reproduziam: o `fix` que tirava a lava-louças do nicho deixou de
-ser oferecido quando a peça perde o encosto do nicho (`187cf25`); e toda
-escrita, dry run, undo e lote pelo REST passaram a nomear mudanças nas
-anotações e nas properties (`afc3d42`), para que um sumiço não passe calado.
+Os que não se reproduziam também têm resposta no código: o `fix` que tirava a
+lava-louças do nicho não é mais oferecido quando a peça perde o encosto do
+nicho (`187cf25`); e toda escrita, dry run, undo e lote pelo REST nomeiam
+mudanças nas anotações e nas properties (`afc3d42`).
+
+Nenhum caso aberto. A próxima rodada começa em "Rodada em aberto".
 
 ## O que já caiu
 
-Trinta casos, todos verificados em uso na mesma planta de 65 m², não no
+Trinta e dois casos, todos verificados em uso na mesma planta de 65 m², não no
 changelog. A lista com o que doía em cada um e onde foi resolvido está em
 `git show 87083ec:docs/ATRITOS-DE-USO.md`.
 
