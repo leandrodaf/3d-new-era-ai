@@ -308,16 +308,19 @@ pub(crate) fn paint_grid(painter: &Painter, rect: Rect, camera: &Camera, palette
 
 pub(crate) const RULER: f32 = 18.0;
 
-/// Top and left rulers with labeled ticks in the display unit.
+/// Top and left rulers with labeled ticks in the display unit. They are
+/// chrome, not drawing: they wear the colors of the window, so the sheet
+/// underneath is the only thing that looks like paper.
 pub(crate) fn paint_rulers(
     painter: &Painter,
     rect: Rect,
     camera: &Camera,
     unit: LengthUnit,
     cursor: Option<Point2>,
+    t: crate::theme::Tokens,
 ) {
-    let bg = Color32::from_rgba_unmultiplied(245, 246, 248, 235);
-    let ink = Color32::from_gray(90);
+    let bg = t.surface.gamma_multiply(0.97);
+    let ink = t.ink_faint;
     let top = Rect::from_min_max(rect.left_top(), Pos2::new(rect.right(), rect.top() + RULER));
     let left = Rect::from_min_max(
         rect.left_top(),
@@ -325,6 +328,9 @@ pub(crate) fn paint_rulers(
     );
     painter.rect_filled(top, 0.0, bg);
     painter.rect_filled(left, 0.0, bg);
+    let edge = Stroke::new(1.0, t.rule);
+    painter.hline(top.x_range(), top.bottom(), edge);
+    painter.vline(left.right(), left.y_range(), edge);
 
     // Major tick spacing: the smallest "nice" step that is at least 60 px apart.
     let major = [
@@ -391,14 +397,21 @@ pub(crate) fn paint_rulers(
         }
     }
     if let Some(c) = cursor {
-        let marker = Color32::from_rgb(40, 120, 230);
+        let marker = t.accent;
         let s = camera.to_screen(rect, c);
         painter.vline(s.x, top.y_range(), Stroke::new(1.0, marker));
         painter.hline(left.x_range(), s.y, Stroke::new(1.0, marker));
     }
-    painter.rect_filled(
-        Rect::from_min_size(rect.left_top(), Vec2::splat(RULER)),
-        0.0,
-        bg,
+    // The corner square covers where the two rulers cross.
+    let corner = Rect::from_min_size(rect.left_top(), Vec2::splat(RULER));
+    painter.rect_filled(corner, 0.0, bg);
+    painter.hline(corner.x_range(), corner.bottom(), edge);
+    painter.vline(corner.right(), corner.y_range(), edge);
+    painter.text(
+        corner.center(),
+        egui::Align2::CENTER_CENTER,
+        unit.label(),
+        FontId::monospace(8.0),
+        ink,
     );
 }

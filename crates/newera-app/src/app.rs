@@ -1,10 +1,9 @@
-use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use web_time::Instant;
 
-use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText};
+use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText, Stroke};
 use egui_phosphor::regular as icon;
 use newera_core::{
     Command, CoreResult, Document, Element, ElementId, Home, LengthUnit, Point2, SharedDocument,
@@ -39,7 +38,15 @@ struct Settings {
     /// How furniture looks on the plan.
     #[serde(default)]
     furniture_look: FurnitureLook,
-    /// Interface in English instead of Portuguese.
+    /// Day, night, or whatever the system is set to.
+    #[serde(default)]
+    theme: crate::theme::Mode,
+    /// Interface language; missing means a settings file from before the
+    /// window spoke more than two languages.
+    #[serde(default)]
+    lang: Option<crate::i18n::Lang>,
+    /// Interface in English instead of Portuguese, as it was written before
+    /// `lang`: read once, on the first run after the update.
     #[serde(default)]
     english: bool,
 }
@@ -66,6 +73,8 @@ pub(crate) struct NewEraApp {
     pub(crate) plan: PlanView,
     pub(crate) scene: SceneView,
     palette: Palette,
+    /// Which theme the plan is drawn for, to notice when the system flips it.
+    dark: bool,
     settings: Settings,
     dialog: Option<Dialog>,
     status: Option<(String, Instant)>,
@@ -130,11 +139,27 @@ impl NewEraApp {
         cc.egui_ctx.set_fonts(fonts);
         crate::theme::apply(&cc.egui_ctx);
 
-        let settings = cc
+        let stored = cc
             .storage
-            .and_then(|s| eframe::get_value::<Settings>(s, SETTINGS_KEY))
-            .unwrap_or_default();
-        crate::i18n::set_english(settings.english);
+            .and_then(|s| eframe::get_value::<Settings>(s, SETTINGS_KEY));
+        // Nothing saved yet: the language the system asks for. A settings
+        // file already there keeps the language it was left in — its owner
+        // chose it, whatever the system says.
+        let first_run = stored.is_none();
+        let mut settings = stored.unwrap_or_default();
+        let lang = settings.lang.unwrap_or_else(|| {
+            if settings.english {
+                crate::i18n::Lang::En
+            } else if first_run {
+                crate::i18n::Lang::from_system().unwrap_or_default()
+            } else {
+                crate::i18n::Lang::Pt
+            }
+        });
+        settings.lang = Some(lang);
+        crate::i18n::set(lang);
+        crate::theme::set_mode(&cc.egui_ctx, settings.theme);
+        let dark = cc.egui_ctx.theme() == egui::Theme::Dark;
         Self {
             document,
             mcp_url,
@@ -142,7 +167,8 @@ impl NewEraApp {
             selection: Selection::new(),
             plan: PlanView::new(),
             scene: SceneView::new(),
-            palette: Palette::default(),
+            palette: crate::theme::plan_palette(dark),
+            dark,
             settings,
             dialog: None,
             status: None,
@@ -182,6 +208,17 @@ impl NewEraApp {
         let result = action(&mut self.document.write());
         if let Err(err) = result {
             self.set_status(format!("⚠ {err}"));
+        }
+    }
+
+    /// The plan is drawn on the paper of the theme in use; when the system
+    /// flips from day to night under the window, the sheet flips with it.
+    fn follow_theme(&mut self, ctx: &egui::Context) {
+        let dark = ctx.theme() == egui::Theme::Dark;
+        if dark != self.dark {
+            self.dark = dark;
+            self.palette = crate::theme::plan_palette(dark);
+            self.plan.invalidate_scene();
         }
     }
 
@@ -266,24 +303,27 @@ impl NewEraApp {
                     app.remember(&path);
                     app.after_load();
                     let mut status = if opened.imported {
-                        format!(
+                        crate::i18n::fill(
                             "Importado de {} — salve como projeto para manter tudo num arquivo",
-                            path.display()
+                            &[&path.display()],
                         )
                     } else {
-                        format!("Aberto: {}", path.display())
+                        crate::i18n::fill("Aberto: {}", &[&path.display()])
                     };
                     if !opened.warnings.is_empty() {
-                        let _ = write!(status, " · {} aviso(s)", opened.warnings.len());
+                        status.push_str(&crate::i18n::fill(
+                            " · {} aviso(s)",
+                            &[&opened.warnings.len()],
+                        ));
                         for warning in &opened.warnings {
                             tracing::warn!("import: {warning}");
                         }
                     }
                     app.set_status(status);
                 }
-                Err(err) => app.set_status(format!(
-                    "⚠ Não foi possível abrir {}: {err}",
-                    path.display()
+                Err(err) => app.set_status(crate::i18n::fill(
+                    "⚠ Não foi possível abrir {}: {}",
+                    &[&path.display(), &err],
                 )),
             })
         });
@@ -418,9 +458,9 @@ impl NewEraApp {
         }
         ui.menu_button(
             format!(
-                "{} Pontos de vista ({})",
+                "{} {}",
                 icon::CAMERA,
-                cameras.stored.len()
+                crate::i18n::fill("Pontos de vista ({})", &[&cameras.stored.len()])
             ),
             |ui| {
                 if cameras.stored.is_empty() {
@@ -430,7 +470,7 @@ impl NewEraApp {
                     let name = camera
                         .name
                         .clone()
-                        .unwrap_or_else(|| format!("Ponto de vista {}", i + 1));
+                        .unwrap_or_else(|| crate::i18n::fill("Ponto de vista {}", &[&(i + 1)]));
                     if ui.button(name).clicked() {
                         self.scene.visitor = Some(crate::view::scene::Visitor {
                             camera: camera.clone(),
@@ -454,7 +494,10 @@ impl NewEraApp {
         {
             let mut camera = visitor.camera.clone();
             let mut next = cameras.clone();
-            camera.name = Some(format!("Ponto de vista {}", next.stored.len() + 1));
+            camera.name = Some(crate::i18n::fill(
+                "Ponto de vista {}",
+                &[&(next.stored.len() + 1)],
+            ));
             next.observer = visitor.camera.clone();
             next.stored.push(camera);
             self.run(|doc| doc.execute(Command::SetCameras { cameras: next }));
@@ -529,11 +572,11 @@ impl NewEraApp {
         ) {
             Ok(_) => {
                 self.document.write().mark_saved(&name);
-                self.set_status(format!("Salvo em {name}"));
+                self.set_status(crate::i18n::fill("Salvo em {}", &[&name]));
                 true
             }
             Err(err) => {
-                self.set_status(format!("⚠ Não foi possível salvar: {err}"));
+                self.set_status(crate::i18n::fill("⚠ Não foi possível salvar: {}", &[&err]));
                 false
             }
         }
@@ -572,14 +615,14 @@ impl NewEraApp {
                 Ok(()) => {
                     app.document.write().mark_saved(&path);
                     app.remember(&path);
-                    app.set_status(format!("Salvo em {}", path.display()));
+                    app.set_status(crate::i18n::fill("Salvo em {}", &[&path.display()]));
                     if let Some(action) = app.after_save.take() {
                         app.perform(action);
                     }
                 }
                 Err(err) => {
                     app.after_save = None;
-                    app.set_status(format!("⚠ Não foi possível salvar: {err}"));
+                    app.set_status(crate::i18n::fill("⚠ Não foi possível salvar: {}", &[&err]));
                 }
             })
         });
@@ -618,9 +661,14 @@ impl NewEraApp {
                 let done = newera_render::export_home(&home, &path, assets.as_deref());
                 Box::new(move |app: &mut Self| match done {
                     Ok(()) => {
-                        app.set_status(format!("Modelo 3D exportado para {}", path.display()));
+                        app.set_status(crate::i18n::fill(
+                            "Modelo 3D exportado para {}",
+                            &[&path.display()],
+                        ));
                     }
-                    Err(err) => app.set_status(format!("⚠ Falha ao exportar: {err}")),
+                    Err(err) => {
+                        app.set_status(crate::i18n::fill("⚠ Falha ao exportar: {}", &[&err]));
+                    }
                 })
             });
         }
@@ -634,8 +682,11 @@ impl NewEraApp {
                 Ok(newera_render::glb_home(&home))
             });
             match saved {
-                Ok(_) => self.set_status(format!("Modelo 3D exportado para {name}.glb")),
-                Err(err) => self.set_status(format!("⚠ Falha ao exportar: {err}")),
+                Ok(_) => self.set_status(crate::i18n::fill(
+                    "Modelo 3D exportado para {}",
+                    &[&format!("{name}.glb")],
+                )),
+                Err(err) => self.set_status(crate::i18n::fill("⚠ Falha ao exportar: {}", &[&err])),
             }
         }
     }
@@ -708,16 +759,23 @@ impl NewEraApp {
                 let done = make()
                     .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
                 Box::new(move |app: &mut Self| match done {
-                    Ok(()) => app.set_status(format!("Planta exportada para {}", path.display())),
-                    Err(err) => app.set_status(format!("⚠ Falha ao exportar: {err}")),
+                    Ok(()) => app.set_status(crate::i18n::fill(
+                        "Planta exportada para {}",
+                        &[&path.display()],
+                    )),
+                    Err(err) => {
+                        app.set_status(crate::i18n::fill("⚠ Falha ao exportar: {}", &[&err]));
+                    }
                 })
             });
         }
         #[cfg(target_arch = "wasm32")]
         match crate::files::save_bytes(&ext.to_uppercase(), ext, &format!("{name}.{ext}"), make) {
-            Ok(Some(path)) => self.set_status(format!("Planta exportada para {path}")),
+            Ok(Some(path)) => {
+                self.set_status(crate::i18n::fill("Planta exportada para {}", &[&path]));
+            }
             Ok(None) => {}
-            Err(err) => self.set_status(format!("⚠ Falha ao exportar: {err}")),
+            Err(err) => self.set_status(crate::i18n::fill("⚠ Falha ao exportar: {}", &[&err])),
         }
     }
 
@@ -822,7 +880,9 @@ impl NewEraApp {
         };
         let size = match image::image_dimensions(&path) {
             Ok((w, h)) => [w, h],
-            Err(err) => return self.set_status(format!("⚠ Imagem inválida: {err}")),
+            Err(err) => {
+                return self.set_status(crate::i18n::fill("⚠ Imagem inválida: {}", &[&err]));
+            }
         };
         // Start at a plausible scale: fit the image width to ~15 m.
         let cm_per_px = 1500.0 / f64::from(size[0]);
@@ -1269,7 +1329,10 @@ impl NewEraApp {
                 for (tool, glyph, label, key) in TOOLS {
                     if ui
                         .add(
-                            egui::Button::selectable(self.tool == tool, format!("{glyph} {label}"))
+                            egui::Button::selectable(
+                                self.tool == tool,
+                                format!("{glyph} {}", crate::i18n::tr(label)),
+                            )
                                 .shortcut_text(key),
                         )
                         .clicked()
@@ -1524,6 +1587,17 @@ impl NewEraApp {
                     );
                 }
                 ui.separator();
+                ui.label(crate::i18n::tr("Tema"));
+                for mode in crate::theme::Mode::ALL {
+                    if ui
+                        .radio(self.settings.theme == mode, mode.label())
+                        .clicked()
+                    {
+                        self.settings.theme = mode;
+                        crate::theme::set_mode(ui.ctx(), mode);
+                    }
+                }
+                ui.separator();
                 ui.label(crate::i18n::tr("Unidade"));
                 for unit in LengthUnit::ALL {
                     ui.radio_value(&mut self.settings.unit, unit, unit.label());
@@ -1533,18 +1607,13 @@ impl NewEraApp {
             self.plugins_menu(ui);
             ui.menu_button(crate::i18n::tr("Ajuda"), |ui| {
                 ui.menu_button(format!("{} Idioma / Language", icon::TRANSLATE), |ui| {
-                    if ui
-                        .radio(!self.settings.english, "Português (Brasil)")
-                        .clicked()
-                    {
-                        self.settings.english = false;
-                        crate::i18n::set_english(false);
-                        self.plan.invalidate_scene();
-                    }
-                    if ui.radio(self.settings.english, "English").clicked() {
-                        self.settings.english = true;
-                        crate::i18n::set_english(true);
-                        self.plan.invalidate_scene();
+                    let current = crate::i18n::lang();
+                    for lang in crate::i18n::Lang::ALL {
+                        if ui.radio(lang == current, lang.label()).clicked() {
+                            self.settings.lang = Some(lang);
+                            crate::i18n::set(lang);
+                            self.plan.invalidate_scene();
+                        }
                     }
                 });
                 #[cfg(not(target_arch = "wasm32"))]
@@ -1582,119 +1651,141 @@ impl NewEraApp {
     }
 
     fn toolbar(&mut self, ui: &mut egui::Ui) {
+        let t = crate::theme::of(ui.visuals());
+        ui.add_space(3.0);
         ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
-            let big = |text: &str| RichText::new(text).size(18.0);
-            if ui
-                .button(big(icon::FILE_PLUS))
-                .on_hover_text(crate::i18n::tr("Novo (Ctrl+N)"))
-                .clicked()
-            {
-                self.request(Pending::New);
-            }
-            if ui
-                .button(big(icon::FOLDER_OPEN))
-                .on_hover_text(crate::i18n::tr("Abrir (Ctrl+O)"))
-                .clicked()
-            {
-                self.request(Pending::Open(None));
-            }
-            if ui
-                .button(big(icon::FLOPPY_DISK))
-                .on_hover_text(crate::i18n::tr("Salvar (Ctrl+S)"))
-                .clicked()
-            {
-                self.save(false);
-            }
-            ui.separator();
+            ui.spacing_mut().item_spacing.x = 8.0;
+            let big = |text: &str| RichText::new(text).size(17.0);
+            keys(ui, |ui| {
+                if ui
+                    .button(big(icon::FILE_PLUS))
+                    .on_hover_text(crate::i18n::tr("Novo (Ctrl+N)"))
+                    .clicked()
+                {
+                    self.request(Pending::New);
+                }
+                if ui
+                    .button(big(icon::FOLDER_OPEN))
+                    .on_hover_text(crate::i18n::tr("Abrir (Ctrl+O)"))
+                    .clicked()
+                {
+                    self.request(Pending::Open(None));
+                }
+                if ui
+                    .button(big(icon::FLOPPY_DISK))
+                    .on_hover_text(crate::i18n::tr("Salvar (Ctrl+S)"))
+                    .clicked()
+                {
+                    self.save(false);
+                }
+            });
             let (can_undo, can_redo) = {
                 let doc = self.document.read();
                 (doc.can_undo(), doc.can_redo())
             };
-            if ui
-                .add_enabled(
-                    can_undo,
-                    egui::Button::new(big(icon::ARROW_COUNTER_CLOCKWISE)),
-                )
-                .on_hover_text(crate::i18n::tr("Desfazer (Ctrl+Z)"))
-                .clicked()
-            {
-                self.run(Document::undo);
-            }
-            if ui
-                .add_enabled(can_redo, egui::Button::new(big(icon::ARROW_CLOCKWISE)))
-                .on_hover_text(crate::i18n::tr("Refazer (Ctrl+Shift+Z)"))
-                .clicked()
-            {
-                self.run(Document::redo);
-            }
-            ui.separator();
-            for (tool, glyph, label, key) in TOOLS {
+            keys(ui, |ui| {
                 if ui
-                    .add(egui::Button::selectable(self.tool == tool, big(glyph)))
-                    .on_hover_text(format!("{label} ({key})"))
+                    .add_enabled(
+                        can_undo,
+                        egui::Button::new(big(icon::ARROW_COUNTER_CLOCKWISE)),
+                    )
+                    .on_hover_text(crate::i18n::tr("Desfazer (Ctrl+Z)"))
                     .clicked()
                 {
-                    self.set_tool(tool);
+                    self.run(Document::undo);
                 }
-            }
-            ui.separator();
-            if ui
-                .button(big(icon::IMAGE))
-                .on_hover_text(crate::i18n::tr("Importar imagem de fundo"))
-                .clicked()
-            {
-                self.import_background();
-            }
-            if ui
-                .button(big(icon::COMPASS))
-                .on_hover_text(crate::i18n::tr("Casa e bússola"))
-                .clicked()
-            {
-                self.open_home_settings();
-            }
-            ui.separator();
-            if ui
-                .button(big(icon::MAGNIFYING_GLASS_PLUS))
-                .on_hover_text(crate::i18n::tr("Aproximar (Ctrl +)"))
-                .clicked()
-            {
-                self.plan.zoom_by(self.plan_rect, 1.25);
-            }
-            if ui
-                .button(big(icon::MAGNIFYING_GLASS_MINUS))
-                .on_hover_text(crate::i18n::tr("Afastar (Ctrl -)"))
-                .clicked()
-            {
-                self.plan.zoom_by(self.plan_rect, 0.8);
-            }
-            if ui
-                .button(big(icon::CORNERS_OUT))
-                .on_hover_text(crate::i18n::tr("Enquadrar (Ctrl+0)"))
-                .clicked()
-            {
-                self.plan.request_fit();
-            }
+                if ui
+                    .add_enabled(can_redo, egui::Button::new(big(icon::ARROW_CLOCKWISE)))
+                    .on_hover_text(crate::i18n::tr("Refazer (Ctrl+Shift+Z)"))
+                    .clicked()
+                {
+                    self.run(Document::redo);
+                }
+            });
+            // The tools are the row that matters: the one in use wears the
+            // accent, the others stay out of the way.
+            keys(ui, |ui| {
+                for (tool, glyph, label, key) in TOOLS {
+                    let chosen = self.tool == tool;
+                    let mut button = egui::Button::selectable(chosen, big(glyph));
+                    if chosen {
+                        button = button.stroke(Stroke::new(1.0, t.accent));
+                    }
+                    if ui
+                        .add(button)
+                        .on_hover_text(format!("{} ({key})", crate::i18n::tr(label)))
+                        .clicked()
+                    {
+                        self.set_tool(tool);
+                    }
+                }
+            });
+            keys(ui, |ui| {
+                if ui
+                    .button(big(icon::IMAGE))
+                    .on_hover_text(crate::i18n::tr("Importar imagem de fundo"))
+                    .clicked()
+                {
+                    self.import_background();
+                }
+                if ui
+                    .button(big(icon::COMPASS))
+                    .on_hover_text(crate::i18n::tr("Casa e bússola"))
+                    .clicked()
+                {
+                    self.open_home_settings();
+                }
+            });
+            keys(ui, |ui| {
+                if ui
+                    .button(big(icon::MAGNIFYING_GLASS_PLUS))
+                    .on_hover_text(crate::i18n::tr("Aproximar (Ctrl +)"))
+                    .clicked()
+                {
+                    self.plan.zoom_by(self.plan_rect, 1.25);
+                }
+                if ui
+                    .button(big(icon::MAGNIFYING_GLASS_MINUS))
+                    .on_hover_text(crate::i18n::tr("Afastar (Ctrl -)"))
+                    .clicked()
+                {
+                    self.plan.zoom_by(self.plan_rect, 0.8);
+                }
+                if ui
+                    .button(big(icon::CORNERS_OUT))
+                    .on_hover_text(crate::i18n::tr("Enquadrar (Ctrl+0)"))
+                    .clicked()
+                {
+                    self.plan.request_fit();
+                }
+            });
         });
+        ui.add_space(2.0);
     }
 
     fn status_bar(&mut self, ui: &mut egui::Ui) {
+        let t = crate::theme::of(ui.visuals());
         ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
             match &self.mcp_url {
-                Some(url) => ui.label(
-                    RichText::new(format!("{} MCP {url}", icon::ROBOT))
-                        .color(ui.visuals().hyperlink_color),
-                ),
-                None if cfg!(target_arch = "wasm32") => ui.weak(format!(
-                    "{} {}",
-                    icon::GLOBE,
-                    crate::i18n::tr("Editor no navegador")
-                )),
-                None => ui.weak(format!(
-                    "{} {}",
-                    icon::ROBOT,
-                    crate::i18n::tr("MCP desligado")
-                )),
+                Some(url) => {
+                    lamp(ui, t.ok);
+                    ui.label(crate::theme::fig(ui.visuals(), &format!("MCP {url}")).color(t.ok))
+                }
+                None if cfg!(target_arch = "wasm32") => {
+                    lamp(ui, t.ink_faint);
+                    ui.label(crate::theme::fig(
+                        ui.visuals(),
+                        crate::i18n::tr("Editor no navegador"),
+                    ))
+                }
+                None => {
+                    lamp(ui, t.ink_faint);
+                    ui.label(crate::theme::fig(
+                        ui.visuals(),
+                        crate::i18n::tr("MCP desligado"),
+                    ))
+                }
             };
             let people: Vec<(String, [u8; 3])> = self
                 .document
@@ -1716,16 +1807,25 @@ impl NewEraApp {
             ui.separator();
             if let Some(p) = self.plan.cursor() {
                 let unit = self.settings.unit;
-                ui.monospace(format!(
-                    "x {}  y {}",
-                    unit.format_length(p.x),
-                    unit.format_length(p.y)
-                ));
+                ui.label(
+                    crate::theme::fig(
+                        ui.visuals(),
+                        &format!(
+                            "x {}   y {}",
+                            unit.format_length(p.x),
+                            unit.format_length(p.y)
+                        ),
+                    )
+                    .color(t.ink_dim),
+                );
                 ui.separator();
             }
-            ui.weak(format!("{:.0}%", self.plan.zoom_percent()));
+            ui.label(crate::theme::fig(
+                ui.visuals(),
+                &format!("{:.0}%", self.plan.zoom_percent()),
+            ));
             ui.separator();
-            ui.weak(tool_hint(self.tool));
+            ui.label(RichText::new(tool_hint(self.tool)).color(t.ink_faint));
             if let Some((text, at)) = &self.status {
                 if at.elapsed() < Duration::from_secs(8) {
                     ui.separator();
@@ -1805,6 +1905,31 @@ fn tool_hint(tool: Tool) -> &'static str {
             "Clique para posicionar · portas e janelas encaixam na parede mais próxima · Esc cancela",
         ),
     }
+}
+
+/// A cluster of keys: buttons that belong together, sunk into the chrome as
+/// one block, the way a keyboard groups its rows.
+fn keys<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let t = crate::theme::of(ui.visuals());
+    egui::Frame::new()
+        .fill(t.inset)
+        .stroke(Stroke::new(1.0, t.rule))
+        .corner_radius(egui::CornerRadius::same(9))
+        .inner_margin(egui::Margin::symmetric(3, 2))
+        .show(ui, |ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            ui.horizontal(|ui| add(ui)).inner
+        })
+        .inner
+}
+
+/// A lit indicator: the dot with a halo the site uses to say something is on.
+fn lamp(ui: &mut egui::Ui, color: egui::Color32) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+    let center = rect.center();
+    ui.painter()
+        .circle_filled(center, 5.0, color.gamma_multiply(0.22));
+    ui.painter().circle_filled(center, 2.5, color);
 }
 
 fn menu_item(ui: &mut egui::Ui, glyph: &str, label: &str, shortcut: &str, enabled: bool) -> bool {
@@ -2003,15 +2128,22 @@ impl NewEraApp {
                     doc.set_asset_dir(Some(assets));
                     drop(doc);
                     self.after_load();
-                    let mut status = format!(
-                        "Importado de {name} — salve como projeto para manter tudo num arquivo"
+                    let mut status = crate::i18n::fill(
+                        "Importado de {} — salve como projeto para manter tudo num arquivo",
+                        &[&name],
                     );
                     if !imported.warnings.is_empty() {
-                        let _ = write!(status, " · {} aviso(s)", imported.warnings.len());
+                        status.push_str(&crate::i18n::fill(
+                            " · {} aviso(s)",
+                            &[&imported.warnings.len()],
+                        ));
                     }
                     self.set_status(status);
                 }
-                Err(err) => self.set_status(format!("⚠ Não foi possível abrir {name}: {err}")),
+                Err(err) => self.set_status(crate::i18n::fill(
+                    "⚠ Não foi possível abrir {}: {}",
+                    &[&name, &err],
+                )),
             }
             return;
         }
@@ -2025,9 +2157,12 @@ impl NewEraApp {
                 doc.set_asset_dir(bundled.then_some(assets));
                 drop(doc);
                 self.after_load();
-                self.set_status(format!("Aberto: {name}"));
+                self.set_status(crate::i18n::fill("Aberto: {}", &[&name]));
             }
-            Err(err) => self.set_status(format!("⚠ Não foi possível abrir {name}: {err}")),
+            Err(err) => self.set_status(crate::i18n::fill(
+                "⚠ Não foi possível abrir {}: {}",
+                &[&name, &err],
+            )),
         }
     }
 }
@@ -2074,14 +2209,30 @@ impl eframe::App for NewEraApp {
         crate::ergonomics::show(self, &ctx);
         crate::cabinets::show(self, &ctx);
 
+        self.follow_theme(&ctx);
         self.shortcuts(&ctx);
         self.update_title(&ctx);
 
-        egui::Panel::top("menu").show(ui, |ui| {
-            self.menu_bar(ui);
-            self.toolbar(ui);
-        });
-        egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
+        // Three heights of chrome: the command bar lifts off the panels, the
+        // panels hold the work, the status bar sinks into the desk.
+        let t = crate::theme::of(&ctx.style_of(ctx.theme()).visuals);
+        egui::Panel::top("menu")
+            .frame(
+                egui::Frame::new()
+                    .fill(t.raised)
+                    .inner_margin(egui::Margin::symmetric(8, 4)),
+            )
+            .show(ui, |ui| {
+                self.menu_bar(ui);
+                self.toolbar(ui);
+            });
+        egui::Panel::bottom("status")
+            .frame(
+                egui::Frame::new()
+                    .fill(t.deep)
+                    .inner_margin(egui::Margin::symmetric(10, 4)),
+            )
+            .show(ui, |ui| self.status_bar(ui));
         egui::Panel::left("left")
             .resizable(true)
             .default_size(270.0)
@@ -2091,7 +2242,11 @@ impl eframe::App for NewEraApp {
             .frame(egui::Frame::NONE)
             .show(ui, |ui| {
                 egui::Panel::top("variant_tabs")
-                    .frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(6, 3)))
+                    .frame(
+                        egui::Frame::new()
+                            .fill(t.surface)
+                            .inner_margin(egui::Margin::symmetric(6, 3)),
+                    )
                     .show(ui, |ui| crate::tabs::bar(self, ui));
                 egui::Panel::top("plan")
                     .resizable(true)
@@ -2232,14 +2387,57 @@ mod tests {
         }
         h.run_steps(3);
         // The discipline combo shows the project being edited as its value.
-        h.get_by(|node| node.value().is_some_and(|v| v.contains("Elétrica")))
-            .click();
+        h.get_by(|node| {
+            node.role() == egui::accesskit::Role::ComboBox
+                && node.value().is_some_and(|v| v.contains("Elétrica"))
+        })
+        .click();
         h.run_steps(3);
         h.get_by_label_contains("Quadro de cargas e NBR 5410")
             .click();
         h.run_steps(4);
         h.get_by_label("C2");
         h.get_by_label_contains("Total instalado:");
+    }
+
+    /// A whole line opens a band, not just the little arrow at its start:
+    /// nobody aims at a triangle.
+    #[test]
+    fn clicking_the_name_of_a_band_opens_it() {
+        let mut h = app_with_wall();
+        assert!(
+            h.query_by_label_contains("Sofá 3 lugares").is_none(),
+            "the band starts shut"
+        );
+        h.get_by_label("Sala de estar").click();
+        h.run_steps(3);
+        h.get_by_label_contains("Sofá 3 lugares");
+        h.get_by_label("Sala de estar").click();
+        h.run_steps(3);
+        assert!(
+            h.query_by_label_contains("Sofá 3 lugares").is_none(),
+            "and the same click shuts it again"
+        );
+    }
+
+    /// What is picked out on the plan has to light up in the panel, and the
+    /// panel has to bring it into view: a selection nobody can see is no
+    /// better than no selection.
+    #[test]
+    fn picking_on_the_plan_lights_the_row_up_in_the_panel() {
+        use egui::accesskit::Toggled;
+        use egui_kittest::kittest::NodeT as _;
+
+        let mut h = app_with_wall();
+        let quiet = h.get_by_label("w1");
+        assert_eq!(quiet.accesskit_node().toggled(), Some(Toggled::False));
+
+        let id = h.state().document.read().home().walls[0].id;
+        h.state_mut().selection.insert(id.into());
+        h.run_steps(3);
+
+        let lit = h.get_by_label("w1");
+        assert_eq!(lit.accesskit_node().toggled(), Some(Toggled::True));
     }
 
     #[test]
@@ -2250,8 +2448,11 @@ mod tests {
             .write()
             .choose_view(Some(newera_core::Discipline::Electrical));
         h.run_steps(3);
-        h.get_by(|node| node.value().is_some_and(|v| v.contains("Elétrica")))
-            .click();
+        h.get_by(|node| {
+            node.role() == egui::accesskit::Role::ComboBox
+                && node.value().is_some_and(|v| v.contains("Elétrica"))
+        })
+        .click();
         h.run_steps(3);
         h.get_by_label_contains("Arquitetura").click();
         h.run_steps(3);

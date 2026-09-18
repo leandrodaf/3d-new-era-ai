@@ -201,10 +201,10 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                         ui.label(role_name(m[1].as_str().unwrap_or_default()));
                         let cm = |v: &serde_json::Value| {
                             let text = format!("{v} cm");
-                            if crate::i18n::is_english() {
-                                text
-                            } else {
+                            if crate::i18n::decimal_comma() {
                                 text.replace('.', ",")
+                            } else {
+                                text
                             }
                         };
                         ui.label(cm(&m[2]));

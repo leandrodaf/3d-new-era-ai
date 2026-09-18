@@ -1,512 +1,1217 @@
 //! Interface language. Texts are written in Portuguese in the code and
-//! looked up here when English is chosen; unknown texts stay as written.
+//! looked up here when another language is chosen; unknown texts stay as
+//! written.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 
-static ENGLISH: AtomicBool = AtomicBool::new(false);
-
-/// Switches the interface language.
-pub(crate) fn set_english(english: bool) {
-    ENGLISH.store(english, Ordering::Relaxed);
+/// A language the window speaks.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) enum Lang {
+    /// Portuguese (Brazil): the language the texts are written in, so it
+    /// needs no table.
+    #[default]
+    Pt,
+    En,
+    Es,
+    Fr,
 }
 
-pub(crate) fn is_english() -> bool {
-    ENGLISH.load(Ordering::Relaxed)
+impl Lang {
+    /// Every language, in the order the menu lists them.
+    pub(crate) const ALL: [Self; 4] = [Self::Pt, Self::En, Self::Es, Self::Fr];
+
+    /// How the language names itself — the one name whoever looks for it
+    /// reads without knowing any of the others.
+    pub(crate) const fn label(self) -> &'static str {
+        match self {
+            Self::Pt => "Português (Brasil)",
+            Self::En => "English",
+            Self::Es => "Español",
+            Self::Fr => "Français",
+        }
+    }
+
+    /// The two letters a locale name starts with for this language.
+    pub(crate) const fn tag(self) -> &'static str {
+        match self {
+            Self::Pt => "pt",
+            Self::En => "en",
+            Self::Es => "es",
+            Self::Fr => "fr",
+        }
+    }
+
+    /// Whether numbers are written with a comma for the decimals: everyone
+    /// here but English.
+    pub(crate) const fn decimal_comma(self) -> bool {
+        !matches!(self, Self::En)
+    }
+
+    /// Which side of a table row the language is on; Portuguese is the key
+    /// of the row, not a side of it.
+    const fn column(self) -> Option<usize> {
+        match self {
+            Self::Pt => None,
+            Self::En => Some(0),
+            Self::Es => Some(1),
+            Self::Fr => Some(2),
+        }
+    }
+
+    const fn code(self) -> u8 {
+        match self {
+            Self::Pt => 0,
+            Self::En => 1,
+            Self::Es => 2,
+            Self::Fr => 3,
+        }
+    }
+
+    const fn from_code(code: u8) -> Self {
+        match code {
+            1 => Self::En,
+            2 => Self::Es,
+            3 => Self::Fr,
+            _ => Self::Pt,
+        }
+    }
+
+    /// The language a locale name asks for — `pt_BR.UTF-8`, `fr-CA`, `es` —
+    /// or nothing when the window does not speak it.
+    fn from_locale(locale: &str) -> Option<Self> {
+        let tag = locale.get(..2)?.to_ascii_lowercase();
+        Self::ALL.into_iter().find(|lang| lang.tag() == tag)
+    }
+
+    /// What the system asks for, when the window speaks it. `NEWERA_LANG`
+    /// comes first, as it does in the installers.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn from_system() -> Option<Self> {
+        ["NEWERA_LANG", "LC_ALL", "LC_MESSAGES", "LANG"]
+            .iter()
+            .filter_map(|name| std::env::var(name).ok())
+            .find_map(|locale| Self::from_locale(&locale))
+    }
+
+    /// In the browser there is no environment to read: the language is the
+    /// one the browser itself is set to.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn from_system() -> Option<Self> {
+        Self::from_locale(&web_sys::window()?.navigator().language()?)
+    }
+}
+
+static LANG: AtomicU8 = AtomicU8::new(0);
+
+/// Switches the interface language.
+pub(crate) fn set(lang: Lang) {
+    LANG.store(lang.code(), Ordering::Relaxed);
+}
+
+pub(crate) fn lang() -> Lang {
+    Lang::from_code(LANG.load(Ordering::Relaxed))
+}
+
+/// Whether numbers on screen take a comma for the decimals.
+pub(crate) fn decimal_comma() -> bool {
+    lang().decimal_comma()
 }
 
 /// The text in the current language.
 /// Translates a line that only exists at run time: what a background job says
 /// it is doing comes from the work itself, not from a literal in this crate.
 pub(crate) fn dynamic(pt: &str) -> String {
-    if !is_english() {
+    let Some(column) = lang().column() else {
         return pt.to_owned();
-    }
-    english(pt).map_or_else(|| pt.to_owned(), str::to_owned)
+    };
+    translations(pt).map_or_else(|| pt.to_owned(), |row| row[column].to_owned())
 }
 
 pub(crate) fn tr(pt: &'static str) -> &'static str {
-    if !is_english() {
-        return pt;
-    }
-    english(pt).unwrap_or(pt)
+    say(pt, lang())
 }
 
+/// The text in one named language, whatever the window is set to. The window
+/// itself always wants [`tr`]; this is for the tests, which run beside each
+/// other and must not shout across.
+fn say(pt: &'static str, lang: Lang) -> &'static str {
+    let Some(column) = lang.column() else {
+        return pt;
+    };
+    translations(pt).map_or(pt, |row| row[column])
+}
+
+/// A sentence with things in it: `{}` in the text marks where each one goes,
+/// in every language, so a translation is free to put them elsewhere.
+pub(crate) fn fill(pt: &'static str, parts: &[&dyn std::fmt::Display]) -> String {
+    fill_in(pt, lang(), parts)
+}
+
+/// [`fill`] in one named language. See [`say`].
+fn fill_in(pt: &'static str, lang: Lang, parts: &[&dyn std::fmt::Display]) -> String {
+    let mut text = String::new();
+    let mut rest = say(pt, lang);
+    for part in parts {
+        let Some((before, after)) = rest.split_once("{}") else {
+            break;
+        };
+        text.push_str(before);
+        text.push_str(&part.to_string());
+        rest = after;
+    }
+    text.push_str(rest);
+    text
+}
+
+/// What the text says in English, Spanish and French, in this order.
 #[allow(clippy::too_many_lines, clippy::match_same_arms)]
-fn english(pt: &str) -> Option<&'static str> {
+fn translations(pt: &str) -> Option<[&'static str; 3]> {
     Some(match pt {
-        " · arco" => " · arc",
-        "A tarefa termina sozinha em segundo plano; o resultado é descartado." => {
-            "The task finishes on its own in the background; its result is thrown away."
-        }
-        "Abrindo imagens e modelos" => "Opening images and models",
-        "Abrindo projeto" => "Opening project",
-        "Desenhando a planta" => "Drawing the plan",
-        "Exportando" => "Exporting",
-        "Extraindo imagens e modelos" => "Extracting images and models",
-        "Forçar e encerrar a espera" => "Force it and stop waiting",
-        "Gravando o projeto" => "Writing the project",
-        "Guardando imagens e modelos" => "Storing images and models",
-        "Importando modelo" => "Importing model",
-        "Lendo o arquivo" => "Reading the file",
-        "Lendo o projeto" => "Reading the project",
-        "Montando o modelo 3D" => "Building the 3D model",
-        "Parando…" => "Stopping…",
-        "Salvando projeto" => "Saving project",
-        "Trabalhando…" => "Working…",
-        "⚠ Espera encerrada — a tarefa termina em segundo plano." => {
-            "⚠ Stopped waiting — the task finishes in the background."
-        }
-        "Ajustar ao telhado" => "Fit to the roof",
-        "Código de obras" => "Building code",
-        "Embutir peça no móvel selecionado" => "Embed the piece in the selected joinery",
-        "Embutido:" => "Embedded:",
-        "Armários na parede" => "Cabinets on the wall",
-        "Armários na parede…" => "Cabinets on the wall…",
-        "Balcões" => "Base cabinets",
-        "Aéreos" => "Wall cabinets",
-        "Entre a norma e a lei do município, prevalece o mais restritivo." => {
-            "Between the standard and the city's law, the more restrictive one wins."
-        }
-        "Fontes desta revisão:" => "Sources of this review:",
-        "Não informado" => "Not set",
+        " · arco" => [" · arc", " · arco", " · arc"],
+        "A tarefa termina sozinha em segundo plano; o resultado é descartado." => [
+            "The task finishes on its own in the background; its result is thrown away.",
+            "La tarea termina sola en segundo plano; su resultado se descarta.",
+            "La tâche se termine seule en arrière-plan ; son résultat est ignoré.",
+        ],
+        "Abrindo imagens e modelos" => [
+            "Opening images and models",
+            "Abriendo imágenes y modelos",
+            "Ouverture des images et des modèles",
+        ],
+        "Abrindo projeto" => [
+            "Opening project",
+            "Abriendo proyecto",
+            "Ouverture du projet",
+        ],
+        "Desenhando a planta" => ["Drawing the plan", "Dibujando el plano", "Tracé du plan"],
+        "Exportando" => ["Exporting", "Exportando", "Exportation"],
+        "Extraindo imagens e modelos" => [
+            "Extracting images and models",
+            "Extrayendo imágenes y modelos",
+            "Extraction des images et des modèles",
+        ],
+        "Forçar e encerrar a espera" => [
+            "Force it and stop waiting",
+            "Forzar y dejar de esperar",
+            "Forcer et arrêter d'attendre",
+        ],
+        "Gravando o projeto" => [
+            "Writing the project",
+            "Grabando el proyecto",
+            "Écriture du projet",
+        ],
+        "Guardando imagens e modelos" => [
+            "Storing images and models",
+            "Guardando imágenes y modelos",
+            "Enregistrement des images et des modèles",
+        ],
+        "Importando modelo" => [
+            "Importing model",
+            "Importando modelo",
+            "Importation du modèle",
+        ],
+        "Lendo o arquivo" => [
+            "Reading the file",
+            "Leyendo el archivo",
+            "Lecture du fichier",
+        ],
+        "Lendo o projeto" => [
+            "Reading the project",
+            "Leyendo el proyecto",
+            "Lecture du projet",
+        ],
+        "Montando o modelo 3D" => [
+            "Building the 3D model",
+            "Montando el modelo 3D",
+            "Construction du modèle 3D",
+        ],
+        "Parando…" => ["Stopping…", "Deteniendo…", "Arrêt…"],
+        "Salvando projeto" => [
+            "Saving project",
+            "Guardando proyecto",
+            "Enregistrement du projet",
+        ],
+        "Trabalhando…" => ["Working…", "Trabajando…", "Travail en cours…"],
+        "⚠ Espera encerrada — a tarefa termina em segundo plano." => [
+            "⚠ Stopped waiting — the task finishes in the background.",
+            "⚠ Espera terminada — la tarea sigue en segundo plano.",
+            "⚠ Attente interrompue — la tâche se termine en arrière-plan.",
+        ],
+        "Ajustar ao telhado" => ["Fit to the roof", "Ajustar al tejado", "Ajuster au toit"],
+        "Código de obras" => [
+            "Building code",
+            "Código de obras",
+            "Code de la construction",
+        ],
+        "Embutir peça no móvel selecionado" => [
+            "Embed the piece in the selected joinery",
+            "Empotrar la pieza en el mueble seleccionado",
+            "Encastrer la pièce dans le meuble sélectionné",
+        ],
+        "Embutido:" => ["Embedded:", "Empotrado:", "Encastré :"],
+        "Armários na parede" => [
+            "Cabinets on the wall",
+            "Armarios en la pared",
+            "Meubles sur le mur",
+        ],
+        "Armários na parede…" => [
+            "Cabinets on the wall…",
+            "Armarios en la pared…",
+            "Meubles sur le mur…",
+        ],
+        "Balcões" => ["Base cabinets", "Muebles bajos", "Meubles bas"],
+        "Aéreos" => ["Wall cabinets", "Muebles altos", "Meubles hauts"],
+        "Entre a norma e a lei do município, prevalece o mais restritivo." => [
+            "Between the standard and the city's law, the more restrictive one wins.",
+            "Entre la norma y la ley del municipio, prevalece la más restrictiva.",
+            "Entre la norme et la loi de la commune, la plus restrictive l'emporte.",
+        ],
+        "Fontes desta revisão:" => [
+            "Sources of this review:",
+            "Fuentes de esta revisión:",
+            "Sources de cette révision :",
+        ],
+        "Não informado" => ["Not set", "Sin definir", "Non défini"],
         "Referências brasileiras onde existe norma; áreas e janelas variam com o código de obras do município." => {
-            "Brazilian standards where one exists; areas and windows vary with the city's building code."
+            [
+                "Brazilian standards where one exists; areas and windows vary with the city's building code.",
+                "Referencias brasileñas donde existe norma; áreas y ventanas varían según el código de obras del municipio.",
+                "Normes brésiliennes lorsqu'elles existent ; surfaces et fenêtres varient selon le code de la construction de la commune.",
+            ]
         }
-        "Torres / guarda-roupa" => "Tall / wardrobe",
-        "Pia centrada em" => "Sink centered at",
-        "Cooktop centrado em" => "Cooktop centered at",
-        "descreve" => "describes",
-        "do início da parede" => "from the wall start",
-        "Bancada de pedra por cima" => "Stone countertop on top",
-        "Frentes" => "Fronts",
-        "Gaveteiros" => "Drawer units",
-        "automático" => "automatic",
+        "Torres / guarda-roupa" => [
+            "Tall / wardrobe",
+            "Columnas / armario ropero",
+            "Colonnes / dressing",
+        ],
+        "Pia centrada em" => [
+            "Sink centered at",
+            "Fregadero centrado en",
+            "Évier centré à",
+        ],
+        "Cooktop centrado em" => [
+            "Cooktop centered at",
+            "Placa de cocción centrada en",
+            "Table de cuisson centrée à",
+        ],
+        "descreve" => ["describes", "describe", "décrit"],
+        "do início da parede" => [
+            "from the wall start",
+            "desde el inicio de la pared",
+            "depuis le début du mur",
+        ],
+        "Bancada de pedra por cima" => [
+            "Stone countertop on top",
+            "Encimera de piedra encima",
+            "Plan de travail en pierre au-dessus",
+        ],
+        "Frentes" => ["Fronts", "Frentes", "Façades"],
+        "Gaveteiros" => ["Drawer units", "Cajoneras", "Blocs-tiroirs"],
+        "automático" => ["automatic", "automático", "automatique"],
         "Mede o trecho livre entre cantos, portas, janelas e eletrodomésticos e divide em módulos sem sobras; substitui os armários que já estão nessa parede." => {
-            "Measures the free stretch between corners, doors, windows and appliances and splits it into modules with no leftovers; replaces the cabinets already on that wall."
+            [
+                "Measures the free stretch between corners, doors, windows and appliances and splits it into modules with no leftovers; replaces the cabinets already on that wall.",
+                "Mide el tramo libre entre esquinas, puertas, ventanas y electrodomésticos y lo divide en módulos sin sobras; sustituye los armarios que ya están en esa pared.",
+                "Mesure la portion libre entre angles, portes, fenêtres et appareils, puis la divise en modules sans chute ; remplace les meubles déjà posés sur ce mur.",
+            ]
         }
-        "Pré-visualizar" => "Preview",
-        "Criar armários" => "Build cabinets",
-        "Criado (Ctrl+Z desfaz):" => "Built (Ctrl+Z undoes it):",
-        "Prévia:" => "Preview:",
-        "doutrina" => "doctrine",
-        "mede" => "measures",
-        "obriga" => "obliges",
-        "portas" => "doors",
-        "gaveteiro" => "drawers",
-        "porta-temperos" => "pull-out",
-        "canto cego" => "blind corner",
-        "cabideiro" => "hanging",
-        "referencia" => "references",
-        "sobre a geladeira" => "over the fridge",
-        "pia" => "sink",
-        "tamponamento" => "filler",
-        "bancada" => "countertop",
-        "Ergonomia" => "Ergonomics",
-        "Ergonomia…" => "Ergonomics…",
-        "Moradores" => "Occupants",
-        "Crianças" => "Children",
-        "Idosos" => "Elderly",
-        "Altura de quem cozinha" => "Cook's height",
-        "Alguém usa cadeira de rodas (NBR 9050)" => "Someone uses a wheelchair (NBR 9050)",
-        "nota de habitabilidade" => "habitability score",
-        "lugares para dormir" => "beds",
-        "banheiros" => "bathrooms",
-        "à mesa" => "at the table",
-        "na sala" => "in the living room",
-        "de guarda-roupa" => "of wardrobe",
-        "Nada a apontar para esses moradores." => "Nothing to point out for these occupants.",
-        "Selecionar na planta" => "Select on the plan",
-        "Aplicar correção" => "Apply fix",
-        "Correção aplicada (Ctrl+Z desfaz)." => "Fix applied (Ctrl+Z undoes it).",
+        "Pré-visualizar" => ["Preview", "Vista previa", "Aperçu"],
+        "Criar armários" => ["Build cabinets", "Crear armarios", "Créer les meubles"],
+        "Criado (Ctrl+Z desfaz):" => [
+            "Built (Ctrl+Z undoes it):",
+            "Creado (Ctrl+Z deshace):",
+            "Créé (Ctrl+Z annule) :",
+        ],
+        "Prévia:" => ["Preview:", "Vista previa:", "Aperçu :"],
+        "doutrina" => ["doctrine", "doctrina", "doctrine"],
+        "mede" => ["measures", "mide", "mesure"],
+        "obriga" => ["obliges", "obliga", "impose"],
+        "portas" => ["doors", "puertas", "portes"],
+        "gaveteiro" => ["drawers", "cajonera", "tiroirs"],
+        "porta-temperos" => ["pull-out", "especiero", "coulissant"],
+        "canto cego" => ["blind corner", "esquina ciega", "angle borgne"],
+        "cabideiro" => ["hanging", "barra de colgar", "penderie"],
+        "referencia" => ["references", "referencia", "référence"],
+        "sobre a geladeira" => [
+            "over the fridge",
+            "sobre el frigorífico",
+            "au-dessus du réfrigérateur",
+        ],
+        "pia" => ["sink", "fregadero", "évier"],
+        "tamponamento" => ["filler", "panel de relleno", "fileur"],
+        "bancada" => ["countertop", "encimera", "plan de travail"],
+        "Ergonomia" => ["Ergonomics", "Ergonomía", "Ergonomie"],
+        "Ergonomia…" => ["Ergonomics…", "Ergonomía…", "Ergonomie…"],
+        "Moradores" => ["Occupants", "Habitantes", "Occupants"],
+        "Crianças" => ["Children", "Niños", "Enfants"],
+        "Idosos" => ["Elderly", "Mayores", "Personnes âgées"],
+        "Altura de quem cozinha" => [
+            "Cook's height",
+            "Altura de quien cocina",
+            "Taille de la personne qui cuisine",
+        ],
+        "Alguém usa cadeira de rodas (NBR 9050)" => [
+            "Someone uses a wheelchair (NBR 9050)",
+            "Alguien usa silla de ruedas (NBR 9050)",
+            "Une personne en fauteuil roulant (NBR 9050)",
+        ],
+        "nota de habitabilidade" => [
+            "habitability score",
+            "nota de habitabilidad",
+            "note d'habitabilité",
+        ],
+        "lugares para dormir" => ["beds", "plazas para dormir", "couchages"],
+        "banheiros" => ["bathrooms", "baños", "salles de bain"],
+        "à mesa" => ["at the table", "en la mesa", "à table"],
+        "na sala" => ["in the living room", "en el salón", "au salon"],
+        "de guarda-roupa" => ["of wardrobe", "de armario ropero", "de dressing"],
+        "Nada a apontar para esses moradores." => [
+            "Nothing to point out for these occupants.",
+            "Nada que señalar para estos habitantes.",
+            "Rien à signaler pour ces occupants.",
+        ],
+        "Selecionar na planta" => [
+            "Select on the plan",
+            "Seleccionar en el plano",
+            "Sélectionner sur le plan",
+        ],
+        "Aplicar correção" => ["Apply fix", "Aplicar corrección", "Appliquer la correction"],
+        "Correção aplicada (Ctrl+Z desfaz)." => [
+            "Fix applied (Ctrl+Z undoes it).",
+            "Corrección aplicada (Ctrl+Z deshace).",
+            "Correction appliquée (Ctrl+Z annule).",
+        ],
         "Referências: NBR 9050, NBR 15575-1 e IBGE; áreas e janelas variam com o código de obras do município." => {
-            "References: NBR 9050, NBR 15575-1 and IBGE; areas and windows vary with the city's building code."
+            [
+                "References: NBR 9050, NBR 15575-1 and IBGE; areas and windows vary with the city's building code.",
+                "Referencias: NBR 9050, NBR 15575-1 e IBGE; áreas y ventanas varían según el código de obras del municipio.",
+                "Références : NBR 9050, NBR 15575-1 et IBGE ; surfaces et fenêtres varient selon le code de la construction de la commune.",
+            ]
         }
-        " · luz" => " · light",
-        "(cópia)" => "(copy)",
-        "Abrir" => "Open",
-        "Abrir (Ctrl+O)" => "Open (Ctrl+O)",
-        "Abrir link" => "Open link",
-        "Abrir…" => "Open…",
-        "Adicionar texto" => "Add text",
-        "Adicionar um andar acima do mais alto" => "Add a storey above the highest one",
-        "Afastamento" => "Offset",
-        "Afastar (Ctrl -)" => "Zoom out (Ctrl -)",
-        "Ajuda" => "Help",
-        "Quadro de cargas e NBR 5410" => "Load schedule and NBR 5410",
-        "Nenhum circuito: atribua os pontos a circuitos (MCP electrical assign)." => {
-            "No circuits: assign the points to circuits (MCP electrical assign)."
-        }
-        "Circuito" => "Circuit",
-        "Pontos" => "Points",
-        "VA" => "VA",
-        "V" => "V",
-        "A" => "A",
-        "Fio mm²" => "Wire mm²",
-        "Disjuntor" => "Breaker",
-        "DR" => "RCD",
-        "Total instalado:" => "Installed total:",
-        "Nada a apontar." => "Nothing to point out.",
-        "Camadas" => "Layers",
-        "Iluminação" => "Lighting",
-        "Eletrodomésticos" => "Appliances",
-        "Marcenaria" => "Joinery",
-        "Mostrar ou esconder na planta e no 3D" => "Show or hide on the plan and in 3D",
-        "Mostrar tudo no 3D" => "Show everything in 3D",
-        "Ligado, o 3D mostra a obra inteira; desligado, esconde o que a planta esconde" => {
-            "On, the 3D shows the whole building; off, it hides what the plan hides"
-        }
-        "Enviar relatórios de erro" => "Send error reports",
+        " · luz" => [" · light", " · luz", " · lumière"],
+        "(cópia)" => ["(copy)", "(copia)", "(copie)"],
+        "Abrir" => ["Open", "Abrir", "Ouvrir"],
+        "Abrir (Ctrl+O)" => ["Open (Ctrl+O)", "Abrir (Ctrl+O)", "Ouvrir (Ctrl+O)"],
+        "Abrir link" => ["Open link", "Abrir enlace", "Ouvrir le lien"],
+        "Abrir…" => ["Open…", "Abrir…", "Ouvrir…"],
+        "Adicionar texto" => ["Add text", "Añadir texto", "Ajouter du texte"],
+        "Adicionar um andar acima do mais alto" => [
+            "Add a storey above the highest one",
+            "Añadir una planta encima de la más alta",
+            "Ajouter un étage au-dessus du plus haut",
+        ],
+        "Afastamento" => ["Offset", "Separación", "Décalage"],
+        "Afastar (Ctrl -)" => [
+            "Zoom out (Ctrl -)",
+            "Alejar (Ctrl -)",
+            "Zoom arrière (Ctrl -)",
+        ],
+        "Ajuda" => ["Help", "Ayuda", "Aide"],
+        "Quadro de cargas e NBR 5410" => [
+            "Load schedule and NBR 5410",
+            "Cuadro de cargas y NBR 5410",
+            "Tableau des charges et NBR 5410",
+        ],
+        "Nenhum circuito: atribua os pontos a circuitos (MCP electrical assign)." => [
+            "No circuits: assign the points to circuits (MCP electrical assign).",
+            "Ningún circuito: asigne los puntos a circuitos (MCP electrical assign).",
+            "Aucun circuit : affectez les points à des circuits (MCP electrical assign).",
+        ],
+        "Circuito" => ["Circuit", "Circuito", "Circuit"],
+        "Pontos" => ["Points", "Puntos", "Points"],
+        "VA" => ["VA", "VA", "VA"],
+        "V" => ["V", "V", "V"],
+        "A" => ["A", "A", "A"],
+        "Fio mm²" => ["Wire mm²", "Hilo mm²", "Fil mm²"],
+        "Disjuntor" => ["Breaker", "Magnetotérmico", "Disjoncteur"],
+        "DR" => ["RCD", "Diferencial", "Différentiel"],
+        "Total instalado:" => ["Installed total:", "Total instalado:", "Total installé :"],
+        "Nada a apontar." => [
+            "Nothing to point out.",
+            "Nada que señalar.",
+            "Rien à signaler.",
+        ],
+        "Camadas" => ["Layers", "Capas", "Calques"],
+        "Iluminação" => ["Lighting", "Iluminación", "Éclairage"],
+        "Eletrodomésticos" => ["Appliances", "Electrodomésticos", "Appareils"],
+        "Marcenaria" => ["Joinery", "Carpintería", "Menuiserie"],
+        "Mostrar ou esconder na planta e no 3D" => [
+            "Show or hide on the plan and in 3D",
+            "Mostrar u ocultar en el plano y en 3D",
+            "Afficher ou masquer sur le plan et en 3D",
+        ],
+        "Mostrar tudo no 3D" => [
+            "Show everything in 3D",
+            "Mostrar todo en 3D",
+            "Tout afficher en 3D",
+        ],
+        "Ligado, o 3D mostra a obra inteira; desligado, esconde o que a planta esconde" => [
+            "On, the 3D shows the whole building; off, it hides what the plan hides",
+            "Activado, el 3D muestra la obra entera; desactivado, oculta lo que el plano oculta",
+            "Activé, la 3D montre tout le bâtiment ; désactivé, elle masque ce que le plan masque",
+        ],
+        "Enviar relatórios de erro" => [
+            "Send error reports",
+            "Enviar informes de error",
+            "Envoyer les rapports d'erreur",
+        ],
         "Falhas e notas de uso vão para os desenvolvedores, sem o seu projeto, sem IP e sem nome da máquina." => {
-            "Crashes and usage notes go to the developers, without your project, your IP or your machine's name."
+            [
+                "Crashes and usage notes go to the developers, without your project, your IP or your machine's name.",
+                "Los fallos y las notas de uso van a los desarrolladores, sin su proyecto, sin IP y sin el nombre de la máquina.",
+                "Les plantages et les notes d'usage vont aux développeurs, sans votre projet, sans IP ni nom de machine.",
+            ]
         }
-        "Ajustes…" => "Settings…",
-        "Alinhamento" => "Alignment",
-        "Altura" => "Height",
-        "Andar" => "Storey",
-        "Aproximar (Ctrl +)" => "Zoom in (Ctrl +)",
-        "Arco" => "Arc",
-        "Arquitetura" => "Architecture",
-        "Arquivo" => "File",
-        "Arraste para mover a vista" => "Drag to move the view",
-        "Arraste: girar · Shift/botão do meio: mover · Scroll: zoom · F: enquadrar" => {
-            "Drag: orbit · Shift/middle button: pan · Scroll: zoom · F: frame"
-        }
-        "Atalhos e ferramentas" => "Shortcuts and tools",
-        "Automático (símbolos e vista de cima dos modelos)" => {
-            "Automatic (symbols, top views for models)"
-        }
-        "Autor" => "Author",
-        "Boa" => "Good",
-        "Buscar: cama, janela, sofá…" => "Search: bed, window, sofa…",
-        "Calibrar e posicionar" => "Calibrate and place",
-        "Calibrar escala da imagem" => "Calibrate image scale",
-        "Cancelar" => "Cancel",
-        "Casa e bússola" => "Home and compass",
-        "Casa e bússola…" => "Home and compass…",
-        "Catálogo" => "Catalog",
-        "Catálogo de origem" => "Source catalog",
-        "Centro" => "Center",
-        "Centro (x, y)" => "Center (x, y)",
-        "Clique dois pontos de medida conhecida · arraste para posicionar a imagem" => {
-            "Click two points of a known distance · drag to place the image"
-        }
-        "Clique e depois clique na planta para posicionar" => {
-            "Click, then click on the plan to place"
-        }
+        "Ajustes…" => ["Settings…", "Ajustes…", "Réglages…"],
+        "Alinhamento" => ["Alignment", "Alineación", "Alignement"],
+        "Altura" => ["Height", "Altura", "Hauteur"],
+        "Andar" => ["Storey", "Planta", "Étage"],
+        "Aproximar (Ctrl +)" => [
+            "Zoom in (Ctrl +)",
+            "Acercar (Ctrl +)",
+            "Zoom avant (Ctrl +)",
+        ],
+        "Arco" => ["Arc", "Arco", "Arc"],
+        "Arquitetura" => ["Architecture", "Arquitectura", "Architecture"],
+        "Arquivo" => ["File", "Archivo", "Fichier"],
+        "Arraste para mover a vista" => [
+            "Drag to move the view",
+            "Arrastre para mover la vista",
+            "Faites glisser pour déplacer la vue",
+        ],
+        "Arraste: girar · Shift/botão do meio: mover · Scroll: zoom · F: enquadrar" => [
+            "Drag: orbit · Shift/middle button: pan · Scroll: zoom · F: frame",
+            "Arrastrar: girar · Mayús/botón central: mover · Rueda: zoom · F: encuadrar",
+            "Glisser : pivoter · Maj/bouton du milieu : déplacer · Molette : zoom · F : cadrer",
+        ],
+        "Atalhos e ferramentas" => [
+            "Shortcuts and tools",
+            "Atajos y herramientas",
+            "Raccourcis et outils",
+        ],
+        "Automático (símbolos e vista de cima dos modelos)" => [
+            "Automatic (symbols, top views for models)",
+            "Automático (símbolos y vista superior de los modelos)",
+            "Automatique (symboles, vues de dessus pour les modèles)",
+        ],
+        "Autor" => ["Author", "Autor", "Auteur"],
+        "Boa" => ["Good", "Buena", "Bonne"],
+        "Buscar: cama, janela, sofá…" => [
+            "Search: bed, window, sofa…",
+            "Buscar: cama, ventana, sofá…",
+            "Rechercher : lit, fenêtre, canapé…",
+        ],
+        "Calibrar e posicionar" => [
+            "Calibrate and place",
+            "Calibrar y posicionar",
+            "Calibrer et placer",
+        ],
+        "Calibrar escala da imagem" => [
+            "Calibrate image scale",
+            "Calibrar escala de la imagen",
+            "Calibrer l'échelle de l'image",
+        ],
+        "Cancelar" => ["Cancel", "Cancelar", "Annuler"],
+        "Casa e bússola" => ["Home and compass", "Casa y brújula", "Maison et boussole"],
+        "Casa e bússola…" => [
+            "Home and compass…",
+            "Casa y brújula…",
+            "Maison et boussole…",
+        ],
+        "Catálogo" => ["Catalog", "Catálogo", "Catalogue"],
+        "Catálogo de origem" => [
+            "Source catalog",
+            "Catálogo de origen",
+            "Catalogue d'origine",
+        ],
+        "Centro" => ["Center", "Centro", "Centre"],
+        "Centro (x, y)" => ["Center (x, y)", "Centro (x, y)", "Centre (x, y)"],
+        "Clique dois pontos de medida conhecida · arraste para posicionar a imagem" => [
+            "Click two points of a known distance · drag to place the image",
+            "Haga clic en dos puntos de distancia conocida · arrastre para posicionar la imagen",
+            "Cliquez deux points d'une distance connue · faites glisser pour placer l'image",
+        ],
+        "Clique e depois clique na planta para posicionar" => [
+            "Click, then click on the plan to place",
+            "Haga clic y luego en el plano para posicionar",
+            "Cliquez, puis cliquez sur le plan pour placer",
+        ],
         "Clique encadeia paredes · digite o comprimento + Enter · Shift desliga o ímã · duplo clique encerra" => {
-            "Clicks chain walls · type a length + Enter · Shift disables magnetism · double-click ends"
+            [
+                "Clicks chain walls · type a length + Enter · Shift disables magnetism · double-click ends",
+                "El clic encadena paredes · escriba la longitud + Enter · Mayús desactiva el imán · doble clic termina",
+                "Les clics enchaînent les murs · tapez une longueur + Entrée · Maj désactive l'aimant · double-clic termine",
+            ]
         }
         "Clique início e fim, mova para afastar e clique · duplo clique numa parede cota a parede" => {
-            "Click start and end, move to offset and click · double-click a wall to dimension it"
+            [
+                "Click start and end, move to offset and click · double-click a wall to dimension it",
+                "Haga clic en inicio y fin, mueva para separar y haga clic · doble clic en una pared la acota",
+                "Cliquez début et fin, déplacez pour décaler et cliquez · double-clic sur un mur pour le coter",
+            ]
         }
-        "Clique onde o texto deve ficar" => "Click where the text goes",
+        "Clique onde o texto deve ficar" => [
+            "Click where the text goes",
+            "Haga clic donde debe quedar el texto",
+            "Cliquez à l'endroit où placer le texte",
+        ],
         "Clique os cantos e duplo clique fecha · duplo clique dentro de paredes detecta o cômodo" => {
-            "Click the corners and double-click to close · double-click inside walls detects the room"
+            [
+                "Click the corners and double-click to close · double-click inside walls detects the room",
+                "Haga clic en las esquinas y doble clic para cerrar · doble clic dentro de paredes detecta la habitación",
+                "Cliquez les coins et double-cliquez pour fermer · double-clic à l'intérieur des murs détecte la pièce",
+            ]
         }
         "Clique os pontos e duplo clique encerra · na Elétrica/Hidráulica a linha vira eletroduto/tubulação" => {
-            "Click the points and double-click to end · in Electrical/Plumbing lines become conduits/pipes"
+            [
+                "Click the points and double-click to end · in Electrical/Plumbing lines become conduits/pipes",
+                "Haga clic en los puntos y doble clic termina · en Eléctrica/Fontanería la línea se vuelve tubo/canalización",
+                "Cliquez les points et double-cliquez pour terminer · en Électricité/Plomberie la ligne devient conduit/tuyau",
+            ]
         }
         "Clique para posicionar · portas e janelas encaixam na parede mais próxima · Esc cancela" => {
-            "Click to place · doors and windows snap into the nearest wall · Esc cancels"
+            [
+                "Click to place · doors and windows snap into the nearest wall · Esc cancels",
+                "Haga clic para posicionar · puertas y ventanas encajan en la pared más cercana · Esc cancela",
+                "Cliquez pour placer · portes et fenêtres s'encastrent dans le mur le plus proche · Échap annule",
+            ]
         }
         "Clique seleciona · Ctrl+clique soma · arraste move · alças editam · duplo clique modifica" => {
-            "Click selects · Ctrl+click adds · drag moves · handles edit · double-click modifies"
+            [
+                "Click selects · Ctrl+click adds · drag moves · handles edit · double-click modifies",
+                "El clic selecciona · Ctrl+clic suma · arrastrar mueve · los tiradores editan · doble clic modifica",
+                "Le clic sélectionne · Ctrl+clic ajoute · glisser déplace · les poignées modifient · double-clic édite",
+            ]
         }
-        "Colar" => "Paste",
+        "Colar" => ["Paste", "Pegar", "Coller"],
         "Comece desenhando paredes (W), importe uma planta como imagem de fundo, ou peça para a IA via MCP." => {
-            "Start by drawing walls (W), import a plan as background image, or ask the AI through MCP."
+            [
+                "Start by drawing walls (W), import a plan as background image, or ask the AI through MCP.",
+                "Empiece dibujando paredes (W), importe un plano como imagen de fondo o pídalo a la IA vía MCP.",
+                "Commencez par tracer des murs (W), importez un plan en image de fond, ou demandez-le à l'IA via MCP.",
+            ]
         }
-        "Comparar" => "Compare",
-        "Comparar as versões" => "Compare versions",
-        "Comparar versões" => "Compare versions",
-        "Comprimento" => "Length",
-        "Comprimento exato da parede sendo desenhada" => "Exact length of the wall being drawn",
-        "Contorno" => "Outline",
-        "Contínuo" => "Solid",
-        "Copiar" => "Copy",
-        "Copiar · Recortar · Colar · Duplicar" => "Copy · Cut · Paste · Duplicate",
-        "Cor" => "Color",
-        "Cotar paredes selecionadas" => "Dimension selected walls",
-        "Cotas automáticas (engenharia)" => "Automatic dimensions (engineering)",
-        "Criar cotas" => "Create dimensions",
-        "Criar cômodos" => "Create rooms",
-        "Criar foto" => "Create photo",
-        "Criar foto…" => "Create photo…",
-        "Criar vídeo" => "Create video",
-        "Criar vídeo…" => "Create video…",
-        "Pontos do caminho" => "Path points",
-        "Adicionar ponto atual" => "Add current point",
-        "Ative o visitante na vista 3D" => "Turn on the visitor in the 3D view",
-        "Órbita aérea" => "Aerial orbit",
-        "Limpar" => "Clear",
-        "Quadros por segundo" => "Frames per second",
-        "Velocidade" => "Speed",
-        "Gerar vídeo…" => "Render video…",
-        "Vídeo salvo em" => "Video saved to",
-        "quadros" => "frames",
-        "Sol pela bússola e hora" => "Sun from compass and time",
-        "Vista 3D" => "3D view",
-        "Mostrar em 3D" => "Show in 3D",
-        "Inclinação" => "Tilt",
-        "Deitado" => "Lying",
-        "Em pé" => "Standing",
-        "Editor no navegador" => "Browser editor",
-        "Disponível no aplicativo para desktop." => "Available in the desktop app.",
-        "No navegador, exporte em .glb." => "In the browser, export as .glb.",
-        "Nenhum plugin instalado" => "No plugins installed",
-        "Pastas" => "Folders",
-        "Rodando" => "Running",
-        "concluído" => "done",
-        "Acompanha as paredes" => "Follows the walls",
-        "O contorno é detectado pelas paredes e divisores e se ajusta quando eles mudam" => {
-            "The outline is detected from walls and dividers and adjusts when they change"
-        }
-        "Ambientes" => "Rooms",
-        "Divisor de ambiente" => "Room divider",
-        "Separa ambientes sem parede (ex.: sala e jantar integrados)" => {
-            "Separates rooms without a wall (e.g. open living and dining)"
-        }
-        "Escala vertical" => "Vertical scale",
-        "Diferente" => "Different",
-        "Criar paredes" => "Create walls",
-        "Curva suave" => "Smooth curve",
-        "Cômodos" => "Rooms",
-        "Descartar" => "Discard",
-        "Descrição" => "Description",
-        "Desenhar linhas" => "Draw lines",
-        "Desfazer" => "Undo",
-        "Desfazer (Ctrl+Z)" => "Undo (Ctrl+Z)",
-        "Desfazer · Refazer (inclusive o que a IA fez)" => {
-            "Undo · Redo (including what the AI did)"
-        }
-        "Desliga o ímã (ângulos de 15°, pontos e grade)" => {
-            "Disables magnetism (15° angles, points and grid)"
-        }
-        "Detalhes: marca, modelo e link" => "Details: brand, model and link",
-        "Digitar número + Enter" => "Type number + Enter",
-        "Direita" => "Right",
-        "Disco" => "Disc",
-        "Distância real" => "Real distance",
-        "Dividir parede ao meio" => "Split wall in half",
-        "Diâmetro" => "Diameter",
-        "Dobradiça à direita" => "Hinge on the right",
-        "Duplicar" => "Duplicate",
-        "Duplicar versão atual" => "Duplicate current version",
-        "Duplicar versão · Próxima versão (guias)" => "Duplicate version · Next version (tabs)",
-        "Duplo clique" => "Double-click",
-        "Editar" => "Edit",
-        "Editar andar…" => "Edit storey…",
-        "Elevação" => "Elevation",
-        "Elevação do piso" => "Floor elevation",
-        "Elétrica" => "Electrical",
-        "Elétrica (tomadas, luz, cabos)" => "Electrical (outlets, lights, cables)",
-        "Encerra paredes · fecha/detecta cômodo · cota parede · modifica" => {
-            "Ends walls · closes/detects room · dimensions wall · modifies"
-        }
-        "Enquadrar (Ctrl+0)" => "Frame (Ctrl+0)",
-        "Enquadrar 3D" => "Frame 3D",
-        "Enquadrar planta" => "Frame plan",
-        "Escala" => "Scale",
-        "Escala calibrada. Arraste para posicionar a imagem ou troque de ferramenta." => {
-            "Scale calibrated. Drag to place the image or switch tools."
-        }
-        "Espelhado" => "Mirrored",
-        "Espessura" => "Thickness",
-        "Espessura da laje" => "Slab thickness",
-        "Esquerda" => "Left",
-        "Esta versão e o histórico dela serão removidos do projeto." => {
-            "This version and its history will be removed from the project."
-        }
-        "Estilo" => "Style",
-        "Excluir" => "Delete",
-        "Excluir andar" => "Delete storey",
-        "Exibir" => "Show",
-        "Exportar 3D" => "Export 3D",
-        "Exportar planta" => "Export plan",
-        "Fechada" => "Closed",
-        "Fechar" => "Close",
-        "Fechar versão" => "Close version",
-        "Fim" => "End",
-        "Fim (x, y)" => "End (x, y)",
-        "Grupo" => "Group",
-        "Hidráulica" => "Plumbing",
-        "Hora do dia" => "Time of day",
-        "Imagem" => "Image",
-        "Imagem de fundo" => "Background image",
+        "Comparar" => ["Compare", "Comparar", "Comparer"],
+        "Comparar as versões" => [
+            "Compare versions",
+            "Comparar las versiones",
+            "Comparer les versions",
+        ],
+        "Comparar versões" => [
+            "Compare versions",
+            "Comparar versiones",
+            "Comparer les versions",
+        ],
+        "Comprimento" => ["Length", "Longitud", "Longueur"],
+        "Comprimento exato da parede sendo desenhada" => [
+            "Exact length of the wall being drawn",
+            "Longitud exacta de la pared que se está dibujando",
+            "Longueur exacte du mur en cours de tracé",
+        ],
+        "Contorno" => ["Outline", "Contorno", "Contour"],
+        "Contínuo" => ["Solid", "Continuo", "Continu"],
+        "Copiar" => ["Copy", "Copiar", "Copier"],
+        "Copiar · Recortar · Colar · Duplicar" => [
+            "Copy · Cut · Paste · Duplicate",
+            "Copiar · Cortar · Pegar · Duplicar",
+            "Copier · Couper · Coller · Dupliquer",
+        ],
+        "Cor" => ["Color", "Color", "Couleur"],
+        "Cotar paredes selecionadas" => [
+            "Dimension selected walls",
+            "Acotar paredes seleccionadas",
+            "Coter les murs sélectionnés",
+        ],
+        "Cotas automáticas (engenharia)" => [
+            "Automatic dimensions (engineering)",
+            "Cotas automáticas (ingeniería)",
+            "Cotes automatiques (ingénierie)",
+        ],
+        "Criar cotas" => ["Create dimensions", "Crear cotas", "Créer des cotes"],
+        "Criar cômodos" => ["Create rooms", "Crear habitaciones", "Créer des pièces"],
+        "Criar foto" => ["Create photo", "Crear foto", "Créer une photo"],
+        "Criar foto…" => ["Create photo…", "Crear foto…", "Créer une photo…"],
+        "Criar vídeo" => ["Create video", "Crear vídeo", "Créer une vidéo"],
+        "Criar vídeo…" => ["Create video…", "Crear vídeo…", "Créer une vidéo…"],
+        "Pontos do caminho" => ["Path points", "Puntos del recorrido", "Points du parcours"],
+        "Adicionar ponto atual" => [
+            "Add current point",
+            "Añadir punto actual",
+            "Ajouter le point actuel",
+        ],
+        "Ative o visitante na vista 3D" => [
+            "Turn on the visitor in the 3D view",
+            "Active el visitante en la vista 3D",
+            "Activez le visiteur dans la vue 3D",
+        ],
+        "Órbita aérea" => ["Aerial orbit", "Órbita aérea", "Orbite aérienne"],
+        "Limpar" => ["Clear", "Limpiar", "Effacer"],
+        "Quadros por segundo" => [
+            "Frames per second",
+            "Cuadros por segundo",
+            "Images par seconde",
+        ],
+        "Velocidade" => ["Speed", "Velocidad", "Vitesse"],
+        "Gerar vídeo…" => ["Render video…", "Generar vídeo…", "Générer la vidéo…"],
+        "Vídeo salvo em" => [
+            "Video saved to",
+            "Vídeo guardado en",
+            "Vidéo enregistrée dans",
+        ],
+        "quadros" => ["frames", "cuadros", "images"],
+        "Sol pela bússola e hora" => [
+            "Sun from compass and time",
+            "Sol según brújula y hora",
+            "Soleil selon la boussole et l'heure",
+        ],
+        "Vista 3D" => ["3D view", "Vista 3D", "Vue 3D"],
+        "Mostrar em 3D" => ["Show in 3D", "Mostrar en 3D", "Afficher en 3D"],
+        "Inclinação" => ["Tilt", "Inclinación", "Inclinaison"],
+        "Deitado" => ["Lying", "Tumbado", "Couché"],
+        "Em pé" => ["Standing", "De pie", "Debout"],
+        "Editor no navegador" => [
+            "Browser editor",
+            "Editor en el navegador",
+            "Éditeur dans le navigateur",
+        ],
+        "Disponível no aplicativo para desktop." => [
+            "Available in the desktop app.",
+            "Disponible en la aplicación de escritorio.",
+            "Disponible dans l'application de bureau.",
+        ],
+        "No navegador, exporte em .glb." => [
+            "In the browser, export as .glb.",
+            "En el navegador, exporte en .glb.",
+            "Dans le navigateur, exportez en .glb.",
+        ],
+        "Nenhum plugin instalado" => [
+            "No plugins installed",
+            "Ningún plugin instalado",
+            "Aucun plugin installé",
+        ],
+        "Pastas" => ["Folders", "Carpetas", "Dossiers"],
+        "Rodando" => ["Running", "En ejecución", "En cours"],
+        "concluído" => ["done", "terminado", "terminé"],
+        "Acompanha as paredes" => ["Follows the walls", "Sigue las paredes", "Suit les murs"],
+        "O contorno é detectado pelas paredes e divisores e se ajusta quando eles mudam" => [
+            "The outline is detected from walls and dividers and adjusts when they change",
+            "El contorno se detecta por las paredes y los divisores y se ajusta cuando cambian",
+            "Le contour est détecté d'après les murs et les séparations et s'ajuste quand ils changent",
+        ],
+        "Ambientes" => ["Rooms", "Ambientes", "Espaces"],
+        "Divisor de ambiente" => ["Room divider", "Divisor de ambiente", "Séparation d'espace"],
+        "Separa ambientes sem parede (ex.: sala e jantar integrados)" => [
+            "Separates rooms without a wall (e.g. open living and dining)",
+            "Separa ambientes sin pared (p. ej.: salón y comedor integrados)",
+            "Sépare des espaces sans mur (ex. : salon et salle à manger ouverts)",
+        ],
+        "Escala vertical" => ["Vertical scale", "Escala vertical", "Échelle verticale"],
+        "Diferente" => ["Different", "Diferente", "Différent"],
+        "Criar paredes" => ["Create walls", "Crear paredes", "Créer des murs"],
+        "Curva suave" => ["Smooth curve", "Curva suave", "Courbe douce"],
+        "Cômodos" => ["Rooms", "Habitaciones", "Pièces"],
+        "Descartar" => ["Discard", "Descartar", "Abandonner"],
+        "Descrição" => ["Description", "Descripción", "Description"],
+        "Desenhar linhas" => ["Draw lines", "Dibujar líneas", "Tracer des lignes"],
+        "Desfazer" => ["Undo", "Deshacer", "Annuler"],
+        "Desfazer (Ctrl+Z)" => ["Undo (Ctrl+Z)", "Deshacer (Ctrl+Z)", "Annuler (Ctrl+Z)"],
+        "Desfazer · Refazer (inclusive o que a IA fez)" => [
+            "Undo · Redo (including what the AI did)",
+            "Deshacer · Rehacer (incluso lo que hizo la IA)",
+            "Annuler · Rétablir (y compris ce qu'a fait l'IA)",
+        ],
+        "Desliga o ímã (ângulos de 15°, pontos e grade)" => [
+            "Disables magnetism (15° angles, points and grid)",
+            "Desactiva el imán (ángulos de 15°, puntos y cuadrícula)",
+            "Désactive l'aimant (angles de 15°, points et grille)",
+        ],
+        "Detalhes: marca, modelo e link" => [
+            "Details: brand, model and link",
+            "Detalles: marca, modelo y enlace",
+            "Détails : marque, modèle et lien",
+        ],
+        "Digitar número + Enter" => [
+            "Type number + Enter",
+            "Escribir número + Enter",
+            "Taper un nombre + Entrée",
+        ],
+        "Direita" => ["Right", "Derecha", "Droite"],
+        "Disco" => ["Disc", "Disco", "Disque"],
+        "Distância real" => ["Real distance", "Distancia real", "Distance réelle"],
+        "Dividir parede ao meio" => [
+            "Split wall in half",
+            "Dividir la pared por la mitad",
+            "Couper le mur en deux",
+        ],
+        "Diâmetro" => ["Diameter", "Diámetro", "Diamètre"],
+        "Dobradiça à direita" => [
+            "Hinge on the right",
+            "Bisagra a la derecha",
+            "Charnière à droite",
+        ],
+        "Duplicar" => ["Duplicate", "Duplicar", "Dupliquer"],
+        "Duplicar versão atual" => [
+            "Duplicate current version",
+            "Duplicar versión actual",
+            "Dupliquer la version actuelle",
+        ],
+        "Duplicar versão · Próxima versão (guias)" => [
+            "Duplicate version · Next version (tabs)",
+            "Duplicar versión · Siguiente versión (pestañas)",
+            "Dupliquer la version · Version suivante (onglets)",
+        ],
+        "Duplo clique" => ["Double-click", "Doble clic", "Double-clic"],
+        "Editar" => ["Edit", "Editar", "Modifier"],
+        "Editar andar…" => ["Edit storey…", "Editar planta…", "Modifier l'étage…"],
+        "Elevação" => ["Elevation", "Elevación", "Élévation"],
+        "Elevação do piso" => ["Floor elevation", "Elevación del suelo", "Niveau du sol"],
+        "Elétrica" => ["Electrical", "Eléctrica", "Électricité"],
+        "Elétrica (tomadas, luz, cabos)" => [
+            "Electrical (outlets, lights, cables)",
+            "Eléctrica (enchufes, luz, cables)",
+            "Électricité (prises, éclairage, câbles)",
+        ],
+        "Encerra paredes · fecha/detecta cômodo · cota parede · modifica" => [
+            "Ends walls · closes/detects room · dimensions wall · modifies",
+            "Termina paredes · cierra/detecta habitación · acota pared · modifica",
+            "Termine les murs · ferme/détecte la pièce · cote le mur · modifie",
+        ],
+        "Enquadrar (Ctrl+0)" => ["Frame (Ctrl+0)", "Encuadrar (Ctrl+0)", "Cadrer (Ctrl+0)"],
+        "Enquadrar 3D" => ["Frame 3D", "Encuadrar 3D", "Cadrer la 3D"],
+        "Enquadrar planta" => ["Frame plan", "Encuadrar plano", "Cadrer le plan"],
+        "Escala" => ["Scale", "Escala", "Échelle"],
+        "Escala calibrada. Arraste para posicionar a imagem ou troque de ferramenta." => [
+            "Scale calibrated. Drag to place the image or switch tools.",
+            "Escala calibrada. Arrastre para posicionar la imagen o cambie de herramienta.",
+            "Échelle calibrée. Faites glisser pour placer l'image ou changez d'outil.",
+        ],
+        "Espelhado" => ["Mirrored", "Reflejado", "Miroir"],
+        "Espessura" => ["Thickness", "Espesor", "Épaisseur"],
+        "Espessura da laje" => [
+            "Slab thickness",
+            "Espesor de la losa",
+            "Épaisseur de la dalle",
+        ],
+        "Esquerda" => ["Left", "Izquierda", "Gauche"],
+        "Esta versão e o histórico dela serão removidos do projeto." => [
+            "This version and its history will be removed from the project.",
+            "Esta versión y su historial se quitarán del proyecto.",
+            "Cette version et son historique seront retirés du projet.",
+        ],
+        "Estilo" => ["Style", "Estilo", "Style"],
+        "Excluir" => ["Delete", "Eliminar", "Supprimer"],
+        "Excluir andar" => ["Delete storey", "Eliminar planta", "Supprimer l'étage"],
+        "Exibir" => ["Show", "Ver", "Afficher"],
+        "Exportar 3D" => ["Export 3D", "Exportar 3D", "Exporter la 3D"],
+        "Exportar planta" => ["Export plan", "Exportar plano", "Exporter le plan"],
+        "Fechada" => ["Closed", "Cerrada", "Fermée"],
+        "Fechar" => ["Close", "Cerrar", "Fermer"],
+        "Fechar versão" => ["Close version", "Cerrar versión", "Fermer la version"],
+        "Fim" => ["End", "Fin", "Fin"],
+        "Fim (x, y)" => ["End (x, y)", "Fin (x, y)", "Fin (x, y)"],
+        "Grupo" => ["Group", "Grupo", "Groupe"],
+        "Hidráulica" => ["Plumbing", "Fontanería", "Plomberie"],
+        "Hora do dia" => ["Time of day", "Hora del día", "Heure de la journée"],
+        "Imagem" => ["Image", "Imagen", "Image"],
+        "Imagem de fundo" => ["Background image", "Imagen de fondo", "Image de fond"],
         "Imagem importada. Clique em dois pontos de medida conhecida para calibrar; arraste para posicionar." => {
-            "Image imported. Click two points of a known distance to calibrate; drag to place."
+            [
+                "Image imported. Click two points of a known distance to calibrate; drag to place.",
+                "Imagen importada. Haga clic en dos puntos de distancia conocida para calibrar; arrastre para posicionar.",
+                "Image importée. Cliquez deux points d'une distance connue pour calibrer ; faites glisser pour placer.",
+            ]
         }
-        "Imagem…" => "Image…",
-        "Imagens" => "Images",
-        "Importar imagem de fundo" => "Import background image",
-        "Importar modelo 3D…" => "Import 3D model…",
-        "Importar…" => "Import…",
-        "Informações" => "Information",
-        "Início" => "Start",
-        "Início (x, y)" => "Start (x, y)",
-        "Itálico" => "Italic",
-        "Lado direito" => "Right side",
-        "Lado esquerdo" => "Left side",
-        "Largura" => "Width",
-        "Legenda de símbolos (elétrica e hidráulica)" => {
-            "Symbol legend (electrical and plumbing)"
-        }
-        "Licença" => "License",
-        "Linhas (tubulação / eletroduto)" => "Lines (pipes / conduits)",
-        "Link" => "Link",
-        "MCP desligado" => "MCP off",
-        "Manter proporções" => "Keep proportions",
-        "Marca" => "Brand",
-        "Medida" => "Measure",
-        "Modelo" => "Model",
-        "Modelo importado. Ajuste medidas com Enter ou pelas alças." => {
-            "Model imported. Adjust sizes with Enter or the handles."
-        }
-        "Modelos 3D" => "3D models",
-        "Modificar andar" => "Modify storey",
-        "Modificar cota" => "Modify dimension",
-        "Modificar cômodo" => "Modify room",
-        "Modificar linha" => "Modify line",
-        "Modificar parede" => "Modify wall",
-        "Modificar texto" => "Modify text",
-        "Modificar · Excluir · Cancelar" => "Modify · Delete · Cancel",
-        "Modificar…" => "Modify…",
-        "Mostrar bússola" => "Show compass",
-        "Move a seleção 1 cm (10 cm)" => "Moves the selection 1 cm (10 cm)",
-        "Mover vista" => "Pan view",
-        "Máxima" => "Best",
-        "Móveis" => "Furniture",
-        "Móveis na planta" => "Furniture on the plan",
-        "Nada encontrado." => "Nothing found.",
-        "Negrito" => "Bold",
-        "Nenhum espaço fechado por paredes aqui" => "No space enclosed by walls here",
-        "Nenhum ponto" => "No points",
-        "Nenhum ponto de vista salvo" => "No saved points of view",
-        "Nome" => "Name",
-        "Nome do projeto" => "Project name",
-        "Norte" => "North",
-        "Nova versão da planta" => "New plan version",
-        "Nova versão em branco" => "New blank version",
-        "Novo" => "New",
-        "Novo (Ctrl+N)" => "New (Ctrl+N)",
-        "Níveis na mesma elevação funcionam como layouts alternativos" => {
-            "Levels at the same elevation work as alternative layouts"
-        }
-        "O andar e tudo o que está nele serão removidos (dá para desfazer)." => {
-            "The storey and everything on it will be removed (undoable)."
-        }
-        "O projeto tem alterações que ainda não foram salvas." => {
-            "The project has unsaved changes."
-        }
-        "OBJ + MTL…" => "OBJ + MTL…",
-        "OK" => "OK",
-        "Opacidade" => "Opacity",
-        "Ordem (mesma elevação)" => "Order (same elevation)",
-        "PDF (A3, ajustado à folha)…" => "PDF (A3, fit to sheet)…",
-        "PDF 1:100…" => "PDF 1:100…",
-        "PDF 1:50…" => "PDF 1:50…",
-        "PNG…" => "PNG…",
-        "Paredes" => "Walls",
-        "Personalizada" => "Custom",
-        "Peça" => "Tile",
-        "Pintura" => "Paint",
-        "Piso" => "Floor",
-        "Planta" => "Plan",
-        "Pontilhado" => "Dotted",
-        "Posição (x, y)" => "Position (x, y)",
-        "Potência da luz" => "Light power",
-        "Preço" => "Price",
-        "Problemas" => "Issues",
-        "Profundidade" => "Depth",
-        "Projeto em edição: novos símbolos e linhas vão para ele" => {
-            "Project being edited: new symbols and lines go there"
-        }
-        "Projetos (3D New Era AI, Sweet Home 3D)" => "Projects (3D New Era AI, Sweet Home 3D)",
-        "Pé-direito" => "Ceiling height",
-        "Qualidade" => "Quality",
-        "Quantitativos" => "Quantities",
-        "Rascunho" => "Draft",
-        "Recentes" => "Recent",
-        "Recortar" => "Cut",
-        "Refazer" => "Redo",
-        "Refazer (Ctrl+Shift+Z)" => "Redo (Ctrl+Shift+Z)",
-        "Referências dos cômodos" => "Room references",
-        "Remover imagem" => "Remove image",
-        "Renderizar" => "Render",
-        "Renomear" => "Rename",
-        "Rotação" => "Rotation",
-        "SVG em escala real…" => "SVG at true scale…",
-        "Sair" => "Quit",
-        "Salvar" => "Save",
-        "Salvar (Ctrl+S)" => "Save (Ctrl+S)",
-        "Salvar PNG…" => "Save PNG…",
-        "Salvar alterações?" => "Save changes?",
-        "Salvar como…" => "Save as…",
-        "Salvar ponto de vista" => "Save point of view",
-        "Scroll · botão do meio · F" => "Scroll · middle button · F",
-        "Selecionar" => "Select",
-        "Selecionar tudo" => "Select all",
-        "Selecionar · Mover vista · Paredes · Cômodos · Cotas · Texto" => {
-            "Select · Pan · Walls · Rooms · Dimensions · Text"
-        }
-        "Sem acabamento" => "No finish",
-        "Sem nome" => "Unnamed",
-        "Sem seta" => "No arrow",
-        "Seta aberta" => "Open arrow",
-        "Seta cheia" => "Filled arrow",
-        "Setas (+Shift)" => "Arrows (+Shift)",
-        "Shift (segurado)" => "Shift (held)",
-        "Sweet Home 3D" => "Sweet Home 3D",
-        "Símbolos arquitetônicos" => "Architectural symbols",
-        "Tamanho" => "Size",
-        "Teto" => "Ceiling",
-        "Texto" => "Text",
-        "Tipo" => "Type",
-        "Tracejado" => "Dashed",
-        "Traço" => "Dash",
-        "Traço e dois pontos" => "Dash dot dot",
-        "Traço e ponto" => "Dash dot",
-        "Térreo" => "Ground floor",
-        "Unidade" => "Unit",
-        "Unir paredes selecionadas" => "Join selected walls",
-        "Usa o ponto de vista atual da vista 3D (aérea ou visitante)." => {
-            "Uses the current 3D point of view (aerial or visitor)."
-        }
-        "Ver" => "View",
-        "Versão" => "Version",
-        "Visitante" => "Visitor",
+        "Imagem…" => ["Image…", "Imagen…", "Image…"],
+        "Imagens" => ["Images", "Imágenes", "Images"],
+        "Importar imagem de fundo" => [
+            "Import background image",
+            "Importar imagen de fondo",
+            "Importer une image de fond",
+        ],
+        "Importar modelo 3D…" => [
+            "Import 3D model…",
+            "Importar modelo 3D…",
+            "Importer un modèle 3D…",
+        ],
+        "Importar…" => ["Import…", "Importar…", "Importer…"],
+        "Informações" => ["Information", "Información", "Informations"],
+        "Início" => ["Start", "Inicio", "Début"],
+        "Início (x, y)" => ["Start (x, y)", "Inicio (x, y)", "Début (x, y)"],
+        "Itálico" => ["Italic", "Cursiva", "Italique"],
+        "Lado direito" => ["Right side", "Lado derecho", "Côté droit"],
+        "Lado esquerdo" => ["Left side", "Lado izquierdo", "Côté gauche"],
+        "Largura" => ["Width", "Anchura", "Largeur"],
+        "Legenda de símbolos (elétrica e hidráulica)" => [
+            "Symbol legend (electrical and plumbing)",
+            "Leyenda de símbolos (eléctrica y fontanería)",
+            "Légende des symboles (électricité et plomberie)",
+        ],
+        "Licença" => ["License", "Licencia", "Licence"],
+        "Linhas (tubulação / eletroduto)" => [
+            "Lines (pipes / conduits)",
+            "Líneas (tubería / tubo eléctrico)",
+            "Lignes (tuyaux / conduits)",
+        ],
+        "Link" => ["Link", "Enlace", "Lien"],
+        "MCP desligado" => ["MCP off", "MCP apagado", "MCP désactivé"],
+        "Manter proporções" => [
+            "Keep proportions",
+            "Mantener proporciones",
+            "Conserver les proportions",
+        ],
+        "Marca" => ["Brand", "Marca", "Marque"],
+        "Medida" => ["Measure", "Medida", "Mesure"],
+        "Modelo" => ["Model", "Modelo", "Modèle"],
+        "Modelo importado. Ajuste medidas com Enter ou pelas alças." => [
+            "Model imported. Adjust sizes with Enter or the handles.",
+            "Modelo importado. Ajuste las medidas con Enter o con los tiradores.",
+            "Modèle importé. Ajustez les dimensions avec Entrée ou les poignées.",
+        ],
+        "Modelos 3D" => ["3D models", "Modelos 3D", "Modèles 3D"],
+        "Modificar andar" => ["Modify storey", "Modificar planta", "Modifier l'étage"],
+        "Modificar cota" => ["Modify dimension", "Modificar cota", "Modifier la cote"],
+        "Modificar cômodo" => ["Modify room", "Modificar habitación", "Modifier la pièce"],
+        "Modificar linha" => ["Modify line", "Modificar línea", "Modifier la ligne"],
+        "Modificar parede" => ["Modify wall", "Modificar pared", "Modifier le mur"],
+        "Modificar texto" => ["Modify text", "Modificar texto", "Modifier le texte"],
+        "Modificar · Excluir · Cancelar" => [
+            "Modify · Delete · Cancel",
+            "Modificar · Eliminar · Cancelar",
+            "Modifier · Supprimer · Annuler",
+        ],
+        "Modificar…" => ["Modify…", "Modificar…", "Modifier…"],
+        "Mostrar bússola" => ["Show compass", "Mostrar brújula", "Afficher la boussole"],
+        "Move a seleção 1 cm (10 cm)" => [
+            "Moves the selection 1 cm (10 cm)",
+            "Mueve la selección 1 cm (10 cm)",
+            "Déplace la sélection de 1 cm (10 cm)",
+        ],
+        "Mover vista" => ["Pan view", "Mover vista", "Déplacer la vue"],
+        "Máxima" => ["Best", "Máxima", "Maximale"],
+        "Móveis" => ["Furniture", "Muebles", "Mobilier"],
+        "Móveis na planta" => [
+            "Furniture on the plan",
+            "Muebles en el plano",
+            "Mobilier sur le plan",
+        ],
+        "Nada encontrado." => ["Nothing found.", "No se encontró nada.", "Aucun résultat."],
+        "Negrito" => ["Bold", "Negrita", "Gras"],
+        "Nenhum espaço fechado por paredes aqui" => [
+            "No space enclosed by walls here",
+            "Ningún espacio cerrado por paredes aquí",
+            "Aucun espace fermé par des murs ici",
+        ],
+        "Nenhum ponto" => ["No points", "Ningún punto", "Aucun point"],
+        "Nenhum ponto de vista salvo" => [
+            "No saved points of view",
+            "Ningún punto de vista guardado",
+            "Aucun point de vue enregistré",
+        ],
+        "Nome" => ["Name", "Nombre", "Nom"],
+        "Nome do projeto" => ["Project name", "Nombre del proyecto", "Nom du projet"],
+        "Norte" => ["North", "Norte", "Nord"],
+        "Nova versão da planta" => [
+            "New plan version",
+            "Nueva versión del plano",
+            "Nouvelle version du plan",
+        ],
+        "Nova versão em branco" => [
+            "New blank version",
+            "Nueva versión en blanco",
+            "Nouvelle version vierge",
+        ],
+        "Novo" => ["New", "Nuevo", "Nouveau"],
+        "Novo (Ctrl+N)" => ["New (Ctrl+N)", "Nuevo (Ctrl+N)", "Nouveau (Ctrl+N)"],
+        "Níveis na mesma elevação funcionam como layouts alternativos" => [
+            "Levels at the same elevation work as alternative layouts",
+            "Los niveles a la misma elevación funcionan como diseños alternativos",
+            "Des niveaux à la même élévation servent de variantes d'aménagement",
+        ],
+        "O andar e tudo o que está nele serão removidos (dá para desfazer)." => [
+            "The storey and everything on it will be removed (undoable).",
+            "La planta y todo lo que hay en ella se quitarán (se puede deshacer).",
+            "L'étage et tout ce qu'il contient seront supprimés (annulable).",
+        ],
+        "O projeto tem alterações que ainda não foram salvas." => [
+            "The project has unsaved changes.",
+            "El proyecto tiene cambios sin guardar.",
+            "Le projet a des modifications non enregistrées.",
+        ],
+        "OBJ + MTL…" => ["OBJ + MTL…", "OBJ + MTL…", "OBJ + MTL…"],
+        "OK" => ["OK", "OK", "OK"],
+        "Opacidade" => ["Opacity", "Opacidad", "Opacité"],
+        "Ordem (mesma elevação)" => [
+            "Order (same elevation)",
+            "Orden (misma elevación)",
+            "Ordre (même élévation)",
+        ],
+        "PDF (A3, ajustado à folha)…" => [
+            "PDF (A3, fit to sheet)…",
+            "PDF (A3, ajustado a la hoja)…",
+            "PDF (A3, ajusté à la feuille)…",
+        ],
+        "PDF 1:100…" => ["PDF 1:100…", "PDF 1:100…", "PDF 1:100…"],
+        "PDF 1:50…" => ["PDF 1:50…", "PDF 1:50…", "PDF 1:50…"],
+        "PNG…" => ["PNG…", "PNG…", "PNG…"],
+        "Paredes" => ["Walls", "Paredes", "Murs"],
+        "Personalizada" => ["Custom", "Personalizada", "Personnalisée"],
+        "Peça" => ["Tile", "Azulejo", "Carrelage"],
+        "Pintura" => ["Paint", "Pintura", "Peinture"],
+        "Piso" => ["Floor", "Suelo", "Sol"],
+        "Planta" => ["Plan", "Plano", "Plan"],
+        "Pontilhado" => ["Dotted", "Punteado", "Pointillé"],
+        "Posição (x, y)" => ["Position (x, y)", "Posición (x, y)", "Position (x, y)"],
+        "Potência da luz" => [
+            "Light power",
+            "Potencia de la luz",
+            "Puissance de la lumière",
+        ],
+        "Preço" => ["Price", "Precio", "Prix"],
+        "Problemas" => ["Issues", "Problemas", "Problèmes"],
+        "Profundidade" => ["Depth", "Profundidad", "Profondeur"],
+        "Projeto em edição: novos símbolos e linhas vão para ele" => [
+            "Project being edited: new symbols and lines go there",
+            "Proyecto en edición: los nuevos símbolos y líneas van a él",
+            "Projet en cours d'édition : les nouveaux symboles et lignes y vont",
+        ],
+        "Projetos (3D New Era AI, Sweet Home 3D)" => [
+            "Projects (3D New Era AI, Sweet Home 3D)",
+            "Proyectos (3D New Era AI, Sweet Home 3D)",
+            "Projets (3D New Era AI, Sweet Home 3D)",
+        ],
+        "Pé-direito" => ["Ceiling height", "Altura libre", "Hauteur sous plafond"],
+        "Qualidade" => ["Quality", "Calidad", "Qualité"],
+        "Quantitativos" => ["Quantities", "Mediciones", "Quantitatifs"],
+        "Rascunho" => ["Draft", "Borrador", "Brouillon"],
+        "Recentes" => ["Recent", "Recientes", "Récents"],
+        "Recortar" => ["Cut", "Cortar", "Couper"],
+        "Refazer" => ["Redo", "Rehacer", "Rétablir"],
+        "Refazer (Ctrl+Shift+Z)" => [
+            "Redo (Ctrl+Shift+Z)",
+            "Rehacer (Ctrl+Shift+Z)",
+            "Rétablir (Ctrl+Maj+Z)",
+        ],
+        "Referências dos cômodos" => [
+            "Room references",
+            "Referencias de las habitaciones",
+            "Références des pièces",
+        ],
+        "Remover imagem" => ["Remove image", "Quitar imagen", "Retirer l'image"],
+        "Renderizar" => ["Render", "Renderizar", "Rendu"],
+        "Renomear" => ["Rename", "Renombrar", "Renommer"],
+        "Rotação" => ["Rotation", "Rotación", "Rotation"],
+        "SVG em escala real…" => [
+            "SVG at true scale…",
+            "SVG a escala real…",
+            "SVG à l'échelle réelle…",
+        ],
+        "Sair" => ["Quit", "Salir", "Quitter"],
+        "Salvar" => ["Save", "Guardar", "Enregistrer"],
+        "Salvar (Ctrl+S)" => ["Save (Ctrl+S)", "Guardar (Ctrl+S)", "Enregistrer (Ctrl+S)"],
+        "Salvar PNG…" => ["Save PNG…", "Guardar PNG…", "Enregistrer en PNG…"],
+        "Salvar alterações?" => [
+            "Save changes?",
+            "¿Guardar los cambios?",
+            "Enregistrer les modifications ?",
+        ],
+        "Salvar como…" => ["Save as…", "Guardar como…", "Enregistrer sous…"],
+        "Salvar ponto de vista" => [
+            "Save point of view",
+            "Guardar punto de vista",
+            "Enregistrer le point de vue",
+        ],
+        "Scroll · botão do meio · F" => [
+            "Scroll · middle button · F",
+            "Rueda · botón central · F",
+            "Molette · bouton du milieu · F",
+        ],
+        "Selecionar" => ["Select", "Seleccionar", "Sélectionner"],
+        "Selecionar tudo" => ["Select all", "Seleccionar todo", "Tout sélectionner"],
+        "Selecionar · Mover vista · Paredes · Cômodos · Cotas · Texto" => [
+            "Select · Pan · Walls · Rooms · Dimensions · Text",
+            "Seleccionar · Mover vista · Paredes · Habitaciones · Cotas · Texto",
+            "Sélectionner · Déplacer · Murs · Pièces · Cotes · Texte",
+        ],
+        "Sem acabamento" => ["No finish", "Sin acabado", "Sans finition"],
+        "Sem nome" => ["Unnamed", "Sin nombre", "Sans nom"],
+        "Sem seta" => ["No arrow", "Sin flecha", "Sans flèche"],
+        "Seta aberta" => ["Open arrow", "Flecha abierta", "Flèche ouverte"],
+        "Seta cheia" => ["Filled arrow", "Flecha rellena", "Flèche pleine"],
+        "Setas (+Shift)" => ["Arrows (+Shift)", "Flechas (+Mayús)", "Flèches (+Maj)"],
+        "Shift (segurado)" => ["Shift (held)", "Mayús (mantenido)", "Maj (maintenue)"],
+        "Sweet Home 3D" => ["Sweet Home 3D", "Sweet Home 3D", "Sweet Home 3D"],
+        "Símbolos arquitetônicos" => [
+            "Architectural symbols",
+            "Símbolos arquitectónicos",
+            "Symboles architecturaux",
+        ],
+        "Tamanho" => ["Size", "Tamaño", "Taille"],
+        "Teto" => ["Ceiling", "Techo", "Plafond"],
+        "Texto" => ["Text", "Texto", "Texte"],
+        "Tipo" => ["Type", "Tipo", "Type"],
+        "Tracejado" => ["Dashed", "Discontinuo", "Tirets"],
+        "Traço" => ["Dash", "Raya", "Tiret"],
+        "Traço e dois pontos" => ["Dash dot dot", "Raya y dos puntos", "Tiret point point"],
+        "Traço e ponto" => ["Dash dot", "Raya y punto", "Tiret point"],
+        "Térreo" => ["Ground floor", "Planta baja", "Rez-de-chaussée"],
+        "Unidade" => ["Unit", "Unidad", "Unité"],
+        "Unir paredes selecionadas" => [
+            "Join selected walls",
+            "Unir paredes seleccionadas",
+            "Joindre les murs sélectionnés",
+        ],
+        "Usa o ponto de vista atual da vista 3D (aérea ou visitante)." => [
+            "Uses the current 3D point of view (aerial or visitor).",
+            "Usa el punto de vista actual de la vista 3D (aérea o visitante).",
+            "Utilise le point de vue actuel de la vue 3D (aérienne ou visiteur).",
+        ],
+        "Ver" => ["View", "Ver", "Affichage"],
+        "Versão" => ["Version", "Versión", "Version"],
+        "Visitante" => ["Visitor", "Visitante", "Visiteur"],
         "Visitante — arraste: olhar · W/A/S/D ou setas: andar · Scroll: avançar · Esc: visão aérea" => {
-            "Visitor — drag: look · W/A/S/D or arrows: walk · Scroll: forward · Esc: aerial view"
+            [
+                "Visitor — drag: look · W/A/S/D or arrows: walk · Scroll: forward · Esc: aerial view",
+                "Visitante — arrastrar: mirar · W/A/S/D o flechas: andar · Rueda: avanzar · Esc: vista aérea",
+                "Visiteur — glisser : regarder · W/A/S/D ou flèches : marcher · Molette : avancer · Échap : vue aérienne",
+            ]
         }
-        "Vista de cima de todos" => "Top views for all",
-        "Visualização 3D requer o backend wgpu." => "The 3D view needs the wgpu backend.",
-        "Visão aérea" => "Aerial view",
-        "Visível" => "Visible",
-        "Visível no 3D" => "Visible in 3D",
-        "Zoom · mover vista · enquadrar" => "Zoom · pan · frame",
-        "glTF binário (.glb)…" => "Binary glTF (.glb)…",
-        "peças" => "pieces",
-        "Área" => "Area",
-        "Área na planta" => "Area on the plan",
-        "Ângulo" => "Angle",
-        "Cotas" => "Dimensions",
-        "Textos" => "Texts",
-        "Linhas" => "Lines",
-        "paredes" => "walls",
-        "cômodos" => "rooms",
-        "móveis" => "pieces",
-        "grupo de" => "group of",
-        "Sala de estar" => "Living room",
-        "Sala de jantar" => "Dining room",
-        "Cozinha" => "Kitchen",
-        "Quarto" => "Bedroom",
-        "Banheiro" => "Bathroom",
-        "Lavanderia" => "Laundry",
-        "Escritório" => "Office",
-        "Portas e janelas" => "Doors and windows",
-        "Estrutura" => "Structure",
-        "Decoração" => "Decor",
-        "Área externa" => "Outdoor",
+        "Vista de cima de todos" => [
+            "Top views for all",
+            "Vista superior de todos",
+            "Vues de dessus pour tout",
+        ],
+        "Visualização 3D requer o backend wgpu." => [
+            "The 3D view needs the wgpu backend.",
+            "La vista 3D necesita el backend wgpu.",
+            "La vue 3D nécessite le backend wgpu.",
+        ],
+        "Visão aérea" => ["Aerial view", "Vista aérea", "Vue aérienne"],
+        "Visível" => ["Visible", "Visible", "Visible"],
+        "Visível no 3D" => ["Visible in 3D", "Visible en 3D", "Visible en 3D"],
+        "Zoom · mover vista · enquadrar" => [
+            "Zoom · pan · frame",
+            "Zoom · mover vista · encuadrar",
+            "Zoom · déplacer · cadrer",
+        ],
+        "glTF binário (.glb)…" => [
+            "Binary glTF (.glb)…",
+            "glTF binario (.glb)…",
+            "glTF binaire (.glb)…",
+        ],
+        "peças" => ["pieces", "piezas", "pièces"],
+        "Área" => ["Area", "Área", "Surface"],
+        "Área na planta" => [
+            "Area on the plan",
+            "Área en el plano",
+            "Surface sur le plan",
+        ],
+        "Ângulo" => ["Angle", "Ángulo", "Angle"],
+        "Cotas" => ["Dimensions", "Cotas", "Cotes"],
+        "Textos" => ["Texts", "Textos", "Textes"],
+        "Linhas" => ["Lines", "Líneas", "Lignes"],
+        "paredes" => ["walls", "paredes", "murs"],
+        "cômodos" => ["rooms", "habitaciones", "pièces"],
+        "móveis" => ["pieces", "muebles", "meubles"],
+        "grupo de" => ["group of", "grupo de", "groupe de"],
+        "Sala de estar" => ["Living room", "Salón", "Salon"],
+        "Sala de jantar" => ["Dining room", "Comedor", "Salle à manger"],
+        "Cozinha" => ["Kitchen", "Cocina", "Cuisine"],
+        "Quarto" => ["Bedroom", "Dormitorio", "Chambre"],
+        "Banheiro" => ["Bathroom", "Baño", "Salle de bain"],
+        "Lavanderia" => ["Laundry", "Lavadero", "Buanderie"],
+        "Escritório" => ["Office", "Despacho", "Bureau"],
+        "Portas e janelas" => [
+            "Doors and windows",
+            "Puertas y ventanas",
+            "Portes et fenêtres",
+        ],
+        "Estrutura" => ["Structure", "Estructura", "Structure"],
+        "Decoração" => ["Decor", "Decoración", "Décoration"],
+        "Área externa" => ["Outdoor", "Zona exterior", "Extérieur"],
+        "atual" => ["current", "actual", "actuel"],
+        "Importado de {} — salve como projeto para manter tudo num arquivo" => [
+            "Imported from {} — save it as a project to keep everything in one file",
+            "Importado de {} — guárdelo como proyecto para tenerlo todo en un archivo",
+            "Importé de {} — enregistrez-le en projet pour tout garder dans un seul fichier",
+        ],
+        "Aberto: {}" => ["Opened: {}", "Abierto: {}", "Ouvert : {}"],
+        " · {} aviso(s)" => [
+            " · {} warning(s)",
+            " · {} aviso(s)",
+            " · {} avertissement(s)",
+        ],
+        "⚠ Não foi possível abrir {}: {}" => [
+            "⚠ Could not open {}: {}",
+            "⚠ No se pudo abrir {}: {}",
+            "⚠ Impossible d'ouvrir {} : {}",
+        ],
+        "Pontos de vista ({})" => [
+            "Points of view ({})",
+            "Puntos de vista ({})",
+            "Points de vue ({})",
+        ],
+        "Ponto de vista {}" => ["Point of view {}", "Punto de vista {}", "Point de vue {}"],
+        "Salvo em {}" => ["Saved to {}", "Guardado en {}", "Enregistré dans {}"],
+        "⚠ Não foi possível salvar: {}" => [
+            "⚠ Could not save: {}",
+            "⚠ No se pudo guardar: {}",
+            "⚠ Impossible d'enregistrer : {}",
+        ],
+        "Modelo 3D exportado para {}" => [
+            "3D model exported to {}",
+            "Modelo 3D exportado a {}",
+            "Modèle 3D exporté vers {}",
+        ],
+        "⚠ Falha ao exportar: {}" => [
+            "⚠ Export failed: {}",
+            "⚠ Fallo al exportar: {}",
+            "⚠ Échec de l'export : {}",
+        ],
+        "Planta exportada para {}" => [
+            "Plan exported to {}",
+            "Plano exportado a {}",
+            "Plan exporté vers {}",
+        ],
+        "⚠ Imagem inválida: {}" => [
+            "⚠ Invalid image: {}",
+            "⚠ Imagen no válida: {}",
+            "⚠ Image non valide : {}",
+        ],
+        "Modificar {} paredes" => [
+            "Modify {} walls",
+            "Modificar {} paredes",
+            "Modifier {} murs",
+        ],
+        "Modificar {}" => ["Modify {}", "Modificar {}", "Modifier {}"],
+        "{} peças" => ["{} pieces", "{} piezas", "{} pièces"],
+        "Os pontos marcados estão a {} na escala atual." => [
+            "The marked points are {} apart at the current scale.",
+            "Los puntos marcados están a {} en la escala actual.",
+            "Les points marqués sont distants de {} à l'échelle actuelle.",
+        ],
+        "Fechar “{}”?" => ["Close “{}”?", "¿Cerrar «{}»?", "Fermer « {} » ?"],
+        "Excluir “{}”?" => ["Delete “{}”?", "¿Eliminar «{}»?", "Supprimer « {} » ?"],
+        "Renderizando… {} s" => ["Rendering… {} s", "Renderizando… {} s", "Rendu… {} s"],
+        "Pronta em {} s" => ["Ready in {} s", "Lista en {} s", "Prête en {} s"],
+        "Foto salva em {}" => [
+            "Photo saved to {}",
+            "Foto guardada en {}",
+            "Photo enregistrée dans {}",
+        ],
+        "Mostrar {}" => ["Show {}", "Mostrar {}", "Afficher {}"],
+        "Tema" => ["Theme", "Tema", "Thème"],
+        "Do sistema" => ["From the system", "Del sistema", "Du système"],
+        "Noite" => ["Night", "Noche", "Nuit"],
+        "Dia" => ["Day", "Día", "Jour"],
+        "luz" => ["light", "luz", "lumière"],
+        "Arraste ou dois dedos: girar · Shift: mover · Pinça ou scroll: zoom · F: enquadrar" => {
+            [
+                "Drag or two fingers: orbit · Shift: pan · Pinch or scroll: zoom · F: frame",
+                "Arrastrar o dos dedos: girar · Mayús: mover · Pellizco o rueda: zoom · F: encuadrar",
+                "Glisser ou deux doigts : pivoter · Maj : déplacer · Pincer ou molette : zoom · F : cadrer",
+            ]
+        }
+        "Aparência" => ["Look", "Aspecto", "Apparence"],
         _ => return None,
     })
 }
@@ -515,11 +1220,11 @@ fn english(pt: &str) -> Option<&'static str> {
 mod tests {
     use super::*;
 
-    /// Every literal handed to `tr` has an English side, or the window
-    /// silently falls back to Portuguese for whoever picked English — which
-    /// is exactly how a new panel ships half translated.
+    /// Every literal handed to `tr` has every other language, or the window
+    /// silently falls back to Portuguese for whoever picked one of them —
+    /// which is exactly how a new panel ships half translated.
     #[test]
-    fn every_string_on_screen_has_an_english_side() {
+    fn every_string_on_screen_is_translated() {
         fn sources(dir: &std::path::Path, into: &mut String) {
             for entry in std::fs::read_dir(dir).expect("src is readable") {
                 let path = entry.expect("entry").path();
@@ -534,9 +1239,20 @@ mod tests {
         sources(std::path::Path::new("src"), &mut code);
         // A literal handed to tr, whatever the wrapping and the trailing comma.
         let mut missing: Vec<String> = Vec::new();
-        let mut rest = code.as_str();
-        while let Some(at) = rest.find("tr(") {
-            rest = &rest[at + 3..];
+        for needle in ["tr(", "fill("] {
+            missing.extend(untranslated(&code, needle));
+        }
+        assert!(missing.is_empty(), "not translated: {missing:#?}");
+    }
+
+    /// Every literal handed to `call` — `tr(`, `fill(` — that no language
+    /// speaks, or that some language leaves blank or without the `{}` the
+    /// sentence needs.
+    fn untranslated(code: &str, call: &str) -> Vec<String> {
+        let mut missing: Vec<String> = Vec::new();
+        let mut rest = code;
+        while let Some(at) = rest.find(call) {
+            rest = &rest[at + call.len()..];
             let Some(open) = rest.find('"') else { break };
             if rest[..open].contains(|c: char| !c.is_whitespace()) {
                 continue;
@@ -545,21 +1261,87 @@ mod tests {
             let Some(close) = body.find('"') else { break };
             let (text, after) = (&body[..close], body[close + 1..].trim_start());
             if after.starts_with(',') || after.starts_with(')') {
-                // The test's own probe, and words spelled the same in English.
-                if english(text).is_none() && !["Algo novo", "Plugins", "cooktop"].contains(&text) {
-                    missing.push(text.to_owned());
+                // The test's own probe, and words spelled the same everywhere.
+                if ["Algo novo", "Plugins", "cooktop"].contains(&text) {
+                    continue;
+                }
+                // A blank side is worse than no row: the label disappears.
+                // A side without the `{}` of the key drops what goes in it.
+                let places = text.matches("{}").count();
+                match translations(text) {
+                    Some(row)
+                        if row
+                            .iter()
+                            .all(|t| !t.trim().is_empty() && t.matches("{}").count() == places) => {
+                    }
+                    _ => missing.push(text.to_owned()),
                 }
             }
         }
-        assert!(missing.is_empty(), "no English for: {missing:#?}");
+        missing
+    }
+
+    /// These run beside the tests that drive whole windows, which read the
+    /// labels in Portuguese — so none of them touch the language the window
+    /// is set to, they ask for a language by name.
+    #[test]
+    fn translates_to_the_chosen_language() {
+        for (lang, saved) in [
+            (Lang::Pt, "Salvar"),
+            (Lang::En, "Save"),
+            (Lang::Es, "Guardar"),
+            (Lang::Fr, "Enregistrer"),
+        ] {
+            assert_eq!(say("Salvar", lang), saved);
+            // A text nobody translated stays as written, in any language.
+            assert_eq!(say("Algo novo", lang), "Algo novo");
+        }
     }
 
     #[test]
-    fn translates_only_when_english() {
-        assert_eq!(tr("Salvar"), "Salvar");
-        set_english(true);
-        assert_eq!(tr("Salvar"), "Save");
-        assert_eq!(tr("Algo novo"), "Algo novo");
-        set_english(false);
+    fn the_window_keeps_the_language_it_is_set_to() {
+        for lang in Lang::ALL {
+            assert_eq!(Lang::from_code(lang.code()), lang);
+        }
+    }
+
+    #[test]
+    fn fills_the_sentence_in_the_chosen_language() {
+        assert_eq!(
+            fill_in("Aberto: {}", Lang::Fr, &[&"casa.n3d"]),
+            "Ouvert : casa.n3d"
+        );
+        assert_eq!(
+            fill_in(
+                "⚠ Não foi possível abrir {}: {}",
+                Lang::Fr,
+                &[&"casa.n3d", &"nada aqui"]
+            ),
+            "⚠ Impossible d'ouvrir casa.n3d : nada aqui"
+        );
+        assert_eq!(
+            fill_in("Aberto: {}", Lang::Pt, &[&"casa.n3d"]),
+            "Aberto: casa.n3d"
+        );
+        // Nothing to put in it, and nothing lost either.
+        assert_eq!(fill_in("Salvo em {}", Lang::Pt, &[]), "Salvo em {}");
+    }
+
+    #[test]
+    fn reads_the_language_the_system_asks_for() {
+        assert_eq!(Lang::from_locale("pt_BR.UTF-8"), Some(Lang::Pt));
+        assert_eq!(Lang::from_locale("en_US.UTF-8"), Some(Lang::En));
+        assert_eq!(Lang::from_locale("es-419"), Some(Lang::Es));
+        assert_eq!(Lang::from_locale("fr_CA"), Some(Lang::Fr));
+        assert_eq!(Lang::from_locale("de_DE.UTF-8"), None);
+        assert_eq!(Lang::from_locale("C"), None);
+        assert_eq!(Lang::from_locale(""), None);
+    }
+
+    #[test]
+    fn only_english_writes_decimals_with_a_dot() {
+        for lang in Lang::ALL {
+            assert_eq!(lang.decimal_comma(), lang != Lang::En);
+        }
     }
 }

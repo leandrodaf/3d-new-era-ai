@@ -160,14 +160,15 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
             }
             if let Some((started, _)) = &window.job {
                 ui.spinner();
-                ui.label(format!(
-                    "Renderizando… {:.0} s",
-                    started.elapsed().as_secs_f32()
+                ui.label(crate::i18n::fill(
+                    "Renderizando… {} s",
+                    &[&format!("{:.0}", started.elapsed().as_secs_f32())],
                 ));
                 ctx.request_repaint_after(Duration::from_millis(200));
             }
             if let Some((_, _, took)) = &window.result {
-                ui.label(RichText::new(format!("Pronta em {:.1} s", took.as_secs_f32())).weak());
+                let took = format!("{:.1}", took.as_secs_f32());
+                ui.label(RichText::new(crate::i18n::fill("Pronta em {} s", &[&took])).weak());
             }
         });
         if let Some((_, texture, _)) = &window.result {
@@ -209,9 +210,11 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
             Ok(bytes)
         };
         match crate::files::save_bytes("PNG", "png", "foto.png", png) {
-            Ok(Some(path)) => app.set_status(format!("Foto salva em {path}")),
+            Ok(Some(path)) => app.set_status(crate::i18n::fill("Foto salva em {}", &[&path])),
             Ok(None) => {}
-            Err(err) => app.set_status(format!("⚠ Não foi possível salvar: {err}")),
+            Err(err) => {
+                app.set_status(crate::i18n::fill("⚠ Não foi possível salvar: {}", &[&err]));
+            }
         }
     }
     if open {

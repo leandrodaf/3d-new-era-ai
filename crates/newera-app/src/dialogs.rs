@@ -144,24 +144,19 @@ fn cm(value: &mut f64, range: std::ops::RangeInclusive<f64>) -> DragValue<'_> {
 /// Shows a dialog with OK/Cancel. Returns `Some(true)` on OK, `Some(false)` on cancel.
 fn modal(ctx: &egui::Context, title: &str, body: impl FnOnce(&mut egui::Ui)) -> Option<bool> {
     let mut result = None;
-    let response = egui::Modal::new(egui::Id::new("newera-dialog")).show(ctx, |ui| {
-        ui.set_min_width(320.0);
-        ui.heading(title);
-        ui.add_space(6.0);
-        body(ui);
-        ui.add_space(10.0);
-        ui.separator();
-        ui.horizontal(|ui| {
+    let response = crate::theme::modal(ctx, egui::Id::new("newera-dialog")).show(ctx, |ui| {
+        // One width for every form in the window, so opening two in a row
+        // does not move the fields around under the eye.
+        ui.set_width(430.0);
+        crate::theme::title(ui, title);
+        crate::theme::body(ui, body);
+        crate::theme::footer(ui, |ui| {
             // Shift+Enter stays available for new lines in multi-line fields.
             let enter = ui.input(|i| i.key_pressed(egui::Key::Enter) && !i.modifiers.shift);
-            if ui
-                .button(format!("{} {}", icon::CHECK, crate::i18n::tr("OK")))
-                .clicked()
-                || enter
-            {
+            if crate::theme::primary(ui, crate::i18n::tr("OK")).clicked() || enter {
                 result = Some(true);
             }
-            if ui.button(crate::i18n::tr("Cancelar")).clicked() {
+            if crate::theme::secondary(ui, crate::i18n::tr("Cancelar")).clicked() {
                 result = Some(false);
             }
         });
@@ -268,11 +263,19 @@ pub(crate) fn material_editor(
     *material != before
 }
 
+/// The two columns every dialog is made of: what the property is called on
+/// the left, quiet as a spec sheet, and what it is set to on the right.
 fn grid(ui: &mut egui::Ui, id: &str, rows: impl FnOnce(&mut egui::Ui)) {
-    egui::Grid::new(id)
-        .num_columns(2)
-        .spacing([12.0, 6.0])
-        .show(ui, rows);
+    let t = crate::theme::of(ui.visuals());
+    ui.scope(|ui| {
+        ui.visuals_mut().widgets.noninteractive.fg_stroke.color = t.ink_dim;
+        ui.spacing_mut().text_edit_width = (ui.available_width() - 130.0).max(160.0);
+        egui::Grid::new(id)
+            .num_columns(2)
+            .min_col_width(108.0)
+            .spacing([16.0, 8.0])
+            .show(ui, rows);
+    });
 }
 
 pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> DialogOutcome {
@@ -289,7 +292,7 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
             let title = if ids.len() == 1 {
                 crate::i18n::tr("Modificar parede").to_owned()
             } else {
-                format!("Modificar {} paredes", ids.len())
+                crate::i18n::fill("Modificar {} paredes", &[&ids.len()])
             };
             let answer = modal(ctx, &title, |ui| {
                 grid(ui, "walls", |ui| {
@@ -548,12 +551,15 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
             let before = (piece.width, piece.depth, piece.height);
             let answer = modal(
                 ctx,
-                &format!("Modificar {}", piece.name.to_lowercase()),
+                &crate::i18n::fill("Modificar {}", &[&piece.name.to_lowercase()]),
                 |ui| {
-                    grid(ui, "furniture", |ui| {
+                    grid(ui, "furniture-name", |ui| {
                         ui.label(crate::i18n::tr("Nome"));
                         ui.text_edit_singleline(&mut piece.name);
                         ui.end_row();
+                    });
+                    crate::theme::section(ui, crate::i18n::tr("Planta"));
+                    grid(ui, "furniture-place", |ui| {
                         ui.label(crate::i18n::tr("Posição (x, y)"));
                         ui.horizontal(|ui| {
                             ui.add(cm(&mut piece.position.x, -1e6..=1e6));
@@ -571,6 +577,9 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                                 .speed(1.0),
                         );
                         ui.end_row();
+                    });
+                    crate::theme::section(ui, crate::i18n::tr("Tamanho"));
+                    grid(ui, "furniture-size", |ui| {
                         ui.label(crate::i18n::tr("Largura"));
                         ui.add(cm(&mut piece.width, 1.0..=10_000.0));
                         ui.end_row();
@@ -583,6 +592,9 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                         ui.label("");
                         ui.checkbox(&mut keep_ratio, crate::i18n::tr("Manter proporções"));
                         ui.end_row();
+                    });
+                    crate::theme::section(ui, crate::i18n::tr("Aparência"));
+                    grid(ui, "furniture-look", |ui| {
                         ui.label(crate::i18n::tr("Cor"));
                         ui.horizontal(|ui| {
                             let mut custom = piece.color.is_some();
@@ -620,7 +632,10 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                         }
                         if piece.is_group() {
                             ui.label(crate::i18n::tr("Grupo"));
-                            ui.label(format!("{} peças", piece.flatten().len() - 1));
+                            ui.label(crate::i18n::fill(
+                                "{} peças",
+                                &[&(piece.flatten().len() - 1)],
+                            ));
                             ui.end_row();
                         }
                     });
@@ -713,9 +728,9 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
         }
         Dialog::Calibrate { a, b, mut distance } => {
             let answer = modal(ctx, crate::i18n::tr("Calibrar escala da imagem"), |ui| {
-                ui.label(format!(
+                ui.label(crate::i18n::fill(
                     "Os pontos marcados estão a {} na escala atual.",
-                    unit.format_length(a.distance(b))
+                    &[&unit.format_length(a.distance(b))],
                 ));
                 ui.add_space(4.0);
                 grid(ui, "calib", |ui| {
@@ -872,28 +887,20 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
         }
         Dialog::ConfirmDiscard(action) => {
             let mut choice = None;
-            egui::Modal::new(egui::Id::new("confirm-discard")).show(ctx, |ui| {
-                ui.set_min_width(340.0);
-                ui.heading(crate::i18n::tr("Salvar alterações?"));
+            crate::theme::modal(ctx, egui::Id::new("confirm-discard")).show(ctx, |ui| {
+                ui.set_min_width(380.0);
+                crate::theme::title(ui, crate::i18n::tr("Salvar alterações?"));
                 ui.label(crate::i18n::tr(
                     "O projeto tem alterações que ainda não foram salvas.",
                 ));
-                ui.add_space(10.0);
-                ui.horizontal(|ui| {
-                    if ui
-                        .button(format!(
-                            "{} {}",
-                            icon::FLOPPY_DISK,
-                            crate::i18n::tr("Salvar")
-                        ))
-                        .clicked()
-                    {
+                crate::theme::footer(ui, |ui| {
+                    if crate::theme::primary(ui, crate::i18n::tr("Salvar")).clicked() {
                         choice = Some(0);
                     }
-                    if ui.button(crate::i18n::tr("Descartar")).clicked() {
+                    if crate::theme::secondary(ui, crate::i18n::tr("Descartar")).clicked() {
                         choice = Some(1);
                     }
-                    if ui.button(crate::i18n::tr("Cancelar")).clicked() {
+                    if crate::theme::secondary(ui, crate::i18n::tr("Cancelar")).clicked() {
                         choice = Some(2);
                     }
                 });
@@ -915,25 +922,17 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
         }
         Dialog::ConfirmCloseVariant { index, name } => {
             let mut choice = None;
-            egui::Modal::new(egui::Id::new("close-variant")).show(ctx, |ui| {
-                ui.set_min_width(340.0);
-                ui.heading(format!("Fechar \"{name}\"?"));
+            crate::theme::modal(ctx, egui::Id::new("close-variant")).show(ctx, |ui| {
+                ui.set_min_width(380.0);
+                crate::theme::title(ui, &crate::i18n::fill("Fechar “{}”?", &[&name]));
                 ui.label(crate::i18n::tr(
                     "Esta versão e o histórico dela serão removidos do projeto.",
                 ));
-                ui.add_space(10.0);
-                ui.horizontal(|ui| {
-                    if ui
-                        .button(format!(
-                            "{} {}",
-                            icon::TRASH,
-                            crate::i18n::tr("Fechar versão")
-                        ))
-                        .clicked()
-                    {
+                crate::theme::footer(ui, |ui| {
+                    if crate::theme::destructive(ui, crate::i18n::tr("Fechar versão")).clicked() {
                         choice = Some(true);
                     }
-                    if ui.button(crate::i18n::tr("Cancelar")).clicked() {
+                    if crate::theme::secondary(ui, crate::i18n::tr("Cancelar")).clicked() {
                         choice = Some(false);
                     }
                 });
@@ -971,14 +970,16 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                     })
                     .collect()
             };
-            egui::Modal::new(egui::Id::new("quantities")).show(ctx, |ui| {
-                ui.set_min_width(380.0);
-                ui.heading(format!(
-                    "{} {}",
-                    icon::LIST_NUMBERS,
-                    crate::i18n::tr("Quantitativos")
-                ));
-                ui.add_space(6.0);
+            crate::theme::modal(ctx, egui::Id::new("quantities")).show(ctx, |ui| {
+                ui.set_min_width(420.0);
+                crate::theme::title(
+                    ui,
+                    &format!(
+                        "{} {}",
+                        icon::LIST_NUMBERS,
+                        crate::i18n::tr("Quantitativos")
+                    ),
+                );
                 for d in newera_core::Discipline::ALL {
                     ui.strong(d.name());
                     let mine: Vec<_> = rows.iter().filter(|r| r.discipline == d).collect();
@@ -1003,9 +1004,11 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                         });
                     ui.add_space(8.0);
                 }
-                if ui.button(crate::i18n::tr("Fechar")).clicked() {
-                    close = true;
-                }
+                crate::theme::footer(ui, |ui| {
+                    if crate::theme::primary(ui, crate::i18n::tr("Fechar")).clicked() {
+                        close = true;
+                    }
+                });
             });
             if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
                 DialogOutcome::Close
@@ -1024,14 +1027,16 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                     newera_core::electrical::cable_lengths(home),
                 )
             };
-            egui::Modal::new(egui::Id::new("electrical")).show(ctx, |ui| {
+            crate::theme::modal(ctx, egui::Id::new("electrical")).show(ctx, |ui| {
                 ui.set_min_width(560.0);
-                ui.heading(format!(
-                    "{} {}",
-                    icon::LIGHTNING,
-                    crate::i18n::tr("Quadro de cargas e NBR 5410")
-                ));
-                ui.add_space(6.0);
+                crate::theme::title(
+                    ui,
+                    &format!(
+                        "{} {}",
+                        icon::LIGHTNING,
+                        crate::i18n::tr("Quadro de cargas e NBR 5410")
+                    ),
+                );
                 if circuits.is_empty() {
                     ui.weak(crate::i18n::tr(
                         "Nenhum circuito: atribua os pontos a circuitos (MCP electrical assign).",
@@ -1114,9 +1119,11 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                         }
                     });
                 ui.add_space(6.0);
-                if ui.button(crate::i18n::tr("Fechar")).clicked() {
-                    close = true;
-                }
+                crate::theme::footer(ui, |ui| {
+                    if crate::theme::primary(ui, crate::i18n::tr("Fechar")).clicked() {
+                        close = true;
+                    }
+                });
             });
             if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
                 DialogOutcome::Close
@@ -1238,25 +1245,17 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
         }
         Dialog::ConfirmDeleteLevel { id, name } => {
             let mut choice = None;
-            egui::Modal::new(egui::Id::new("delete-level")).show(ctx, |ui| {
-                ui.set_min_width(340.0);
-                ui.heading(format!("Excluir \"{name}\"?"));
+            crate::theme::modal(ctx, egui::Id::new("delete-level")).show(ctx, |ui| {
+                ui.set_min_width(380.0);
+                crate::theme::title(ui, &crate::i18n::fill("Excluir “{}”?", &[&name]));
                 ui.label(crate::i18n::tr(
                     "O andar e tudo o que está nele serão removidos (dá para desfazer).",
                 ));
-                ui.add_space(10.0);
-                ui.horizontal(|ui| {
-                    if ui
-                        .button(format!(
-                            "{} {}",
-                            icon::TRASH,
-                            crate::i18n::tr("Excluir andar")
-                        ))
-                        .clicked()
-                    {
+                crate::theme::footer(ui, |ui| {
+                    if crate::theme::destructive(ui, crate::i18n::tr("Excluir andar")).clicked() {
                         choice = Some(true);
                     }
-                    if ui.button(crate::i18n::tr("Cancelar")).clicked() {
+                    if crate::theme::secondary(ui, crate::i18n::tr("Cancelar")).clicked() {
                         choice = Some(false);
                     }
                 });
@@ -1274,13 +1273,15 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
         Dialog::Compare(rows) => {
             let mut close = false;
             let mut switch = None;
-            egui::Modal::new(egui::Id::new("compare-variants")).show(ctx, |ui| {
-                ui.heading(format!(
-                    "{} {}",
-                    icon::CHART_BAR,
-                    crate::i18n::tr("Comparar versões")
-                ));
-                ui.add_space(6.0);
+            crate::theme::modal(ctx, egui::Id::new("compare-variants")).show(ctx, |ui| {
+                crate::theme::title(
+                    ui,
+                    &format!(
+                        "{} {}",
+                        icon::CHART_BAR,
+                        crate::i18n::tr("Comparar versões")
+                    ),
+                );
                 egui::Grid::new("compare")
                     .striped(true)
                     .spacing([18.0, 6.0])
@@ -1322,17 +1323,18 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                                 issues
                             });
                             if row.active {
-                                ui.weak("atual");
+                                ui.weak(crate::i18n::tr("atual"));
                             } else if ui.small_button(crate::i18n::tr("Abrir")).clicked() {
                                 switch = Some(i);
                             }
                             ui.end_row();
                         }
                     });
-                ui.add_space(8.0);
-                if ui.button(crate::i18n::tr("Fechar")).clicked() {
-                    close = true;
-                }
+                crate::theme::footer(ui, |ui| {
+                    if crate::theme::primary(ui, crate::i18n::tr("Fechar")).clicked() {
+                        close = true;
+                    }
+                });
             });
             if let Some(index) = switch {
                 app.run(|doc| doc.switch_variant(index));
@@ -1347,14 +1349,16 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
         }
         Dialog::Help => {
             let mut close = false;
-            egui::Modal::new(egui::Id::new("help")).show(ctx, |ui| {
+            crate::theme::modal(ctx, egui::Id::new("help")).show(ctx, |ui| {
                 ui.set_min_width(460.0);
-                ui.heading(format!(
-                    "{} {}",
-                    icon::KEYBOARD,
-                    crate::i18n::tr("Atalhos e ferramentas")
-                ));
-                ui.add_space(6.0);
+                crate::theme::title(
+                    ui,
+                    &format!(
+                        "{} {}",
+                        icon::KEYBOARD,
+                        crate::i18n::tr("Atalhos e ferramentas")
+                    ),
+                );
                 grid(ui, "help", |ui| {
                     for (keys, what) in [
                         (
@@ -1407,10 +1411,11 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                         ui.end_row();
                     }
                 });
-                ui.add_space(8.0);
-                if ui.button(crate::i18n::tr("Fechar")).clicked() {
-                    close = true;
-                }
+                crate::theme::footer(ui, |ui| {
+                    if crate::theme::primary(ui, crate::i18n::tr("Fechar")).clicked() {
+                        close = true;
+                    }
+                });
             });
             if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
                 DialogOutcome::Close

@@ -150,8 +150,9 @@ The core of what makes the editor useful: placing real objects with real dimensi
 - [x] Plugin API: `plugin.json` folders run as external programs with the API URL,
       token and a session of their own (Plugins menu, `/api/plugins`, MCP `plugins`);
       example `plugins/quadro-areas`
-- [x] i18n: interface in Portuguese or English (Ajuda › Idioma / Language), saved in
-      preferences; project data and catalog item names stay as written
+- [x] i18n: interface in Portuguese, English, Spanish or French (Ajuda › Idioma /
+      Language), saved in preferences and starting in the language the system asks
+      for; project data and catalog item names stay as written
 
 ## ✅ MVP review — the real `.sh3d`, side by side with Sweet Home 3D
 

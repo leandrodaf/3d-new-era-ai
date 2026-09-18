@@ -5,6 +5,8 @@
   <mime-type type="application/x-newera">
     <comment>3D New Era AI project</comment>
     <comment xml:lang="pt_BR">Projeto do 3D New Era AI</comment>
+    <comment xml:lang="es">Proyecto de 3D New Era AI</comment>
+    <comment xml:lang="fr">Projet 3D New Era AI</comment>
     <glob pattern="*.newera"/>
     <icon name="application-x-newera"/>
     <generic-icon name="application-x-newera"/>

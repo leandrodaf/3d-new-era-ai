@@ -6,6 +6,37 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The window speaks Spanish and French besides Portuguese and English: pick one in
+  Help > Idioma / Language, or let it follow the system (`NEWERA_LANG`, `LC_ALL`,
+  `LC_MESSAGES`, `LANG`, and the browser's language in the web editor) the first time
+  it opens. The installers, the Linux desktop entry, the `.newera` file type and the
+  macOS bundle speak the four as well.
+
+- A visual identity of its own, taken from the site: a drafting studio in warm
+  graphite with one blueprint blue to point with, day and night themes chosen in
+  Ver › Tema (or left to the system), technical readouts set in mono, and the plan
+  drawn on paper by day and on a lit board by night. Rulers, dialogs and the dimming
+  behind them follow the theme; exports keep their own white paper.
+- The left panel rebuilt: one search well, bands that open on a click anywhere on
+  their line and count what is inside, filter keys per kind of element, and one row
+  shape everywhere with the accent down the side of what is selected.
+- What is picked on the plan lights up in the panel and is scrolled into view, with
+  the band holding it opened.
+- Full trackpad support: pinch to zoom, two fingers to move the plan or to turn the
+  3D view (Shift to slide it), a twist to spin it, and momentum carried through —
+  a wheel still zooms, told apart from a glide by how the machine reports it.
+
+### Fixed
+
+- Dialogs read as part of the program: one width, a titled head, fields grouped under
+  mono headings, a body that scrolls instead of running off the screen, and one footer
+  with the action filled in the accent and the way out beside it.
+- Texts that never had a translation — the tool names in the toolbar and the Plan
+  menu, and the status bar lines about opening, saving, exporting and importing —
+  now follow the chosen language instead of staying in Portuguese.
+
 ## [1.3.0] - 2026-09-16
 
 The electrical, telecom and plumbing projects, checked against the text of the

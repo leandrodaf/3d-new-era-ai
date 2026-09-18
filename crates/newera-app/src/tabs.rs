@@ -71,6 +71,17 @@ pub(crate) fn bar(app: &mut NewEraApp, ui: &mut egui::Ui) {
                             info.active,
                             if info.active { text.strong() } else { text },
                         ));
+                        // The sheet in front is underlined, the way a tab in
+                        // a drawing set is marked on its edge.
+                        if info.active {
+                            let t = crate::theme::of(ui.visuals());
+                            let rect = tab.rect;
+                            ui.painter().hline(
+                                (rect.left() + 3.0)..=(rect.right() - 3.0),
+                                rect.bottom() - 1.0,
+                                egui::Stroke::new(2.0, t.accent),
+                            );
+                        }
                         if tab.clicked() && !info.active {
                             switch_to = Some(info.index);
                         }
@@ -352,7 +363,13 @@ fn disciplines(app: &mut NewEraApp, ui: &mut egui::Ui) {
             for d in Discipline::ALL {
                 let mut visible = !hidden.contains(&d);
                 if ui
-                    .checkbox(&mut visible, format!("Mostrar {}", d.name().to_lowercase()))
+                    .checkbox(
+                        &mut visible,
+                        crate::i18n::fill(
+                            "Mostrar {}",
+                            &[&crate::i18n::tr(d.name()).to_lowercase()],
+                        ),
+                    )
                     .changed()
                 {
                     toggle = Some((d, visible));

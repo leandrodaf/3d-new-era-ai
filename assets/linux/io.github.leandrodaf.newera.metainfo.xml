@@ -6,6 +6,8 @@
   <name>3D New Era AI</name>
   <summary>Home design editor with a built-in MCP server</summary>
   <summary xml:lang="pt_BR">Editor de projetos de casa com servidor MCP embutido</summary>
+  <summary xml:lang="es">Editor de proyectos de casa con servidor MCP integrado</summary>
+  <summary xml:lang="fr">Éditeur de plans de maison avec serveur MCP intégré</summary>
   <description>
     <p>
       A home design editor — walls, doors, windows, joinery, lighting, camera —
@@ -16,6 +18,17 @@
       Um editor de projetos de casa — paredes, portas, janelas, marcenaria,
       iluminação, câmera — com um servidor MCP dentro: a IA usa as mesmas
       ferramentas que você e cada mudança aparece na tela, com desfazer.
+    </p>
+    <p xml:lang="es">
+      Un editor de proyectos de casa — paredes, puertas, ventanas, carpintería,
+      iluminación, cámara — con un servidor MCP dentro: la IA usa las mismas
+      herramientas que usted y cada cambio aparece en pantalla, con deshacer.
+    </p>
+    <p xml:lang="fr">
+      Un éditeur de plans de maison — murs, portes, fenêtres, menuiserie,
+      éclairage, caméra — avec un serveur MCP à l'intérieur : l'IA utilise les
+      mêmes outils que vous et chaque changement s'affiche à l'écran, avec
+      annulation.
     </p>
   </description>
   <launchable type="desktop-id">newera.desktop</launchable>

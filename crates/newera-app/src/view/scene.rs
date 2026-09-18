@@ -67,7 +67,18 @@ impl OrbitCamera {
     }
 
     fn zoom(&mut self, scroll: f32) {
-        self.distance = (self.distance * (-scroll * 0.002).exp()).clamp(1.0, 200.0);
+        self.closer((-scroll * 0.002).exp());
+    }
+
+    /// Straight to a factor, the way a pinch reports it: above 1.0 the
+    /// fingers spread and the house comes closer.
+    fn closer(&mut self, factor: f32) {
+        self.distance = (self.distance / factor).clamp(1.0, 200.0);
+    }
+
+    /// Turns around the house without changing the height of the eye.
+    fn turn(&mut self, radians: f32) {
+        self.yaw += radians;
     }
 
     /// Moves the target on the ground plane, relative to the view direction.
@@ -346,7 +357,7 @@ impl SceneView {
             if self.visitor.is_some() {
                 crate::i18n::tr("Visitante — arraste: olhar · W/A/S/D ou setas: andar · Scroll: avançar · Esc: visão aérea")
             } else {
-                crate::i18n::tr("Arraste: girar · Shift/botão do meio: mover · Scroll: zoom · F: enquadrar")
+                crate::i18n::tr("Arraste ou dois dedos: girar · Shift: mover · Pinça ou scroll: zoom · F: enquadrar")
             },
             egui::FontId::proportional(11.0),
             egui::Color32::from_black_alpha(160),
@@ -361,18 +372,22 @@ impl SceneView {
                 visitor.look(response.drag_delta());
             }
             if response.hovered() {
+                // Walking with the hands: two fingers up and down walk, left
+                // and right step aside, and the keys do what they always did.
+                let hands = crate::view::gesture::Gesture::read(ui);
                 let (forward, side) = ui.input(|i| {
                     let key = |k| if i.key_down(k) { 1.0 } else { 0.0 };
                     (
-                        f64::from(i.smooth_scroll_delta.y) * 0.5
+                        f64::from(hands.glide.y + hands.wheel) * 0.5
                             + (key(egui::Key::W) + key(egui::Key::ArrowUp)
                                 - key(egui::Key::S)
                                 - key(egui::Key::ArrowDown))
                                 * 4.0,
-                        (key(egui::Key::D) + key(egui::Key::ArrowRight)
-                            - key(egui::Key::A)
-                            - key(egui::Key::ArrowLeft))
-                            * 4.0,
+                        f64::from(-hands.glide.x) * 0.5
+                            + (key(egui::Key::D) + key(egui::Key::ArrowRight)
+                                - key(egui::Key::A)
+                                - key(egui::Key::ArrowLeft))
+                                * 4.0,
                     )
                 });
                 if forward != 0.0 || side != 0.0 {
@@ -396,9 +411,27 @@ impl SceneView {
             self.camera.orbit(response.drag_delta());
         }
         if response.hovered() {
-            let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-            if scroll != 0.0 {
-                self.camera.zoom(scroll);
+            // Two fingers turn the house around, as they would a model held
+            // in the hands; with Shift they slide it; the pinch comes closer
+            // and a twist spins it on the spot.
+            let hands = crate::view::gesture::Gesture::read(ui);
+            if !hands.is_idle() {
+                if hands.wheel != 0.0 {
+                    self.camera.zoom(hands.wheel);
+                }
+                if let Some(pinch) = hands.pinch() {
+                    self.camera.closer(pinch);
+                }
+                if hands.twist != 0.0 {
+                    self.camera.turn(-hands.twist);
+                }
+                if hands.glide != egui::Vec2::ZERO {
+                    if ui.input(|i| i.modifiers.shift) {
+                        self.camera.pan(hands.glide);
+                    } else {
+                        self.camera.orbit(hands.glide * 0.6);
+                    }
+                }
             }
             if ui.input(|i| i.key_pressed(egui::Key::F)) {
                 self.camera.look_at_home(home);

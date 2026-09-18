@@ -27,11 +27,22 @@ fn house(doc: &mut Document, width: f64) {
 }
 
 pub(crate) fn render(name: &str, document: SharedDocument, setup: impl FnOnce(&mut NewEraApp)) {
+    render_in(name, crate::theme::Mode::System, document, setup);
+}
+
+/// The same, in the theme asked for instead of the one the machine is set to.
+pub(crate) fn render_in(
+    name: &str,
+    mode: crate::theme::Mode,
+    document: SharedDocument,
+    setup: impl FnOnce(&mut NewEraApp),
+) {
     let mut harness = Harness::builder()
         .with_size(eframe::egui::vec2(1400.0, 860.0))
         .with_step_dt(1.0 / 60.0)
         .wgpu()
         .build_eframe(move |cc| NewEraApp::new(cc, document, None));
+    crate::theme::set_mode(&harness.ctx, mode);
     harness.run_steps(5);
     setup(harness.state_mut());
     harness.run_steps(12);
@@ -213,17 +224,36 @@ fn disciplines() {
     render("disciplines-electrical", SharedDocument::new(doc), |_| {});
 }
 
+/// One window per language the app speaks, the same house in all of them:
+/// side by side, a label left in Portuguese stands out.
 #[test]
 #[ignore = "visual review; needs a GPU"]
-fn english_interface() {
-    crate::i18n::set_english(true);
+fn every_interface_language() {
+    for lang in crate::i18n::Lang::ALL {
+        crate::i18n::set(lang);
+        let mut doc = Document::default();
+        house(&mut doc, 600.0);
+        let name = format!("language-{}", lang.tag());
+        render(&name, SharedDocument::new(doc), |app| {
+            crate::i18n::set(lang);
+            app.open_modify(&[newera_core::WallId(1).into()]);
+        });
+    }
+    crate::i18n::set(crate::i18n::Lang::Pt);
+}
+
+/// The same window in daylight: the palette has to hold up on paper too.
+#[test]
+#[ignore = "visual review; needs a GPU"]
+fn the_day_theme() {
     let mut doc = Document::default();
     house(&mut doc, 600.0);
-    render("english", SharedDocument::new(doc), |app| {
-        crate::i18n::set_english(true);
-        app.open_modify(&[newera_core::WallId(1).into()]);
-    });
-    crate::i18n::set_english(false);
+    render_in(
+        "theme-day",
+        crate::theme::Mode::Day,
+        SharedDocument::new(doc),
+        |_| {},
+    );
 }
 
 #[test]

@@ -208,10 +208,22 @@ impl PlanView {
         }
 
         // --- Navigation -------------------------------------------------
+        // On a trackpad the sheet moves under the fingers, as it would on a
+        // desk, and the pinch zooms where they are; a wheel zooms, the way it
+        // has in every drawing program since the wheel existed.
         if let Some(pointer) = response.hover_pos() {
-            let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-            if scroll != 0.0 {
-                self.camera.zoom_at(rect, pointer, (scroll * 0.002).exp());
+            let hands = crate::view::gesture::Gesture::read(ui);
+            if !hands.is_idle() {
+                if let Some(pinch) = hands.pinch() {
+                    self.camera.zoom_at(rect, pointer, pinch);
+                }
+                if hands.wheel != 0.0 {
+                    self.camera
+                        .zoom_at(rect, pointer, (hands.wheel * 0.002).exp());
+                }
+                if hands.glide != Vec2::ZERO {
+                    self.camera.pan(hands.glide);
+                }
             }
             if ui.input(|i| i.key_pressed(Key::F) && i.modifiers.is_none())
                 && !self.accepts_length_input()
@@ -652,7 +664,14 @@ impl PlanView {
             painter.rect_filled(bg, 4.0, color(input.palette.selection));
             painter.galley(s + Vec2::splat(4.0), galley, Color32::WHITE);
         }
-        paint_rulers(&painter, rect, &self.camera, input.unit, raw);
+        paint_rulers(
+            &painter,
+            rect,
+            &self.camera,
+            input.unit,
+            raw,
+            crate::theme::of(ui.visuals()),
+        );
 
         // Cursor feedback.
         if response.hovered() {

@@ -1,6 +1,9 @@
-//! Left side panel: furniture catalog on top, home contents below.
+//! Left side panel: the catalog to take pieces from on top, the project to
+//! find them in below. One search line, sections titled like a drawing's
+//! notes, and a single row shape everywhere — so the eye learns one pattern
+//! and then reads the whole panel with it.
 
-use eframe::egui::{self, Color32, RichText, Sense, Stroke, Vec2};
+use eframe::egui::{self, RichText, Sense, Stroke, Vec2};
 use egui_phosphor::regular as icon;
 use newera_catalog::{CatalogItem, Category, SymbolShape};
 use newera_core::{ElementId, FurnitureId, Point2};
@@ -30,8 +33,9 @@ fn category_icon(category: Category) -> &'static str {
 /// Small top-view thumbnail drawn from the item's plan symbol.
 fn thumbnail(ui: &mut egui::Ui, item: &CatalogItem, size: f32) {
     let (rect, _) = ui.allocate_exact_size(Vec2::splat(size), Sense::hover());
+    let t = crate::theme::of(ui.visuals());
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 4.0, Color32::from_rgb(250, 250, 248));
+    painter.rect_filled(rect, 4.0, t.inset);
     let piece = item.instantiate(FurnitureId(0), Point2::new(0.0, 0.0));
     // Door swings extend in front of the opening; frame them too.
     let extent_y = if piece.is_opening() {
@@ -54,11 +58,7 @@ fn thumbnail(ui: &mut egui::Ui, item: &CatalogItem, size: f32) {
             SymbolShape::Fill { points, detail } => {
                 let pts: Vec<Point2> = points.iter().map(|&(x, y)| Point2::new(x, y)).collect();
                 let mut mesh = egui::Mesh::default();
-                let color = if detail {
-                    Color32::from_rgb(222, 225, 229)
-                } else {
-                    Color32::WHITE
-                };
+                let color = if detail { t.rule_strong } else { t.ink_dim };
                 for p in &points {
                     mesh.colored_vertex(to(*p), color);
                 }
@@ -78,42 +78,191 @@ fn thumbnail(ui: &mut egui::Ui, item: &CatalogItem, size: f32) {
                     pts.push(first);
                 }
                 let width = if strong { 1.2 } else { 0.7 };
-                painter.add(egui::Shape::line(
-                    pts,
-                    Stroke::new(width, Color32::from_gray(70)),
-                ));
+                painter.add(egui::Shape::line(pts, Stroke::new(width, t.ink)));
             }
         }
     }
 }
 
+/// A panel's title: the icon in the accent, the name, and the number that
+/// says how much is in there set as a note in the margin.
+fn header(ui: &mut egui::Ui, glyph: &str, title: &str, note: &str) {
+    let t = crate::theme::of(ui.visuals());
+    ui.add_space(8.0);
+    ui.horizontal(|ui| {
+        ui.add_space(2.0);
+        ui.label(RichText::new(glyph).size(15.0).color(t.accent));
+        ui.label(RichText::new(title).heading().color(t.ink));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(crate::theme::fig(ui.visuals(), note));
+        });
+    });
+    ui.add_space(4.0);
+}
+
+/// The hairline that closes a block, drawn edge to edge instead of inset like
+/// `ui.separator`, so the panel reads as stacked bands.
+fn rule(ui: &mut egui::Ui) {
+    let t = crate::theme::of(ui.visuals());
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), Sense::hover());
+    ui.painter().hline(
+        ui.max_rect().x_range(),
+        rect.center().y,
+        Stroke::new(1.0, t.rule),
+    );
+}
+
+/// The search line: one well, the glass inside it, and a cross that appears
+/// only when there is something to clear.
+fn search(ui: &mut egui::Ui, query: &mut String) {
+    let t = crate::theme::of(ui.visuals());
+    egui::Frame::new()
+        .fill(t.inset)
+        .stroke(Stroke::new(1.0, t.rule))
+        .corner_radius(egui::CornerRadius::same(8))
+        .inner_margin(egui::Margin::symmetric(8, 4))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(icon::MAGNIFYING_GLASS).color(t.ink_faint));
+                let clear = !query.is_empty();
+                let width = ui.available_width() - if clear { 22.0 } else { 0.0 };
+                ui.add_sized(
+                    Vec2::new(width, 20.0),
+                    egui::TextEdit::singleline(query)
+                        .frame(egui::Frame::NONE)
+                        .hint_text(crate::i18n::tr("Buscar: cama, janela, sofá…")),
+                );
+                if clear
+                    && ui
+                        .add(egui::Button::new(RichText::new(icon::X).size(11.0)).frame(false))
+                        .clicked()
+                {
+                    query.clear();
+                }
+            });
+        });
+}
+
+/// One line of a list: full width, a bar of accent down the left when it is
+/// the one selected, a quiet lift under the pointer. `name` is what a screen
+/// reader — and a test — reads the line as.
+fn row<R>(
+    ui: &mut egui::Ui,
+    selected: bool,
+    name: &str,
+    add: impl FnOnce(&mut egui::Ui) -> R,
+) -> (egui::Response, R) {
+    let t = crate::theme::of(ui.visuals());
+    let backdrop = ui.painter().add(egui::Shape::Noop);
+    let mut out = None;
+    let response = ui
+        .scope_builder(egui::UiBuilder::new().sense(Sense::click()), |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.add_space(6.0);
+                out = Some(add(ui));
+            });
+        })
+        .response;
+    response
+        .widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, selected, name));
+    let rect = response.rect.expand2(Vec2::new(0.0, 2.0));
+    if selected || response.hovered() {
+        let fill = if selected { t.accent_soft } else { t.raised };
+        ui.painter()
+            .set(backdrop, egui::epaint::RectShape::filled(rect, 5, fill));
+    }
+    if selected {
+        ui.painter().rect_filled(
+            egui::Rect::from_min_size(rect.left_top(), Vec2::new(2.0, rect.height())),
+            1,
+            t.accent,
+        );
+    }
+    (response, out.expect("the row body ran"))
+}
+
+/// The number at the end of a section title, set as a note.
+fn count(ui: &mut egui::Ui, n: usize) {
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.add_space(4.0);
+        ui.label(crate::theme::fig(ui.visuals(), &n.to_string()));
+    });
+}
+
+/// A band of the panel: what it is called, how much is in it, and whether it
+/// starts open.
+#[derive(Clone, Copy)]
+struct Band<'a> {
+    id: egui::Id,
+    glyph: &'a str,
+    title: &'a str,
+    total: usize,
+    /// Open the first time it is drawn.
+    open: bool,
+    /// Open it now, whatever it was: something inside was just selected.
+    reveal: bool,
+}
+
+/// A band that opens: the arrow, the icon, the name, the count. Returns what
+/// the body drew, when it is open.
+fn band<R>(ui: &mut egui::Ui, band: Band<'_>, body: impl FnOnce(&mut egui::Ui) -> R) -> Option<R> {
+    let Band {
+        id,
+        glyph,
+        title,
+        total,
+        open,
+        reveal,
+    } = band;
+    let t = crate::theme::of(ui.visuals());
+    let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(
+        ui.ctx(),
+        id.with("band"),
+        open,
+    );
+    // A selection made out on the plan opens the band that holds it.
+    if reveal && !state.is_open() {
+        state.set_open(true);
+        state.store(ui.ctx());
+    }
+    let is_open = state.is_open();
+    let (response, ()) = row(ui, false, title, |ui| {
+        ui.label(
+            RichText::new(if is_open {
+                icon::CARET_DOWN
+            } else {
+                icon::CARET_RIGHT
+            })
+            .size(10.0)
+            .color(t.ink_faint),
+        );
+        ui.label(RichText::new(glyph).color(if is_open { t.accent } else { t.ink_dim }));
+        ui.label(RichText::new(title).color(t.ink));
+        count(ui, total);
+    });
+    if response.clicked() {
+        state.toggle(ui);
+    }
+    let body = state.show_body_indented(&response, ui, body);
+    body.map(|inner| inner.inner)
+}
+
 fn catalog_row(app: &mut NewEraApp, ui: &mut egui::Ui, item: &'static CatalogItem) {
     let selected = app.tool == Tool::Place(item.id);
     let unit = app.unit();
-    let response = ui
-        .horizontal(|ui| {
-            thumbnail(ui, item, 34.0);
-            ui.vertical(|ui| {
-                ui.add_space(1.0);
-                let name = RichText::new(item.name);
-                ui.label(if selected {
-                    name.color(crate::theme::ACCENT).strong()
-                } else {
-                    name
-                });
-                ui.weak(RichText::new(unit.format_size(item.size)).small());
-            });
-        })
-        .response
-        .interact(Sense::click());
-    if response.hovered() {
-        ui.painter().rect_stroke(
-            response.rect.expand(1.0),
-            4.0,
-            Stroke::new(1.0, crate::theme::ACCENT.gamma_multiply(0.5)),
-            egui::StrokeKind::Outside,
-        );
-    }
+    let t = crate::theme::of(ui.visuals());
+    let (response, ()) = row(ui, selected, item.name, |ui| {
+        thumbnail(ui, item, 30.0);
+        ui.vertical(|ui| {
+            ui.add_space(1.0);
+            ui.label(RichText::new(item.name).color(if selected { t.accent } else { t.ink }));
+            ui.label(crate::theme::fig(
+                ui.visuals(),
+                &unit.format_size(item.size),
+            ));
+        });
+    });
     if response
         .on_hover_text(crate::i18n::tr(
             "Clique e depois clique na planta para posicionar",
@@ -129,26 +278,25 @@ pub(crate) fn left(app: &mut NewEraApp, ui: &mut egui::Ui) {
         .resizable(true)
         .default_size(ui.available_height() * 0.55)
         .show(ui, |ui| {
-            ui.add_space(4.0);
-            ui.label(
-                RichText::new(format!(
+            header(
+                ui,
+                icon::ARMCHAIR,
+                crate::i18n::tr("Catálogo"),
+                &format!(
                     "{} {}",
-                    icon::ARMCHAIR,
-                    crate::i18n::tr("Catálogo")
-                ))
-                .heading(),
+                    newera_catalog::CATALOG.len(),
+                    crate::i18n::tr("peças")
+                ),
             );
-            ui.horizontal(|ui| {
-                ui.label(icon::MAGNIFYING_GLASS);
-                ui.add(
-                    egui::TextEdit::singleline(&mut app.catalog_query)
-                        .hint_text(crate::i18n::tr("Buscar: cama, janela, sofá…"))
-                        .desired_width(f32::INFINITY),
-                );
-            });
+            let mut query = std::mem::take(&mut app.catalog_query);
+            search(ui, &mut query);
+            app.catalog_query = query;
+            ui.add_space(6.0);
+            rule(ui);
             egui::ScrollArea::vertical()
                 .id_salt("catalog_scroll")
                 .show(ui, |ui| {
+                    ui.add_space(4.0);
                     let query = app.catalog_query.trim().to_owned();
                     if query.is_empty() {
                         for category in Category::ALL {
@@ -156,152 +304,338 @@ pub(crate) fn left(app: &mut NewEraApp, ui: &mut egui::Ui) {
                                 .iter()
                                 .filter(|i| i.category == category)
                                 .collect();
-                            egui::CollapsingHeader::new(format!(
-                                "{}  {} ({})",
-                                category_icon(category),
-                                crate::i18n::tr(category.name()),
-                                items.len()
-                            ))
-                            .id_salt(category.id())
-                            .show(ui, |ui| {
-                                for item in items {
-                                    catalog_row(app, ui, item);
-                                }
-                            });
+                            band(
+                                ui,
+                                Band {
+                                    id: egui::Id::new(category.id()),
+                                    glyph: category_icon(category),
+                                    title: crate::i18n::tr(category.name()),
+                                    total: items.len(),
+                                    open: false,
+                                    reveal: false,
+                                },
+                                |ui| {
+                                    for item in items {
+                                        catalog_row(app, ui, item);
+                                    }
+                                },
+                            );
                         }
                     } else {
                         let found = newera_catalog::search(&query);
                         if found.is_empty() {
-                            ui.weak(crate::i18n::tr("Nada encontrado."));
+                            ui.add_space(8.0);
+                            ui.label(
+                                RichText::new(crate::i18n::tr("Nada encontrado."))
+                                    .color(crate::theme::of(ui.visuals()).ink_faint),
+                            );
                         }
                         for item in found {
                             catalog_row(app, ui, item);
                         }
                     }
+                    ui.add_space(8.0);
                 });
         });
 
-    egui::CentralPanel::default().show(ui, |ui| {
-        let home = {
-            let doc = app.document.read();
-            doc.home().level_view(doc.home().current_level())
-        };
-        ui.add_space(4.0);
-        ui.label(RichText::new(format!("{} {}", icon::HOUSE_LINE, home.name)).heading());
-        let total: f64 = home.rooms.iter().map(newera_core::Room::area).sum();
-        ui.weak(format!(
-            "{} {} · {} {} · {} {} · {}",
+    egui::CentralPanel::default().show(ui, |ui| outliner(app, ui));
+}
+
+/// What the project is made of, by kind. The chips at the top say which kinds
+/// are worth looking at right now.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Furniture,
+    Rooms,
+    Walls,
+    Dimensions,
+    Labels,
+    Lines,
+}
+
+impl Kind {
+    const ALL: [Self; 6] = [
+        Self::Furniture,
+        Self::Rooms,
+        Self::Walls,
+        Self::Dimensions,
+        Self::Labels,
+        Self::Lines,
+    ];
+
+    const fn glyph(self) -> &'static str {
+        match self {
+            Self::Furniture => icon::ARMCHAIR,
+            Self::Rooms => icon::POLYGON,
+            Self::Walls => icon::WALL,
+            Self::Dimensions => icon::RULER,
+            Self::Labels => icon::TEXT_T,
+            Self::Lines => icon::LINE_SEGMENTS,
+        }
+    }
+
+    fn title(self) -> &'static str {
+        match self {
+            Self::Furniture => crate::i18n::tr("Móveis"),
+            Self::Rooms => crate::i18n::tr("Cômodos"),
+            Self::Walls => crate::i18n::tr("Paredes"),
+            Self::Dimensions => crate::i18n::tr("Cotas"),
+            Self::Labels => crate::i18n::tr("Textos"),
+            Self::Lines => crate::i18n::tr("Linhas"),
+        }
+    }
+
+    const fn bit(self) -> u8 {
+        match self {
+            Self::Furniture => 1,
+            Self::Rooms => 2,
+            Self::Walls => 4,
+            Self::Dimensions => 8,
+            Self::Labels => 16,
+            Self::Lines => 32,
+        }
+    }
+}
+
+/// One filter key: pressed means "show me this kind".
+fn chip(ui: &mut egui::Ui, on: bool, kind: Kind, total: usize) -> egui::Response {
+    let t = crate::theme::of(ui.visuals());
+    let button = egui::Button::new(RichText::new(kind.glyph()).size(14.0).color(if on {
+        t.accent
+    } else {
+        t.ink_faint
+    }))
+    .min_size(Vec2::new(26.0, 22.0))
+    .corner_radius(egui::CornerRadius::same(6))
+    .fill(if on { t.accent_soft } else { t.inset })
+    .stroke(Stroke::NONE);
+    ui.add_enabled(total > 0, button)
+        .on_hover_text(format!("{} ({total})", kind.title()))
+}
+
+fn outliner(app: &mut NewEraApp, ui: &mut egui::Ui) {
+    let home = {
+        let doc = app.document.read();
+        doc.home().level_view(doc.home().current_level())
+    };
+    let unit = app.unit();
+    let total: f64 = home.rooms.iter().map(newera_core::Room::area).sum();
+    header(ui, icon::HOUSE_LINE, &home.name, &unit.format_area(total));
+    ui.label(crate::theme::fig(
+        ui.visuals(),
+        &format!(
+            "{} {} · {} {} · {} {}",
             home.walls.len(),
             crate::i18n::tr("paredes"),
             home.rooms.len(),
             crate::i18n::tr("cômodos"),
             home.furniture.len(),
             crate::i18n::tr("móveis"),
-            app.unit().format_area(total)
-        ));
-        ui.separator();
+        ),
+    ));
+    ui.add_space(6.0);
 
-        let unit = app.unit();
-        let mut clicked: Option<(ElementId, bool)> = None;
-        let mut modify: Option<ElementId> = None;
-        egui::ScrollArea::vertical().id_salt("home_scroll").show(ui, |ui| {
-            let mut section = |ui: &mut egui::Ui, title: String, rows: Vec<(ElementId, String)>| {
-                if rows.is_empty() {
+    let counts = |kind: Kind| match kind {
+        Kind::Furniture => home.furniture.len(),
+        Kind::Rooms => home.rooms.len(),
+        Kind::Walls => home.walls.len(),
+        Kind::Dimensions => home.dimensions.len(),
+        Kind::Labels => home.labels.len(),
+        Kind::Lines => home.polylines.len(),
+    };
+    let filter_id = egui::Id::new("outliner_filter");
+    let mut hidden = ui.data(|d| d.get_temp::<u8>(filter_id).unwrap_or(0));
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+        for kind in Kind::ALL {
+            if chip(ui, hidden & kind.bit() == 0, kind, counts(kind)).clicked() {
+                hidden ^= kind.bit();
+            }
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(filter_id, hidden));
+    ui.add_space(6.0);
+    rule(ui);
+
+    // What is picked out on the plan has to light up here too, and the panel
+    // scrolls to it: with a hundred pieces the highlight is no use if it is
+    // three screens down. Only when the selection actually changed, so the
+    // list stays where it was put while nobody is selecting anything.
+    let mark = format!("{:?}", app.selection);
+    let focus_id = egui::Id::new("outliner_focus");
+    let moved = ui.data(|d| d.get_temp::<String>(focus_id)) != Some(mark.clone());
+    ui.data_mut(|d| d.insert_temp(focus_id, mark));
+
+    let mut clicked: Option<(ElementId, bool)> = None;
+    let mut modify: Option<ElementId> = None;
+    egui::ScrollArea::vertical()
+        .id_salt("home_scroll")
+        .show(ui, |ui| {
+            ui.add_space(4.0);
+            let mut section = |ui: &mut egui::Ui, kind: Kind, rows: Vec<(ElementId, String, String)>| {
+                if rows.is_empty() || hidden & kind.bit() != 0 {
                     return;
                 }
-                egui::CollapsingHeader::new(title).default_open(true).show(ui, |ui| {
-                    for (id, text) in rows {
-                        let selected = app.selection.contains(&id);
-                        let response = ui.selectable_label(selected, text);
-                        if response.clicked() {
-                            clicked = Some((id, ui.input(|i| i.modifiers.command)));
+                let n = rows.len();
+                let holds_selection = rows.iter().any(|(id, ..)| app.selection.contains(id));
+                band(
+                    ui,
+                    Band {
+                        id: egui::Id::new(("outliner", kind.bit())),
+                        glyph: kind.glyph(),
+                        title: kind.title(),
+                        total: n,
+                        open: true,
+                        reveal: moved && holds_selection,
+                    },
+                    |ui: &mut egui::Ui| {
+                        let t = crate::theme::of(ui.visuals());
+                        for (id, name, note) in rows {
+                            let selected = app.selection.contains(&id);
+                            let (response, ()) = row(ui, selected, &name, |ui| {
+                                ui.label(RichText::new(name.clone()).color(if selected {
+                                    t.ink
+                                } else {
+                                    t.ink_dim
+                                }));
+                                if !note.is_empty() {
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            ui.add_space(4.0);
+                                            ui.label(crate::theme::fig(ui.visuals(), &note));
+                                        },
+                                    );
+                                }
+                            });
+                            if selected && moved {
+                                response.scroll_to_me(Some(egui::Align::Center));
+                            }
+                            if response.clicked() {
+                                clicked = Some((id, ui.input(|i| i.modifiers.command)));
+                            }
+                            if response.double_clicked() {
+                                modify = Some(id);
+                            }
                         }
-                        if response.double_clicked() {
-                            modify = Some(id);
-                        }
-                    }
-                });
+                    },
+                );
             };
             section(
                 ui,
-                format!("{} {} ({})", icon::ARMCHAIR, crate::i18n::tr("Móveis"), home.furniture.len()),
+                Kind::Furniture,
                 home.furniture
                     .iter()
                     .map(|f| {
-                        let size = unit.format_size([f.width, f.depth, f.height]);
                         let kind = if f.is_group() {
-                            format!(" · {} {}", crate::i18n::tr("grupo de"), f.flatten().len() - 1)
+                            format!("{} {}", crate::i18n::tr("grupo de"), f.flatten().len() - 1)
                         } else if f.light.is_some() {
-                            crate::i18n::tr(" · luz").to_owned()
+                            crate::i18n::tr("luz").to_owned()
                         } else {
-                            String::new()
+                            unit.format_size([f.width, f.depth, f.height])
                         };
-                        (f.id.into(), format!("{} · {size}{kind}", f.name))
+                        (f.id.into(), f.name.clone(), kind)
                     })
                     .collect(),
             );
             section(
                 ui,
-                format!("{} {} ({})", icon::POLYGON, crate::i18n::tr("Cômodos"), home.rooms.len()),
+                Kind::Rooms,
                 home.rooms
                     .iter()
                     .map(|r| {
-                        let name = if r.name.is_empty() { crate::i18n::tr("Sem nome") } else { &r.name };
-                        (r.id.into(), format!("{name} · {}", unit.format_area(r.area())))
+                        let name = if r.name.is_empty() {
+                            crate::i18n::tr("Sem nome").to_owned()
+                        } else {
+                            r.name.clone()
+                        };
+                        (r.id.into(), name, unit.format_area(r.area()))
                     })
                     .collect(),
             );
             section(
                 ui,
-                format!("{} {} ({})", icon::WALL, crate::i18n::tr("Paredes"), home.walls.len()),
+                Kind::Walls,
                 home.walls
                     .iter()
                     .map(|w| {
-                        let arc = if w.is_arc() { crate::i18n::tr(" · arco") } else { "" };
-                        (w.id.into(), format!("{} · {}{arc}", w.id, unit.format_length(w.length())))
+                        let arc = if w.is_arc() {
+                            crate::i18n::tr(" · arco")
+                        } else {
+                            ""
+                        };
+                        (
+                            w.id.into(),
+                            format!("{}{arc}", w.id),
+                            unit.format_length(w.length()),
+                        )
                     })
                     .collect(),
             );
             section(
                 ui,
-                format!("{} {} ({})", icon::RULER, crate::i18n::tr("Cotas"), home.dimensions.len()),
-                home.dimensions.iter().map(|d| (d.id.into(), unit.format_length(d.length()))).collect(),
-            );
-            section(
-                ui,
-                format!("{} {} ({})", icon::TEXT_T, crate::i18n::tr("Textos"), home.labels.len()),
-                home.labels
+                Kind::Dimensions,
+                home.dimensions
                     .iter()
-                    .map(|l| (l.id.into(), l.text.lines().next().unwrap_or_default().to_owned()))
+                    .map(|d| {
+                        (
+                            d.id.into(),
+                            format!("{}", d.id),
+                            unit.format_length(d.length()),
+                        )
+                    })
                     .collect(),
             );
             section(
                 ui,
-                format!("{} {} ({})", icon::LINE_SEGMENTS, crate::i18n::tr("Linhas"), home.polylines.len()),
+                Kind::Labels,
+                home.labels
+                    .iter()
+                    .map(|l| {
+                        (
+                            l.id.into(),
+                            l.text.lines().next().unwrap_or_default().to_owned(),
+                            String::new(),
+                        )
+                    })
+                    .collect(),
+            );
+            section(
+                ui,
+                Kind::Lines,
                 home.polylines
                     .iter()
                     .map(|l| {
                         let length: f64 = l.points.windows(2).map(|p| p[0].distance(p[1])).sum();
-                        (l.id.into(), format!("{} · {}", l.id, unit.format_length(length)))
+                        (
+                            l.id.into(),
+                            format!("{}", l.id),
+                            unit.format_length(length),
+                        )
                     })
                     .collect(),
             );
             if home.walls.is_empty() && home.rooms.is_empty() && home.furniture.is_empty() {
                 ui.add_space(12.0);
-                ui.weak(crate::i18n::tr("Comece desenhando paredes (W), importe uma planta como imagem de fundo, ou peça para a IA via MCP."));
+                ui.label(
+                    RichText::new(crate::i18n::tr(
+                        "Comece desenhando paredes (W), importe uma planta como imagem de fundo, ou peça para a IA via MCP.",
+                    ))
+                    .color(crate::theme::of(ui.visuals()).ink_faint),
+                );
             }
+            ui.add_space(8.0);
         });
 
-        if let Some((id, additive)) = clicked {
-            if !additive {
-                app.selection.clear();
-            }
-            if !app.selection.remove(&id) || !additive {
-                app.selection.insert(id);
-            }
+    if let Some((id, additive)) = clicked {
+        if !additive {
+            app.selection.clear();
         }
-        if let Some(id) = modify {
-            app.open_modify(&[id]);
+        if !app.selection.remove(&id) || !additive {
+            app.selection.insert(id);
         }
-    });
+    }
+    if let Some(id) = modify {
+        app.open_modify(&[id]);
+    }
 }
