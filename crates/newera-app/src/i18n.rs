@@ -1938,6 +1938,12 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
             "Conecte su IA (en el navegador, activa y desactiva)",
             "Connecter votre IA (dans un navigateur, active et désactive)",
         ],
+        "3D" => ["3D", "3D", "3D"],
+        "Catálogo · Planta · 3D (telas estreitas)" => [
+            "Catalogue · Plan · 3D (narrow screens)",
+            "Catálogo · Plano · 3D (pantallas estrechas)",
+            "Catalogue · Plan · 3D (écrans étroits)",
+        ],
         _ => return None,
     })
 }

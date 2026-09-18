@@ -53,9 +53,14 @@ ws.addEventListener("message", (e) => {
   const msg = JSON.parse(e.data);
   if (pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
 });
-const send = (method, params = {}) => new Promise((r) => {
-  pending.set(++id, r);
-  ws.send(JSON.stringify({ id, method, params }));
+const send = (method, params = {}) => new Promise((resolve) => {
+  const mine = ++id;
+  const done = (value) => { pending.delete(mine); resolve(value); };
+  pending.set(mine, done);
+  ws.send(JSON.stringify({ id: mine, method, params }));
+  // A command that never answers (a screenshot of a page that will not settle)
+  // must not take the whole audit with it.
+  setTimeout(() => done({ result: {} }), 20000);
 });
 const evaluate = async (expression) =>
   (await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }))
@@ -91,8 +96,17 @@ const INSPECT = `(() => {
     }
     // Things a finger has to hit.
     const tappable = el.matches("a, button, summary, [role=tab], input, select, details > summary");
-    if (tappable && (box.height < 40 || box.width < 32) && box.height > 0) {
-      small.push({ el: name(el), w: Math.round(box.width), h: Math.round(box.height) });
+    // A control the page hides off-screen (the file picker's own input) is not
+    // something anybody taps.
+    const hidden = box.width < 8 || box.height < 8 || box.bottom < 0 || box.top > innerHeight * 8;
+    if (tappable && !hidden && (box.height < 40 || box.width < 32)) {
+      small.push({
+        el: name(el),
+        w: Math.round(box.width),
+        h: Math.round(box.height),
+        text: (el.textContent || "").trim().slice(0, 24),
+        within: el.parentElement ? name(el.parentElement) : "",
+      });
     }
     // Text too small to read on a phone.
     const text = el.children.length === 0 ? (el.textContent || "").trim() : "";
@@ -126,13 +140,17 @@ for (const phone of PHONES) {
   await evaluate("window.scrollTo(0, 0); true");
   await sleep(600);
   const report = await evaluate(INSPECT);
-  const shot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true });
-  writeFileSync(join(out, `${phone.name}.png`), Buffer.from(shot.result.data, "base64"));
-
+  if (!report) {
+    console.log(`\n${phone.name} — the page did not answer`);
+    bad += 1;
+    continue;
+  }
   const problems = [];
   if (report.overflow > 1) problems.push(`page scrolls sideways by ${report.overflow}px`);
   for (const w of report.wide) problems.push(`${w.el} is ${w.width}px wide (screen ${report.view}px)`);
-  for (const s of report.small) problems.push(`${s.el} is only ${s.w}×${s.h}px to tap`);
+  for (const s of report.small) {
+    problems.push(`${s.el} is only ${s.w}×${s.h}px to tap — "${s.text}" in ${s.within}`);
+  }
   for (const t of report.tiny) problems.push(`${t.el} sets ${t.size}px text — "${t.text}"`);
   console.log(`\n${phone.name} (${phone.width}×${phone.height} @${phone.dpr}x) — ${report.title}`);
   if (problems.length === 0) {
@@ -140,6 +158,10 @@ for (const phone of PHONES) {
   } else {
     bad += problems.length;
     for (const p of problems) console.log(`  ✗ ${p}`);
+  }
+  const shot = await send("Page.captureScreenshot", { format: "png" });
+  if (shot.result?.data) {
+    writeFileSync(join(out, `${phone.name}.png`), Buffer.from(shot.result.data, "base64"));
   }
 }
 

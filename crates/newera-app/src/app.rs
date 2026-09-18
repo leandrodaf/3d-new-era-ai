@@ -76,6 +76,19 @@ const AUTOSAVE_KEY: &str = "newera-autosave";
 #[cfg(target_arch = "wasm32")]
 const AUTOSAVE_LIMIT: usize = 3 * 1024 * 1024;
 
+/// On a screen too narrow for three columns, one of these is on show.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum Pane {
+    Catalog,
+    #[default]
+    Plan,
+    Scene,
+}
+
+/// Narrower than this (in points) the window shows one pane at a time: a
+/// phone held upright, or a window squeezed to the side of a screen.
+const NARROW: f32 = 720.0;
+
 pub(crate) struct NewEraApp {
     pub(crate) document: SharedDocument,
     pub(crate) mcp_url: Option<String>,
@@ -102,6 +115,12 @@ pub(crate) struct NewEraApp {
     pub(crate) announced_calls: u64,
     /// A registration started from the AI panel, running in its own thread.
     pub(crate) ai_job: Option<crate::ai::RegisterSlot>,
+    /// Width the window had last frame, to notice a screen that changed
+    /// shape — a phone turned, a tab that finally got its real size.
+    #[cfg(target_arch = "wasm32")]
+    last_width: f32,
+    /// What a narrow screen is showing, since it cannot show everything.
+    pub(crate) pane: Pane,
     /// In a browser: whether this tab is reachable by an AI, and where.
     #[cfg(target_arch = "wasm32")]
     pub(crate) ai_link: crate::ai_web::Shared,
@@ -237,6 +256,9 @@ impl NewEraApp {
             catalog_query: String::new(),
             announced_agents: 0,
             announced_calls: 0,
+            #[cfg(target_arch = "wasm32")]
+            last_width: 0.0,
+            pane: Pane::default(),
             ai_job: None,
             #[cfg(target_arch = "wasm32")]
             ai_link: crate::ai_web::Shared::default(),
@@ -1167,6 +1189,17 @@ impl NewEraApp {
             ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, k)))
         };
 
+        // On a narrow screen the three panes are one keystroke apart, which is
+        // also how a check drives them without hunting for a button.
+        for (key, pane) in [
+            (Key::Num1, Pane::Catalog),
+            (Key::Num2, Pane::Plan),
+            (Key::Num3, Pane::Scene),
+        ] {
+            if pressed(cmd, key) {
+                self.pane = pane;
+            }
+        }
         // Ctrl+Shift+M: in a browser, make this tab reachable by an AI, or
         // close it again. On the desktop the server is already up, so the
         // same keys open the panel that says how to reach it.
@@ -1820,6 +1853,18 @@ impl NewEraApp {
     }
 
     fn toolbar(&mut self, ui: &mut egui::Ui) {
+        // Narrow enough and the tools do not fit on one line: they scroll
+        // sideways rather than falling off the edge.
+        if ui.ctx().content_rect().width() < NARROW {
+            egui::ScrollArea::horizontal()
+                .id_salt("toolbar_scroll")
+                .show(ui, |ui| self.toolbar_row(ui));
+            return;
+        }
+        self.toolbar_row(ui);
+    }
+
+    fn toolbar_row(&mut self, ui: &mut egui::Ui) {
         let t = crate::theme::of(ui.visuals());
         ui.add_space(3.0);
         ui.horizontal(|ui| {
@@ -1932,6 +1977,115 @@ impl NewEraApp {
         ui.add_space(2.0);
     }
 
+    /// A phone hands the editor a canvas measured in a handful of points — a
+    /// 390 px screen at three device pixels each arrives as 130 × 281 — and a
+    /// window laid out for a desk is unusable at that size: three buttons and
+    /// a title that overlaps its own count.
+    ///
+    /// So the scale is set to what the screen can hold: enough points for the
+    /// chrome to lay out honestly, at a size a person can still read. Above
+    /// that width nothing is touched — whoever set their own zoom keeps it.
+    #[cfg(target_arch = "wasm32")]
+    fn fit_to_screen(&mut self, ctx: &egui::Context) {
+        /// Points of width the narrow layout needs to breathe.
+        const WANT: f32 = 440.0;
+
+        let have = ctx.content_rect().width();
+        // A window that changed shape was framed for the old one.
+        if have > 1.0 && (have - self.last_width).abs() > self.last_width.max(1.0) * 0.1 {
+            self.last_width = have;
+            self.plan.request_fit();
+        }
+        if have <= 1.0 || have >= WANT {
+            return;
+        }
+        let zoom = (ctx.zoom_factor() * have / WANT).clamp(0.2, 1.0);
+        if (zoom - ctx.zoom_factor()).abs() > 0.02 {
+            ctx.set_zoom_factor(zoom);
+            // The plan was framed for the old size; frame it again for this one.
+            self.plan.request_fit();
+        }
+    }
+
+    /// The plan, and what drawing in it asks of the rest of the window.
+    fn plan_ui(&mut self, ui: &mut egui::Ui) {
+        self.plan_rect = ui.available_rect_before_wrap();
+        let piece_images = self.piece_images();
+        let events = self.plan.ui(
+            ui,
+            PlanInput {
+                document: &self.document,
+                selection: &mut self.selection,
+                tool: self.tool,
+                unit: self.settings.unit,
+                palette: &self.palette,
+                piece_images,
+            },
+        );
+        for event in events {
+            match event {
+                PlanEvent::Modify(ids) => self.open_modify(&ids),
+                PlanEvent::NewLabel(at) => {
+                    self.dialog = Some(Dialog::NewLabel {
+                        at,
+                        text: String::new(),
+                    });
+                }
+                PlanEvent::Calibrate { a, b } => {
+                    self.dialog = Some(Dialog::Calibrate {
+                        a,
+                        b,
+                        distance: 100.0,
+                    });
+                }
+                PlanEvent::Placed(_) => self.tool = Tool::Select,
+                PlanEvent::Status(text) => self.set_status(text),
+            }
+        }
+    }
+
+    /// The 3D view of the same home.
+    fn scene_ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        let (home, revision, project) = {
+            let doc = self.document.read();
+            (doc.home().clone(), doc.revision(), doc.asset_dir())
+        };
+        self.scene.ui(
+            ui,
+            frame.wgpu_render_state(),
+            &home,
+            revision,
+            &self.selection,
+            project.as_deref(),
+        );
+    }
+
+    /// On a narrow screen: which of the three is on show. Big enough for a
+    /// thumb, at the bottom, where the thumb already is.
+    fn pane_bar(&mut self, ui: &mut egui::Ui) {
+        let t = crate::theme::of(ui.visuals());
+        ui.horizontal(|ui| {
+            let each = (ui.available_width() - 16.0) / 3.0;
+            for (pane, glyph, label) in [
+                (Pane::Catalog, icon::ARMCHAIR, crate::i18n::tr("Catálogo")),
+                (Pane::Plan, icon::SQUARES_FOUR, crate::i18n::tr("Planta")),
+                (Pane::Scene, icon::CUBE, crate::i18n::tr("3D")),
+            ] {
+                let on = self.pane == pane;
+                let button = egui::Button::new(
+                    RichText::new(format!("{glyph}  {label}"))
+                        .size(15.0)
+                        .color(if on { t.accent } else { t.ink }),
+                )
+                .min_size(egui::vec2(each, 38.0))
+                .fill(if on { t.accent_soft } else { t.raised });
+                if ui.add(button).clicked() {
+                    self.pane = pane;
+                }
+            }
+        });
+    }
+
     fn status_bar(&mut self, ui: &mut egui::Ui) {
         let t = crate::theme::of(ui.visuals());
         ui.horizontal(|ui| {
@@ -1953,6 +2107,25 @@ impl NewEraApp {
                             ui.colored_label(egui::Color32::from_rgb(*r, *g, *b), name);
                         }
                     });
+            }
+            let narrow = ui.ctx().content_rect().width() < NARROW;
+            if narrow {
+                // A phone's status bar holds the lamp, the zoom and whatever
+                // just happened — the pointer's coordinates are for a mouse.
+                ui.separator();
+                ui.label(crate::theme::fig(
+                    ui.visuals(),
+                    &format!("{:.0}%", self.plan.zoom_percent()),
+                ));
+                if let Some((text, at)) = &self.status {
+                    if at.elapsed() < Duration::from_secs(8) {
+                        ui.separator();
+                        ui.label(RichText::new(text).color(ui.visuals().text_color()));
+                    } else {
+                        self.status = None;
+                    }
+                }
+                return;
             }
             ui.separator();
             if let Some(p) = self.plan.cursor() {
@@ -2403,10 +2576,27 @@ impl eframe::App for NewEraApp {
                     .inner_margin(egui::Margin::symmetric(10, 4)),
             )
             .show(ui, |ui| self.status_bar(ui));
-        egui::Panel::left("left")
-            .resizable(true)
-            .default_size(270.0)
-            .show(ui, |ui| panels::left(self, ui));
+        // A phone cannot hold catalogue, plan and 3D side by side, and pretending
+        // otherwise gives all three at a size nobody can use. Below this width
+        // the window shows one at a time, and a bar within thumb's reach says
+        // which — everything else about the editor stays the same.
+        #[cfg(target_arch = "wasm32")]
+        self.fit_to_screen(&ctx);
+        let narrow = ctx.content_rect().width() < NARROW;
+        if narrow {
+            egui::Panel::bottom("panes")
+                .frame(
+                    egui::Frame::new()
+                        .fill(t.raised)
+                        .inner_margin(egui::Margin::symmetric(8, 6)),
+                )
+                .show(ui, |ui| self.pane_bar(ui));
+        } else {
+            egui::Panel::left("left")
+                .resizable(true)
+                .default_size(270.0)
+                .show(ui, |ui| panels::left(self, ui));
+        }
 
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
@@ -2418,63 +2608,28 @@ impl eframe::App for NewEraApp {
                             .inner_margin(egui::Margin::symmetric(6, 3)),
                     )
                     .show(ui, |ui| crate::tabs::bar(self, ui));
+                if narrow {
+                    // One thing at a time, the whole screen for it.
+                    egui::CentralPanel::default().frame(egui::Frame::NONE).show(
+                        ui,
+                        |ui| match self.pane {
+                            Pane::Catalog => panels::left(self, ui),
+                            Pane::Plan => self.plan_ui(ui),
+                            Pane::Scene => self.scene_ui(ui, frame),
+                        },
+                    );
+                    return;
+                }
                 egui::Panel::top("plan")
                     .resizable(true)
                     .default_size(ui.available_height() / 2.0)
                     // Never collapse, e.g. when a browser canvas starts tiny.
                     .min_size(120.0)
                     .frame(egui::Frame::NONE)
-                    .show(ui, |ui| {
-                        self.plan_rect = ui.available_rect_before_wrap();
-                        let piece_images = self.piece_images();
-                        let events = self.plan.ui(
-                            ui,
-                            PlanInput {
-                                document: &self.document,
-                                selection: &mut self.selection,
-                                tool: self.tool,
-                                unit: self.settings.unit,
-                                palette: &self.palette,
-                                piece_images,
-                            },
-                        );
-                        for event in events {
-                            match event {
-                                PlanEvent::Modify(ids) => self.open_modify(&ids),
-                                PlanEvent::NewLabel(at) => {
-                                    self.dialog = Some(Dialog::NewLabel {
-                                        at,
-                                        text: String::new(),
-                                    });
-                                }
-                                PlanEvent::Calibrate { a, b } => {
-                                    self.dialog = Some(Dialog::Calibrate {
-                                        a,
-                                        b,
-                                        distance: 100.0,
-                                    });
-                                }
-                                PlanEvent::Placed(_) => self.tool = Tool::Select,
-                                PlanEvent::Status(text) => self.set_status(text),
-                            }
-                        }
-                    });
+                    .show(ui, |ui| self.plan_ui(ui));
                 egui::CentralPanel::default()
                     .frame(egui::Frame::NONE)
-                    .show(ui, |ui| {
-                        let (home, revision, project) = {
-                            let doc = self.document.read();
-                            (doc.home().clone(), doc.revision(), doc.asset_dir())
-                        };
-                        self.scene.ui(
-                            ui,
-                            frame.wgpu_render_state(),
-                            &home,
-                            revision,
-                            &self.selection,
-                            project.as_deref(),
-                        );
-                    });
+                    .show(ui, |ui| self.scene_ui(ui, frame));
             });
 
         // Selection may point to elements removed by undo or by an agent.

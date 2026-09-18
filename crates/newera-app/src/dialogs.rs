@@ -1424,6 +1424,10 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                             crate::i18n::tr("Duplicar versão · Próxima versão (guias)"),
                         ),
                         (
+                            "Ctrl+1 · Ctrl+2 · Ctrl+3",
+                            crate::i18n::tr("Catálogo · Planta · 3D (telas estreitas)"),
+                        ),
+                        (
                             "Ctrl+Shift+M",
                             crate::i18n::tr("Conectar sua IA (no navegador, liga e desliga)"),
                         ),

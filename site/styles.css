@@ -441,3 +441,31 @@ button { font: inherit; color: inherit; }
 .footer__badge { padding-block: 10px 0; }
 .footer__badge a[hidden] { display: none; }
 .footer__badge img { display: block; height: 54px; width: auto; }
+
+/* ---------------------------------------------------------------------------
+   Touch: a finger is not a cursor.
+
+   Everything that can be tapped gets at least 44 px of height — the size a
+   thumb actually hits — without growing on screen: the padding does it, and
+   the line-height stays. Small print grows a step, because 11.5 px is a
+   footnote on a desk and a squint on a phone.
+
+   Keyed to the pointer, not the width: a tablet held in the hand is a finger
+   too, and a narrow window on a laptop is still a mouse.
+--------------------------------------------------------------------------- */
+@media (pointer: coarse) {
+  .nav__toggle { width: 44px; height: 44px; }
+  .brand { padding-block: 11px; }
+  .nav__actions .btn, .nav__actions .stars { min-height: 44px; padding-block: 10px; }
+  .link-arrow { padding-block: 8px; }
+  .code .copy, .copy { min-height: 44px; padding: 11px 14px; }
+  /* Every disclosure, not only the FAQ's. */
+  summary { padding-block: 14px; }
+  .faq summary { padding-block: 16px; }
+  .footer__links a { padding-block: 11px; display: inline-block; }
+  .footer__row .brand--foot { padding-block: 11px; }
+  .lang button, .chips button, .os button, .tabs__list button { min-height: 44px; }
+  .footer__credits a, .foot-note a, .dl__meta a { padding-block: 12px; display: inline-block; }
+  /* Captions and figure marks: one step up, so they read at arm's length. */
+  .fig, figcaption, .mosaic figcaption, .dim--top span { font-size: 12.5px; }
+}

@@ -115,6 +115,16 @@ jobs:
       # The browser as an MCP server: the tab switches it on, an AI client
       # talks to the address the relay hands out, and what it draws has to be
       # in that tab's project.
+      # What a phone gets: the page must not scroll sideways, nothing may be
+      # too small to tap, and no text below what a person can read at arm's
+      # length — checked at four real handset sizes.
+      - name: The site and the editor on a phone
+        run: |
+          python3 -m http.server 8801 --bind 127.0.0.1 --directory site &
+          for _ in $(seq 1 40); do curl -sf http://127.0.0.1:8801/ >/dev/null && break; sleep 0.25; done
+          node scripts/mobile-audit.mjs http://127.0.0.1:8801/ target/mobile
+          node scripts/mobile-audit.mjs http://127.0.0.1:8790/editor/ target/mobile-app
+          node scripts/mobile-audit.mjs http://127.0.0.1:8790/ target/mobile-viewer
       - name: An AI draws in the browser over MCP
         run: |
           cargo build -p newera-relay --release --locked
@@ -126,6 +136,15 @@ jobs:
         with:
           name: web-editor-screenshots
           path: target/web-e2e
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phone-screenshots
+          path: |
+            target/mobile
+            target/mobile-app
+            target/mobile-viewer
           if-no-files-found: ignore
 
   deny:
