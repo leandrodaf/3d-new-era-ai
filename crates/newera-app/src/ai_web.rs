@@ -140,9 +140,17 @@ async fn open_room(base: &str) -> Result<Room, String> {
     let request = web_sys::Request::new_with_str_and_init(&format!("{base}/rooms"), &options)
         .map_err(|e| told(&e))?;
     let window = web_sys::window().ok_or("no window")?;
-    let response = wasm_bindgen_futures::JsFuture::from(window.fetch_with_request(&request))
+    // A relay that is not there refuses at the network, before any status: say
+    // that plainly instead of handing somebody a browser's error text.
+    let answer = wasm_bindgen_futures::JsFuture::from(window.fetch_with_request(&request))
         .await
-        .map_err(|e| told(&e))?
+        .map_err(|_| {
+            crate::i18n::tr(
+                "o servidor que leva a sua IA até esta aba não respondeu — no aplicativo do computador o MCP não precisa dele",
+            )
+            .to_owned()
+        })?;
+    let response = answer
         .dyn_into::<web_sys::Response>()
         .map_err(|_| "the relay answered something odd".to_owned())?;
     if !response.ok() {

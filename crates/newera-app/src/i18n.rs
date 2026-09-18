@@ -1944,6 +1944,13 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
             "Catálogo · Plano · 3D (pantallas estrechas)",
             "Catalogue · Plan · 3D (écrans étroits)",
         ],
+        "o servidor que leva a sua IA até esta aba não respondeu — no aplicativo do computador o MCP não precisa dele" => {
+            [
+                "the server that carries your AI to this tab did not answer — in the desktop app the MCP needs no server",
+                "el servidor que lleva su IA hasta esta pestaña no respondió — en la aplicación de escritorio el MCP no lo necesita",
+                "le serveur qui relie votre IA à cet onglet n'a pas répondu — dans l'application de bureau, le MCP n'en a pas besoin",
+            ]
+        }
         _ => return None,
     })
 }
