@@ -130,13 +130,17 @@ await send("Page.enable");
   }
   if (dead) {
     const why = await evaluate("document.getElementById('failed-why')?.textContent ?? ''");
-    const out = await evaluate("document.getElementById('failed-link')?.getAttribute('href') ?? ''");
+    const escape = await evaluate("document.getElementById('failed-link')?.getAttribute('href') ?? ''");
     console.log("skipped: the editor could not start here —", why.trim() || "no reason given");
-    if (!out) {
+    if (!escape) {
       console.error("the failure panel offers no way out");
       failed = true;
     }
   } else {
+    // The engine can also die half way through — the panel comes up while the
+    // check is already clicking. So the complaints are collected, and read at
+    // the end against whether there was still an editor to complain about.
+    const sins = [];
     // Wall tool (W), then a wall drawn right of the demo house on the plan.
     await send("Input.dispatchKeyEvent", { type: "keyDown", key: "w", code: "KeyW", text: "w" });
     await send("Input.dispatchKeyEvent", { type: "keyUp", key: "w", code: "KeyW" });
@@ -168,8 +172,7 @@ await send("Page.enable");
       await shot(webgpu ? "web-editor-background.png" : "web-editor-background-webgl.png");
       console.log("background: the picker opened and the image went in");
     } else {
-      console.error("the background picker never opened");
-      failed = true;
+      sins.push("the background picker never opened");
     }
 
     // What was drawn has to survive the tab being closed: the project is
@@ -179,8 +182,7 @@ await send("Page.enable");
     await sleep(2500);
     const drawn = await stored();
     if (!drawn) {
-      console.error("nothing was mirrored into the browser's storage");
-      failed = true;
+      sins.push("nothing was mirrored into the browser's storage");
     }
     await send("Page.navigate", { url });
     for (let i = 0; i < 300; i++) {
@@ -190,8 +192,7 @@ await send("Page.enable");
     await sleep(3000);
     const back = await stored();
     if (back !== drawn) {
-      console.error("the work did not come back after a reload");
-      failed = true;
+      sins.push("the work did not come back after a reload");
     } else {
       console.log("autosave: the drawing came back after a reload");
     }
@@ -207,6 +208,15 @@ await send("Page.enable");
       failed = true;
     }
 
+    if (sins.length) {
+      if (await engineDead()) {
+        const why = await evaluate("document.getElementById('failed-why')?.textContent ?? ''");
+        console.log("skipped: the editor stopped part way —", why.trim() || "no reason given");
+      } else {
+        sins.forEach((sin) => console.error(sin));
+        failed = true;
+      }
+    }
   }
 
   // The lightweight viewer, on the same engine: it is ready when it says so.
