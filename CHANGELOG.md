@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-09-18
+
+### Added
+
+- In a browser the MCP comes up on its own. An editor whose point is that an AI drives it
+  should not ask for a switch to be found first: a window wide enough to be somebody's
+  desk is reachable the moment it opens, at the address it had last time. A phone is left
+  alone — the address is of no use where there is nowhere to paste it.
+
+### Fixed
+
+- **The address stops being invalidated.** It is the tab's own from now on: the room is
+  kept in the browser and asked for again on every connection, so switching off and on,
+  reloading, closing the tab for the night — or the relay restarting under it — all give
+  back the same address. What is registered in an AI client once goes on working.
+- The commands the panel hands out no longer fail with "already exists": `claude mcp add`
+  refuses a name it already has, and anybody who installed the app has one, so the line
+  removes it first.
+- The panel is one screen again: the state and its address, the clients as tabs with the
+  line to copy under them, and the calls as they land — no numbered steps between
+  somebody and the thing they came for.
+
 ### Added
 
 - The browser opens on a home worth looking at: a corner classic seven of the kind the
@@ -406,7 +428,8 @@ MCP server, with everything below.
 - `scripts/mcp.sh` / `make mcp` to call MCP tools from the shell.
 - CI for formatting, clippy, tests on Linux/macOS/Windows, MCP smoke test, MSRV and cargo-deny; release builds.
 
-[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.2...HEAD
+[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.3...HEAD
+[1.4.3]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.3.0...v1.4.0

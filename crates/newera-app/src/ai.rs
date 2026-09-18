@@ -61,7 +61,9 @@ pub(crate) fn clients(url: &str) -> Vec<Client> {
         Client {
             label: "Claude Code",
             place: terminal,
-            code: format!("claude mcp add --transport http newera {url}"),
+            code: format!(
+                "claude mcp remove newera 2>/dev/null; claude mcp add --transport http newera {url}"
+            ),
             note: crate::i18n::tr(
                 "Os instaladores já registram sozinhos se o Claude Code estiver instalado.",
             ),
@@ -91,7 +93,7 @@ pub(crate) fn clients(url: &str) -> Vec<Client> {
         Client {
             label: "Codex",
             place: terminal,
-            code: format!("codex mcp add newera --url {url}"),
+            code: format!("codex mcp remove newera 2>/dev/null; codex mcp add newera --url {url}"),
             note: crate::i18n::tr(
                 "Os instaladores já registram sozinhos se o Codex estiver instalado.",
             ),
@@ -109,7 +111,9 @@ pub(crate) fn clients(url: &str) -> Vec<Client> {
         Client {
             label: "Gemini CLI",
             place: terminal,
-            code: format!("gemini mcp add --transport http newera {url}"),
+            code: format!(
+                "gemini mcp remove newera 2>/dev/null; gemini mcp add --transport http newera {url}"
+            ),
             note: crate::i18n::tr("Depois abra o Gemini CLI e peça o projeto."),
             run: Some((
                 "gemini",
@@ -448,28 +452,8 @@ fn card<R>(ui: &mut egui::Ui, t: crate::theme::Tokens, body: impl FnOnce(&mut eg
         .inner
 }
 
-/// A step's number, as a mark rather than a word.
-fn step(ui: &mut egui::Ui, t: crate::theme::Tokens, number: u8, title: &str) {
-    ui.horizontal(|ui| {
-        let (rect, _) = ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
-        ui.painter()
-            .circle_filled(rect.center(), 11.0, t.accent_soft);
-        ui.painter().text(
-            rect.center(),
-            egui::Align2::CENTER_CENTER,
-            number.to_string(),
-            egui::FontId::proportional(12.0),
-            t.accent,
-        );
-        ui.add_space(2.0);
-        ui.label(RichText::new(title).size(14.0).strong().color(t.ink));
-    });
-    ui.add_space(6.0);
-}
-
-/// The panel. Three things, in the order somebody needs them: where this
-/// window stands, what to paste to change that, and what the AI has done
-/// since — each in its own card, nothing shouting over the rest.
+/// The panel: where this window stands, what to paste to reach it, and what
+/// the AI has done since. No steps to follow — a tab, a line to copy, done.
 pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize) -> bool {
     let mut close = false;
     let t = ctx.style_of(ctx.theme());
@@ -482,21 +466,14 @@ pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize
     let narrow = ctx.content_rect().width() < crate::app::NARROW;
 
     crate::theme::modal(ctx, egui::Id::new("connect-ai")).show(ctx, |ui| {
-        ui.set_min_width(if narrow { 300.0 } else { 600.0 });
-        ui.spacing_mut().item_spacing.y = 8.0;
+        ui.set_min_width(if narrow { 300.0 } else { 620.0 });
+        ui.spacing_mut().item_spacing.y = 10.0;
         crate::theme::title(
             ui,
             &format!("{} {}", icon::ROBOT, crate::i18n::tr("Conectar sua IA")),
         );
-        ui.label(
-            RichText::new(crate::i18n::tr(
-                "O editor abre uma porta MCP: a sua IA desenha aqui dentro, em centímetros, e você vê acontecer.",
-            ))
-            .color(t.ink_dim),
-        );
-        ui.add_space(4.0);
 
-        // ---- Where this window stands ----
+        // ---- Where this window stands, in one line ----
         card(ui, t, |ui| {
             ui.horizontal(|ui| {
                 let on = pulse.newest().is_some();
@@ -517,10 +494,13 @@ pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize
                         t.ok,
                     ),
                     None if serving => (
-                        crate::i18n::tr("Esperando a sua IA chegar").to_owned(),
+                        crate::i18n::tr("No ar, esperando a sua IA").to_owned(),
                         t.ink,
                     ),
-                    None => (crate::i18n::tr("Ainda não dá para alcançar esta janela").to_owned(), t.ink_dim),
+                    None => (
+                        crate::i18n::tr("Ainda não dá para alcançar esta janela").to_owned(),
+                        t.ink_dim,
+                    ),
                 };
                 ui.label(RichText::new(line).size(14.0).strong().color(colour));
                 #[cfg(target_arch = "wasm32")]
@@ -528,48 +508,25 @@ pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize
                     web_switch(app, ui, serving);
                 });
             });
-
             if serving {
-                ui.add_space(8.0);
-                // The address, as a thing to be copied: its own well, one
-                // button, and nothing else on the line to fight it.
-                egui::Frame::new()
-                    .fill(t.inset)
-                    .corner_radius(8)
-                    .inner_margin(egui::Margin::symmetric(10, 8))
-                    .show(ui, |ui| {
-                        ui.set_width(ui.available_width());
-                        ui.horizontal(|ui| {
-                            ui.add(
-                                egui::Label::new(
-                                    RichText::new(&url).monospace().size(11.5).color(t.ink_dim),
-                                )
-                                .wrap(),
-                            );
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    if ui
-                                        .button(format!(
-                                            "{} {}",
-                                            icon::COPY,
-                                            crate::i18n::tr("Copiar")
-                                        ))
-                                        .clicked()
-                                    {
-                                        ui.ctx().copy_text(url.clone());
-                                        app.set_status(crate::i18n::tr("Endereço copiado"));
-                                    }
-                                },
-                            );
-                        });
-                    });
+                ui.add_space(6.0);
+                well(
+                    ui,
+                    t,
+                    RichText::new(&url).monospace().size(11.5).color(t.ink_dim),
+                    |ui| {
+                        if copy_button(ui, t).clicked() {
+                            ui.ctx().copy_text(url.clone());
+                            app.set_status(crate::i18n::tr("Endereço copiado"));
+                        }
+                    },
+                );
                 #[cfg(target_arch = "wasm32")]
                 ui.label(
                     RichText::new(crate::i18n::tr(
-                        "Quem tiver o endereço abaixo pode editar este projeto: trate como senha.",
+                        "Quem tiver esse endereço edita este projeto: trate como senha.",
                     ))
-                    .color(t.ink_dim)
+                    .color(t.ink_faint)
                     .small(),
                 );
             } else if !cfg!(target_arch = "wasm32") {
@@ -582,52 +539,37 @@ pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize
             }
         });
 
-        // ---- What to paste ----
+        // ---- The tab, the line, and nothing else ----
         card(ui, t, |ui| {
-            step(ui, t, 1, crate::i18n::tr("Escolha o aplicativo de IA que você usa"));
             ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
+                ui.spacing_mut().item_spacing = egui::vec2(4.0, 6.0);
                 for (i, client) in clients.iter().enumerate() {
                     let on = *chosen == i;
-                    let chip = egui::Button::new(
+                    let tab = egui::Button::new(
                         RichText::new(client.label)
-                            .size(13.0)
-                            .color(if on { t.accent } else { t.ink_dim }),
+                            .size(13.5)
+                            .color(if on { t.ink } else { t.ink_dim })
+                            .strong(),
                     )
-                    .fill(if on { t.accent_soft } else { t.inset })
-                    .stroke(egui::Stroke::new(1.0, if on { t.accent } else { t.rule }))
+                    .fill(if on { t.inset } else { egui::Color32::TRANSPARENT })
+                    .stroke(egui::Stroke::NONE)
                     .corner_radius(8)
-                    .min_size(egui::vec2(0.0, 30.0));
-                    if ui.add(chip).clicked() {
+                    .min_size(egui::vec2(0.0, 32.0));
+                    if ui.add(tab).clicked() {
                         *chosen = i;
                     }
                 }
             });
-
             let client = &clients[*chosen];
-            ui.add_space(12.0);
-            step(ui, t, 2, crate::i18n::tr("Cole isto onde ele pede"));
-            ui.label(RichText::new(client.place).color(t.ink_dim).small());
+            ui.add_space(8.0);
+            ui.label(RichText::new(client.place).color(t.ink_faint).small());
             ui.add_space(4.0);
-            egui::Frame::new()
-                .fill(t.inset)
-                .corner_radius(8)
-                .inner_margin(egui::Margin::symmetric(10, 9))
-                .show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.add(
-                        egui::Label::new(RichText::new(&client.code).monospace().size(12.0))
-                            .wrap(),
-                    );
-                });
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(client.note).color(t.ink_faint).small());
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui
-                        .button(format!("{} {}", icon::COPY, crate::i18n::tr("Copiar")))
-                        .clicked()
-                    {
+            well(
+                ui,
+                t,
+                RichText::new(&client.code).monospace().size(12.0),
+                |ui| {
+                    if copy_button(ui, t).clicked() {
                         ui.ctx().copy_text(client.code.clone());
                         app.set_status(crate::i18n::tr("Copiado"));
                     }
@@ -660,26 +602,9 @@ pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize
                             register(app, program, args.clone());
                         }
                     }
-                });
-            });
-
-            ui.add_space(12.0);
-            step(ui, t, 3, crate::i18n::tr("Peça alguma coisa"));
-            let ask = crate::i18n::tr(
-                "Quantas paredes tem este projeto? Depois coloque uma janela de 120 cm na sala.",
+                },
             );
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("“{ask}”")).italics().color(t.ink));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui
-                        .small_button(format!("{} {}", icon::COPY, crate::i18n::tr("Copiar")))
-                        .clicked()
-                    {
-                        ui.ctx().copy_text(ask.to_owned());
-                        app.set_status(crate::i18n::tr("Copiado"));
-                    }
-                });
-            });
+            ui.label(RichText::new(client.note).color(t.ink_faint).small());
         });
 
         // ---- What it has done ----
@@ -687,7 +612,7 @@ pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize
             ui.horizontal(|ui| {
                 ui.label(
                     RichText::new(crate::i18n::tr("Últimas chamadas"))
-                        .size(14.0)
+                        .size(13.5)
                         .strong()
                         .color(t.ink),
                 );
@@ -700,29 +625,27 @@ pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize
                     });
                 }
             });
-            ui.add_space(4.0);
+            ui.add_space(2.0);
             if pulse.recent.is_empty() {
                 ui.label(
                     RichText::new(crate::i18n::tr(
                         "Nada ainda. Assim que sua IA usar uma ferramenta, ela aparece aqui.",
                     ))
-                    .color(t.ink_faint),
+                    .color(t.ink_faint)
+                    .small(),
                 );
             } else {
                 egui::ScrollArea::vertical()
-                    .max_height(126.0)
+                    .max_height(120.0)
                     .auto_shrink([false, true])
                     .show(ui, |ui| {
-                        for (i, call) in pulse.recent.iter().rev().enumerate() {
+                        for call in pulse.recent.iter().rev() {
                             let fresh = pulse.now_ms.saturating_sub(call.at_ms) < 2_000;
-                            if i > 0 {
-                                ui.add_space(2.0);
-                            }
                             ui.horizontal(|ui| {
                                 ui.label(
                                     RichText::new(&call.tool)
                                         .monospace()
-                                        .size(12.5)
+                                        .size(12.0)
                                         .color(if fresh { t.accent } else { t.ink }),
                                 );
                                 ui.with_layout(
@@ -757,10 +680,49 @@ pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize
             }
         });
     });
-    // The panel is a live thing: it has a clock in it and calls landing under
-    // the person's eyes.
     ctx.request_repaint_after(std::time::Duration::from_millis(250));
     close || ctx.input(|i| i.key_pressed(egui::Key::Escape))
+}
+
+/// A well: the sunken block a thing to be copied sits in, with its buttons on
+/// their own line underneath — a long address must never run under them.
+fn well(
+    ui: &mut egui::Ui,
+    t: crate::theme::Tokens,
+    text: RichText,
+    actions: impl FnOnce(&mut egui::Ui),
+) {
+    egui::Frame::new()
+        .fill(t.inset)
+        .corner_radius(8)
+        .inner_margin(egui::Margin::symmetric(10, 8))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.add(egui::Label::new(text).wrap());
+            ui.add_space(6.0);
+            // A row of its own height: a right-to-left layout with nothing
+            // bounding it takes every pixel the modal has, and the panel comes
+            // out as one black field with a button in it.
+            ui.allocate_ui_with_layout(
+                egui::vec2(ui.available_width(), 30.0),
+                egui::Layout::right_to_left(egui::Align::Center),
+                actions,
+            );
+        });
+}
+
+/// The same copy button everywhere, so it is recognised rather than read.
+fn copy_button(ui: &mut egui::Ui, t: crate::theme::Tokens) -> egui::Response {
+    ui.add(
+        egui::Button::new(
+            RichText::new(format!("{} {}", icon::COPY, crate::i18n::tr("Copiar")))
+                .size(12.5)
+                .color(t.ink),
+        )
+        .fill(t.raised)
+        .stroke(egui::Stroke::new(1.0, t.rule))
+        .corner_radius(8),
+    )
 }
 
 /// In a browser: the one button that decides whether this tab can be reached,

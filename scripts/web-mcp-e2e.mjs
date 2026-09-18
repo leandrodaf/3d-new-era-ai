@@ -83,43 +83,22 @@ try {
   if (!started) throw new Error("the editor did not start in 60 s");
   await frames(20);
 
-  const before = await fetch(`${relay}/health`).then((r) => r.json());
-
-  // Ctrl+Shift+M is the switch — the same one the panel's button throws. A
-  // loaded runner can be between frames when the keys arrive, so this presses
-  // again until the relay says a room is open: what is being checked is the
-  // room, not the keyboard.
-  const press = async () => {
-    for (const [type, extra] of [["keyDown", { text: "" }], ["keyUp", {}]]) {
-      await send("Input.dispatchKeyEvent", {
-        type, key: "M", code: "KeyM", windowsVirtualKeyCode: 77,
-        modifiers: 2 | 8, ...extra,
-      });
-    }
-  };
-  let health = before;
-  for (let round = 0; round < 4 && health.rooms <= before.rooms; round++) {
-    await press();
-    for (let i = 0; i < 20 && health.rooms <= before.rooms; i++) {
-      await frames(2);
-      health = await fetch(`${relay}/health`).then((r) => r.json());
-    }
-  }
-  if (health.rooms <= before.rooms) {
-    const log = await evaluate("JSON.stringify((window.neweraLog || []).slice(-6))");
-    throw new Error(`the tab never opened a room on the relay — page said ${log}`);
-  }
-  ok("the tab switched its MCP on");
-
-  // The tab publishes the address it is reachable at, which is what a person
-  // copies out of the panel.
+  // Nothing is pressed here: a window wide enough to be somebody's desk comes
+  // up reachable on its own, which is the whole point — an editor for driving
+  // with an AI should not need a switch found first.
   let address = "";
-  for (let i = 0; i < 20 && !address; i++) {
-    await frames(2);
+  for (let i = 0; i < 60 && !address; i++) {
+    await frames(3);
     address = await evaluate("document.body.getAttribute('data-mcp') || ''");
   }
-  if (!address) throw new Error("the tab did not publish its MCP address");
-  ok("the address is on the page");
+  if (!address) {
+    const log = await evaluate("JSON.stringify((window.neweraLog || []).slice(-6))");
+    throw new Error(`the tab never made itself reachable — page said ${log}`);
+  }
+  ok("the tab came up reachable, with nobody pressing anything");
+  const health = await fetch(`${relay}/health`).then((r) => r.json());
+  if (health.rooms < 1) bad("the relay has no room for it");
+
   await check(address);
 
   async function check(mcpUrl) {
@@ -209,6 +188,19 @@ try {
       else ok("switched off, the address answers nobody");
     } else {
       console.log("  … the window never took the keys; the switch goes unchecked here");
+    }
+
+    // Switched on again, the address must be the one already pasted into
+    // somebody's AI client: a link that changes is a link that breaks.
+    if (off) {
+      await press();
+      let back = "";
+      for (let i = 0; i < 30 && !back; i++) {
+        await frames(3);
+        back = await evaluate("document.body.getAttribute('data-mcp') || ''");
+      }
+      if (back !== mcpUrl) bad(`switched on again under a different address: ${back || "none"}`);
+      else ok("switched on again, at the very same address");
     }
 
     // And then the one that has to hold whatever anybody presses: the tab

@@ -191,15 +191,59 @@ fn secret() -> String {
     })
 }
 
+/// A room a tab is asking to keep: the one it held last time.
+#[derive(Debug, Clone, Deserialize)]
+struct Wanted {
+    room: String,
+    tab_key: String,
+    client_token: String,
+}
+
+impl Wanted {
+    /// Nothing but three of our own secrets is worth looking at.
+    fn plausible(&self) -> bool {
+        let hex = |s: &String| s.len() == 32 && s.bytes().all(|b| b.is_ascii_hexdigit());
+        hex(&self.room) && hex(&self.tab_key) && hex(&self.client_token)
+    }
+}
+
 impl Rooms {
-    /// Opens a room for a tab. The two secrets are the whole security model:
-    /// one holds the socket, the other is what an AI needs to reach it.
+    /// Opens a room for a tab, or gives back the one it already had.
+    ///
+    /// An address that changes is an address somebody has to paste into their
+    /// AI client again, so a tab may ask to keep its own: it presents the room
+    /// and the key it was given, and gets the same room back — whether it is
+    /// still here, or gone because this service restarted under it. A room
+    /// that exists and does not match that key belongs to somebody else and is
+    /// refused; an id nobody holds is 128 bits nobody guesses.
     ///
     /// `caller` is whoever asked, as far as the network knows — one address
     /// may not open rooms without end.
-    fn open(&self, caller: &str) -> Result<(String, String, String), &'static str> {
+    fn open(
+        &self,
+        caller: &str,
+        wanted: Option<Wanted>,
+    ) -> Result<(String, String, String), &'static str> {
         self.sweep();
-        let (id, tab_key, client_token) = (secret(), secret(), secret());
+        let wanted = wanted.filter(Wanted::plausible);
+        if let Some(wanted) = &wanted {
+            let mut held = self.0.lock().expect("rooms");
+            if let Some(room) = held.rooms.get_mut(&wanted.room) {
+                if !same_secret(&room.tab_key, &wanted.tab_key) {
+                    return Err("that room is not yours");
+                }
+                room.touched = Instant::now();
+                return Ok((
+                    wanted.room.clone(),
+                    room.tab_key.clone(),
+                    room.client_token.clone(),
+                ));
+            }
+        }
+        let (id, tab_key, client_token) = match wanted {
+            Some(wanted) => (wanted.room, wanted.tab_key, wanted.client_token),
+            None => (secret(), secret(), secret()),
+        };
         let now = Instant::now();
         let mut held = self.0.lock().expect("rooms");
         if held.rooms.len() >= MAX_ROOMS {
@@ -285,7 +329,11 @@ struct Opened {
     tab_path: String,
 }
 
-async fn open_room(State(rooms): State<Rooms>, headers: axum::http::HeaderMap) -> Response {
+async fn open_room(
+    State(rooms): State<Rooms>,
+    headers: axum::http::HeaderMap,
+    body: Option<axum::Json<Wanted>>,
+) -> Response {
     // This runs behind a tunnel, so the peer address is the tunnel's: the
     // forwarded header is what tells one caller from another. It is not proof
     // of anything — it only has to be steady enough to count against, and the
@@ -297,8 +345,12 @@ async fn open_room(State(rooms): State<Rooms>, headers: axum::http::HeaderMap) -
         .map(str::trim)
         .filter(|v| !v.is_empty())
         .map_or_else(|| "unknown".to_owned(), str::to_owned);
-    let (room, tab_key, client_token) = match rooms.open(&who) {
+    let wanted = body.map(|axum::Json(wanted)| wanted);
+    let (room, tab_key, client_token) = match rooms.open(&who, wanted) {
         Ok(opened) => opened,
+        Err(why @ "that room is not yours") => {
+            return (StatusCode::FORBIDDEN, why).into_response();
+        }
         Err(why) => return (StatusCode::TOO_MANY_REQUESTS, why).into_response(),
     };
     axum::Json(Opened {
@@ -646,7 +698,7 @@ mod tests {
     #[test]
     fn a_room_is_two_secrets_and_neither_is_the_other() {
         let rooms = Rooms::default();
-        let (id, tab_key, client_token) = rooms.open("test").expect("a room");
+        let (id, tab_key, client_token) = rooms.open("test", None).expect("a room");
         assert_eq!(id.len(), 32);
         assert_ne!(id, tab_key);
         assert_ne!(tab_key, client_token);
@@ -658,7 +710,7 @@ mod tests {
     #[tokio::test]
     async fn a_wrong_token_is_turned_away() {
         let rooms = Rooms::default();
-        let (id, _tab, token) = rooms.open("test").expect("a room");
+        let (id, _tab, token) = rooms.open("test", None).expect("a room");
         let list = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"});
         let good = answer(&rooms, &id, &token, &list).await.expect("an answer");
         assert!(good.get("result").is_some());
@@ -682,7 +734,7 @@ mod tests {
     #[tokio::test]
     async fn a_call_without_a_tab_says_so() {
         let rooms = Rooms::default();
-        let (id, _tab, token) = rooms.open("test").expect("a room");
+        let (id, _tab, token) = rooms.open("test", None).expect("a room");
         let call = json!({
             "jsonrpc": "2.0", "id": 7, "method": "tools/call",
             "params": {"name": "get_home", "arguments": {}}
@@ -697,7 +749,7 @@ mod tests {
     #[tokio::test]
     async fn it_shakes_hands() {
         let rooms = Rooms::default();
-        let (id, _tab, token) = rooms.open("test").expect("a room");
+        let (id, _tab, token) = rooms.open("test", None).expect("a room");
         let hello = json!({
             "jsonrpc": "2.0", "id": 1, "method": "initialize",
             "params": {
@@ -720,12 +772,77 @@ mod tests {
     fn one_caller_cannot_open_every_room() {
         let rooms = Rooms::default();
         for _ in 0..ROOMS_PER_HOUR {
-            rooms.open("203.0.113.7").expect("within the hour's share");
+            rooms
+                .open("203.0.113.7", None)
+                .expect("within the hour's share");
         }
-        assert!(rooms.open("203.0.113.7").is_err(), "the share runs out");
+        assert!(
+            rooms.open("203.0.113.7", None).is_err(),
+            "the share runs out"
+        );
         rooms
-            .open("198.51.100.4")
+            .open("198.51.100.4", None)
             .expect("somebody else is not affected");
+    }
+
+    /// An address must survive: the same tab asks for the room it held and
+    /// gets it back — even when this service restarted and has never heard of
+    /// it. A room that belongs to somebody else is refused.
+    #[test]
+    fn a_tab_keeps_its_own_address() {
+        let rooms = Rooms::default();
+        let (id, key, token) = rooms.open("test", None).expect("a room");
+
+        let again = rooms
+            .open(
+                "test",
+                Some(Wanted {
+                    room: id.clone(),
+                    tab_key: key.clone(),
+                    client_token: token.clone(),
+                }),
+            )
+            .expect("the same room, still held");
+        assert_eq!(again, (id.clone(), key.clone(), token.clone()));
+
+        // As if the service had restarted: nothing in memory, the tab asks for
+        // what it had, and the address it pasted into an AI client still works.
+        let empty = Rooms::default();
+        let revived = empty
+            .open(
+                "test",
+                Some(Wanted {
+                    room: id.clone(),
+                    tab_key: key.clone(),
+                    client_token: token.clone(),
+                }),
+            )
+            .expect("claimed again");
+        assert_eq!(revived, (id.clone(), key.clone(), token.clone()));
+
+        // Somebody else's key opens nothing.
+        let stolen = empty.open(
+            "test",
+            Some(Wanted {
+                room: id.clone(),
+                tab_key: "0".repeat(32),
+                client_token: "1".repeat(32),
+            }),
+        );
+        assert_eq!(stolen.unwrap_err(), "that room is not yours");
+
+        // And a made-up shape is ignored rather than trusted: a fresh room.
+        let (other, ..) = empty
+            .open(
+                "test",
+                Some(Wanted {
+                    room: "nope".into(),
+                    tab_key: "nope".into(),
+                    client_token: "nope".into(),
+                }),
+            )
+            .expect("a room all the same");
+        assert_ne!(other, "nope");
     }
 
     /// Secrets are compared in a way that does not leak how much was right.
@@ -758,7 +875,7 @@ mod tests {
     #[tokio::test]
     async fn a_notification_gets_no_answer() {
         let rooms = Rooms::default();
-        let (id, _tab, token) = rooms.open("test").expect("a room");
+        let (id, _tab, token) = rooms.open("test", None).expect("a room");
         let note = json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
         assert!(answer(&rooms, &id, &token, &note).await.is_none());
     }

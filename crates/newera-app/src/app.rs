@@ -280,11 +280,12 @@ impl NewEraApp {
                 app.set_status(crate::i18n::tr("Projeto recuperado desta sessão."));
             }
         }
-        // A reload is not a new session: if this tab was reachable before the
-        // page was refreshed, it walks back into the same room — the address
-        // the person already pasted into their AI keeps working.
+        // In a browser the MCP comes up on its own: this editor is for driving
+        // with an AI, and a switch somebody has to find first is a step in the
+        // way. The room is the one this tab held before, so the address does
+        // not change from visit to visit.
         #[cfg(target_arch = "wasm32")]
-        crate::ai_web::resume(&app.document.clone(), &cc.egui_ctx.clone(), &app.ai_link);
+        crate::ai_web::start(&app.document.clone(), &cc.egui_ctx.clone(), &app.ai_link);
 
         // Nobody arrives knowing that an editor can be driven by their AI, and
         // the connection is made in another program's settings: the first time
@@ -2941,8 +2942,12 @@ mod tests {
         h.get_by_label_contains(&format!("{} ", icon::ROBOT))
             .click();
         h.run_steps(3);
-        h.get_by_label_contains("claude mcp add --transport http newera http://127.0.0.1:7878/mcp");
-        h.get_by_label_contains("Esperando a sua IA chegar");
+        // The command is idempotent on purpose: `claude mcp add` refuses a name
+        // that already exists, and somebody who installed the app has one.
+        h.get_by_label_contains(
+            "claude mcp remove newera 2>/dev/null; claude mcp add --transport http newera http://127.0.0.1:7878/mcp",
+        );
+        h.get_by_label_contains("No ar, esperando a sua IA");
         h.key_press(Key::Escape);
         h.run_steps(3);
 

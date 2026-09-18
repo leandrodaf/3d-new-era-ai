@@ -86,8 +86,8 @@ pub(crate) fn disconnect(state: &Shared) {
     held.link = Link::Off;
     drop(held);
     published(None);
-    // Switched off on purpose: there is nothing to walk back into.
-    forget();
+    // The room is kept on purpose: switching on again gives back the same
+    // address, and the one already pasted into an AI client goes on working.
 }
 
 /// Writes the address into the page (`body[data-mcp]`), or takes it away.
@@ -123,10 +123,10 @@ pub(crate) fn connect(document: SharedDocument, ctx: eframe::egui::Context, stat
     }
     let base = relay_base();
     wasm_bindgen_futures::spawn_local(async move {
-        match open_room(&base).await {
-            Ok(room) => {
-                remember(&base, &room);
-                hold(&document, &ctx, &state, &base, &room);
+        match open_room(&base, recall(&base)).await {
+            Ok(kept) => {
+                remember(&kept);
+                hold(&document, &ctx, &state, &base, &kept.room());
             }
             Err(why) => {
                 state.borrow_mut().link = Link::Failed { why };
@@ -143,26 +143,34 @@ struct Room {
     tab_path: String,
 }
 
-/// The room this tab holds, as it is kept between visits. Same origin only,
-/// and no more secret than what the panel already shows on screen.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+/// The room this tab holds, kept between visits — and kept when the switch is
+/// thrown, because an address that changes is an address somebody has to paste
+/// into their AI client again.
+///
+/// Same origin only, and no more secret than what the panel shows on screen.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct Kept {
     relay: String,
-    mcp_path: String,
-    tab_path: String,
+    room: String,
+    tab_key: String,
+    client_token: String,
+}
+
+impl Kept {
+    fn room(&self) -> Room {
+        Room {
+            mcp_path: format!("/r/{}/{}/mcp", self.room, self.client_token),
+            tab_path: format!("/r/{}/tab?key={}", self.room, self.tab_key),
+        }
+    }
 }
 
 fn storage() -> Option<web_sys::Storage> {
     web_sys::window().and_then(|w| w.local_storage().ok().flatten())
 }
 
-fn remember(base: &str, room: &Room) {
-    let kept = Kept {
-        relay: base.to_owned(),
-        mcp_path: room.mcp_path.clone(),
-        tab_path: room.tab_path.clone(),
-    };
-    if let (Some(storage), Ok(text)) = (storage(), serde_json::to_string(&kept)) {
+fn remember(kept: &Kept) {
+    if let (Some(storage), Ok(text)) = (storage(), serde_json::to_string(kept)) {
         let _ = storage.set_item(REMEMBERED, &text);
     }
 }
@@ -174,40 +182,69 @@ fn forget() {
 }
 
 /// The room from the last visit, if it was on this same relay.
-fn recall(base: &str) -> Option<Room> {
+fn recall(base: &str) -> Option<Kept> {
     let text = storage().and_then(|s| s.get_item(REMEMBERED).ok().flatten())?;
     let kept: Kept = serde_json::from_str(&text).ok()?;
-    (kept.relay == base).then_some(Room {
-        mcp_path: kept.mcp_path,
-        tab_path: kept.tab_path,
-    })
+    (kept.relay == base).then_some(kept)
 }
 
-/// Walks back into the room this tab held before the page was reloaded.
+/// Makes this tab reachable as it opens, without anybody being asked to.
 ///
-/// The relay keeps a room for a while after its tab goes, precisely so a
-/// refresh is not a new address: whoever pasted it into their AI client keeps
-/// a working setup. If the room is gone, so is the note of it, and the window
-/// is simply off — never pointing at an address nobody answers.
-pub(crate) fn resume(document: &SharedDocument, ctx: &eframe::egui::Context, state: &Shared) {
-    let base = relay_base();
-    let Some(room) = recall(&base) else {
+/// The point of this editor is that an AI drives it; a switch somebody has to
+/// find first is a step between them and that. So a window wide enough to be
+/// somebody's desk comes up already reachable — at the same address as last
+/// time, since the room is kept — and the panel shows the address and the
+/// switch for whoever wants it off.
+///
+/// A phone is left alone: the address is of no use without a place to paste
+/// it, and nothing should be opened on somebody's behalf for nothing.
+pub(crate) fn start(document: &SharedDocument, ctx: &eframe::egui::Context, state: &Shared) {
+    if ctx.content_rect().width() < crate::app::NARROW {
         return;
-    };
-    {
-        let mut held = state.borrow_mut();
-        if !matches!(held.link, Link::Off) {
-            return;
-        }
-        held.link = Link::Opening;
     }
-    hold(document, ctx, state, &base, &room);
+    if !matches!(state.borrow().link, Link::Off) {
+        return;
+    }
+    let base = relay_base();
+    match recall(&base) {
+        // A room this tab already holds: walk straight back into it, without
+        // asking the relay for anything.
+        Some(kept) => {
+            state.borrow_mut().link = Link::Opening;
+            hold(document, ctx, state, &base, &kept.room());
+        }
+        None => connect(document.clone(), ctx.clone(), state.clone()),
+    }
 }
 
-async fn open_room(base: &str) -> Result<Room, String> {
+/// What the relay answers when a room is opened or claimed.
+#[derive(serde::Deserialize)]
+struct Opened {
+    room: String,
+    tab_key: String,
+    mcp_path: String,
+}
+
+async fn open_room(base: &str, keeping: Option<Kept>) -> Result<Kept, String> {
     let options = web_sys::RequestInit::new();
     options.set_method("POST");
     options.set_mode(web_sys::RequestMode::Cors);
+    // Asking for the room this tab already had is what keeps its address the
+    // same — across a reload, a switch off and on, and a relay that restarted.
+    if let Some(keeping) = &keeping
+        && let Ok(body) = serde_json::to_string(&serde_json::json!({
+            "room": keeping.room,
+            "tab_key": keeping.tab_key,
+            "client_token": keeping.client_token,
+        }))
+    {
+        options.set_body(&wasm_bindgen::JsValue::from_str(&body));
+        let headers = web_sys::Headers::new().map_err(|e| told(&e))?;
+        headers
+            .set("content-type", "application/json")
+            .map_err(|e| told(&e))?;
+        options.set_headers(&headers);
+    }
     let request = web_sys::Request::new_with_str_and_init(&format!("{base}/rooms"), &options)
         .map_err(|e| told(&e))?;
     let window = web_sys::window().ok_or("no window")?;
@@ -224,6 +261,14 @@ async fn open_room(base: &str) -> Result<Room, String> {
     let response = answer
         .dyn_into::<web_sys::Response>()
         .map_err(|_| "the relay answered something odd".to_owned())?;
+    if response.status() == 403 {
+        // The room belongs to somebody else now: start over rather than keep
+        // asking for a door that is not ours.
+        forget();
+        return Err(
+            crate::i18n::tr("o endereço guardado não vale mais — ligue de novo").to_owned(),
+        );
+    }
     if !response.ok() {
         return Err(format!("the relay said {}", response.status()));
     }
@@ -232,7 +277,22 @@ async fn open_room(base: &str) -> Result<Room, String> {
         .map_err(|e| told(&e))?
         .as_string()
         .unwrap_or_default();
-    serde_json::from_str(&text).map_err(|e| format!("the relay answered something odd: {e}"))
+    let opened: Opened = serde_json::from_str(&text)
+        .map_err(|e| format!("the relay answered something odd: {e}"))?;
+    // The token is in the path the relay hands back; keeping it apart is what
+    // lets the tab ask for this very room again.
+    let client_token = opened
+        .mcp_path
+        .split('/')
+        .nth(3)
+        .unwrap_or_default()
+        .to_owned();
+    Ok(Kept {
+        relay: base.to_owned(),
+        room: opened.room,
+        tab_key: opened.tab_key,
+        client_token,
+    })
 }
 
 /// Opens the socket and wires what arrives on it to the tools.

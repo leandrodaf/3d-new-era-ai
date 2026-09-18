@@ -1988,6 +1988,21 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
             "Pídale algo",
             "Demandez-lui quelque chose",
         ],
+        "o endereço guardado não vale mais — ligue de novo" => [
+            "the address kept here is no longer yours — switch it on again",
+            "la dirección guardada ya no es suya — actívela de nuevo",
+            "l'adresse gardée ici n'est plus la vôtre — activez-la à nouveau",
+        ],
+        "No ar, esperando a sua IA" => [
+            "Up, waiting for your AI",
+            "En el aire, esperando su IA",
+            "En ligne, en attente de votre IA",
+        ],
+        "Quem tiver esse endereço edita este projeto: trate como senha." => [
+            "Anyone with that address edits this project: treat it like a password.",
+            "Quien tenga esa dirección edita este proyecto: trátela como una contraseña.",
+            "Quiconque a cette adresse modifie ce projet : traitez-la comme un mot de passe.",
+        ],
         _ => return None,
     })
 }
