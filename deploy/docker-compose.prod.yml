@@ -1,0 +1,202 @@
+# Produção na VPS — gerado por deploy/onboard para newera-relay.
+#
+# NÃO edite este arquivo direto na máquina: o próximo `onboard.sh` o
+# reescreve. Mude o template em agendo-certo-internal/deploy/onboard e
+# rode de novo.
+#
+# Nenhum serviço publica porta pra internet. Quem expõe a aplicação é o
+# Cloudflare Tunnel, que roda como systemd no host e conecta de DENTRO
+# pra fora. A VPS não tem porta de entrada aberta (ufw default deny), e
+# é isso que sustenta o resto do desenho.
+
+name: newera-relay
+
+services:
+  app:
+    image: ${APP_IMAGE:?defina APP_IMAGE, ex ghcr.io/leandrodaf/3d-new-era-ai:v1.0.0}
+    restart: unless-stopped
+
+    # 127.0.0.1 no bind é a peça central: a porta NÃO fica acessível de
+    # fora da máquina nem se o ufw cair. Só o cloudflared, que roda no
+    # host, alcança. Publicar como "7979:7979" abriria pra
+    # internet inteira — e o Docker FURA o ufw ao fazer isso, porque
+    # escreve direto na cadeia DOCKER do iptables, que roda antes das
+    # regras do ufw.
+    ports:
+      - "127.0.0.1:7979:7979"
+
+    env_file:
+      # Os segredos da aplicação vivem só aqui, com 0600 e dono root.
+      # Ficam FORA do compose de propósito: este arquivo é versionado e
+      # legível por qualquer um com acesso ao repo.
+      - ./app.env
+
+    environment:
+      # postgres é o nome do serviço na rede interna — resolve pelo DNS
+      # do Docker e nunca sai da máquina.
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_NAME: ${POSTGRES_DB:-newera_relay}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?}
+      # DATABASE_URL junto porque app Go costuma aceitar um ou outro.
+      # sslmode=disable é seguro AQUI e só aqui: o tráfego app<->banco
+      # nunca sai da bridge interna, dentro da mesma máquina. Se o banco
+      # um dia sair pra outro host, isto PRECISA virar verify-full.
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:-newera_relay}?sslmode=disable
+      PORT: "7979"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    # frontend: a app precisa de saída pra internet (Stripe, Resend,
+    # OAuth, Sentry). backend: onde o Postgres vive.
+    networks: [frontend, backend]
+
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    mem_limit: 256m
+    pids_limit: 256
+
+    logging:
+      # syslog, não json-file: com json-file o log vive DENTRO do
+      # diretório do container, e todo deploy recria o container levando
+      # o histórico junto — sobravam ~40 minutos de log.
+      #
+      # UDP em 127.0.0.1 de propósito: entrega fire-and-forget, então se
+      # o rsyslog estiver parado o container SOBE do mesmo jeito e só
+      # perde log. Problema de log não pode derrubar produção.
+      driver: syslog
+      options:
+        syslog-address: "udp://127.0.0.1:514"
+        tag: "relay-app"
+        mode: "non-blocking"
+
+  postgres:
+    image: postgres:17.6-bookworm
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-newera_relay}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      # scram-sha-256 em vez do md5 legado (quebrável offline) e
+      # data-checksums pra detectar corrupção silenciosa de disco. As
+      # duas SÓ valem no initdb: num cluster já criado, mudar exige
+      # recriar. Por isso estão aqui desde o primeiro boot.
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256 --data-checksums"
+      # Locale neutro e determinístico: C.UTF-8 é byte-order puro, é o
+      # único garantido na imagem oficial (pt_BR nem existe gerada lá) e
+      # é o mais rápido pra índice.
+      LANG: C.UTF-8
+
+    command: [postgres, -c, config_file=/etc/postgresql/postgresql.conf]
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
+
+    networks: [backend]
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${POSTGRES_DB:-newera_relay}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add:
+      # O entrypoint do Postgres roda como root só pra ajustar dono do
+      # PGDATA e então faz setuid pro usuário postgres — estes cinco são
+      # o mínimo pra isso. Sem eles o container não sobe.
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+
+    shm_size: 256mb
+    # O padrão do Docker é 64MB de /dev/shm, e o Postgres usa memória
+    # compartilhada pra hash join e sort paralelo. Com 64MB, query
+    # grande falha com "could not resize shared memory segment".
+
+    mem_limit: 512m
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://127.0.0.1:514"
+        tag: "relay-postgres"
+        mode: "non-blocking"
+
+  backup:
+    # MESMA imagem do Postgres de propósito: o pg_dump precisa ser da
+    # mesma versão do servidor (ou mais nova) — um pg_dump 16 contra um
+    # servidor 17 recusa rodar, e é o tipo de erro que só aparece quando
+    # você precisa do backup.
+    build:
+      context: ./backup
+    image: newera-relay-backup:local
+    restart: unless-stopped
+
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD:?}
+      PGDATABASE: ${POSTGRES_DB:-newera_relay}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:?}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:?}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:?}
+      R2_BUCKET: ${R2_BUCKET:-newera-relay-backups}
+      BACKUP_HOUR_UTC: ${BACKUP_HOUR_UTC:-09}
+      KEEP_DAILY: ${KEEP_DAILY:-7}
+      KEEP_WEEKLY: ${KEEP_WEEKLY:-4}
+      KEEP_MONTHLY: ${KEEP_MONTHLY:-3}
+      # Dead-man's switch: um ping a cada backup bem-sucedido. Se parar
+      # de chegar, o serviço externo avisa. Vazio = sem alerta, e aí uma
+      # falha só aparece quando você precisar do backup.
+      BACKUP_HEARTBEAT_URL: ${BACKUP_HEARTBEAT_URL:-}
+      # true na PRIMEIRA subida: sem isso a primeira cópia só existiria
+      # na próxima janela diária, e até lá não há backup nenhum. Foi
+      # exatamente o buraco encontrado no agendo-certo em 27/08/2026.
+      BACKUP_ON_START: ${BACKUP_ON_START:-true}
+
+    # Precisa das DUAS redes: backend pra alcançar o Postgres, frontend
+    # pra enviar o dump pro R2. É o preço de mandar backup pra fora.
+    networks: [backend, frontend]
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    mem_limit: 512m
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://127.0.0.1:514"
+        tag: "relay-backup"
+        mode: "non-blocking"
+
+networks:
+  # internal: true = sem gateway pra internet. O Postgres fica numa rede
+  # da qual não é possível iniciar conexão de saída. Se um dia alguém
+  # executar código dentro do banco (COPY PROGRAM, extensão maliciosa),
+  # ainda assim não exfiltra nada pela rede.
+  #
+  # É uma rede PRÓPRIA deste projeto: o Postgres do newera-relay não é
+  # alcançável pelos containers dos outros sistemas da máquina, e
+  # vice-versa. Só o painel interno se conecta às redes de todos.
+  backend:
+    internal: true
+  frontend: {}
+
+volumes:
+  postgres-data:

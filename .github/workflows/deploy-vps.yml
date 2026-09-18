@@ -1,0 +1,198 @@
+# Deploy de produção de newera-relay — GERADO por deploy/onboard do
+# agendo-certo-internal. Regenerar sobrescreve; ajustes manuais devem
+# virar mudança no template.
+#
+# Dispara SÓ em tag de release semver (v1.0.0, v1.2.3).
+#
+# O padrão `v[0-9]+.[0-9]+.[0-9]+` é filtro de ref do GitHub (glob, não
+# regex): `+` é "um ou mais do caractere anterior" e `.` é literal. Casa
+# v1.0.0 e v10.2.3, e NÃO casa v1.0.0-rc1 — pré-release não vai pra
+# produção sem alguém decidir promover.
+#
+# Fluxo: testa -> builda a imagem -> publica no ghcr.io -> entra na VPS
+# pelo Cloudflare Tunnel e troca o container.
+#
+# A VPS não tem NENHUMA porta aberta pra internet (ufw default deny, e o
+# sshd só aceita 127.0.0.1). O acesso é feito por dentro do tunnel, com
+# `cloudflared access ssh` — o mesmo caminho que o Leandro usa no dia a dia.
+name: deploy
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  # Minúsculo e literal: o Docker recusa tag com maiúscula, e
+  # `github.repository` traz o dono como "AgendoCerto". Interpolar e
+  # converter daria mais linha de shell do que valor.
+  IMAGE: ghcr.io/leandrodaf/3d-new-era-ai
+
+jobs:
+  # Portão: `docker compose up` só roda com a suíte inteira verde. A app
+  # aplica o schema no próprio boot (AutoMigrate + Bootstrap*), então um
+  # deploy quebrado não é "endpoint fora do ar" — é migração rodando contra
+  # o banco de produção.
+  # Portão: a imagem só é publicada com a suíte inteira verde. Muita app
+  # aplica o schema no próprio boot, então um deploy quebrado não é
+  # "endpoint fora do ar" — é migração rodando contra o banco de produção.
+  # The gate: the image is only published with the suite green. This app is
+  # Rust and keeps nothing in a database, so the template's Postgres service
+  # and Go steps are replaced by what actually guards this service.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy -p newera-relay --all-targets --locked -- -D warnings
+      - run: cargo test -p newera-relay --locked
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # publicar no ghcr.io
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64          # a VPS é x86_64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.ref_name }}
+            ${{ env.IMAGE }}:latest
+          # Cache no próprio registry: o `go mod download` e o build ficam
+          # cacheados entre releases, sem inflar a imagem final.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # ssh.agendocerto.com.br é protegido por Cloudflare Access: sem estas
+    # duas variáveis o `cloudflared access ssh` tenta abrir um navegador
+    # pra login interativo e o job trava até estourar o timeout. O service
+    # token é uma credencial de máquina, autorizada por uma policy de
+    # Service Auth que aceita ESTE token específico — não "qualquer token
+    # da conta".
+    env:
+      TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+      TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+    permissions:
+      contents: read
+      packages: read   # a VPS baixa a imagem usando o token DESTE run
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Instalar cloudflared
+        run: |
+          curl -fsSL -o /tmp/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          sudo install -m 0755 /tmp/cloudflared /usr/local/bin/cloudflared
+          cloudflared --version
+
+      - name: Configurar SSH pelo tunnel
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # Fingerprint fixado em secret: sem isso o `StrictHostKeyChecking`
+          # teria que ser desligado, e aí um man-in-the-middle no caminho
+          # receberia a chave de deploy sem nenhum aviso.
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          cat >> ~/.ssh/config <<EOF
+          Host deploy-target
+            HostName $SSH_HOST
+            User $SSH_USER
+            IdentityFile ~/.ssh/id_deploy
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h
+          EOF
+          chmod 600 ~/.ssh/config
+
+      # Sincroniza a config ANTES de trocar a imagem. Sem este passo, uma
+      # mudança no docker-compose.prod.yml ou no postgresql.conf ficaria
+      # eternamente no repo sem nunca chegar no servidor — e o deploy
+      # pareceria bem-sucedido servindo a config antiga.
+      # --exclude: os segredos vivem SÓ na máquina e nunca no repo. Os DOIS
+      # arquivos precisam estar aqui, e é o `--delete` que torna isso
+      # crítico: ele apaga no destino tudo que não existe em deploy/. Sem
+      # `app.env` na lista, o PRIMEIRO deploy de uma app nova apaga os
+      # segredos que o onboard acabou de escrever, e o `docker compose up`
+      # morre por env_file inexistente — com o arquivo já destruído, então
+      # nem reverter o deploy resolve.
+      #
+      # Passou despercebido até 03/09/2026 porque agendo-certo e internal
+      # são anteriores a este template e declaram `environment:` direto;
+      # o umami foi a primeira app a usar app.env de verdade.
+      - name: Sincronizar config de deploy
+        run: |
+          set -euo pipefail
+          rsync -az --delete \
+            --exclude '.env' \
+            --exclude 'app.env' \
+            -e "ssh -o ConnectTimeout=30" \
+            deploy/ deploy-target:/opt/newera-relay/
+          ssh deploy-target "chmod +x /opt/newera-relay/deploy.sh"
+
+      # O pacote no ghcr é privado (o repo é privado). Em vez de deixar um
+      # PAT de longa duração na VPS, autenticamos com o GITHUB_TOKEN deste
+      # run — que expira quando o workflow termina — e deslogamos no fim.
+      # Credencial que não sobrevive ao deploy não pode vazar depois.
+      - name: Deploy
+        env:
+          TAG: ${{ github.ref_name }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ssh -o ConnectTimeout=30 deploy-target \
+            "docker login ghcr.io -u '${{ github.actor }}' --password-stdin" <<< "$GHCR_TOKEN"
+          ssh -o ConnectTimeout=30 deploy-target \
+            "APP_IMAGE='${{ env.IMAGE }}:${TAG}' /opt/newera-relay/deploy.sh" \
+            && ssh deploy-target "docker logout ghcr.io" \
+            || { ssh deploy-target "docker logout ghcr.io" || true; exit 1; }
+
+      - name: Verificar saúde
+        run: |
+          set -euo pipefail
+          # A imagem é `scratch` e não tem shell pra um HEALTHCHECK interno
+          # (ver Dockerfile), então quem valida é este passo, de fora, pelo
+          # mesmo 127.0.0.1:7979 que o cloudflared usa — é o
+          # caminho real do tráfego, e não um teste por dentro que pode
+          # passar com a rota de rede quebrada.
+          for i in $(seq 1 20); do
+            code=$(ssh deploy-target "curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:7979/health" || echo 000)
+            if [ "$code" = "200" ]; then echo "saudável (tentativa $i)"; exit 0; fi
+            echo "tentativa $i: HTTP $code"; sleep 6
+          done
+          echo "::error::a aplicação não ficou saudável em 2 minutos"
+          ssh deploy-target "cd /opt/newera-relay && docker compose -f docker-compose.prod.yml --env-file .env logs --tail 80 app"
+          exit 1
