@@ -242,6 +242,31 @@ fn every_interface_language() {
     crate::i18n::set(crate::i18n::Lang::Pt);
 }
 
+/// The panel that tells someone how to point their AI at this window, with an
+/// agent already at work in it.
+#[test]
+#[ignore = "visual review; needs a GPU"]
+fn connect_ai() {
+    let mut doc = Document::default();
+    house(&mut doc, 600.0);
+    let now = newera_core::collab::now_ms();
+    doc.agents_mut()
+        .hello(Some("s1"), "claude-code", Some("2.0.0"), now - 95_000);
+    doc.agents_mut().called(Some("s1"), "create", now - 40_000);
+    doc.agents_mut().called(Some("s1"), "place", now - 9_000);
+    doc.agents_mut()
+        .called(Some("s1"), "render_photo", now - 1_000);
+    render_in(
+        "connect-ai",
+        crate::theme::Mode::Night,
+        SharedDocument::new(doc),
+        |app| {
+            app.mcp_url = Some("http://127.0.0.1:7878/mcp".to_owned());
+            app.dialog = Some(Dialog::ConnectAi { client: 0 });
+        },
+    );
+}
+
 /// The window as the press kit shows it: a furnished home, in English, with
 /// nothing open over it.
 #[test]

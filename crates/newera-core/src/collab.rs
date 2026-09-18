@@ -152,6 +152,148 @@ impl Sessions {
     }
 }
 
+/// One AI client talking MCP to this window.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Agent {
+    /// What the client calls itself at the handshake: `claude-code`,
+    /// `Claude Desktop`, `cursor-vscode`…
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    /// When it first said hello, ms since the Unix epoch.
+    pub since_ms: u64,
+    /// Last time it did anything.
+    pub seen_ms: u64,
+    /// Tools it has called.
+    pub calls: u64,
+}
+
+/// One tool call, for the window to show that something is happening.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Call {
+    pub tool: String,
+    pub agent: String,
+    pub at_ms: u64,
+}
+
+/// The AI clients talking MCP to this document, and what they have just done.
+///
+/// A person who opens the editor has no way of telling whether their agent is
+/// really connected — the connection lives in another program's settings file.
+/// This is what the window shows them: who said hello, when, and the last few
+/// tools they called. Like [`Sessions`], it is never saved and never undoable.
+#[derive(Debug, Clone, Default)]
+pub struct Agents {
+    list: Vec<Agent>,
+    recent: Vec<Call>,
+    /// MCP session id → index in `list`, so a call is credited to the client
+    /// that opened that session and not to whoever spoke last.
+    by_session: std::collections::HashMap<String, usize>,
+    calls: u64,
+    generation: u64,
+}
+
+impl Agents {
+    /// Tool calls kept for the window to show.
+    pub const HISTORY: usize = 12;
+
+    /// A client finished the MCP handshake. `session` is the id the transport
+    /// handed it, when there is one (HTTP has them; stdio does not).
+    pub fn hello(&mut self, session: Option<&str>, name: &str, version: Option<&str>, now_ms: u64) {
+        let name = {
+            let trimmed = name.trim();
+            if trimmed.is_empty() { "MCP" } else { trimmed }
+        };
+        self.generation += 1;
+        let index = if let Some(index) = self.list.iter().position(|a| a.name == name) {
+            self.list[index].seen_ms = now_ms;
+            self.list[index].version = version.map(str::to_owned);
+            index
+        } else {
+            self.list.push(Agent {
+                name: name.to_owned(),
+                version: version.map(str::to_owned),
+                since_ms: now_ms,
+                seen_ms: now_ms,
+                calls: 0,
+            });
+            self.list.len() - 1
+        };
+        if let Some(session) = session {
+            self.by_session.insert(session.to_owned(), index);
+        }
+    }
+
+    /// A tool was called, by the client that owns `session` when it is known.
+    pub fn called(&mut self, session: Option<&str>, tool: &str, now_ms: u64) {
+        self.generation += 1;
+        self.calls += 1;
+        let index = session
+            .and_then(|s| self.by_session.get(s).copied())
+            .or_else(|| {
+                // No session (stdio) or one we never saw say hello: credit the
+                // client heard from most recently, which on one desktop is
+                // nearly always the only one there is.
+                self.list
+                    .iter()
+                    .enumerate()
+                    .max_by_key(|(_, a)| a.seen_ms)
+                    .map(|(i, _)| i)
+            });
+        let name = if let Some(index) = index {
+            let agent = &mut self.list[index];
+            agent.calls += 1;
+            agent.seen_ms = now_ms;
+            agent.name.clone()
+        } else {
+            // A call before any handshake: still worth showing.
+            self.list.push(Agent {
+                name: "MCP".to_owned(),
+                version: None,
+                since_ms: now_ms,
+                seen_ms: now_ms,
+                calls: 1,
+            });
+            "MCP".to_owned()
+        };
+        self.recent.push(Call {
+            tool: tool.to_owned(),
+            agent: name,
+            at_ms: now_ms,
+        });
+        if self.recent.len() > Self::HISTORY {
+            let extra = self.recent.len() - Self::HISTORY;
+            self.recent.drain(..extra);
+        }
+    }
+
+    /// Who has said hello, oldest first.
+    pub fn list(&self) -> &[Agent] {
+        &self.list
+    }
+
+    /// The last calls, oldest first.
+    pub fn recent(&self) -> &[Call] {
+        &self.recent
+    }
+
+    /// Tool calls since the window opened.
+    pub fn calls(&self) -> u64 {
+        self.calls
+    }
+
+    /// When anything last happened.
+    pub fn seen_ms(&self) -> Option<u64> {
+        self.list.iter().map(|a| a.seen_ms).max()
+    }
+
+    /// Changes on every hello and every call: enough to know whether the
+    /// window has something new to show.
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+}
+
 /// Milliseconds since the Unix epoch.
 pub fn now_ms() -> u64 {
     std::time::SystemTime::now()

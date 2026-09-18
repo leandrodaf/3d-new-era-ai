@@ -1709,6 +1709,163 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
             "Proyecto recuperado de esta sesión.",
             "Projet récupéré de cette session.",
         ],
+        "No terminal:" => ["In a terminal:", "En el terminal:", "Dans un terminal :"],
+        "Os instaladores já registram sozinhos se o Claude Code estiver instalado." => [
+            "The installers register it for you when Claude Code is installed.",
+            "Los instaladores lo registran solos si Claude Code está instalado.",
+            "Les installateurs l'enregistrent tout seuls si Claude Code est installé.",
+        ],
+        "Configurações → Desenvolvedor → Editar configuração" => [
+            "Settings → Developer → Edit Config",
+            "Configuración → Desarrollador → Editar configuración",
+            "Réglages → Développeur → Modifier la configuration",
+        ],
+        "Precisa do Node.js instalado para a ponte mcp-remote. Reinicie o Claude Desktop." => [
+            "Needs Node.js for the mcp-remote bridge. Restart Claude Desktop.",
+            "Necesita Node.js para el puente mcp-remote. Reinicie Claude Desktop.",
+            "Nécessite Node.js pour le pont mcp-remote. Redémarrez Claude Desktop.",
+        ],
+        "Os instaladores já registram sozinhos se o Codex estiver instalado." => [
+            "The installers register it for you when Codex is installed.",
+            "Los instaladores lo registran solos si Codex está instalado.",
+            "Les installateurs l'enregistrent tout seuls si Codex est installé.",
+        ],
+        "Depois abra o Gemini CLI e peça o projeto." => [
+            "Then open Gemini CLI and ask for your project.",
+            "Después abra Gemini CLI y pídale el proyecto.",
+            "Ouvrez ensuite Gemini CLI et demandez-lui votre projet.",
+        ],
+        "Use no modo agente do Copilot." => [
+            "Use it in Copilot's agent mode.",
+            "Úselo en el modo agente de Copilot.",
+            "À utiliser dans le mode agent de Copilot.",
+        ],
+        "Arquivo ~/.cursor/mcp.json" => [
+            "File ~/.cursor/mcp.json",
+            "Archivo ~/.cursor/mcp.json",
+            "Fichier ~/.cursor/mcp.json",
+        ],
+        "Reinicie o Cursor depois de salvar." => [
+            "Restart Cursor after saving.",
+            "Reinicie Cursor después de guardar.",
+            "Redémarrez Cursor après avoir enregistré.",
+        ],
+        "Outro app" => ["Another app", "Otra app", "Une autre app"],
+        "Nas configurações de MCP do app (Cline, Roo Code, Cherry Studio, LM Studio…)" => [
+            "In the app's MCP settings (Cline, Roo Code, Cherry Studio, LM Studio…)",
+            "En los ajustes de MCP de la app (Cline, Roo Code, Cherry Studio, LM Studio…)",
+            "Dans les réglages MCP de l'app (Cline, Roo Code, Cherry Studio, LM Studio…)",
+        ],
+        "O que importa é o app falar MCP: o modelo pode ser qualquer um." => [
+            "What matters is that the app speaks MCP: the model can be any of them.",
+            "Lo que importa es que la app hable MCP: el modelo puede ser cualquiera.",
+            "Ce qui compte, c'est que l'app parle MCP : le modèle peut être n'importe lequel.",
+        ],
+        "agora" => ["just now", "ahora", "à l'instant"],
+        "há {} s" => ["{} s ago", "hace {} s", "il y a {} s"],
+        "há {} min" => ["{} min ago", "hace {} min", "il y a {} min"],
+        "há {} h" => ["{} h ago", "hace {} h", "il y a {} h"],
+        "{} · {} chamadas" => ["{} · {} calls", "{} · {} llamadas", "{} · {} appels"],
+        "MCP · esperando sua IA" => [
+            "MCP · waiting for your AI",
+            "MCP · esperando su IA",
+            "MCP · en attente de votre IA",
+        ],
+        "IA: só no aplicativo" => [
+            "AI: in the app only",
+            "IA: solo en la aplicación",
+            "IA : seulement dans l'application",
+        ],
+        "Conectar sua IA — clique para ver como" => [
+            "Connect your AI — click to see how",
+            "Conecte su IA — haga clic para ver cómo",
+            "Connectez votre IA — cliquez pour voir comment",
+        ],
+        "IA" => ["AI", "IA", "IA"],
+        "{} conectado · {}" => ["{} connected · {}", "{} conectado · {}", "{} connecté · {}"],
+        "Nenhuma IA conectada ainda" => [
+            "No AI connected yet",
+            "Ninguna IA conectada todavía",
+            "Aucune IA connectée pour l'instant",
+        ],
+        "Conectar sua IA…" => ["Connect your AI…", "Conecte su IA…", "Connecter votre IA…"],
+        "Copiar o endereço do MCP" => [
+            "Copy the MCP address",
+            "Copiar la dirección del MCP",
+            "Copier l'adresse MCP",
+        ],
+        "Endereço copiado" => ["Address copied", "Dirección copiada", "Adresse copiée"],
+        "Conectar sua IA" => ["Connect your AI", "Conecte su IA", "Connecter votre IA"],
+        "O editor abre uma porta MCP: a sua IA desenha aqui dentro, em centímetros, e você vê acontecer." => {
+            [
+                "The editor opens an MCP port: your AI draws in here, in centimetres, and you watch it happen.",
+                "El editor abre un puerto MCP: su IA dibuja aquí dentro, en centímetros, y usted lo ve ocurrir.",
+                "L'éditeur ouvre un port MCP : votre IA dessine ici, en centimètres, et vous la regardez faire.",
+            ]
+        }
+        "Agora" => ["Right now", "Ahora mismo", "En ce moment"],
+        "Servidor MCP ligado" => [
+            "MCP server on",
+            "Servidor MCP encendido",
+            "Serveur MCP allumé",
+        ],
+        "No navegador o editor roda sozinho: o MCP vive no aplicativo do computador." => [
+            "In a browser the editor runs on its own: the MCP lives in the desktop app.",
+            "En el navegador el editor funciona solo: el MCP vive en la aplicación de escritorio.",
+            "Dans un navigateur, l'éditeur tourne seul : le MCP vit dans l'application de bureau.",
+        ],
+        "O servidor está desligado (--no-server): reabra o aplicativo sem essa opção." => [
+            "The server is off (--no-server): reopen the app without that option.",
+            "El servidor está apagado (--no-server): vuelva a abrir la aplicación sin esa opción.",
+            "Le serveur est éteint (--no-server) : rouvrez l'application sans cette option.",
+        ],
+        "Nenhuma IA conectada ainda — siga os três passos abaixo." => [
+            "No AI connected yet — the three steps below do it.",
+            "Ninguna IA conectada todavía: los tres pasos de abajo lo resuelven.",
+            "Aucune IA connectée — les trois étapes ci-dessous s'en chargent.",
+        ],
+        "1. Escolha o aplicativo de IA que você usa" => [
+            "1. Pick the AI app you use",
+            "1. Elija la app de IA que usa",
+            "1. Choisissez l'app d'IA que vous utilisez",
+        ],
+        "2. Cole isto onde ele pede" => [
+            "2. Paste this where it asks",
+            "2. Pegue esto donde lo pide",
+            "2. Collez ceci là où il le demande",
+        ],
+        "3. Peça alguma coisa" => [
+            "3. Ask it for something",
+            "3. Pídale algo",
+            "3. Demandez-lui quelque chose",
+        ],
+        "Quantas paredes tem este projeto? Depois coloque uma janela de 120 cm na sala." => [
+            "How many walls does this project have? Then put a 120 cm window in the living room.",
+            "¿Cuántas paredes tiene este proyecto? Después ponga una ventana de 120 cm en el salón.",
+            "Combien de murs a ce projet ? Ensuite, posez une fenêtre de 120 cm dans le salon.",
+        ],
+        "Copiado" => ["Copied", "Copiado", "Copié"],
+        "Últimas chamadas" => ["Latest calls", "Últimas llamadas", "Derniers appels"],
+        "Nada ainda. Assim que sua IA usar uma ferramenta, ela aparece aqui." => [
+            "Nothing yet. The moment your AI uses a tool, it shows up here.",
+            "Nada todavía. En cuanto su IA use una herramienta, aparece aquí.",
+            "Rien encore. Dès que votre IA utilise un outil, cela apparaît ici.",
+        ],
+        "Baixar o aplicativo" => [
+            "Download the app",
+            "Descargar la aplicación",
+            "Télécharger l'application",
+        ],
+        "{} conectado · {} chamadas · {}" => [
+            "{} connected · {} calls · {}",
+            "{} conectado · {} llamadas · {}",
+            "{} connecté · {} appels · {}",
+        ],
+        "{} conectou — sua IA já pode desenhar aqui" => [
+            "{} connected — your AI can draw in here now",
+            "{} se conectó — su IA ya puede dibujar aquí",
+            "{} s'est connecté — votre IA peut dessiner ici",
+        ],
         _ => return None,
     })
 }

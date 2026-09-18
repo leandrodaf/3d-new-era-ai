@@ -57,6 +57,11 @@ pub(crate) enum Dialog {
         name: String,
     },
     Help,
+    /// How to point an AI at this window, and what it is doing right now.
+    ConnectAi {
+        /// Which client's snippet is on show.
+        client: usize,
+    },
 }
 
 /// Type and side finishes being edited for one or more walls. Values start
@@ -1350,6 +1355,14 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                 DialogOutcome::Close
             } else {
                 DialogOutcome::Keep(Dialog::Compare(rows))
+            }
+        }
+        Dialog::ConnectAi { client } => {
+            let mut client = client;
+            if crate::ai::panel(app, ctx, &mut client) {
+                DialogOutcome::Close
+            } else {
+                DialogOutcome::Keep(Dialog::ConnectAi { client })
             }
         }
         Dialog::Help => {

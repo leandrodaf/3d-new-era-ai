@@ -78,7 +78,7 @@ const AUTOSAVE_LIMIT: usize = 3 * 1024 * 1024;
 
 pub(crate) struct NewEraApp {
     pub(crate) document: SharedDocument,
-    mcp_url: Option<String>,
+    pub(crate) mcp_url: Option<String>,
     pub(crate) tool: Tool,
     pub(crate) selection: Selection,
     pub(crate) plan: PlanView,
@@ -87,7 +87,7 @@ pub(crate) struct NewEraApp {
     /// Which theme the plan is drawn for, to notice when the system flips it.
     dark: bool,
     settings: Settings,
-    dialog: Option<Dialog>,
+    pub(crate) dialog: Option<Dialog>,
     status: Option<(String, Instant)>,
     clipboard: Vec<Element>,
     pending: Option<Pending>,
@@ -95,6 +95,9 @@ pub(crate) struct NewEraApp {
     title: String,
     plan_rect: egui::Rect,
     pub(crate) catalog_query: String,
+    /// AI clients already announced in the status bar, so a connection is
+    /// said once and not on every frame.
+    pub(crate) announced_agents: usize,
     /// Tab being renamed in place: `(variant index, draft name)`.
     pub(crate) renaming_variant: Option<(usize, String)>,
     /// Visitor camera last taken from the document, to follow changes made
@@ -225,6 +228,7 @@ impl NewEraApp {
             #[cfg(target_arch = "wasm32")]
             mirrored: (0, Instant::now()),
             catalog_query: String::new(),
+            announced_agents: 0,
             renaming_variant: None,
         };
         // The work of the last visit comes back before anything else opens
@@ -242,6 +246,12 @@ impl NewEraApp {
                 app.restored = true;
                 app.set_status(crate::i18n::tr("Projeto recuperado desta sessão."));
             }
+        }
+        // Nobody arrives knowing that an editor can be driven by their AI, and
+        // the connection is made in another program's settings: the first time
+        // the window opens, it says so itself.
+        if first_run {
+            app.dialog = Some(Dialog::ConnectAi { client: 0 });
         }
         app
     }
@@ -1722,6 +1732,9 @@ impl NewEraApp {
                     ui.radio_value(&mut self.settings.unit, unit, unit.label());
                 }
             });
+            // The AI menu is there in a browser too: it is where someone finds
+            // out that the MCP lives in the app for the computer.
+            crate::ai::menu(self, ui);
             #[cfg(not(target_arch = "wasm32"))]
             self.plugins_menu(ui);
             ui.menu_button(crate::i18n::tr("Ajuda"), |ui| {
@@ -1886,26 +1899,7 @@ impl NewEraApp {
         let t = crate::theme::of(ui.visuals());
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
-            match &self.mcp_url {
-                Some(url) => {
-                    lamp(ui, t.ok);
-                    ui.label(crate::theme::fig(ui.visuals(), &format!("MCP {url}")).color(t.ok))
-                }
-                None if cfg!(target_arch = "wasm32") => {
-                    lamp(ui, t.ink_faint);
-                    ui.label(crate::theme::fig(
-                        ui.visuals(),
-                        crate::i18n::tr("Editor no navegador"),
-                    ))
-                }
-                None => {
-                    lamp(ui, t.ink_faint);
-                    ui.label(crate::theme::fig(
-                        ui.visuals(),
-                        crate::i18n::tr("MCP desligado"),
-                    ))
-                }
-            };
+            crate::ai::chip(self, ui);
             let people: Vec<(String, [u8; 3])> = self
                 .document
                 .read()
@@ -2043,7 +2037,7 @@ fn keys<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
 }
 
 /// A lit indicator: the dot with a halo the site uses to say something is on.
-fn lamp(ui: &mut egui::Ui, color: egui::Color32) {
+pub(crate) fn lamp(ui: &mut egui::Ui, color: egui::Color32) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
     let center = rect.center();
     ui.painter()
@@ -2051,7 +2045,13 @@ fn lamp(ui: &mut egui::Ui, color: egui::Color32) {
     ui.painter().circle_filled(center, 2.5, color);
 }
 
-fn menu_item(ui: &mut egui::Ui, glyph: &str, label: &str, shortcut: &str, enabled: bool) -> bool {
+pub(crate) fn menu_item(
+    ui: &mut egui::Ui,
+    glyph: &str,
+    label: &str,
+    shortcut: &str,
+    enabled: bool,
+) -> bool {
     ui.add_enabled(
         enabled,
         egui::Button::new(format!("{glyph}  {label}")).shortcut_text(shortcut),
@@ -2326,6 +2326,7 @@ impl eframe::App for NewEraApp {
         #[cfg(not(target_arch = "wasm32"))]
         self.collect_plugin();
         self.follow_document_camera();
+        crate::ai::announce(self);
         if self
             .top_views
             .as_ref()
@@ -2721,6 +2722,41 @@ mod tests {
         toggle(&mut h);
         assert!(newera_telemetry::enabled(), "and back on");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Whoever opens this window has to be able to see that their agent is
+    /// really talking to it — and find out how, when it is not.
+    #[test]
+    fn the_window_shows_the_ai_connecting_and_how_to_connect_it() {
+        let mut h = app_with_wall();
+        h.state_mut().mcp_url = Some("http://127.0.0.1:7878/mcp".to_owned());
+        h.run_steps(3);
+        // Nobody yet: the status bar says so, in as many words (the figures
+        // line is set in small capitals, hence the shouting).
+        h.get_by_label_contains("ESPERANDO SUA IA");
+
+        // The panel opens from the menu and carries the address to paste.
+        h.get_by_label("IA").click();
+        h.run_steps(3);
+        h.get_by_label_contains("Conectar sua IA…").click();
+        h.run_steps(3);
+        h.get_by_label_contains("claude mcp add --transport http newera http://127.0.0.1:7878/mcp");
+        h.get_by_label_contains("Nenhuma IA conectada ainda");
+        h.key_press(Key::Escape);
+        h.run_steps(3);
+
+        // An agent says hello and calls a tool: both show up without a click.
+        {
+            let mut doc = h.state().document.write();
+            let now = newera_core::collab::now_ms();
+            doc.agents_mut()
+                .hello(Some("s1"), "claude-code", Some("2.0.0"), now);
+            doc.agents_mut().called(Some("s1"), "place", now);
+        }
+        h.run_steps(3);
+        h.get_by_label_contains("CLAUDE-CODE · 1");
+        // And it says so once, where messages go.
+        h.get_by_label_contains("claude-code conectou");
     }
 
     #[test]

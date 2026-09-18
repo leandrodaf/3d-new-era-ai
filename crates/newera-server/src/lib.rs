@@ -85,7 +85,15 @@ pub fn router_with(
             addr.to_string(),
         ]
     };
-    let mcp = newera_mcp::http_service(document.clone(), allowed_hosts, shutdown);
+    // The MCP service, with a reader in front noting who is connected and
+    // what they call — the window has no other way to show it.
+    let mcp = Router::new()
+        .fallback_service(newera_mcp::http_service(
+            document.clone(),
+            allowed_hosts,
+            shutdown,
+        ))
+        .layer(axum::middleware::from_fn(watch_mcp(document.clone())));
 
     Router::new()
         .route("/health", get(|| async { "ok" }))
@@ -124,6 +132,123 @@ pub fn router_with(
 
 type Middleware =
     std::pin::Pin<Box<dyn std::future::Future<Output = axum::response::Response> + Send>>;
+
+/// The most an MCP message may weigh before this stops reading it. Images go
+/// in over this route (`set_background`), so it is generous; beyond it the
+/// request still goes through, it is simply not looked at.
+const MCP_PEEK_LIMIT: usize = 64 * 1024 * 1024;
+
+/// Notes who is talking MCP to this document and what they call, so the
+/// window can show it.
+///
+/// Whether an agent is connected is otherwise invisible from the editor — the
+/// connection lives in another program's configuration file, and a person has
+/// no way of telling a working setup from a typo. So every message on the way
+/// in is read for two things: the handshake, which carries the client's name,
+/// and `tools/call`, which carries the tool. Nothing else is kept, and nothing
+/// is blocked: a message this cannot parse simply passes.
+fn watch_mcp(
+    document: SharedDocument,
+) -> impl Fn(axum::extract::Request, axum::middleware::Next) -> Middleware + Clone + Send + Sync + 'static
+{
+    move |request: axum::extract::Request, next: axum::middleware::Next| {
+        let document = document.clone();
+        Box::pin(async move {
+            let session = request
+                .headers()
+                .get("mcp-session-id")
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_owned);
+            let (parts, body) = request.into_parts();
+            let Ok(bytes) = axum::body::to_bytes(body, MCP_PEEK_LIMIT).await else {
+                return axum::response::IntoResponse::into_response((
+                    axum::http::StatusCode::PAYLOAD_TOO_LARGE,
+                    "MCP message too large",
+                ));
+            };
+            let heard = heard_in(&bytes);
+            let request =
+                axum::extract::Request::from_parts(parts, axum::body::Body::from(bytes.clone()));
+            let response = next.run(request).await;
+            // The handshake answers with the session id the client will use
+            // from then on, so the greeting is filed under it and every later
+            // call lands on the right name.
+            let session = response
+                .headers()
+                .get("mcp-session-id")
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_owned)
+                .or(session);
+            if !heard.is_empty() && response.status().is_success() {
+                let now = newera_core::collab::now_ms();
+                let mut doc = document.write();
+                let agents = doc.agents_mut();
+                for message in heard {
+                    match message {
+                        Heard::Hello { name, version } => {
+                            agents.hello(session.as_deref(), &name, version.as_deref(), now);
+                        }
+                        Heard::Call { tool } => {
+                            agents.called(session.as_deref(), &tool, now);
+                        }
+                    }
+                }
+            }
+            response
+        })
+    }
+}
+
+/// What a message on the MCP route was worth noticing for.
+enum Heard {
+    Hello {
+        name: String,
+        version: Option<String>,
+    },
+    Call {
+        tool: String,
+    },
+}
+
+/// Reads one JSON-RPC message, or a batch of them, for greetings and calls.
+fn heard_in(bytes: &[u8]) -> Vec<Heard> {
+    let Ok(body) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+        return Vec::new();
+    };
+    let messages = match &body {
+        serde_json::Value::Array(list) => list.clone(),
+        other => vec![other.clone()],
+    };
+    messages
+        .iter()
+        .filter_map(|message| {
+            let params = message.get("params");
+            match message.get("method").and_then(serde_json::Value::as_str) {
+                Some("initialize") => {
+                    let client = params?.get("clientInfo")?;
+                    Some(Heard::Hello {
+                        name: client
+                            .get("name")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or("MCP")
+                            .to_owned(),
+                        version: client
+                            .get("version")
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_owned),
+                    })
+                }
+                Some("tools/call") => Some(Heard::Call {
+                    tool: params?
+                        .get("name")
+                        .and_then(serde_json::Value::as_str)?
+                        .to_owned(),
+                }),
+                _ => None,
+            }
+        })
+        .collect()
+}
 
 /// Rejects requests without the token (when one is configured).
 fn require_token(
@@ -638,6 +763,97 @@ mod tests {
     use tower::ServiceExt;
 
     use super::*;
+
+    /// The window can only show that an agent is connected if the route
+    /// notices the handshake and the calls going by.
+    #[tokio::test]
+    async fn the_window_learns_who_is_talking_mcp() {
+        let document = SharedDocument::new(Document::default());
+        let app = router(document.clone(), DEFAULT_ADDR, CancellationToken::new());
+        let hello = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": { "name": "claude-code", "version": "2.0.0" }
+            }
+        });
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/mcp")
+                    .header("host", "127.0.0.1:7878")
+                    .header("content-type", "application/json")
+                    .header("accept", "application/json, text/event-stream")
+                    .body(Body::from(hello.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            response.status().is_success(),
+            "handshake: {:?}",
+            response.status()
+        );
+        let session = response
+            .headers()
+            .get("mcp-session-id")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_owned();
+
+        {
+            let doc = document.read();
+            let agents = doc.agents();
+            assert_eq!(agents.list().len(), 1, "one client said hello");
+            assert_eq!(agents.list()[0].name, "claude-code");
+            assert_eq!(agents.list()[0].version.as_deref(), Some("2.0.0"));
+            assert_eq!(agents.calls(), 0, "a handshake is not a call");
+        }
+
+        let call = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": { "name": "get_home", "arguments": {} }
+        });
+        let response = app
+            .oneshot(
+                Request::post("/mcp")
+                    .header("host", "127.0.0.1:7878")
+                    .header("content-type", "application/json")
+                    .header("accept", "application/json, text/event-stream")
+                    .header("mcp-protocol-version", "2025-06-18")
+                    .header("mcp-session-id", session)
+                    .body(Body::from(call.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            response.status().is_success(),
+            "call: {:?}",
+            response.status()
+        );
+        let doc = document.read();
+        let agents = doc.agents();
+        assert_eq!(agents.calls(), 1);
+        assert_eq!(
+            agents.recent().last().map(|c| c.tool.as_str()),
+            Some("get_home")
+        );
+        assert_eq!(
+            agents.recent().last().map(|c| c.agent.as_str()),
+            Some("claude-code")
+        );
+        assert_eq!(
+            agents.list()[0].calls,
+            1,
+            "the call is credited to the client that made it"
+        );
+    }
 
     #[tokio::test]
     async fn api_home_reflects_document() {

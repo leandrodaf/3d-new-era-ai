@@ -3,6 +3,7 @@
 //! Layout follows classic home design tools: catalog and home contents on the
 //! left, the 2D floor plan on top and the native 3D view below it.
 
+mod ai;
 mod app;
 mod cabinets;
 mod dialogs;

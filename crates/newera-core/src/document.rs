@@ -59,6 +59,8 @@ pub struct Document {
     sessions: crate::collab::Sessions,
     /// The HTTP API serving this document, when one runs.
     server: Option<crate::collab::ServerInfo>,
+    /// AI clients talking MCP to this window (not saved, not undoable).
+    agents: crate::collab::Agents,
 }
 
 impl Default for Document {
@@ -80,6 +82,7 @@ impl Document {
             asset_dir: None,
             sessions: crate::collab::Sessions::default(),
             server: None,
+            agents: crate::collab::Agents::default(),
         }
     }
 
@@ -89,6 +92,15 @@ impl Document {
 
     pub fn sessions_mut(&mut self) -> &mut crate::collab::Sessions {
         &mut self.sessions
+    }
+
+    /// The AI clients talking MCP to this document, and their last calls.
+    pub fn agents(&self) -> &crate::collab::Agents {
+        &self.agents
+    }
+
+    pub fn agents_mut(&mut self) -> &mut crate::collab::Agents {
+        &mut self.agents
     }
 
     pub fn server(&self) -> Option<&crate::collab::ServerInfo> {
