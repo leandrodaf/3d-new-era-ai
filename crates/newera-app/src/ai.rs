@@ -369,50 +369,41 @@ pub(crate) fn chip(app: &mut NewEraApp, ui: &mut egui::Ui) {
     }
 }
 
-/// The menu people find when they go looking for the AI.
-pub(crate) fn menu(app: &mut NewEraApp, ui: &mut egui::Ui) {
-    ui.menu_button(crate::i18n::tr("IA"), |ui| {
-        let pulse = Pulse::read(app);
-        match pulse.newest() {
-            Some(agent) => {
-                ui.label(
-                    RichText::new(crate::i18n::fill(
-                        "{} conectado · {}",
-                        &[&agent.name, &ago(pulse.now_ms, agent.seen_ms)],
-                    ))
-                    .strong(),
-                );
-            }
-            None if app.mcp_url.is_some() => {
-                ui.weak(crate::i18n::tr("Nenhuma IA conectada ainda"));
-            }
-            None => {
-                ui.weak(crate::i18n::tr("MCP desligado"));
-            }
-        }
-        ui.separator();
-        if crate::app::menu_item(
-            ui,
-            icon::ROBOT,
-            crate::i18n::tr("Conectar sua IA…"),
-            "",
-            true,
-        ) {
-            app.dialog = Some(crate::dialogs::Dialog::ConnectAi { client: 0 });
-        }
-        let url = address(app);
-        if crate::app::menu_item(
-            ui,
-            icon::COPY,
-            crate::i18n::tr("Copiar o endereço do MCP"),
-            "",
-            app.mcp_url.is_some(),
-        ) {
-            ui.ctx().copy_text(url);
-            app.set_status(crate::i18n::tr("Endereço copiado"));
-            ui.close();
-        }
-    });
+/// The button in the top bar: a robot, the state as a colour, and the panel
+/// one tap away.
+///
+/// Whoever opens this editor should not have to learn a menu to find out that
+/// their AI can drive it. So the mark is in the corner where a logo would be,
+/// it lights up when an agent is connected, and it pulses on each call.
+pub(crate) fn button(app: &mut NewEraApp, ui: &mut egui::Ui) {
+    let t = crate::theme::of(ui.visuals());
+    let pulse = Pulse::read(app);
+    let connected = pulse.newest().is_some();
+    let (ink, fill) = match (reachable(app), connected, pulse.busy()) {
+        (_, true, true) => (t.accent_strong, t.accent_soft),
+        (_, true, false) => (t.ok, t.accent_soft),
+        (true, false, _) => (t.accent, t.accent_soft),
+        (false, ..) => (t.ink_dim, t.raised),
+    };
+    let label = RichText::new(format!("{}  IA", icon::ROBOT))
+        .size(14.0)
+        .color(ink);
+    let hint = match (reachable(app), pulse.newest()) {
+        (_, Some(agent)) => crate::i18n::fill(
+            "{} conectado · {}",
+            &[&agent.name, &ago(pulse.now_ms, agent.seen_ms)],
+        ),
+        (true, None) => crate::i18n::tr("Nenhuma IA conectada ainda").to_owned(),
+        (false, None) => crate::i18n::tr("Conectar sua IA — clique para ver como").to_owned(),
+    };
+    let button = egui::Button::new(label)
+        .fill(fill)
+        .stroke(egui::Stroke::new(1.0, if connected { ink } else { t.rule }))
+        .corner_radius(8);
+    if ui.add(button).on_hover_text(hint).clicked() {
+        app.dialog = Some(crate::dialogs::Dialog::ConnectAi { client: 0 });
+    }
+    ui.add_space(6.0);
 }
 
 /// In a browser: the switch that makes this tab reachable, and what it means.

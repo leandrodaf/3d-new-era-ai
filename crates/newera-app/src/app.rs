@@ -1335,6 +1335,11 @@ impl NewEraApp {
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
         egui::MenuBar::new().ui(ui, |ui| {
+            // The AI is not a feature hidden in a menu: it is what this editor
+            // is for. The button sits before everything else, wears the light
+            // that says whether an agent is there, and opens the one panel that
+            // explains how to bring one.
+            crate::ai::button(self, ui);
             ui.menu_button(crate::i18n::tr("Arquivo"), |ui| {
                 if menu_item(ui, icon::FILE_PLUS, crate::i18n::tr("Novo"), "Ctrl+N", true) {
                     self.request(Pending::New);
@@ -1802,9 +1807,6 @@ impl NewEraApp {
                     ui.radio_value(&mut self.settings.unit, unit, unit.label());
                 }
             });
-            // The AI menu is there in a browser too: it is where someone finds
-            // out that the MCP lives in the app for the computer.
-            crate::ai::menu(self, ui);
             #[cfg(not(target_arch = "wasm32"))]
             self.plugins_menu(ui);
             ui.menu_button(crate::i18n::tr("Ajuda"), |ui| {
@@ -2927,10 +2929,11 @@ mod tests {
         // line is set in small capitals, hence the shouting).
         h.get_by_label_contains("ESPERANDO SUA IA");
 
-        // The panel opens from the menu and carries the address to paste.
-        h.get_by_label("IA").click();
-        h.run_steps(3);
-        h.get_by_label_contains("Conectar sua IA…").click();
+        // The panel opens from the button in the top bar — the first thing in
+        // the row, because this editor is for driving with an AI — and it
+        // carries the address to paste.
+        h.get_by_label_contains(&format!("{} ", icon::ROBOT))
+            .click();
         h.run_steps(3);
         h.get_by_label_contains("claude mcp add --transport http newera http://127.0.0.1:7878/mcp");
         h.get_by_label_contains("Nenhuma IA conectada ainda");

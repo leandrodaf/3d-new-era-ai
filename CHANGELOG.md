@@ -27,6 +27,9 @@ usable on a phone.
   ask, and the last twelve tool calls as they land. The window names the client that
   connected and says each tool as it is used, so a working setup and a typo no longer look
   the same.
+- The AI has a place in the top bar: a robot with the name of the thing beside it, lit
+  when an agent is connected and pulsing on each call, one tap from the panel that says
+  how to bring one. It is the first thing in the row, which is what this editor is for.
 - Made for a phone. The editor sets its scale to what the screen can hold and, below 720
   points, shows one thing at a time — catalogue, plan or 3D — with a bar in thumb's reach
   and Ctrl+1/2/3 for whoever has a keyboard; the toolbar scrolls instead of falling off the
