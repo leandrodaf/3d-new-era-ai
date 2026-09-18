@@ -172,6 +172,22 @@ async fn the_tab_is_kept_alive() {
         .expect("the socket is still there after silence");
 }
 
+/// A body that is not a room request is not a refusal: the relay opens a fresh
+/// room, the way it always did.
+#[tokio::test]
+async fn a_body_that_says_nothing_still_opens_a_room() {
+    let base = relay().await;
+    for body in [json!({}), json!({"room": "nope"}), Value::Null] {
+        let (status, opened) = post(&format!("{base}/rooms"), body).await;
+        assert_eq!(status, 200);
+        assert_eq!(
+            opened["room"].as_str().map(str::len),
+            Some(32),
+            "a room all the same"
+        );
+    }
+}
+
 /// One room cannot be reached with another's secrets, and a room nobody owns
 /// cannot be reached at all.
 #[tokio::test]

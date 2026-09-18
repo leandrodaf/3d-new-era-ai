@@ -192,7 +192,12 @@ fn secret() -> String {
 }
 
 /// A room a tab is asking to keep: the one it held last time.
-#[derive(Debug, Clone, Deserialize)]
+///
+/// Every field defaults, so a body that says nothing of the sort — `{}`, or
+/// somebody else's JSON — reads as "no preference" and opens a fresh room,
+/// rather than being refused at the door.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
 struct Wanted {
     room: String,
     tab_key: String,
@@ -332,7 +337,10 @@ struct Opened {
 async fn open_room(
     State(rooms): State<Rooms>,
     headers: axum::http::HeaderMap,
-    body: Option<axum::Json<Wanted>>,
+    // Read as text and parsed here: a body that is not a room request — `{}`,
+    // `null`, somebody's stray JSON — should open a room, not be turned away
+    // with a complaint about its shape.
+    body: String,
 ) -> Response {
     // This runs behind a tunnel, so the peer address is the tunnel's: the
     // forwarded header is what tells one caller from another. It is not proof
@@ -345,7 +353,7 @@ async fn open_room(
         .map(str::trim)
         .filter(|v| !v.is_empty())
         .map_or_else(|| "unknown".to_owned(), str::to_owned);
-    let wanted = body.map(|axum::Json(wanted)| wanted);
+    let wanted = serde_json::from_str::<Wanted>(&body).ok();
     let (room, tab_key, client_token) = match rooms.open(&who, wanted) {
         Ok(opened) => opened,
         Err(why @ "that room is not yours") => {
