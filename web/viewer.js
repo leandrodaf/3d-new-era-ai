@@ -31,7 +31,11 @@ if (tag !== "pt") {
   }
 }
 
-const { instance } = await WebAssembly.instantiateStreaming(fetch("newera_web.wasm"), {});
+// The stamp this file was loaded with, handed on to the wasm beside it: one
+// build, one pair, whatever any cache in between is holding.
+const build = new URL(import.meta.url).searchParams.get("v");
+const wasmUrl = build ? `newera_web.wasm?v=${build}` : "newera_web.wasm";
+const { instance } = await WebAssembly.instantiateStreaming(fetch(wasmUrl), {});
 const wasm = instance.exports;
 status.textContent = words.ready;
 

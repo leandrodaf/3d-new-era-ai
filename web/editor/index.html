@@ -107,7 +107,22 @@
   addEventListener("unhandledrejection", (e) => neweraFail(e.reason));
 </script>
 <script type="module">
-  import init, { start } from "./pkg/newera_editor_web.js";
+  // The glue and the wasm are halves of one build and have fixed names, so a
+  // browser holding yesterday's glue and today's wasm links them together and
+  // refuses: "function import requires a callable". Both URLs carry the same
+  // stamp — written in at publish time, one per build — so a cache can only
+  // ever serve a matching pair.
+  // Substituted at publish time. Served straight from the repository it keeps
+  // its placeholder, and then every load asks for a fresh pair — which is what
+  // you want while building the thing.
+  const STAMP = "__BUILD__";
+  const BUILD = STAMP.startsWith("__") ? String(Date.now()) : STAMP;
+  const boot = async (again) => {
+    const v = again ? `${BUILD}-${Math.random().toString(36).slice(2)}` : BUILD;
+    const glue = await import(`./pkg/newera_editor_web.js?v=${v}`);
+    await glue.default({ module_or_path: `./pkg/newera_editor_web_bg.wasm?v=${v}` });
+    return glue;
+  };
 
   const loading = document.getElementById("loading");
   // ?project=URL opens a project; without it the demo home is shown.
@@ -121,9 +136,17 @@
     }
   } catch (_) { /* start empty */ }
   try {
-    await init();
+    let glue;
+    try {
+      glue = await boot(false);
+    } catch (error) {
+      // A mismatched pair got through anyway (a half-updated CDN, a service
+      // worker, a proxy): ask for both again, past every cache, once.
+      if (!/LinkError|callable|import|magic|Wasm/i.test(String(error))) throw error;
+      glue = await boot(true);
+    }
     loading.remove();
-    await start("newera", name, bytes);
+    await glue.start("newera", name, bytes);
   } catch (error) {
     window.neweraFail(error);
   }

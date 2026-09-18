@@ -43,6 +43,14 @@
   <section id="plan"><h2 data-t="plan">Planta baixa</h2></section>
   <section id="view"><h2>3D</h2><img id="image" alt=""><span class="hint" data-t="drag">Arraste para girar</span></section>
 </main>
-<script type="module" src="viewer.js"></script>
+<!-- The stamp is written in at publish time so the glue and the wasm are
+     always fetched as the pair they were built as. -->
+<script type="module">
+  // Substituted at publish time; unsubstituted (straight from the repository)
+  // every load asks for a fresh pair.
+  const stamp = "__BUILD__";
+  const v = stamp.startsWith("__") ? String(Date.now()) : stamp;
+  import(`./viewer.js?v=${v}`);
+</script>
 </body>
 </html>

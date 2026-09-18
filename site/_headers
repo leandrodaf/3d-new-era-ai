@@ -1,11 +1,17 @@
 # What the CDN should do with each thing here.
 
+# Every URL here carries the build's stamp, so what a cache holds is always
+# what the page asked for: it can be kept for a day without going stale.
 /app/pkg/*
-  Cache-Control: public, max-age=600
+  Cache-Control: public, max-age=86400
   X-Content-Type-Options: nosniff
 
+# The pages themselves must stay revalidated — they carry the stamps.
 /viewer/*.wasm
-  Cache-Control: public, max-age=600
+  Cache-Control: public, max-age=86400
+
+/viewer/viewer.js
+  Cache-Control: public, max-age=86400
 
 /images/*
   Cache-Control: public, max-age=604800
