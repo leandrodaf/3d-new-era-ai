@@ -138,9 +138,20 @@ await send("Page.enable");
     }
   } else {
     // The engine can also die half way through — the panel comes up while the
-    // check is already clicking. So the complaints are collected, and read at
-    // the end against whether there was still an editor to complain about.
-    const sins = [];
+    // check is already clicking, and a reload starts a fresh one that has not
+    // fallen over yet. So each complaint is weighed the moment it is made:
+    // engine dead, the rest of the editor checks stand down.
+    let gone = false;
+    const complain = async (what) => {
+      if (await engineDead()) {
+        const why = await evaluate("document.getElementById('failed-why')?.textContent ?? ''");
+        console.log("skipped: the editor stopped part way —", why.trim() || "no reason given");
+        gone = true;
+      } else {
+        console.error(what);
+        failed = true;
+      }
+    };
     // Wall tool (W), then a wall drawn right of the demo house on the plan.
     await send("Input.dispatchKeyEvent", { type: "keyDown", key: "w", code: "KeyW", text: "w" });
     await send("Input.dispatchKeyEvent", { type: "keyUp", key: "w", code: "KeyW" });
@@ -172,48 +183,40 @@ await send("Page.enable");
       await shot(webgpu ? "web-editor-background.png" : "web-editor-background-webgl.png");
       console.log("background: the picker opened and the image went in");
     } else {
-      sins.push("the background picker never opened");
+      await complain("the background picker never opened");
     }
 
     // What was drawn has to survive the tab being closed: the project is
     // mirrored into the browser's storage and opened again on the next visit,
     // instead of the demo home landing on top of it.
-    const stored = () => evaluate("localStorage.getItem('newera-autosave') || ''");
-    await sleep(2500);
-    const drawn = await stored();
-    if (!drawn) {
-      sins.push("nothing was mirrored into the browser's storage");
-    }
-    await send("Page.navigate", { url });
-    for (let i = 0; i < 300; i++) {
-      await sleep(200);
-      if (await evaluate("!document.getElementById('loading')")) break;
-    }
-    await sleep(3000);
-    const back = await stored();
-    if (back !== drawn) {
-      sins.push("the work did not come back after a reload");
-    } else {
-      console.log("autosave: the drawing came back after a reload");
-    }
-    const log = await evaluate("JSON.stringify(window.neweraLog || [])");
-    console.log("log:", log);
-    const errors = JSON.parse(log).filter((line) => /^(error|uncaught|rejection)/.test(line));
-    // A machine with no usable GPU cannot run the editor and says so in its own
-    // words; that is the machine's limit, not a broken build. Anything else is.
-    const noGpu = /createBuffer|too large for the implementation|adapter|WebGPU|WebGL|unreachable/i;
-    if (errors.length && errors.every((line) => noGpu.test(line))) {
-      console.log("skipped: this machine's GPU stack cannot run the editor");
-    } else if (errors.length) {
-      failed = true;
-    }
-
-    if (sins.length) {
-      if (await engineDead()) {
-        const why = await evaluate("document.getElementById('failed-why')?.textContent ?? ''");
-        console.log("skipped: the editor stopped part way —", why.trim() || "no reason given");
+    if (!gone) {
+      const stored = () => evaluate("localStorage.getItem('newera-autosave') || ''");
+      await sleep(2500);
+      const drawn = await stored();
+      if (!drawn) {
+        await complain("nothing was mirrored into the browser's storage");
+      }
+      await send("Page.navigate", { url });
+      for (let i = 0; i < 300; i++) {
+        await sleep(200);
+        if (await evaluate("!document.getElementById('loading')")) break;
+      }
+      await sleep(3000);
+      const back = await stored();
+      if (back !== drawn) {
+        await complain("the work did not come back after a reload");
       } else {
-        sins.forEach((sin) => console.error(sin));
+        console.log("autosave: the drawing came back after a reload");
+      }
+      const log = await evaluate("JSON.stringify(window.neweraLog || [])");
+      console.log("log:", log);
+      const errors = JSON.parse(log).filter((line) => /^(error|uncaught|rejection)/.test(line));
+      // A machine with no usable GPU cannot run the editor and says so in its own
+      // words; that is the machine's limit, not a broken build. Anything else is.
+      const noGpu = /createBuffer|too large for the implementation|adapter|WebGPU|WebGL|unreachable/i;
+      if (errors.length && errors.every((line) => noGpu.test(line))) {
+        console.log("skipped: this machine's GPU stack cannot run the editor");
+      } else if (errors.length) {
         failed = true;
       }
     }
