@@ -7,6 +7,8 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PickKind {
     Project,
+    /// A scanned plan to trace over.
+    Background,
 }
 
 /// A file chosen in the browser.
@@ -81,6 +83,10 @@ mod web {
             PickKind::Project => rfd::AsyncFileDialog::new().add_filter(
                 "3D New Era AI / Sweet Home 3D",
                 &[newera_core::PROJECT_EXTENSION, "sh3d"],
+            ),
+            PickKind::Background => rfd::AsyncFileDialog::new().add_filter(
+                "PNG, JPEG, WebP, BMP",
+                &["png", "jpg", "jpeg", "webp", "bmp"],
             ),
         };
         let ctx = ctx.clone();

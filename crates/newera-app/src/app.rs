@@ -129,6 +129,10 @@ pub(crate) struct NewEraApp {
     /// Frames drawn before the browser canvas got its real size.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     waited_frames: u32,
+    /// Where the background image picked in the browser is mounted, so the
+    /// next one can let it go.
+    #[cfg(target_arch = "wasm32")]
+    background_dir: Option<std::path::PathBuf>,
     /// Whether the project on screen came back from the browser's storage,
     /// in which case the page should not open the demo over it.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
@@ -215,6 +219,8 @@ impl NewEraApp {
             after_save: None,
             pick_request: None,
             waited_frames: 0,
+            #[cfg(target_arch = "wasm32")]
+            background_dir: None,
             restored: false,
             #[cfg(target_arch = "wasm32")]
             mirrored: (0, Instant::now()),
@@ -934,7 +940,50 @@ impl NewEraApp {
 
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn import_background(&mut self) {
-        self.set_status(crate::i18n::tr("Disponível no aplicativo para desktop."));
+        // The picker answers a few frames later, through `web_files`.
+        self.pick_request = Some(crate::files::PickKind::Background);
+    }
+
+    /// Puts a picked image behind the plan. In a browser there is no path to
+    /// point at, so the bytes are mounted in memory under a name of their
+    /// own and the background points there.
+    #[cfg(target_arch = "wasm32")]
+    fn place_background(&mut self, name: &str, bytes: &[u8]) {
+        let size = match image::load_from_memory(bytes) {
+            Ok(image) => [image.width(), image.height()],
+            Err(err) => {
+                return self.set_status(crate::i18n::fill("⚠ Imagem inválida: {}", &[&err]));
+            }
+        };
+        // A directory per import, so a second image does not have to share a
+        // name with the first — and the one before it is let go.
+        let revision = self.document.read().revision();
+        let dir = std::path::PathBuf::from(format!("/memory/background/{revision}"));
+        if let Some(previous) = self.background_dir.replace(dir.clone()) {
+            newera_core::vfs::unmount(&previous);
+        }
+        newera_core::vfs::mount(&dir, [(name.to_owned(), bytes.to_vec())]);
+        let path = dir.join(name).display().to_string();
+        // Start at a plausible scale: fit the image width to ~15 m.
+        let cm_per_px = 1500.0 / f64::from(size[0]);
+        self.run(|doc| {
+            doc.execute(Command::SetBackground {
+                background: Some(newera_core::BackgroundImage {
+                    path,
+                    size_px: size,
+                    cm_per_px,
+                    offset: Point2::new(0.0, 0.0),
+                    opacity: 0.5,
+                    visible: true,
+                    ..Default::default()
+                }),
+            })
+        });
+        self.plan.request_fit();
+        self.set_tool(Tool::Calibrate);
+        self.set_status(crate::i18n::tr(
+            "Imagem importada. Clique em dois pontos de medida conhecida para calibrar; arraste para posicionar.",
+        ));
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -2166,13 +2215,26 @@ impl NewEraApp {
 #[cfg(target_arch = "wasm32")]
 impl NewEraApp {
     /// Opens requested pickers and loads the files the browser handed over.
-    fn web_files(&mut self, ctx: &egui::Context) {
+    /// Opens the browser's file picker for whatever asked for one this
+    /// frame. Called at the *end* of the frame, so a button pressed in this
+    /// one opens the picker in this one: waiting for the next frame means
+    /// waiting for a repaint that an idle window has no reason to draw, and
+    /// the browser may have dropped the click's user activation by then —
+    /// which is a picker that never opens.
+    fn web_pick(&mut self, ctx: &egui::Context) {
         if let Some(kind) = self.pick_request.take() {
             crate::files::pick(kind, ctx);
         }
+    }
+
+    fn web_files(&mut self, ctx: &egui::Context) {
+        let _ = ctx;
         for picked in crate::files::take_picked() {
             match picked.kind {
                 crate::files::PickKind::Project => self.open_bytes(&picked.name, &picked.bytes),
+                crate::files::PickKind::Background => {
+                    self.place_background(&picked.name, &picked.bytes);
+                }
             }
         }
     }
@@ -2395,6 +2457,10 @@ impl eframe::App for NewEraApp {
         }
 
         ctx.request_repaint_after(EXTERNAL_CHANGES_POLL);
+
+        // Last, so a button pressed this frame gets its picker this frame.
+        #[cfg(target_arch = "wasm32")]
+        self.web_pick(&ctx);
 
         // A browser tab is closed without a question: what was drawn goes to
         // the browser's storage a moment after it changes, not half a minute.
