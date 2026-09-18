@@ -87,7 +87,7 @@ pub(crate) enum Pane {
 
 /// Narrower than this (in points) the window shows one pane at a time: a
 /// phone held upright, or a window squeezed to the side of a screen.
-const NARROW: f32 = 720.0;
+pub(crate) const NARROW: f32 = 720.0;
 
 pub(crate) struct NewEraApp {
     pub(crate) document: SharedDocument,

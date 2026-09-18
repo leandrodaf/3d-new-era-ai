@@ -93,6 +93,9 @@ usable on a phone.
   wasm keep the same names and a cache can hold one half of each build, which does not
   link. Both are stamped with the digest of the build now, so a cache can only ever serve a
   matching pair, and a mismatch that gets through anyway is fetched again past every cache.
+- The row of plan versions no longer runs into the discipline, the layers and the storeys
+  on a narrow screen: there the three go behind one button, with "compare versions" beside
+  them, and the sheets scroll under it.
 - Switching the browser's MCP off really closes it: the socket was kept inside the
   state, so a link that had fallen over left nothing to hang up and the old address went
   on answering while a new one was on screen. The socket is held beside the state now and

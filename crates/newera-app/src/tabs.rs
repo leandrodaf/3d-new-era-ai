@@ -46,11 +46,15 @@ pub(crate) fn bar(app: &mut NewEraApp, ui: &mut egui::Ui) {
     let mut blank = false;
     let mut close = None;
 
+    // On a phone the row has room for the sheets and one button: the rest —
+    // discipline, layers, storeys — goes behind that button instead of being
+    // drawn on top of the tabs.
+    let narrow = ui.ctx().content_rect().width() < crate::app::NARROW;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 3.0;
         egui::ScrollArea::horizontal()
             .id_salt("variant_tabs")
-            .max_width(ui.available_width() - 190.0)
+            .max_width((ui.available_width() - if narrow { 92.0 } else { 190.0 }).max(60.0))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     for info in &infos {
@@ -156,6 +160,7 @@ pub(crate) fn bar(app: &mut NewEraApp, ui: &mut egui::Ui) {
         .response
         .on_hover_text(crate::i18n::tr("Nova versão da planta"));
         let compare = count > 1
+            && !narrow
             && ui
                 .button(format!(
                     "{} {}",
@@ -164,13 +169,42 @@ pub(crate) fn bar(app: &mut NewEraApp, ui: &mut egui::Ui) {
                 ))
                 .on_hover_text(crate::i18n::tr("Comparar as versões"))
                 .clicked();
+        let mut compare_narrow = false;
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if narrow {
+                ui.menu_button(RichText::new(icon::SLIDERS_HORIZONTAL).size(16.0), |ui| {
+                    ui.set_min_width(230.0);
+                    disciplines(app, ui);
+                    ui.separator();
+                    layers(app, ui);
+                    ui.separator();
+                    levels(app, ui);
+                    if count > 1 {
+                        ui.separator();
+                        if ui
+                            .button(format!(
+                                "{} {}",
+                                icon::CHART_BAR,
+                                crate::i18n::tr("Comparar as versões")
+                            ))
+                            .clicked()
+                        {
+                            compare_narrow = true;
+                            ui.close();
+                        }
+                    }
+                })
+                .response
+                .on_hover_text(crate::i18n::tr("Disciplina, camadas e andares"));
+                return;
+            }
             levels(app, ui);
             ui.separator();
             layers(app, ui);
             ui.separator();
             disciplines(app, ui);
         });
+        let compare = compare || compare_narrow;
         if compare {
             app.open_compare();
         }

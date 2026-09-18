@@ -1951,6 +1951,11 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
                 "le serveur qui relie votre IA à cet onglet n'a pas répondu — dans l'application de bureau, le MCP n'en a pas besoin",
             ]
         }
+        "Disciplina, camadas e andares" => [
+            "Discipline, layers and storeys",
+            "Disciplina, capas y plantas",
+            "Discipline, calques et étages",
+        ],
         _ => return None,
     })
 }
