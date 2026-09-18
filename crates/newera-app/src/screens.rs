@@ -267,6 +267,31 @@ fn connect_ai() {
     );
 }
 
+/// The window as the site shows it: the demo home the browser opens on, in
+/// the dark palette, with the plan and the 3D as a visitor first meets them.
+#[test]
+#[ignore = "visual review; needs a GPU"]
+fn site_shot() {
+    let bytes = std::fs::read(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/demo.newera"),
+    )
+    .expect("the demo home ships with the browser editor");
+    crate::i18n::set(crate::i18n::Lang::Pt);
+    let mut harness = egui_kittest::Harness::builder()
+        .with_size(eframe::egui::vec2(1600.0, 1000.0))
+        .with_step_dt(1.0 / 60.0)
+        .wgpu()
+        .build_eframe(|cc| NewEraApp::new(cc, SharedDocument::default(), None));
+    crate::theme::set_mode(&harness.ctx, crate::theme::Mode::Night);
+    harness.run_steps(5);
+    harness.state_mut().open_bytes("demo.newera", &bytes);
+    harness.run_steps(24);
+    let image = harness.render().expect("render");
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/screenshots");
+    std::fs::create_dir_all(&dir).unwrap();
+    image.save(dir.join("site-editor.png")).unwrap();
+}
+
 /// The same panel before anybody has connected: the state nearly every
 /// visitor meets first, and the one the button in the bar is loud about.
 #[test]

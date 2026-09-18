@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The browser opens on a home worth looking at: a corner classic seven of the kind the
+  Upper West Side is full of — 164 m² with the gallery running the length of it, living
+  and dining to the north, the bedrooms and the service wing to the south, furnished
+  down to the lamps, with every room lit to the lux its use asks for and five points of
+  view saved to walk through. It was drawn with the program's own tools over MCP, and
+  the layout check passes on it.
+
 ## [1.4.2] - 2026-09-18
 
 ### Added
