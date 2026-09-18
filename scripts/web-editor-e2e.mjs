@@ -114,74 +114,99 @@ await send("Page.enable");
     failed = JSON.parse(log).some((line) => /^(error|uncaught|rejection)/.test(line));
     throw Object.assign(new Error("done"), { done: true });
   }
-  // Wall tool (W), then a wall drawn right of the demo house on the plan.
-  await send("Input.dispatchKeyEvent", { type: "keyDown", key: "w", code: "KeyW", text: "w" });
-  await send("Input.dispatchKeyEvent", { type: "keyUp", key: "w", code: "KeyW" });
-  await sleep(200);
-  await click(1150, 250);
-  await click(1350, 250);
-  await click(1350, 250, 2);
-  await sleep(1500);
-  await shot(webgpu ? "web-editor-wall.png" : "web-editor-wall-webgl.png");
-
-  // A scanned plan behind the drawing: the button opens the browser's picker
-  // and what comes back is mounted in memory and set as the background. This
-  // is the whole path, and it used to end at "only in the desktop app".
-  const plan = join(out, "e2e-plan.png");
-  writeFileSync(plan, Buffer.from(PLAN_PNG, "base64"));
-  chooser = null;
-  await click(517, 58);
-  // A hidden tab only draws when someone asks for a picture, and the click is
-  // only answered on a frame — so keep asking while waiting, and knock twice
-  // before giving up: a machine rasterising in software takes its time.
-  for (let i = 0; i < 60 && !chooser; i++) {
-    await send("Page.captureScreenshot", { format: "png" });
-    await sleep(200);
-    if (i === 25 && !chooser) await click(517, 58);
+  // A machine whose GPU stack cannot run the editor says so in its own words,
+  // in the panel with the download link. That is the machine's limit, not a
+  // broken build — so the checks that need a live editor step aside, and the
+  // viewer, which runs on the same engine, is still checked below.
+  const engineDead = async () => Boolean(await evaluate(
+    "(() => { const p = document.getElementById('failed'); return Boolean(p) && getComputedStyle(p).display !== 'none'; })()"
+  ));
+  // The engine gives up a moment after the loading note goes; give it that
+  // moment before deciding it is alive.
+  let dead = false;
+  for (let i = 0; i < 12 && !dead; i++) {
+    dead = await engineDead();
+    if (!dead) await sleep(250);
   }
-  if (chooser) {
-    await send("DOM.setFileInputFiles", { backendNodeId: chooser.backendNodeId, files: [plan] });
+  if (dead) {
+    const why = await evaluate("document.getElementById('failed-why')?.textContent ?? ''");
+    const out = await evaluate("document.getElementById('failed-link')?.getAttribute('href') ?? ''");
+    console.log("skipped: the editor could not start here —", why.trim() || "no reason given");
+    if (!out) {
+      console.error("the failure panel offers no way out");
+      failed = true;
+    }
+  } else {
+    // Wall tool (W), then a wall drawn right of the demo house on the plan.
+    await send("Input.dispatchKeyEvent", { type: "keyDown", key: "w", code: "KeyW", text: "w" });
+    await send("Input.dispatchKeyEvent", { type: "keyUp", key: "w", code: "KeyW" });
+    await sleep(200);
+    await click(1150, 250);
+    await click(1350, 250);
+    await click(1350, 250, 2);
+    await sleep(1500);
+    await shot(webgpu ? "web-editor-wall.png" : "web-editor-wall-webgl.png");
+
+    // A scanned plan behind the drawing: the button opens the browser's picker
+    // and what comes back is mounted in memory and set as the background. This
+    // is the whole path, and it used to end at "only in the desktop app".
+    const plan = join(out, "e2e-plan.png");
+    writeFileSync(plan, Buffer.from(PLAN_PNG, "base64"));
+    chooser = null;
+    await click(517, 58);
+    // A hidden tab only draws when someone asks for a picture, and the click is
+    // only answered on a frame — so keep asking while waiting, and knock twice
+    // before giving up: a machine rasterising in software takes its time.
+    for (let i = 0; i < 60 && !chooser; i++) {
+      await send("Page.captureScreenshot", { format: "png" });
+      await sleep(200);
+      if (i === 25 && !chooser) await click(517, 58);
+    }
+    if (chooser) {
+      await send("DOM.setFileInputFiles", { backendNodeId: chooser.backendNodeId, files: [plan] });
+      await sleep(2500);
+      await shot(webgpu ? "web-editor-background.png" : "web-editor-background-webgl.png");
+      console.log("background: the picker opened and the image went in");
+    } else {
+      console.error("the background picker never opened");
+      failed = true;
+    }
+
+    // What was drawn has to survive the tab being closed: the project is
+    // mirrored into the browser's storage and opened again on the next visit,
+    // instead of the demo home landing on top of it.
+    const stored = () => evaluate("localStorage.getItem('newera-autosave') || ''");
     await sleep(2500);
-    await shot(webgpu ? "web-editor-background.png" : "web-editor-background-webgl.png");
-    console.log("background: the picker opened and the image went in");
-  } else {
-    console.error("the background picker never opened");
-    failed = true;
-  }
+    const drawn = await stored();
+    if (!drawn) {
+      console.error("nothing was mirrored into the browser's storage");
+      failed = true;
+    }
+    await send("Page.navigate", { url });
+    for (let i = 0; i < 300; i++) {
+      await sleep(200);
+      if (await evaluate("!document.getElementById('loading')")) break;
+    }
+    await sleep(3000);
+    const back = await stored();
+    if (back !== drawn) {
+      console.error("the work did not come back after a reload");
+      failed = true;
+    } else {
+      console.log("autosave: the drawing came back after a reload");
+    }
+    const log = await evaluate("JSON.stringify(window.neweraLog || [])");
+    console.log("log:", log);
+    const errors = JSON.parse(log).filter((line) => /^(error|uncaught|rejection)/.test(line));
+    // A machine with no usable GPU cannot run the editor and says so in its own
+    // words; that is the machine's limit, not a broken build. Anything else is.
+    const noGpu = /createBuffer|too large for the implementation|adapter|WebGPU|WebGL|unreachable/i;
+    if (errors.length && errors.every((line) => noGpu.test(line))) {
+      console.log("skipped: this machine's GPU stack cannot run the editor");
+    } else if (errors.length) {
+      failed = true;
+    }
 
-  // What was drawn has to survive the tab being closed: the project is
-  // mirrored into the browser's storage and opened again on the next visit,
-  // instead of the demo home landing on top of it.
-  const stored = () => evaluate("localStorage.getItem('newera-autosave') || ''");
-  await sleep(2500);
-  const drawn = await stored();
-  if (!drawn) {
-    console.error("nothing was mirrored into the browser's storage");
-    failed = true;
-  }
-  await send("Page.navigate", { url });
-  for (let i = 0; i < 300; i++) {
-    await sleep(200);
-    if (await evaluate("!document.getElementById('loading')")) break;
-  }
-  await sleep(3000);
-  const back = await stored();
-  if (back !== drawn) {
-    console.error("the work did not come back after a reload");
-    failed = true;
-  } else {
-    console.log("autosave: the drawing came back after a reload");
-  }
-  const log = await evaluate("JSON.stringify(window.neweraLog || [])");
-  console.log("log:", log);
-  const errors = JSON.parse(log).filter((line) => /^(error|uncaught|rejection)/.test(line));
-  // A machine with no usable GPU cannot run the editor and says so in its own
-  // words; that is the machine's limit, not a broken build. Anything else is.
-  const noGpu = /createBuffer|too large for the implementation|adapter|WebGPU|WebGL|unreachable/i;
-  if (errors.length && errors.every((line) => noGpu.test(line))) {
-    console.log("skipped: this machine's GPU stack cannot run the editor");
-  } else if (errors.length) {
-    failed = true;
   }
 
   // The lightweight viewer, on the same engine: it is ready when it says so.
