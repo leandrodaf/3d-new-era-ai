@@ -242,6 +242,77 @@ fn every_interface_language() {
     crate::i18n::set(crate::i18n::Lang::Pt);
 }
 
+/// The window as the press kit shows it: a furnished home, in English, with
+/// nothing open over it.
+#[test]
+#[ignore = "visual review; needs a GPU"]
+fn press_shot() {
+    let bytes = std::fs::read(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/demo.newera"),
+    )
+    .expect("the demo home ships with the browser editor");
+    let again = bytes.clone();
+    crate::i18n::set(crate::i18n::Lang::En);
+    render_in(
+        "press-editor",
+        crate::theme::Mode::Night,
+        SharedDocument::default(),
+        move |app| {
+            crate::i18n::set(crate::i18n::Lang::En);
+            app.open_bytes("demo.newera", &bytes);
+            dress(app);
+        },
+    );
+    // And the same home by day, in another language: the palette and the
+    // wording both have to hold up.
+    let bytes = again;
+    crate::i18n::set(crate::i18n::Lang::Es);
+    render_in(
+        "press-day",
+        crate::theme::Mode::Day,
+        SharedDocument::default(),
+        move |app| {
+            crate::i18n::set(crate::i18n::Lang::Es);
+            app.open_bytes("demo.newera", &bytes);
+            dress(app);
+        },
+    );
+    crate::i18n::set(crate::i18n::Lang::Pt);
+}
+
+/// The press shot is the product's face, so the demo gets what a real project
+/// would have: floors and walls with a finish, and the 3D standing in the
+/// living room instead of hovering over a lawn.
+fn dress(app: &mut NewEraApp) {
+    use newera_core::{Camera, Element, Material};
+    let mut home = app.document.read().home().clone();
+    for wall in &mut home.walls {
+        wall.left_side = Some("#efe7d8".parse::<Material>().unwrap());
+        wall.right_side = Some("#efe7d8".parse::<Material>().unwrap());
+    }
+    // Standing with your back to the television, looking down the living room
+    // at the sofa — eyes at 1.6 m, barely tilted down.
+    let eye = Camera {
+        x: 230.0,
+        y: 95.0,
+        z: 185.0,
+        yaw: 0.0,
+        pitch: 16.0,
+        fov: 75.0,
+        ..Camera::default()
+    };
+    let commands = home
+        .walls
+        .iter()
+        .cloned()
+        .map(Element::Wall)
+        .map(|element| Command::Update { element })
+        .collect();
+    app.run(|doc| doc.execute(Command::Batch { commands }));
+    app.scene.visitor = Some(crate::view::scene::Visitor { camera: eye });
+    app.plan.request_fit();
+}
+
 /// The same window in daylight: the palette has to hold up on paper too.
 #[test]
 #[ignore = "visual review; needs a GPU"]
