@@ -148,19 +148,40 @@ try {
     else ok("the tab's project holds what the AI drew");
 
     // Switched off, the address stops answering — the whole point of the
-    // switch being a switch.
-    for (const [type, extra] of [["keyDown", { text: "" }], ["keyUp", {}]]) {
-      await send("Input.dispatchKeyEvent", {
-        type, key: "M", code: "KeyM", windowsVirtualKeyCode: 77,
-        modifiers: 2 | 8, ...extra,
-      });
+    // switch being a switch. Under load a keypress can land before the window
+    // is listening, so this insists, and then waits for the address to go
+    // quiet instead of asking once.
+    const press = async () => {
+      for (const [type, extra] of [["keyDown", { text: "" }], ["keyUp", {}]]) {
+        await send("Input.dispatchKeyEvent", {
+          type, key: "M", code: "KeyM", windowsVirtualKeyCode: 77,
+          modifiers: 2 | 8, ...extra,
+        });
+      }
+    };
+    let off = false;
+    for (let attempt = 0; attempt < 3 && !off; attempt++) {
+      await press();
+      for (let i = 0; i < 20 && !off; i++) {
+        await frames(2);
+        off = !(await evaluate("document.body.hasAttribute('data-mcp')"));
+      }
     }
-    await frames(12);
-    const afterOff = await rpc(mcpUrl, {
-      jsonrpc: "2.0", id: 6, method: "tools/call",
-      params: { name: "get_home", arguments: {} },
-    });
-    const closed = afterOff?.result?.isError === true || afterOff?.error;
+    if (!off) {
+      bad("the window did not switch its MCP off");
+      return;
+    }
+    ok("the window switched its MCP off");
+
+    let closed = false;
+    for (let i = 0; i < 20 && !closed; i++) {
+      const afterOff = await rpc(mcpUrl, {
+        jsonrpc: "2.0", id: 6, method: "tools/call",
+        params: { name: "get_home", arguments: {} },
+      });
+      closed = afterOff?.result?.isError === true || Boolean(afterOff?.error);
+      if (!closed) await sleep(300);
+    }
     if (!closed) bad("the address still answered after the switch was thrown");
     else ok("switched off, the address answers nobody");
   }

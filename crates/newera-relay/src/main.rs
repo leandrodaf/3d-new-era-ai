@@ -20,7 +20,9 @@ async fn health(port: u16) -> std::io::Result<()> {
     if said.starts_with("HTTP/1.0 200") || said.starts_with("HTTP/1.1 200") {
         Ok(())
     } else {
-        Err(std::io::Error::other(said.lines().next().unwrap_or("no answer").to_owned()))
+        Err(std::io::Error::other(
+            said.lines().next().unwrap_or("no answer").to_owned(),
+        ))
     }
 }
 
