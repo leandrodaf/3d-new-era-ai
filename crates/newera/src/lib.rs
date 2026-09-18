@@ -72,12 +72,19 @@ pub fn run() -> anyhow::Result<()> {
 
     // Crash reports first, so a failure opening the project is reported too.
     // Kept to the end of `run`: dropping it sends what is pending.
-    let _telemetry = newera_telemetry::init(match mode {
+    let mode_name = match mode {
         Mode::Gui { .. } => "gui",
         Mode::Serve => "serve",
         Mode::Mcp => "mcp",
         Mode::Telemetry { .. } => "cli",
-    });
+    };
+    let _telemetry = newera_telemetry::init(mode_name);
+    // How many people opened it, and on what. One ping, in the background,
+    // behind the same switch as the crash reports; `newera telemetry` itself
+    // is the switch and is not counted as using the app.
+    if !matches!(mode, Mode::Telemetry { .. }) {
+        newera_telemetry::analytics::opened(mode_name);
+    }
 
     // stdout belongs to the protocol in stdio mode, so logs always go to stderr.
     tracing_subscriber::registry()

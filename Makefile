@@ -14,6 +14,7 @@ LOG     ?= info,wgpu_core=warn,wgpu_hal=warn,naga=warn,rmcp=warn,egui_wgpu=warn
 # build from this machine reports and the repository never carries them.
 -include .env.local
 export NEWERA_SENTRY_DSN
+export NEWERA_GA_API_SECRET
 
 export NEWERA_ADDR := $(ADDR)
 export NEWERA_LOG  := $(LOG)

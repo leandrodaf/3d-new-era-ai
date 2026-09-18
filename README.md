@@ -333,6 +333,13 @@ the MCP token is removed from every report. Notes are always kept locally in
 the config folder (`notes.jsonl`), sent or not. A build from source reports
 only when built with `NEWERA_SENTRY_DSN`.
 
+Released builds also count one thing in Google Analytics: that the app was
+opened, with its version, the operating system and the mode (`gui`, `serve`,
+`mcp`). It rides the same switch, carries an id drawn at random for the
+installation — not a person — and needs `NEWERA_GA_API_SECRET` at build time,
+so a build from source counts nothing. The site counts page views in the same
+property; the project itself never leaves your machine either way.
+
 ## Contributing
 
 Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). `make check`

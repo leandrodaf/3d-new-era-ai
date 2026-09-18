@@ -154,7 +154,10 @@ um quarto de 4 × 5 m com porta e janela, mobilie e gere uma foto."*
 **Telemetria.** As versões publicadas enviam relatórios de erro aos desenvolvedores pelo
 Sentry, junto com as notas que os agentes deixam pela ferramenta `feedback` do MCP. Vem
 **ligada por padrão** e desliga com um clique em **Ajuda → Enviar relatórios de erro** ou com
-`newera telemetry off`. Nada do projeto é enviado, nem o IP nem o nome da máquina.
+`newera telemetry off`. Nada do projeto é enviado, nem o IP nem o nome da máquina. As
+versões publicadas também contam no Google Analytics que o app foi aberto, com versão,
+sistema e modo — mesma chave de liga/desliga, um id sorteado para a instalação e nada do
+projeto.
 
 De onde vêm os números quando o editor diz que uma cozinha está errada — as normas, a
 doutrina e a pesquisa por trás de cada regra, com edição e link: [docs/NORMAS.md](docs/NORMAS.md).

@@ -15,6 +15,12 @@
 //! `warn!`/`info!` before them as breadcrumbs; the OS and app version. What is
 //! not: IP addresses and hostnames (`send_default_pii` off), the MCP token,
 //! and the plan itself.
+//!
+//! [`analytics`] rides the same switch and counts one thing: that the app was
+//! opened, and on what.
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod analytics;
 
 use std::io::Write as _;
 use std::path::PathBuf;
