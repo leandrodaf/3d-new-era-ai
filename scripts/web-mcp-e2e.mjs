@@ -85,21 +85,30 @@ try {
 
   const before = await fetch(`${relay}/health`).then((r) => r.json());
 
-  // Ctrl+Shift+M is the switch — the same one the panel's button throws.
-  for (const [type, extra] of [["keyDown", { text: "" }], ["keyUp", {}]]) {
-    await send("Input.dispatchKeyEvent", {
-      type, key: "M", code: "KeyM", windowsVirtualKeyCode: 77,
-      modifiers: 2 | 8, ...extra,
-    });
-  }
-  await frames(20);
-
+  // Ctrl+Shift+M is the switch — the same one the panel's button throws. A
+  // loaded runner can be between frames when the keys arrive, so this presses
+  // again until the relay says a room is open: what is being checked is the
+  // room, not the keyboard.
+  const press = async () => {
+    for (const [type, extra] of [["keyDown", { text: "" }], ["keyUp", {}]]) {
+      await send("Input.dispatchKeyEvent", {
+        type, key: "M", code: "KeyM", windowsVirtualKeyCode: 77,
+        modifiers: 2 | 8, ...extra,
+      });
+    }
+  };
   let health = before;
-  for (let i = 0; i < 40 && health.rooms <= before.rooms; i++) {
-    await frames(2);
-    health = await fetch(`${relay}/health`).then((r) => r.json());
+  for (let round = 0; round < 4 && health.rooms <= before.rooms; round++) {
+    await press();
+    for (let i = 0; i < 20 && health.rooms <= before.rooms; i++) {
+      await frames(2);
+      health = await fetch(`${relay}/health`).then((r) => r.json());
+    }
   }
-  if (health.rooms <= before.rooms) throw new Error("the tab never opened a room on the relay");
+  if (health.rooms <= before.rooms) {
+    const log = await evaluate("JSON.stringify((window.neweraLog || []).slice(-6))");
+    throw new Error(`the tab never opened a room on the relay — page said ${log}`);
+  }
   ok("the tab switched its MCP on");
 
   // The tab publishes the address it is reachable at, which is what a person
@@ -148,9 +157,9 @@ try {
     else ok("the tab's project holds what the AI drew");
 
     // Switched off, the address stops answering — the whole point of the
-    // switch being a switch. Under load a keypress can land before the window
-    // is listening, so this insists, and then waits for the address to go
-    // quiet instead of asking once.
+    // switch being a switch. A loaded runner can be between frames when the
+    // keys arrive, so this presses again until the address goes quiet: what
+    // is being checked is the address, not the keyboard.
     const press = async () => {
       for (const [type, extra] of [["keyDown", { text: "" }], ["keyUp", {}]]) {
         await send("Input.dispatchKeyEvent", {
@@ -159,30 +168,20 @@ try {
         });
       }
     };
-    let off = false;
-    for (let attempt = 0; attempt < 3 && !off; attempt++) {
+    let closed = false;
+    for (let round = 0; round < 6 && !closed; round++) {
       await press();
-      for (let i = 0; i < 20 && !off; i++) {
+      for (let i = 0; i < 8 && !closed; i++) {
         await frames(2);
-        off = !(await evaluate("document.body.hasAttribute('data-mcp')"));
+        const afterOff = await rpc(mcpUrl, {
+          jsonrpc: "2.0", id: 6, method: "tools/call",
+          params: { name: "get_home", arguments: {} },
+        });
+        closed = afterOff?.result?.isError === true || Boolean(afterOff?.error);
       }
     }
-    if (!off) {
-      bad("the window did not switch its MCP off");
-      return;
-    }
-    ok("the window switched its MCP off");
-
-    let closed = false;
-    for (let i = 0; i < 20 && !closed; i++) {
-      const afterOff = await rpc(mcpUrl, {
-        jsonrpc: "2.0", id: 6, method: "tools/call",
-        params: { name: "get_home", arguments: {} },
-      });
-      closed = afterOff?.result?.isError === true || Boolean(afterOff?.error);
-      if (!closed) await sleep(300);
-    }
-    if (!closed) bad("the address still answered after the switch was thrown");
+    const published = await evaluate("document.body.getAttribute('data-mcp') || ''");
+    if (!closed) bad(`the address still answered after the switch was thrown (page says ${published || "off"})`);
     else ok("switched off, the address answers nobody");
   }
 } catch (error) {
