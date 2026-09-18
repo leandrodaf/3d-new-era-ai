@@ -27,6 +27,15 @@ All notable changes to this project are documented here. The format follows
 - The catalog speaks the four languages too: every piece, every wall type and
   every finish is named in the language of the window, a piece dropped on the plan
   is created under that name, and the search finds it by the word on screen.
+- The browser editor opens on a furnished demo home instead of an empty sheet, says in
+  the visitor's language when a browser cannot start it, and is checked by CI in a real
+  headless Chrome: it builds the page, draws a wall with the mouse and loads the viewer,
+  failing on anything the page logs.
+- Found by search and by agents: schema.org data for the program and the questions,
+  hreflang for the four languages, a sitemap, a robots.txt that welcomes the crawlers
+  behind AI assistants, and an llms.txt that tells an agent what the program is and what
+  it can be asked to do. The site header holds up on a phone, with the sections in a menu
+  and the GitHub stars in the corner.
 - The site opens in the visitor's own language — Portuguese, English, Spanish or
   French, read from the browser and overridable with `?lang=` or the switch in the
   corner — with the picture descriptions and the link preview to match.
