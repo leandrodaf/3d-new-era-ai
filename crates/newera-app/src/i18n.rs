@@ -1956,6 +1956,38 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
             "Disciplina, capas y plantas",
             "Discipline, calques et étages",
         ],
+        "IA · esperando" => ["AI · waiting", "IA · esperando", "IA · en attente"],
+        "Conectar IA" => ["Connect AI", "Conectar IA", "Connecter l'IA"],
+        "{} conectado · {} chamadas" => [
+            "{} connected · {} calls",
+            "{} conectado · {} llamadas",
+            "{} connecté · {} appels",
+        ],
+        "Esperando a sua IA chegar" => [
+            "Waiting for your AI to arrive",
+            "Esperando a que llegue su IA",
+            "En attente de votre IA",
+        ],
+        "Ainda não dá para alcançar esta janela" => [
+            "Nothing can reach this window yet",
+            "Todavía nada puede alcanzar esta ventana",
+            "Rien ne peut encore joindre cette fenêtre",
+        ],
+        "Escolha o aplicativo de IA que você usa" => [
+            "Pick the AI app you use",
+            "Elija la app de IA que usa",
+            "Choisissez l'app d'IA que vous utilisez",
+        ],
+        "Cole isto onde ele pede" => [
+            "Paste this where it asks",
+            "Pegue esto donde lo pide",
+            "Collez ceci là où il le demande",
+        ],
+        "Peça alguma coisa" => [
+            "Ask it for something",
+            "Pídale algo",
+            "Demandez-lui quelque chose",
+        ],
         _ => return None,
     })
 }

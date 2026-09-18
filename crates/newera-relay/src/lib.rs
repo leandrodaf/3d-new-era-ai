@@ -34,9 +34,13 @@ use serde_json::{Value, json};
 use std::fmt::Write as _;
 use tokio::sync::{mpsc, oneshot};
 
-/// How long a room outlives the tab that made it, so a reload keeps the
-/// address the person already pasted into their AI.
-const GRACE: Duration = Duration::from_secs(120);
+/// How long a room outlives the tab that made it.
+///
+/// A refresh takes seconds, but the address is pasted into somebody's AI
+/// client and losing it means setting that up again: the room waits a quarter
+/// of an hour for its tab to come back. A room with nobody in it costs a few
+/// hundred bytes and answers "not connected" to anyone who tries it.
+const GRACE: Duration = Duration::from_mins(15);
 
 /// A room nobody has touched for this long is gone.
 const IDLE: Duration = Duration::from_mins(360);

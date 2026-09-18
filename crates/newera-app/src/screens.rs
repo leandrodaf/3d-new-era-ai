@@ -267,6 +267,24 @@ fn connect_ai() {
     );
 }
 
+/// The same panel before anybody has connected: the state nearly every
+/// visitor meets first, and the one the button in the bar is loud about.
+#[test]
+#[ignore = "visual review; needs a GPU"]
+fn connect_ai_waiting() {
+    let mut doc = Document::default();
+    house(&mut doc, 600.0);
+    render_in(
+        "connect-ai-waiting",
+        crate::theme::Mode::Night,
+        SharedDocument::new(doc),
+        |app| {
+            app.mcp_url = Some("http://127.0.0.1:7878/mcp".to_owned());
+            app.dialog = Some(Dialog::ConnectAi { client: 0 });
+        },
+    );
+}
+
 /// The window as the press kit shows it: a furnished home, in English, with
 /// nothing open over it.
 #[test]

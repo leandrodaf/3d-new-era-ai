@@ -280,6 +280,12 @@ impl NewEraApp {
                 app.set_status(crate::i18n::tr("Projeto recuperado desta sessão."));
             }
         }
+        // A reload is not a new session: if this tab was reachable before the
+        // page was refreshed, it walks back into the same room — the address
+        // the person already pasted into their AI keeps working.
+        #[cfg(target_arch = "wasm32")]
+        crate::ai_web::resume(&app.document.clone(), &cc.egui_ctx.clone(), &app.ai_link);
+
         // Nobody arrives knowing that an editor can be driven by their AI, and
         // the connection is made in another program's settings: the first time
         // the window opens, it says so itself. Not in a browser — there the
@@ -2936,7 +2942,7 @@ mod tests {
             .click();
         h.run_steps(3);
         h.get_by_label_contains("claude mcp add --transport http newera http://127.0.0.1:7878/mcp");
-        h.get_by_label_contains("Nenhuma IA conectada ainda");
+        h.get_by_label_contains("Esperando a sua IA chegar");
         h.key_press(Key::Escape);
         h.run_steps(3);
 
@@ -2960,6 +2966,25 @@ mod tests {
         }
         h.run_steps(3);
         h.get_by_label_contains("render_photo · claude-code");
+    }
+
+    /// On a phone the top bar has room for the menus and nothing else: the AI
+    /// button stands down there, and the chip in the status bar carries the
+    /// same news in two words.
+    #[test]
+    fn the_ai_button_stands_down_on_a_narrow_screen() {
+        let document = SharedDocument::new(Document::default());
+        let mut narrow = Harness::builder()
+            .with_size(egui::vec2(520.0, 780.0))
+            .with_step_dt(1.0 / 60.0)
+            .build_eframe(move |cc| NewEraApp::new(cc, document, None));
+        narrow.run_steps(5);
+        let found = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            narrow.get_by_label_contains(&format!("{} ", icon::ROBOT));
+        }));
+        assert!(found.is_err(), "the button is for screens that have room");
+        // What a phone gets instead.
+        narrow.get_by_label_contains("MCP");
     }
 
     #[test]

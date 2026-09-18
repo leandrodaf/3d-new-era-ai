@@ -22,6 +22,11 @@ use wasm_bindgen::prelude::*;
 /// (`?relay=http://127.0.0.1:7979` while working on it).
 const RELAY: &str = "https://mcp.3dneweraai.com";
 
+/// Where the room this tab holds is written down, so a reload walks back into
+/// it instead of asking for a new address — the old one is already pasted into
+/// somebody's AI client, and losing it on a refresh is losing the setup.
+const REMEMBERED: &str = "newera-mcp-room";
+
 /// Tools the browser does not offer: they would hold the window for minutes.
 const TOO_SLOW_HERE: [&str; 2] = ["render_photo", "video"];
 
@@ -81,6 +86,8 @@ pub(crate) fn disconnect(state: &Shared) {
     held.link = Link::Off;
     drop(held);
     published(None);
+    // Switched off on purpose: there is nothing to walk back into.
+    forget();
 }
 
 /// Writes the address into the page (`body[data-mcp]`), or takes it away.
@@ -117,7 +124,10 @@ pub(crate) fn connect(document: SharedDocument, ctx: eframe::egui::Context, stat
     let base = relay_base();
     wasm_bindgen_futures::spawn_local(async move {
         match open_room(&base).await {
-            Ok(room) => hold(&document, &ctx, &state, &base, &room),
+            Ok(room) => {
+                remember(&base, &room);
+                hold(&document, &ctx, &state, &base, &room);
+            }
             Err(why) => {
                 state.borrow_mut().link = Link::Failed { why };
                 ctx.request_repaint();
@@ -131,6 +141,67 @@ pub(crate) fn connect(document: SharedDocument, ctx: eframe::egui::Context, stat
 struct Room {
     mcp_path: String,
     tab_path: String,
+}
+
+/// The room this tab holds, as it is kept between visits. Same origin only,
+/// and no more secret than what the panel already shows on screen.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct Kept {
+    relay: String,
+    mcp_path: String,
+    tab_path: String,
+}
+
+fn storage() -> Option<web_sys::Storage> {
+    web_sys::window().and_then(|w| w.local_storage().ok().flatten())
+}
+
+fn remember(base: &str, room: &Room) {
+    let kept = Kept {
+        relay: base.to_owned(),
+        mcp_path: room.mcp_path.clone(),
+        tab_path: room.tab_path.clone(),
+    };
+    if let (Some(storage), Ok(text)) = (storage(), serde_json::to_string(&kept)) {
+        let _ = storage.set_item(REMEMBERED, &text);
+    }
+}
+
+fn forget() {
+    if let Some(storage) = storage() {
+        let _ = storage.remove_item(REMEMBERED);
+    }
+}
+
+/// The room from the last visit, if it was on this same relay.
+fn recall(base: &str) -> Option<Room> {
+    let text = storage().and_then(|s| s.get_item(REMEMBERED).ok().flatten())?;
+    let kept: Kept = serde_json::from_str(&text).ok()?;
+    (kept.relay == base).then_some(Room {
+        mcp_path: kept.mcp_path,
+        tab_path: kept.tab_path,
+    })
+}
+
+/// Walks back into the room this tab held before the page was reloaded.
+///
+/// The relay keeps a room for a while after its tab goes, precisely so a
+/// refresh is not a new address: whoever pasted it into their AI client keeps
+/// a working setup. If the room is gone, so is the note of it, and the window
+/// is simply off — never pointing at an address nobody answers.
+pub(crate) fn resume(document: &SharedDocument, ctx: &eframe::egui::Context, state: &Shared) {
+    let base = relay_base();
+    let Some(room) = recall(&base) else {
+        return;
+    };
+    {
+        let mut held = state.borrow_mut();
+        if !matches!(held.link, Link::Off) {
+            return;
+        }
+        held.link = Link::Opening;
+    }
+    hold(document, ctx, state, &base, &room);
 }
 
 async fn open_room(base: &str) -> Result<Room, String> {
@@ -291,6 +362,11 @@ fn hold(
         let socket = socket.clone();
         Closure::<dyn FnMut()>::new(move || {
             let mut held = state.borrow_mut();
+            // A socket that never opened means the room is gone: forget it, or
+            // every visit would try the same dead address.
+            if matches!(held.link, Link::Opening) {
+                forget();
+            }
             // Only the socket that is current speaks for the link: one closed
             // on the way to a new address has nothing to say about it.
             if held.socket.as_ref().is_some_and(|open| *open == socket) {

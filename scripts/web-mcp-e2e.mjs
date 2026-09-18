@@ -156,6 +156,22 @@ try {
     if (!grew) bad("the project did not change in the tab");
     else ok("the tab's project holds what the AI drew");
 
+    // A refresh must not cost the address: the page is reloaded and the same
+    // one has to answer again, because it is already pasted into somebody's
+    // AI client.
+    await send("Page.navigate", { url: `${page}?relay=${encodeURIComponent(relay)}` });
+    let backAgain = false;
+    for (let i = 0; i < 60 && !backAgain; i++) {
+      await frames(3);
+      const again = await rpc(mcpUrl, {
+        jsonrpc: "2.0", id: 8, method: "tools/call",
+        params: { name: "get_home", arguments: {} },
+      });
+      backAgain = Boolean(again?.result?.content) && again?.result?.isError !== true;
+    }
+    if (!backAgain) bad("the address was lost when the page reloaded");
+    else ok("reloaded, and the same address still answers");
+
     // Two ways an address must die, checked in order of how much they matter.
     //
     // First the switch: Ctrl+Shift+M is the same one the panel's button

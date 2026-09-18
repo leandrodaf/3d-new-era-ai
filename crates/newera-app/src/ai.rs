@@ -369,103 +369,107 @@ pub(crate) fn chip(app: &mut NewEraApp, ui: &mut egui::Ui) {
     }
 }
 
-/// The button in the top bar: a robot, the state as a colour, and the panel
-/// one tap away.
+/// The button in the top bar. It is the first thing in the window and it is
+/// meant to be: an editor whose point is that an AI can drive it should say so
+/// before anything else, and say where it stands — waiting, connected, at
+/// work — without being opened.
 ///
-/// Whoever opens this editor should not have to learn a menu to find out that
-/// their AI can drive it. So the mark is in the corner where a logo would be,
-/// it lights up when an agent is connected, and it pulses on each call.
+/// Not on a phone: there the row has no room for it, and the chip in the
+/// status bar already says the same thing in the space of two words.
 pub(crate) fn button(app: &mut NewEraApp, ui: &mut egui::Ui) {
+    if ui.ctx().content_rect().width() < crate::app::NARROW {
+        return;
+    }
     let t = crate::theme::of(ui.visuals());
     let pulse = Pulse::read(app);
-    let connected = pulse.newest().is_some();
-    let (ink, fill) = match (reachable(app), connected, pulse.busy()) {
-        (_, true, true) => (t.accent_strong, t.accent_soft),
-        (_, true, false) => (t.ok, t.accent_soft),
-        (true, false, _) => (t.accent, t.accent_soft),
-        (false, ..) => (t.ink_dim, t.raised),
-    };
-    let label = RichText::new(format!("{}  IA", icon::ROBOT))
-        .size(14.0)
-        .color(ink);
-    let hint = match (reachable(app), pulse.newest()) {
-        (_, Some(agent)) => crate::i18n::fill(
-            "{} conectado · {}",
-            &[&agent.name, &ago(pulse.now_ms, agent.seen_ms)],
+    let live = reachable(app);
+    let agent = pulse.newest().map(|a| a.name.clone());
+
+    // Three states, three different things to say — and the one that needs a
+    // person to act is the loud one.
+    let (fill, ink, edge, text) = match (&agent, live) {
+        (Some(name), _) => (
+            t.accent_soft,
+            if pulse.busy() { t.accent_strong } else { t.ok },
+            if pulse.busy() { t.accent } else { t.ok },
+            name.clone(),
         ),
-        (true, None) => crate::i18n::tr("Nenhuma IA conectada ainda").to_owned(),
-        (false, None) => crate::i18n::tr("Conectar sua IA — clique para ver como").to_owned(),
+        (None, true) => (
+            t.accent_soft,
+            t.accent,
+            t.accent,
+            crate::i18n::tr("IA · esperando").to_owned(),
+        ),
+        (None, false) => (
+            t.accent,
+            t.deep,
+            t.accent,
+            crate::i18n::tr("Conectar IA").to_owned(),
+        ),
     };
+    let hint = match &agent {
+        Some(name) => crate::i18n::fill("{} conectado · {} chamadas", &[name, &pulse.calls]),
+        None if live => crate::i18n::tr("Nenhuma IA conectada ainda").to_owned(),
+        None => crate::i18n::tr("Conectar sua IA — clique para ver como").to_owned(),
+    };
+
+    let label = RichText::new(format!("{}  {}", icon::ROBOT, text))
+        .size(13.5)
+        .strong()
+        .color(ink);
     let button = egui::Button::new(label)
         .fill(fill)
-        .stroke(egui::Stroke::new(1.0, if connected { ink } else { t.rule }))
-        .corner_radius(8);
+        .stroke(egui::Stroke::new(1.0, edge))
+        .corner_radius(13)
+        .min_size(egui::vec2(0.0, 26.0));
     if ui.add(button).on_hover_text(hint).clicked() {
         app.dialog = Some(crate::dialogs::Dialog::ConnectAi { client: 0 });
     }
+    // A live one keeps its dot moving; a dark one has nothing to animate.
+    if pulse.busy() {
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_millis(150));
+    }
+    ui.add_space(10.0);
+}
+
+/// A card: the shape everything in this panel is built from — one surface,
+/// one hairline, room to breathe.
+fn card<R>(ui: &mut egui::Ui, t: crate::theme::Tokens, body: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    egui::Frame::new()
+        .fill(t.raised)
+        .stroke(egui::Stroke::new(1.0, t.rule))
+        .corner_radius(10)
+        .inner_margin(egui::Margin::symmetric(14, 12))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            body(ui)
+        })
+        .inner
+}
+
+/// A step's number, as a mark rather than a word.
+fn step(ui: &mut egui::Ui, t: crate::theme::Tokens, number: u8, title: &str) {
+    ui.horizontal(|ui| {
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
+        ui.painter()
+            .circle_filled(rect.center(), 11.0, t.accent_soft);
+        ui.painter().text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            number.to_string(),
+            egui::FontId::proportional(12.0),
+            t.accent,
+        );
+        ui.add_space(2.0);
+        ui.label(RichText::new(title).size(14.0).strong().color(t.ink));
+    });
     ui.add_space(6.0);
 }
 
-/// In a browser: the switch that makes this tab reachable, and what it means.
-///
-/// Nothing is on until somebody asks for it. A tab that is switched on has an
-/// address on the internet; whoever holds it can edit this project, which is
-/// the point and also the warning.
-#[cfg(target_arch = "wasm32")]
-fn switch(app: &mut NewEraApp, ui: &mut egui::Ui, t: crate::theme::Tokens) {
-    let state = app.ai_link.borrow().link.clone();
-    match state {
-        crate::ai_web::Link::Off => {
-            ui.vertical(|ui| {
-                ui.label(crate::i18n::tr(
-                    "Ligue e esta aba ganha um endereço que a sua IA alcança. O projeto não sai daqui: o servidor no meio só passa recados.",
-                ));
-                if crate::theme::primary(ui, crate::i18n::tr("Ligar o MCP nesta aba")).clicked() {
-                    let (document, ctx, link) = (
-                        app.document.clone(),
-                        ui.ctx().clone(),
-                        app.ai_link.clone(),
-                    );
-                    crate::ai_web::connect(document, ctx, link);
-                }
-            });
-        }
-        crate::ai_web::Link::Opening => {
-            ui.label(crate::i18n::tr("Ligando…"));
-        }
-        crate::ai_web::Link::On { .. } => {
-            ui.vertical(|ui| {
-                ui.label(
-                    RichText::new(crate::i18n::tr("Esta aba está no ar para a sua IA"))
-                        .color(t.ok)
-                        .strong(),
-                );
-                ui.label(
-                    RichText::new(crate::i18n::tr(
-                        "Quem tiver o endereço abaixo pode editar este projeto: trate como senha.",
-                    ))
-                    .color(t.ink_dim)
-                    .small(),
-                );
-            });
-        }
-        crate::ai_web::Link::Failed { why } => {
-            ui.vertical(|ui| {
-                ui.label(
-                    RichText::new(crate::i18n::fill("Não deu para ligar: {}", &[&why]))
-                        .color(t.warn),
-                );
-                if crate::theme::secondary(ui, crate::i18n::tr("Tentar de novo")).clicked() {
-                    let (document, ctx, link) =
-                        (app.document.clone(), ui.ctx().clone(), app.ai_link.clone());
-                    crate::ai_web::connect(document, ctx, link);
-                }
-            });
-        }
-    }
-}
-
-/// The panel itself. Returns whether it should close.
+/// The panel. Three things, in the order somebody needs them: where this
+/// window stands, what to paste to change that, and what the AI has done
+/// since — each in its own card, nothing shouting over the rest.
 pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize) -> bool {
     let mut close = false;
     let t = ctx.style_of(ctx.theme());
@@ -475,215 +479,270 @@ pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize
     let pulse = Pulse::read(app);
     let clients = clients(&url);
     *chosen = (*chosen).min(clients.len() - 1);
+    let narrow = ctx.content_rect().width() < crate::app::NARROW;
 
     crate::theme::modal(ctx, egui::Id::new("connect-ai")).show(ctx, |ui| {
-        ui.set_min_width(560.0);
+        ui.set_min_width(if narrow { 300.0 } else { 600.0 });
+        ui.spacing_mut().item_spacing.y = 8.0;
         crate::theme::title(
             ui,
-            &format!(
-                "{} {}",
-                icon::ROBOT,
-                crate::i18n::tr("Conectar sua IA")
-            ),
+            &format!("{} {}", icon::ROBOT, crate::i18n::tr("Conectar sua IA")),
         );
-        ui.label(crate::i18n::tr(
-            "O editor abre uma porta MCP: a sua IA desenha aqui dentro, em centímetros, e você vê acontecer.",
-        ));
-        ui.add_space(10.0);
+        ui.label(
+            RichText::new(crate::i18n::tr(
+                "O editor abre uma porta MCP: a sua IA desenha aqui dentro, em centímetros, e você vê acontecer.",
+            ))
+            .color(t.ink_dim),
+        );
+        ui.add_space(4.0);
 
-        // ---- What is true right now ----
-        crate::theme::section(ui, crate::i18n::tr("Agora"));
-        egui::Frame::group(ui.style())
-            .fill(t.raised)
-            .stroke(egui::Stroke::new(1.0, t.rule))
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                ui.horizontal(|ui| {
-                    crate::app::lamp(ui, if serving { t.ok } else { t.ink_faint });
-                    if serving {
-                        ui.label(crate::i18n::tr("Servidor MCP ligado"));
-                        // An address is read and typed as it is written: the
-                        // small-capitals figures line would change it.
-                        ui.label(
-                            RichText::new(&url)
-                                .monospace()
-                                .size(11.0)
-                                .color(t.ink_dim),
-                        );
-                        if ui
-                            .small_button(format!("{} {}", icon::COPY, crate::i18n::tr("Copiar")))
-                            .clicked()
-                        {
-                            ui.ctx().copy_text(url.clone());
-                            app.set_status(crate::i18n::tr("Endereço copiado"));
-                        }
-                        #[cfg(target_arch = "wasm32")]
-                        if ui
-                            .small_button(crate::i18n::tr("Desligar"))
-                            .on_hover_text(crate::i18n::tr(
-                                "Fecha o endereço. A sua IA perde o acesso na hora; o projeto continua aqui.",
-                            ))
-                            .clicked()
-                        {
-                            crate::ai_web::disconnect(&app.ai_link);
-                            app.set_status(crate::i18n::tr("MCP desligado"));
-                        }
-                    } else if cfg!(target_arch = "wasm32") {
-                        #[cfg(target_arch = "wasm32")]
-                        switch(app, ui, t);
-                    } else {
-                        ui.label(crate::i18n::tr(
-                            "O servidor está desligado (--no-server): reabra o aplicativo sem essa opção.",
-                        ));
-                    }
-                });
+        // ---- Where this window stands ----
+        card(ui, t, |ui| {
+            ui.horizontal(|ui| {
+                let on = pulse.newest().is_some();
+                crate::app::lamp(
+                    ui,
+                    match (serving, on, pulse.busy()) {
+                        (_, true, true) => t.accent,
+                        (_, true, false) | (true, false, _) => t.ok,
+                        (false, ..) => t.ink_faint,
+                    },
+                );
+                let (line, colour) = match pulse.newest() {
+                    Some(agent) => (
+                        crate::i18n::fill(
+                            "{} conectado · {} chamadas · {}",
+                            &[&agent.name, &pulse.calls, &ago(pulse.now_ms, agent.seen_ms)],
+                        ),
+                        t.ok,
+                    ),
+                    None if serving => (
+                        crate::i18n::tr("Esperando a sua IA chegar").to_owned(),
+                        t.ink,
+                    ),
+                    None => (crate::i18n::tr("Ainda não dá para alcançar esta janela").to_owned(), t.ink_dim),
+                };
+                ui.label(RichText::new(line).size(14.0).strong().color(colour));
                 #[cfg(target_arch = "wasm32")]
-                if serving {
-                    ui.label(
-                        RichText::new(crate::i18n::tr(
-                            "Quem tiver o endereço abaixo pode editar este projeto: trate como senha.",
-                        ))
-                        .color(t.ink_dim)
-                        .small(),
-                    );
-                }
-                ui.horizontal(|ui| {
-                    if let Some(agent) = pulse.newest() {
-                        crate::app::lamp(ui, if pulse.busy() { t.accent } else { t.ok });
-                        ui.label(
-                            RichText::new(crate::i18n::fill(
-                                "{} conectado · {} chamadas · {}",
-                                &[&agent.name, &pulse.calls, &ago(pulse.now_ms, agent.seen_ms)],
-                            ))
-                            .color(t.ok)
-                            .strong(),
-                        );
-                    } else {
-                        crate::app::lamp(ui, t.ink_faint);
-                        ui.label(crate::i18n::tr(
-                            "Nenhuma IA conectada ainda — siga os três passos abaixo.",
-                        ));
-                    }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    web_switch(app, ui, serving);
                 });
             });
-        ui.add_space(10.0);
 
-        // ---- Three steps ----
-        crate::theme::section(
-            ui,
-            crate::i18n::tr("1. Escolha o aplicativo de IA que você usa"),
-        );
-        ui.horizontal_wrapped(|ui| {
-            for (i, client) in clients.iter().enumerate() {
-                if ui.selectable_label(*chosen == i, client.label).clicked() {
-                    *chosen = i;
-                }
-            }
-        });
-        let client = &clients[*chosen];
-        ui.add_space(8.0);
-        crate::theme::section(ui, crate::i18n::tr("2. Cole isto onde ele pede"));
-        ui.label(RichText::new(client.place).color(t.ink_dim));
-        egui::Frame::group(ui.style())
-            .fill(t.inset)
-            .stroke(egui::Stroke::new(1.0, t.rule))
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                // The snippet is a block of its own: a long address must not
-                // be pushed under the buttons beside it.
-                ui.add(egui::Label::new(RichText::new(&client.code).monospace()).wrap());
-                ui.add_space(6.0);
-                ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui
-                            .button(format!("{} {}", icon::COPY, crate::i18n::tr("Copiar")))
-                            .clicked()
-                        {
-                            ui.ctx().copy_text(client.code.clone());
-                            app.set_status(crate::i18n::tr("Copiado"));
-                        }
-                        // When the client has a command line and it is on this
-                        // machine, there is no reason to make anybody open a
-                        // terminal: the window runs it.
-                        #[cfg(not(target_arch = "wasm32"))]
-                        if let Some((program, args)) = &client.run
-                            && installed(program)
-                        {
-                            let busy = app.ai_job.is_some();
-                            let label = format!(
-                                "{} {}",
-                                icon::LIGHTNING,
-                                if busy {
-                                    crate::i18n::tr("Registrando…")
-                                } else {
-                                    crate::i18n::tr("Registrar agora")
-                                }
-                            );
-                            if ui
-                                .add_enabled(!busy && serving, egui::Button::new(label))
-                                .on_hover_text(crate::i18n::tr(
-                                    "Roda esse mesmo comando aqui, sem abrir o terminal.",
-                                ))
-                                .clicked()
-                            {
-                                register(app, program, args.clone());
-                            }
-                        }
-                    });
-                });
-            });
-        ui.label(RichText::new(client.note).color(t.ink_dim).small());
-        ui.add_space(8.0);
-        crate::theme::section(ui, crate::i18n::tr("3. Peça alguma coisa"));
-        let ask = crate::i18n::tr(
-            "Quantas paredes tem este projeto? Depois coloque uma janela de 120 cm na sala.",
-        );
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(ask).italics());
-            if ui
-                .small_button(format!("{} {}", icon::COPY, crate::i18n::tr("Copiar")))
-                .clicked()
-            {
-                ui.ctx().copy_text(ask.to_owned());
-                app.set_status(crate::i18n::tr("Copiado"));
-            }
-        });
-        ui.add_space(10.0);
-
-        // ---- The proof ----
-        crate::theme::section(ui, crate::i18n::tr("Últimas chamadas"));
-        if pulse.recent.is_empty() {
-            ui.weak(crate::i18n::tr(
-                "Nada ainda. Assim que sua IA usar uma ferramenta, ela aparece aqui.",
-            ));
-        } else {
-            egui::ScrollArea::vertical()
-                .max_height(120.0)
-                .show(ui, |ui| {
-                    for call in pulse.recent.iter().rev() {
+            if serving {
+                ui.add_space(8.0);
+                // The address, as a thing to be copied: its own well, one
+                // button, and nothing else on the line to fight it.
+                egui::Frame::new()
+                    .fill(t.inset)
+                    .corner_radius(8)
+                    .inner_margin(egui::Margin::symmetric(10, 8))
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
                         ui.horizontal(|ui| {
-                            ui.label(
-                                RichText::new(&call.tool)
-                                    .monospace()
-                                    .color(if pulse.now_ms.saturating_sub(call.at_ms) < 2_000 {
-                                        t.accent
-                                    } else {
-                                        t.ink
-                                    }),
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(&url).monospace().size(11.5).color(t.ink_dim),
+                                )
+                                .wrap(),
                             );
-                            ui.label(
-                                RichText::new(format!(
-                                    "{} · {}",
-                                    call.agent,
-                                    ago(pulse.now_ms, call.at_ms)
-                                ))
-                                .color(t.ink_dim)
-                                .small(),
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ui
+                                        .button(format!(
+                                            "{} {}",
+                                            icon::COPY,
+                                            crate::i18n::tr("Copiar")
+                                        ))
+                                        .clicked()
+                                    {
+                                        ui.ctx().copy_text(url.clone());
+                                        app.set_status(crate::i18n::tr("Endereço copiado"));
+                                    }
+                                },
                             );
                         });
+                    });
+                #[cfg(target_arch = "wasm32")]
+                ui.label(
+                    RichText::new(crate::i18n::tr(
+                        "Quem tiver o endereço abaixo pode editar este projeto: trate como senha.",
+                    ))
+                    .color(t.ink_dim)
+                    .small(),
+                );
+            } else if !cfg!(target_arch = "wasm32") {
+                ui.label(
+                    RichText::new(crate::i18n::tr(
+                        "O servidor está desligado (--no-server): reabra o aplicativo sem essa opção.",
+                    ))
+                    .color(t.ink_dim),
+                );
+            }
+        });
+
+        // ---- What to paste ----
+        card(ui, t, |ui| {
+            step(ui, t, 1, crate::i18n::tr("Escolha o aplicativo de IA que você usa"));
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
+                for (i, client) in clients.iter().enumerate() {
+                    let on = *chosen == i;
+                    let chip = egui::Button::new(
+                        RichText::new(client.label)
+                            .size(13.0)
+                            .color(if on { t.accent } else { t.ink_dim }),
+                    )
+                    .fill(if on { t.accent_soft } else { t.inset })
+                    .stroke(egui::Stroke::new(1.0, if on { t.accent } else { t.rule }))
+                    .corner_radius(8)
+                    .min_size(egui::vec2(0.0, 30.0));
+                    if ui.add(chip).clicked() {
+                        *chosen = i;
+                    }
+                }
+            });
+
+            let client = &clients[*chosen];
+            ui.add_space(12.0);
+            step(ui, t, 2, crate::i18n::tr("Cole isto onde ele pede"));
+            ui.label(RichText::new(client.place).color(t.ink_dim).small());
+            ui.add_space(4.0);
+            egui::Frame::new()
+                .fill(t.inset)
+                .corner_radius(8)
+                .inner_margin(egui::Margin::symmetric(10, 9))
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.add(
+                        egui::Label::new(RichText::new(&client.code).monospace().size(12.0))
+                            .wrap(),
+                    );
+                });
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(client.note).color(t.ink_faint).small());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui
+                        .button(format!("{} {}", icon::COPY, crate::i18n::tr("Copiar")))
+                        .clicked()
+                    {
+                        ui.ctx().copy_text(client.code.clone());
+                        app.set_status(crate::i18n::tr("Copiado"));
+                    }
+                    // Where the client has a command line and it is on this
+                    // machine, nobody should have to open a terminal.
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if let Some((program, args)) = &client.run
+                        && installed(program)
+                    {
+                        let busy = app.ai_job.is_some();
+                        let label = format!(
+                            "{} {}",
+                            icon::LIGHTNING,
+                            if busy {
+                                crate::i18n::tr("Registrando…")
+                            } else {
+                                crate::i18n::tr("Registrar agora")
+                            }
+                        );
+                        let run = egui::Button::new(RichText::new(label).color(t.deep))
+                            .fill(t.accent)
+                            .corner_radius(8);
+                        if ui
+                            .add_enabled(!busy && serving, run)
+                            .on_hover_text(crate::i18n::tr(
+                                "Roda esse mesmo comando aqui, sem abrir o terminal.",
+                            ))
+                            .clicked()
+                        {
+                            register(app, program, args.clone());
+                        }
                     }
                 });
-        }
+            });
+
+            ui.add_space(12.0);
+            step(ui, t, 3, crate::i18n::tr("Peça alguma coisa"));
+            let ask = crate::i18n::tr(
+                "Quantas paredes tem este projeto? Depois coloque uma janela de 120 cm na sala.",
+            );
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(format!("“{ask}”")).italics().color(t.ink));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui
+                        .small_button(format!("{} {}", icon::COPY, crate::i18n::tr("Copiar")))
+                        .clicked()
+                    {
+                        ui.ctx().copy_text(ask.to_owned());
+                        app.set_status(crate::i18n::tr("Copiado"));
+                    }
+                });
+            });
+        });
+
+        // ---- What it has done ----
+        card(ui, t, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(crate::i18n::tr("Últimas chamadas"))
+                        .size(14.0)
+                        .strong()
+                        .color(t.ink),
+                );
+                if pulse.calls > 0 {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(
+                            crate::theme::fig(ui.visuals(), &pulse.calls.to_string())
+                                .color(t.ink_faint),
+                        );
+                    });
+                }
+            });
+            ui.add_space(4.0);
+            if pulse.recent.is_empty() {
+                ui.label(
+                    RichText::new(crate::i18n::tr(
+                        "Nada ainda. Assim que sua IA usar uma ferramenta, ela aparece aqui.",
+                    ))
+                    .color(t.ink_faint),
+                );
+            } else {
+                egui::ScrollArea::vertical()
+                    .max_height(126.0)
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        for (i, call) in pulse.recent.iter().rev().enumerate() {
+                            let fresh = pulse.now_ms.saturating_sub(call.at_ms) < 2_000;
+                            if i > 0 {
+                                ui.add_space(2.0);
+                            }
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    RichText::new(&call.tool)
+                                        .monospace()
+                                        .size(12.5)
+                                        .color(if fresh { t.accent } else { t.ink }),
+                                );
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        ui.label(
+                                            RichText::new(ago(pulse.now_ms, call.at_ms))
+                                                .color(t.ink_faint)
+                                                .small(),
+                                        );
+                                        ui.label(
+                                            RichText::new(&call.agent).color(t.ink_dim).small(),
+                                        );
+                                    },
+                                );
+                            });
+                        }
+                    });
+            }
+        });
 
         crate::theme::footer(ui, |ui| {
             if crate::theme::primary(ui, crate::i18n::tr("Fechar")).clicked() {
@@ -693,9 +752,8 @@ pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize
                 && cfg!(target_arch = "wasm32")
                 && crate::theme::secondary(ui, crate::i18n::tr("Baixar o aplicativo")).clicked()
             {
-                ui.ctx().open_url(egui::OpenUrl::new_tab(
-                    "https://3dneweraai.com/#baixar",
-                ));
+                ui.ctx()
+                    .open_url(egui::OpenUrl::new_tab("https://3dneweraai.com/#baixar"));
             }
         });
     });
@@ -703,6 +761,61 @@ pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize
     // the person's eyes.
     ctx.request_repaint_after(std::time::Duration::from_millis(250));
     close || ctx.input(|i| i.key_pressed(egui::Key::Escape))
+}
+
+/// In a browser: the one button that decides whether this tab can be reached,
+/// and what it says while it is deciding.
+#[cfg(target_arch = "wasm32")]
+fn web_switch(app: &mut NewEraApp, ui: &mut egui::Ui, serving: bool) {
+    let t = crate::theme::of(ui.visuals());
+    let state = app.ai_link.borrow().link.clone();
+    match state {
+        crate::ai_web::Link::Opening => {
+            ui.label(RichText::new(crate::i18n::tr("Ligando…")).color(t.ink_dim));
+        }
+        crate::ai_web::Link::On { .. } => {
+            if ui
+                .button(crate::i18n::tr("Desligar"))
+                .on_hover_text(crate::i18n::tr(
+                    "Fecha o endereço. A sua IA perde o acesso na hora; o projeto continua aqui.",
+                ))
+                .clicked()
+            {
+                crate::ai_web::disconnect(&app.ai_link);
+                app.set_status(crate::i18n::tr("MCP desligado"));
+            }
+        }
+        crate::ai_web::Link::Off | crate::ai_web::Link::Failed { .. } => {
+            let label = RichText::new(format!(
+                "{}  {}",
+                icon::LIGHTNING,
+                crate::i18n::tr("Ligar o MCP nesta aba")
+            ))
+            .color(t.deep)
+            .strong();
+            if ui
+                .add(
+                    egui::Button::new(label)
+                        .fill(t.accent)
+                        .corner_radius(8)
+                        .min_size(egui::vec2(0.0, 30.0)),
+                )
+                .clicked()
+            {
+                let (document, ctx, link) =
+                    (app.document.clone(), ui.ctx().clone(), app.ai_link.clone());
+                crate::ai_web::connect(document, ctx, link);
+            }
+        }
+    }
+    let _ = serving;
+    if let crate::ai_web::Link::Failed { why } = app.ai_link.borrow().link.clone() {
+        ui.label(
+            RichText::new(crate::i18n::fill("Não deu para ligar: {}", &[&why]))
+                .color(t.warn)
+                .small(),
+        );
+    }
 }
 
 #[cfg(test)]

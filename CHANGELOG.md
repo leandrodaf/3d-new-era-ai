@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-09-18
+
+### Added
+
+- The AI has the loudest button in the window: a pill at the head of the top bar that
+  says which of three things is true — nothing can reach this window, waiting for your
+  AI, or the name of the one that is connected — and pulses as it works. Not on a phone,
+  where the row has no room and the status bar already says it.
+- The panel behind it was rebuilt around three cards: where the window stands (with the
+  address in a well of its own and one button to copy it), the three steps with the
+  clients as chips and the command in its own block, and the last calls as a clean list.
+
+### Fixed
+
+- A reload no longer costs the connection. The tab writes down the room it holds and
+  walks back into it when the page opens, so the address already pasted into an AI client
+  keeps working; the relay holds a room a quarter of an hour for its tab to come back,
+  and a room that is gone is forgotten rather than pointed at.
+
 ## [1.4.1] - 2026-09-18
 
 ### Fixed
@@ -378,7 +397,8 @@ MCP server, with everything below.
 - `scripts/mcp.sh` / `make mcp` to call MCP tools from the shell.
 - CI for formatting, clippy, tests on Linux/macOS/Windows, MCP smoke test, MSRV and cargo-deny; release builds.
 
-[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.2.0...v1.3.0
