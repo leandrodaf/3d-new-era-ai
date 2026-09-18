@@ -73,7 +73,20 @@ const PLAN_PNG =
 
 let failed = false;
 try {
-  await send("Page.enable");
+  const running = async () => Boolean(await evaluate(
+  "Boolean(document.querySelector('input')) || (window.neweraLog || []).length > 0"
+));
+// Asking for a screenshot is what makes a headless tab draw: without it the
+// window can sit there forever without starting.
+const waitRunning = async (seconds = 60) => {
+  for (let i = 0; i < seconds * 2; i++) {
+    if (await running()) return true;
+    await send("Page.captureScreenshot", { format: "png" });
+    await sleep(500);
+  }
+  return false;
+};
+await send("Page.enable");
   await send("DOM.enable");
   await send("Page.setInterceptFileChooserDialog", { enabled: true });
   await send("Page.navigate", { url });
@@ -111,6 +124,26 @@ try {
   await sleep(1500);
   await shot(webgpu ? "web-editor-wall.png" : "web-editor-wall-webgl.png");
 
+  // A scanned plan behind the drawing: the button opens the browser's picker
+  // and what comes back is mounted in memory and set as the background. This
+  // is the whole path, and it used to end at "only in the desktop app".
+  const plan = join(out, "e2e-plan.png");
+  writeFileSync(plan, Buffer.from(PLAN_PNG, "base64"));
+  chooser = null;
+  await click(517, 58);
+  for (let i = 0; i < 40 && !chooser; i++) {
+    await sleep(100);
+  }
+  if (chooser) {
+    await send("DOM.setFileInputFiles", { backendNodeId: chooser.backendNodeId, files: [plan] });
+    await sleep(2500);
+    await shot(webgpu ? "web-editor-background.png" : "web-editor-background-webgl.png");
+    console.log("background: the picker opened and the image went in");
+  } else {
+    console.error("the background picker never opened");
+    failed = true;
+  }
+
   // What was drawn has to survive the tab being closed: the project is
   // mirrored into the browser's storage and opened again on the next visit,
   // instead of the demo home landing on top of it.
@@ -143,26 +176,6 @@ try {
   if (errors.length && errors.every((line) => noGpu.test(line))) {
     console.log("skipped: this machine's GPU stack cannot run the editor");
   } else if (errors.length) {
-    failed = true;
-  }
-
-  // A scanned plan behind the drawing: the button opens the browser's picker
-  // and what comes back is mounted in memory and set as the background. This
-  // is the whole path, and it used to end at "only in the desktop app".
-  const plan = join(out, "e2e-plan.png");
-  writeFileSync(plan, Buffer.from(PLAN_PNG, "base64"));
-  chooser = null;
-  await click(517, 58);
-  for (let i = 0; i < 40 && !chooser; i++) {
-    await sleep(100);
-  }
-  if (chooser) {
-    await send("DOM.setFileInputFiles", { backendNodeId: chooser.backendNodeId, files: [plan] });
-    await sleep(2500);
-    await shot(webgpu ? "web-editor-background.png" : "web-editor-background-webgl.png");
-    console.log("background: the picker opened and the image went in");
-  } else {
-    console.error("the background picker never opened");
     failed = true;
   }
 
