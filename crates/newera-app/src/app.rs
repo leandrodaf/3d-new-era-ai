@@ -249,7 +249,10 @@ impl NewEraApp {
         }
         // Nobody arrives knowing that an editor can be driven by their AI, and
         // the connection is made in another program's settings: the first time
-        // the window opens, it says so itself.
+        // the window opens, it says so itself. Not in a browser — there the
+        // panel would open to say what this page cannot do; the chip and the
+        // menu are there for whoever goes looking.
+        #[cfg(not(target_arch = "wasm32"))]
         if first_run {
             app.dialog = Some(Dialog::ConnectAi { client: 0 });
         }
