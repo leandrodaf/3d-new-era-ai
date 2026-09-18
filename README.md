@@ -147,6 +147,13 @@ and viewer and serves them at `http://127.0.0.1:8790`.
 Open the editor (or run `newera serve` for no window). It serves MCP at
 **`http://127.0.0.1:7878/mcp`** — point your AI there and it edits the plan you see, live.
 
+The window does this part for you: the **AI** menu (or the MCP chip in the
+status bar) opens a panel with the address, the snippet for whichever client
+you use, and — when that client has a command line and it is installed — a
+button that registers it from there, no terminal. The same panel is how you
+know it worked: it names the client that connected and lists the tools it is
+calling, as it calls them. The status bar says it too, from across the room.
+
 **Claude Code**
 
 ```sh
