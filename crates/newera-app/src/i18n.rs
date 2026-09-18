@@ -1933,6 +1933,11 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
             "Cierra la dirección. Su IA pierde el acceso al instante; el proyecto sigue aquí.",
             "Ferme l'adresse. Votre IA perd l'accès aussitôt ; le projet reste ici.",
         ],
+        "Conectar sua IA (no navegador, liga e desliga)" => [
+            "Connect your AI (in a browser, switches it on and off)",
+            "Conecte su IA (en el navegador, activa y desactiva)",
+            "Connecter votre IA (dans un navigateur, active et désactive)",
+        ],
         _ => return None,
     })
 }

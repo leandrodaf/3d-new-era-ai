@@ -1,0 +1,33 @@
+# The MCP relay, for the VPS. Nothing else in this repository is a service:
+# the editor is a desktop app and a page, and neither needs a server.
+services:
+  relay:
+    build:
+      context: .
+      dockerfile: deploy/relay/Dockerfile
+    image: newera-relay:latest
+    restart: unless-stopped
+    environment:
+      PORT: 7979
+      RUST_LOG: newera_relay=info
+    ports:
+      - "${HOST_PORT:-7979}:7979"
+    # It keeps rooms in memory and nothing on disk: a restart costs the tabs
+    # that were connected their address, and costs nobody their drawing.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/newera-relay", "--health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 256M

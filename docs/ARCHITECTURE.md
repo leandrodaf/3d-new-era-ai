@@ -46,6 +46,7 @@ That is what makes these properties hold everywhere, for free:
 | `newera-server` | core, mcp, plugins, axum | HTTP transport: REST API, sessions, plugins and the Streamable HTTP MCP endpoint. It also reads the MCP traffic going by — the handshake's client name and each `tools/call` — into `Document::agents`, which is how the window can show that an agent is connected. |
 | `newera-app` | core, eframe | Desktop editor (also built for the browser). Never talks to the network: what it knows about the AI side it reads from the document, beside the collaborators (`src/ai.rs`). |
 | `newera-web`, `newera-editor-web` | core / app | WebAssembly viewer and the full editor in the browser. |
+| `newera-relay` | axum | Lets an AI reach the editor in a browser tab: a room is two secrets, tool calls go down the tab's socket and answers come back. No database, no disk, no project data — it passes messages and forgets. |
 | `newera` | all | CLI entry point and process wiring. |
 
 Dependencies only point downwards. `newera-core` must stay free of heavy

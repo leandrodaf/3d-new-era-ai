@@ -147,6 +147,16 @@ and viewer and serves them at `http://127.0.0.1:8790`.
 Open the editor (or run `newera serve` for no window). It serves MCP at
 **`http://127.0.0.1:7878/mcp`** — point your AI there and it edits the plan you see, live.
 
+**In a browser, with nothing installed.** Open <https://3dneweraai.com/app/>,
+switch the MCP on in the **AI** panel (or Ctrl+Shift+M) and the tab gets an
+address your AI can reach — paste it where you would paste the local one. A
+small relay stands between the two because a tab cannot listen on a port; it
+passes messages and stores nothing, the project never leaves the tab, and the
+address stops answering the moment you switch it off or close the tab. Treat
+that address like a password: whoever has it can edit the project that is
+open. `render_photo` and `video` are not offered there — they run for minutes
+on a CPU and would freeze the window; that is what the app is for.
+
 The window does this part for you: the **AI** menu (or the MCP chip in the
 status bar) opens a panel with the address, the snippet for whichever client
 you use, and — when that client has a command line and it is installed — a

@@ -1167,6 +1167,29 @@ impl NewEraApp {
             ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, k)))
         };
 
+        // Ctrl+Shift+M: in a browser, make this tab reachable by an AI, or
+        // close it again. On the desktop the server is already up, so the
+        // same keys open the panel that says how to reach it.
+        if pressed(cmd_shift, Key::M) {
+            #[cfg(target_arch = "wasm32")]
+            {
+                let on = matches!(&*self.ai_link.borrow(), crate::ai_web::Link::On { .. });
+                if on {
+                    crate::ai_web::disconnect(&self.ai_link);
+                    self.set_status(crate::i18n::tr("MCP desligado"));
+                } else {
+                    crate::ai_web::connect(
+                        self.document.clone(),
+                        ctx.clone(),
+                        self.ai_link.clone(),
+                    );
+                }
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                self.dialog = Some(Dialog::ConnectAi { client: 0 });
+            }
+        }
         if pressed(cmd, Key::T) {
             self.run(|doc| {
                 doc.add_variant(None, true);

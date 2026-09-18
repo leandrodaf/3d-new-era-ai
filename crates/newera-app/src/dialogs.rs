@@ -1423,6 +1423,10 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                             "Ctrl+T · Ctrl+Tab",
                             crate::i18n::tr("Duplicar versão · Próxima versão (guias)"),
                         ),
+                        (
+                            "Ctrl+Shift+M",
+                            crate::i18n::tr("Conectar sua IA (no navegador, liga e desliga)"),
+                        ),
                     ] {
                         ui.label(RichText::new(keys).monospace().strong());
                         ui.label(what);

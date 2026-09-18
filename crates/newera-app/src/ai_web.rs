@@ -73,6 +73,25 @@ pub(crate) fn disconnect(state: &Shared) {
         let _ = socket.close();
     }
     *state.borrow_mut() = Link::Off;
+    published(None);
+}
+
+/// Writes the address into the page (`body[data-mcp]`), or takes it away.
+fn published(url: Option<&str>) {
+    let Some(body) = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.body())
+    else {
+        return;
+    };
+    match url {
+        Some(url) => {
+            let _ = body.set_attribute("data-mcp", url);
+        }
+        None => {
+            let _ = body.remove_attribute("data-mcp");
+        }
+    }
 }
 
 /// Opens a room on the relay and holds it, doing the work that arrives.
@@ -171,6 +190,9 @@ fn hold(
                 url: url.clone(),
                 socket: socket.clone(),
             };
+            // The page keeps the address where the panel shows it: readable by
+            // whoever is already looking at this tab, and by nobody else.
+            published(Some(&url));
             ctx.request_repaint();
         })
     };

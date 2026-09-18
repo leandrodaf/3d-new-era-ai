@@ -66,11 +66,14 @@ const MAX_IN_FLIGHT: usize = 16;
 
 /// Where the editor is served from. Anything else is refused at the browser's
 /// own gate: the secrets are the real lock, this is the outer door.
-const ORIGINS: [&str; 4] = [
+const ORIGINS: [&str; 6] = [
     "https://3dneweraai.com",
     "https://www.3dneweraai.com",
+    // Where the editor is served while it is being worked on and checked.
     "http://127.0.0.1:8801",
     "http://localhost:8801",
+    "http://127.0.0.1:8790",
+    "http://localhost:8790",
 ];
 
 /// What the tab is asked to do, and what it answers.
