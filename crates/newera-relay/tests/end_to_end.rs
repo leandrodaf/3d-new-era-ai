@@ -144,6 +144,34 @@ async fn an_ai_reaches_the_tab_and_the_tab_answers() {
     assert_eq!(orphan["result"]["isError"], true);
 }
 
+/// A socket that says nothing is closed by what sits in front of this (about
+/// a hundred seconds, at Cloudflare): the tab is pinged so that never happens
+/// to somebody who is simply reading their own plan.
+#[tokio::test]
+async fn the_tab_is_kept_alive() {
+    let base = relay().await;
+    let (_, opened) = post(&format!("{base}/rooms"), json!({})).await;
+    let tab_url = format!(
+        "ws://{}{}",
+        base.trim_start_matches("http://"),
+        opened["tab_path"].as_str().unwrap()
+    );
+    let (mut socket, _) = tokio_tungstenite::connect_async(&tab_url)
+        .await
+        .expect("the tab connects");
+    // The first beat is due one interval in; with the interval this short in
+    // the test build it would be a long wait, so what is checked is that the
+    // socket is still open and answering after a quiet stretch — which is
+    // what the ping buys.
+    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    socket
+        .send(tokio_tungstenite::tungstenite::Message::text(
+            json!({"type": "hello", "tools": []}).to_string(),
+        ))
+        .await
+        .expect("the socket is still there after silence");
+}
+
 /// One room cannot be reached with another's secrets, and a room nobody owns
 /// cannot be reached at all.
 #[tokio::test]

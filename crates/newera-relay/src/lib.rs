@@ -45,6 +45,12 @@ const IDLE: Duration = Duration::from_mins(360);
 /// photos are slow on purpose; an agent waiting forever is worse.
 const TOOL_TIMEOUT: Duration = Duration::from_secs(180);
 
+/// How often the tab is pinged. Cloudflare closes a WebSocket that says
+/// nothing for about a hundred seconds, and a tab whose socket was closed
+/// under it looks, from the outside, exactly like a tab that went away: the
+/// address stops answering while somebody is still looking at the editor.
+const KEEPALIVE: Duration = Duration::from_secs(30);
+
 /// The protocol version this speaks when a client does not name one.
 const PROTOCOL: &str = "2025-06-18";
 
@@ -356,10 +362,25 @@ async fn hold_tab(socket: WebSocket, rooms: Rooms, room: String) {
         entry.touched = Instant::now();
     }
     let writing = tokio::spawn(async move {
-        while let Some(message) = rx.recv().await {
-            let text = serde_json::to_string(&message).unwrap_or_default();
-            if sink.send(Message::text(text)).await.is_err() {
-                break;
+        let mut beat = tokio::time::interval(KEEPALIVE);
+        beat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        beat.tick().await; // the first tick is immediate; the socket is new
+        loop {
+            tokio::select! {
+                message = rx.recv() => {
+                    let Some(message) = message else { break };
+                    let text = serde_json::to_string(&message).unwrap_or_default();
+                    if sink.send(Message::text(text)).await.is_err() {
+                        break;
+                    }
+                }
+                _ = beat.tick() => {
+                    // Silence is what gets a socket closed in the middle; the
+                    // browser answers this without the page knowing.
+                    if sink.send(Message::Ping(Vec::new().into())).await.is_err() {
+                        break;
+                    }
+                }
             }
         }
     });

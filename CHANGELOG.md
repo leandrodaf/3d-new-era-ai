@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-18
+
+### Fixed
+
+- The browser's MCP address stopped answering after a couple of quiet minutes: what
+  sits in front of the relay closes a WebSocket that says nothing for about a hundred
+  seconds, and from the outside that looks exactly like a tab that went away. The tab
+  is pinged every thirty seconds, so an address lasts as long as the tab does.
+
 ## [1.4.0] - 2026-09-18
 
 The editor answers to an AI from a browser tab, with nothing installed, and is
@@ -369,7 +378,8 @@ MCP server, with everything below.
 - `scripts/mcp.sh` / `make mcp` to call MCP tools from the shell.
 - CI for formatting, clippy, tests on Linux/macOS/Windows, MCP smoke test, MSRV and cargo-deny; release builds.
 
-[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.1.0...v1.2.0
