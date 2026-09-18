@@ -511,6 +511,9 @@ impl PlanView {
                         p
                     };
                     let mut ghost = item.instantiate(FurnitureId(0), at);
+                    // Named the way the window writes it, since that name is
+                    // what goes into the project and onto the plan.
+                    crate::i18n::tr(item.name).clone_into(&mut ghost.name);
                     if ghost.is_opening()
                         && let Some((wall_id, along)) =
                             ops::nearest_wall(&home, p, ops::OPENING_REACH)

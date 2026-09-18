@@ -1829,7 +1829,9 @@ pub fn search(query: &str) -> Vec<&'static CatalogItem> {
     scored.into_iter().map(|(_, _, item)| item).collect()
 }
 
-fn fold(text: &str) -> String {
+/// Text the way the search compares it: lower case, without accents, so
+/// `sofá` and `sofa` are the same word.
+pub fn fold(text: &str) -> String {
     text.to_lowercase()
         .chars()
         .map(|c| match c {

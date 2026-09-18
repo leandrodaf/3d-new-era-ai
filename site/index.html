@@ -3,20 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>3D New Era AI — projete casas conversando com a sua IA</title>
-<meta name="description" content="Editor de arquitetura e interiores de código aberto com servidor MCP embutido. Sua IA desenha, mobilia, ilumina pela NBR e fotografa — ao vivo na sua tela. Windows, macOS e Linux.">
+<title>3D New Era AI — design homes by talking to your AI</title>
+<meta name="description" content="Open-source architecture and interiors editor with an MCP server inside. Your AI draws, furnishes, lights to code and renders the photos — live on your screen. Windows, macOS and Linux.">
 <meta name="theme-color" content="#f4f1ea">
 <link rel="canonical" href="https://leandrodaf.github.io/3d-new-era-ai/">
+<link rel="alternate" hreflang="pt-BR" href="https://leandrodaf.github.io/3d-new-era-ai/?lang=pt">
+<link rel="alternate" hreflang="en" href="https://leandrodaf.github.io/3d-new-era-ai/?lang=en">
+<link rel="alternate" hreflang="es" href="https://leandrodaf.github.io/3d-new-era-ai/?lang=es">
+<link rel="alternate" hreflang="fr" href="https://leandrodaf.github.io/3d-new-era-ai/?lang=fr">
+<link rel="alternate" hreflang="x-default" href="https://leandrodaf.github.io/3d-new-era-ai/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="3D New Era AI">
-<meta property="og:title" content="3D New Era AI — projete casas conversando com a sua IA">
-<meta property="og:description" content="Editor de arquitetura de código aberto com MCP embutido. A IA desenha, mobilia, ilumina e fotografa. Grátis para Windows, macOS e Linux.">
+<meta property="og:title" content="3D New Era AI — design homes by talking to your AI">
+<meta property="og:description" content="Open-source architecture editor with MCP inside. The AI draws, furnishes, lights and renders. Free for Windows, macOS and Linux.">
 <meta property="og:url" content="https://leandrodaf.github.io/3d-new-era-ai/">
 <meta property="og:image" content="https://leandrodaf.github.io/3d-new-era-ai/og.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:locale" content="pt_BR">
-<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="pt_BR">
+<meta property="og:locale:alternate" content="es_ES">
+<meta property="og:locale:alternate" content="fr_FR">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://leandrodaf.github.io/3d-new-era-ai/og.jpg">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -37,16 +44,18 @@
       <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M17.2 17.2a10.8 10.8 0 0 1 10.8-10.8" fill="none" stroke="var(--accent)" stroke-width="2.4"/><path d="M4 4h24v24H4z M4 17.2h13.2V28" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>
       <span>3D New Era <em>AI</em></span>
     </a>
-    <nav class="nav__links" aria-label="Seções">
+    <nav class="nav__links" data-i18n-label="aria.sections" aria-label="Seções">
       <a href="#como" data-i18n="nav.how">Como funciona</a>
       <a href="#galeria" data-i18n="nav.gallery">Galeria</a>
       <a href="#ia" data-i18n="nav.ai">Conectar IA</a>
       <a href="#faq" data-i18n="nav.faq">Dúvidas</a>
     </nav>
     <div class="nav__actions">
-      <div class="lang" role="group" aria-label="Idioma / Language">
-        <button type="button" data-lang="pt" aria-pressed="true">PT</button>
-        <button type="button" data-lang="en" aria-pressed="false">EN</button>
+      <div class="lang" role="group" aria-label="Idioma / Language / Idioma / Langue">
+        <button type="button" data-lang="pt" aria-pressed="true" lang="pt-BR" title="Português (Brasil)">PT</button>
+        <button type="button" data-lang="en" aria-pressed="false" lang="en" title="English">EN</button>
+        <button type="button" data-lang="es" aria-pressed="false" lang="es" title="Español">ES</button>
+        <button type="button" data-lang="fr" aria-pressed="false" lang="fr" title="Français">FR</button>
       </div>
       <a class="btn btn--ghost btn--sm hide-sm" href="https://github.com/leandrodaf/3d-new-era-ai" rel="noopener">GitHub</a>
       <a class="btn btn--ink btn--sm" href="#baixar" data-i18n="nav.download">Baixar</a>
@@ -59,7 +68,7 @@
   <!-- HERO -->
   <section class="hero wrap">
     <figure class="hero__frame">
-      <img src="images/showcase/09-jantar-noite.jpg" alt="Sala de jantar ao anoitecer, renderizada pelo app" width="1280" height="800" fetchpriority="high">
+      <img src="images/showcase/09-jantar-noite.jpg" data-i18n-alt="alt.hero" alt="Sala de jantar ao anoitecer, renderizada pelo app" width="1280" height="800" fetchpriority="high">
       <div class="hero__shade" aria-hidden="true"></div>
       <div class="hero__copy">
         <p class="eyebrow eyebrow--light"><span class="dot"></span><span data-i18n="hero.eyebrow">Código aberto · grátis · Windows, macOS e Linux</span></p>
@@ -99,7 +108,7 @@
   <section class="product wrap">
     <div class="dim dim--top" aria-hidden="true"><span>1600</span></div>
     <figure class="product__shot">
-      <img src="images/editor.png" alt="O editor com catálogo, planta humanizada e vista 3D" width="1600" height="1000" loading="lazy">
+      <img src="images/editor.png" data-i18n-alt="alt.editor" alt="O editor com catálogo, planta humanizada e vista 3D" width="1600" height="1000" loading="lazy">
     </figure>
     <div class="dim dim--side" aria-hidden="true"><span>1000</span></div>
     <p class="fig" data-i18n="product.fig">FIG. 02 — O editor: catálogo, planta humanizada e 3D ao vivo, com a IA trabalhando pelo MCP</p>
@@ -147,7 +156,7 @@
           </div>
         </div>
         <figure class="plan" data-reveal>
-          <img src="images/showcase/13-planta-humanizada.jpg" alt="Planta humanizada do apartamento" width="1600" height="2000" loading="lazy">
+          <img src="images/showcase/13-planta-humanizada.jpg" data-i18n-alt="alt.plan" alt="Planta humanizada do apartamento" width="1600" height="2000" loading="lazy">
           <figcaption class="fig" data-i18n="cv.fig">FIG. 03 — Planta humanizada gerada pelo app</figcaption>
         </figure>
       </div>
@@ -168,15 +177,15 @@
         <p class="section-no">03</p>
         <h2 id="dn-title" class="head__title"><span data-i18n="dn.h1">Sol das 15h ou luzes acesas.</span> <span class="muted" data-i18n="dn.h2">A mesma câmera, a luz que você colocou.</span></h2>
       </div>
-      <div class="chips" role="tablist" aria-label="Ambiente">
+      <div class="chips" role="tablist" data-i18n-label="aria.room" aria-label="Ambiente">
         <button type="button" role="tab" aria-selected="true" data-scene="jantar" data-i18n="dn.dining">Jantar</button>
         <button type="button" role="tab" aria-selected="false" data-scene="cozinha" data-i18n="dn.kitchen">Cozinha</button>
         <button type="button" role="tab" aria-selected="false" data-scene="suite" data-i18n="dn.suite">Suíte</button>
       </div>
     </header>
     <div class="compare" style="--pos:50%">
-      <img class="compare__img" data-day src="images/showcase/02-jantar-estar.jpg" alt="De dia" width="1280" height="800" loading="lazy">
-      <div class="compare__night"><img class="compare__img" data-night src="images/showcase/09-jantar-noite.jpg" alt="À noite" width="1280" height="800" loading="lazy"></div>
+      <img class="compare__img" data-day src="images/showcase/02-jantar-estar.jpg" data-i18n-alt="alt.day" alt="De dia" width="1280" height="800" loading="lazy">
+      <div class="compare__night"><img class="compare__img" data-night src="images/showcase/09-jantar-noite.jpg" data-i18n-alt="alt.night" alt="À noite" width="1280" height="800" loading="lazy"></div>
       <span class="compare__tag compare__tag--l">15:00</span>
       <span class="compare__tag compare__tag--r">19:30</span>
       <div class="compare__handle" aria-hidden="true"><span></span></div>
@@ -242,16 +251,16 @@
         <a class="link-arrow" href="https://github.com/leandrodaf/3d-new-era-ai/blob/main/docs/SHOWCASE.md" rel="noopener" data-i18n="gl.how">Como foi feito →</a>
       </header>
       <div class="mosaic">
-        <figure class="m-wide"><img src="images/showcase/12-aerea.jpg" alt="Vista aérea em corte" loading="lazy" width="1280" height="800"><figcaption data-i18n="g1">Aérea em corte</figcaption></figure>
-        <figure><img src="images/showcase/03-painel-tv.jpg" alt="Painel ripado com TV" loading="lazy" width="1280" height="800"><figcaption data-i18n="g2">Painel ripado com TV embutida</figcaption></figure>
-        <figure><img src="images/showcase/04-cozinha.jpg" alt="Cozinha em L" loading="lazy" width="1280" height="800"><figcaption data-i18n="g3">Cozinha em L, granilite</figcaption></figure>
-        <figure><img src="images/showcase/05-escritorio.jpg" alt="Escritório" loading="lazy" width="1280" height="800"><figcaption data-i18n="g4">Escritório</figcaption></figure>
-        <figure><img src="images/showcase/11-suite-noite.jpg" alt="Suíte à noite" loading="lazy" width="1280" height="800"><figcaption data-i18n="g5">Suíte à noite</figcaption></figure>
-        <figure class="m-wide m-right"><img src="images/showcase/01-estar-janela.jpg" alt="Estar com painel ripado" loading="lazy" width="1280" height="800"><figcaption data-i18n="g6">Estar e jantar, 33 m²</figcaption></figure>
-        <figure><img src="images/showcase/10-cozinha-noite.jpg" alt="Cozinha à noite" loading="lazy" width="1280" height="800"><figcaption data-i18n="g7">Cozinha à noite</figcaption></figure>
-        <figure><img src="images/showcase/08-banheiro.jpg" alt="Banheiro" loading="lazy" width="1280" height="800"><figcaption data-i18n="g8">Banheiro, mármore Nero</figcaption></figure>
-        <figure><img src="images/showcase/07-suite.jpg" alt="Suíte de dia" loading="lazy" width="1280" height="800"><figcaption data-i18n="g9">Suíte com armários</figcaption></figure>
-        <figure><img src="images/showcase/02-jantar-estar.jpg" alt="Jantar de dia" loading="lazy" width="1280" height="800"><figcaption data-i18n="g10">Jantar às 15h</figcaption></figure>
+        <figure class="m-wide"><img src="images/showcase/12-aerea.jpg" data-i18n-alt="g1" alt="Vista aérea em corte" loading="lazy" width="1280" height="800"><figcaption data-i18n="g1">Aérea em corte</figcaption></figure>
+        <figure><img src="images/showcase/03-painel-tv.jpg" data-i18n-alt="g2" alt="Painel ripado com TV" loading="lazy" width="1280" height="800"><figcaption data-i18n="g2">Painel ripado com TV embutida</figcaption></figure>
+        <figure><img src="images/showcase/04-cozinha.jpg" data-i18n-alt="g3" alt="Cozinha em L" loading="lazy" width="1280" height="800"><figcaption data-i18n="g3">Cozinha em L, granilite</figcaption></figure>
+        <figure><img src="images/showcase/05-escritorio.jpg" data-i18n-alt="g4" alt="Escritório" loading="lazy" width="1280" height="800"><figcaption data-i18n="g4">Escritório</figcaption></figure>
+        <figure><img src="images/showcase/11-suite-noite.jpg" data-i18n-alt="g5" alt="Suíte à noite" loading="lazy" width="1280" height="800"><figcaption data-i18n="g5">Suíte à noite</figcaption></figure>
+        <figure class="m-wide m-right"><img src="images/showcase/01-estar-janela.jpg" data-i18n-alt="g6" alt="Estar com painel ripado" loading="lazy" width="1280" height="800"><figcaption data-i18n="g6">Estar e jantar, 33 m²</figcaption></figure>
+        <figure><img src="images/showcase/10-cozinha-noite.jpg" data-i18n-alt="g7" alt="Cozinha à noite" loading="lazy" width="1280" height="800"><figcaption data-i18n="g7">Cozinha à noite</figcaption></figure>
+        <figure><img src="images/showcase/08-banheiro.jpg" data-i18n-alt="g8" alt="Banheiro" loading="lazy" width="1280" height="800"><figcaption data-i18n="g8">Banheiro, mármore Nero</figcaption></figure>
+        <figure><img src="images/showcase/07-suite.jpg" data-i18n-alt="g9" alt="Suíte de dia" loading="lazy" width="1280" height="800"><figcaption data-i18n="g9">Suíte com armários</figcaption></figure>
+        <figure><img src="images/showcase/02-jantar-estar.jpg" data-i18n-alt="g10" alt="Jantar de dia" loading="lazy" width="1280" height="800"><figcaption data-i18n="g10">Jantar às 15h</figcaption></figure>
       </div>
     </div>
   </section>
@@ -269,7 +278,7 @@
         <li><b>3</b><div><h3 data-i18n="ai.s3h">Peça</h3><p data-i18n="ai.s3p">“Desenhe um quarto de 4 × 5 m com porta e janela, mobilie e gere uma foto.”</p></div></li>
       </ol>
       <div class="tabs">
-        <div class="tabs__list" role="tablist" aria-label="Cliente de IA">
+        <div class="tabs__list" role="tablist" data-i18n-label="aria.client" aria-label="Cliente de IA">
           <button role="tab" aria-selected="true" data-tab="claude">Claude Code</button>
           <button role="tab" aria-selected="false" data-tab="codex">Codex</button>
           <button role="tab" aria-selected="false" data-tab="gemini">Gemini CLI</button>
@@ -297,7 +306,7 @@
 
       <div class="dl__grid">
         <div class="dl__main">
-          <div class="os" role="tablist" aria-label="Sistema">
+          <div class="os" role="tablist" data-i18n-label="aria.os" aria-label="Sistema">
             <button role="tab" aria-selected="true" data-os="windows">Windows</button>
             <button role="tab" aria-selected="false" data-os="mac">macOS</button>
             <button role="tab" aria-selected="false" data-os="linux">Linux</button>
@@ -349,7 +358,7 @@
       </a>
       <p class="footer__by" data-i18n="foot.by">Feito em Rust por Leandro Ferreira.</p>
     </div>
-    <nav class="footer__links" aria-label="Links">
+    <nav class="footer__links" data-i18n-label="aria.links" aria-label="Links">
       <a href="https://github.com/leandrodaf/3d-new-era-ai" rel="noopener">GitHub</a>
       <a href="https://github.com/leandrodaf/3d-new-era-ai/releases/latest" rel="noopener" data-i18n="foot.releases">Versões</a>
       <a href="https://github.com/leandrodaf/3d-new-era-ai/blob/main/docs/SHOWCASE.md" rel="noopener" data-i18n="foot.showcase">Vitrine</a>

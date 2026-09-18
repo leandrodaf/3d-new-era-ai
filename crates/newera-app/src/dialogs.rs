@@ -180,7 +180,7 @@ pub(crate) fn material_editor(
             Some(m) if m.image.is_some() => crate::i18n::tr("Imagem").to_owned(),
             Some(Material {
                 pattern: Some(p), ..
-            }) => p.label().to_owned(),
+            }) => crate::i18n::tr(p.label()).to_owned(),
             Some(_) => crate::i18n::tr("Pintura").to_owned(),
         };
         egui::ComboBox::from_id_salt(id)
@@ -206,7 +206,10 @@ pub(crate) fn material_editor(
                     let on = material
                         .as_ref()
                         .is_some_and(|m| m.pattern == Some(pattern) && m.image.is_none());
-                    if ui.selectable_label(on, pattern.label()).clicked() {
+                    if ui
+                        .selectable_label(on, crate::i18n::tr(pattern.label()))
+                        .clicked()
+                    {
                         *material = Some(Material::pattern(pattern));
                     }
                 }
@@ -318,7 +321,9 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                         .wall_type
                         .as_deref()
                         .and_then(newera_core::wall_type)
-                        .map_or(crate::i18n::tr("Personalizada"), |t| t.name);
+                        .map_or(crate::i18n::tr("Personalizada"), |t| {
+                            crate::i18n::tr(t.name)
+                        });
                     egui::ComboBox::from_id_salt("wall_type")
                         .selected_text(type_name)
                         .width(220.0)
@@ -336,7 +341,7 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                             for kind in WALL_TYPES {
                                 let label = format!(
                                     "{} · {}",
-                                    kind.name,
+                                    crate::i18n::tr(kind.name),
                                     unit.format_length(kind.thickness)
                                 );
                                 if ui
@@ -344,7 +349,7 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                                         finish.wall_type.as_deref() == Some(kind.id),
                                         label,
                                     )
-                                    .on_hover_text(kind.description)
+                                    .on_hover_text(crate::i18n::tr(kind.description))
                                     .clicked()
                                 {
                                     finish.wall_type = Some(kind.id.to_owned());

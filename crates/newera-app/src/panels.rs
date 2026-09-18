@@ -248,15 +248,39 @@ fn band<R>(ui: &mut egui::Ui, band: Band<'_>, body: impl FnOnce(&mut egui::Ui) -
     body.map(|inner| inner.inner)
 }
 
+/// The catalog's own search, plus the names as this window writes them: a
+/// Spanish window has to find the sofa by the word on its own screen.
+fn find(query: &str) -> Vec<&'static CatalogItem> {
+    let mut found = newera_catalog::search(query);
+    if crate::i18n::lang() == crate::i18n::Lang::Pt {
+        return found;
+    }
+    let words: Vec<String> = newera_catalog::fold(query)
+        .split_whitespace()
+        .map(str::to_owned)
+        .collect();
+    for item in newera_catalog::CATALOG {
+        if found.iter().any(|f| f.id == item.id) {
+            continue;
+        }
+        let name = newera_catalog::fold(crate::i18n::tr(item.name));
+        if words.iter().any(|word| name.contains(word.as_str())) {
+            found.push(item);
+        }
+    }
+    found
+}
+
 fn catalog_row(app: &mut NewEraApp, ui: &mut egui::Ui, item: &'static CatalogItem) {
     let selected = app.tool == Tool::Place(item.id);
     let unit = app.unit();
     let t = crate::theme::of(ui.visuals());
-    let (response, ()) = row(ui, selected, item.name, |ui| {
+    let name = crate::i18n::tr(item.name);
+    let (response, ()) = row(ui, selected, name, |ui| {
         thumbnail(ui, item, 30.0);
         ui.vertical(|ui| {
             ui.add_space(1.0);
-            ui.label(RichText::new(item.name).color(if selected { t.accent } else { t.ink }));
+            ui.label(RichText::new(name).color(if selected { t.accent } else { t.ink }));
             ui.label(crate::theme::fig(
                 ui.visuals(),
                 &unit.format_size(item.size),
@@ -322,7 +346,7 @@ pub(crate) fn left(app: &mut NewEraApp, ui: &mut egui::Ui) {
                             );
                         }
                     } else {
-                        let found = newera_catalog::search(&query);
+                        let found = find(&query);
                         if found.is_empty() {
                             ui.add_space(8.0);
                             ui.label(

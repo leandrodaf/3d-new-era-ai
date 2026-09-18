@@ -24,6 +24,12 @@ All notable changes to this project are documented here. The format follows
   shape everywhere with the accent down the side of what is selected.
 - What is picked on the plan lights up in the panel and is scrolled into view, with
   the band holding it opened.
+- The catalog speaks the four languages too: every piece, every wall type and
+  every finish is named in the language of the window, a piece dropped on the plan
+  is created under that name, and the search finds it by the word on screen.
+- The site opens in the visitor's own language — Portuguese, English, Spanish or
+  French, read from the browser and overridable with `?lang=` or the switch in the
+  corner — with the picture descriptions and the link preview to match.
 - Full trackpad support: pinch to zoom, two fingers to move the plan or to turn the
   3D view (Shift to slide it), a twist to spin it, and momentum carried through —
   a wheel still zooms, told apart from a glide by how the machine reports it.
@@ -41,7 +47,7 @@ All notable changes to this project are documented here. The format follows
 
 The electrical, telecom and plumbing projects, checked against the text of the
 norms, and a long round of fixes found by an agent working a real 65 m²
-apartment through the MCP server (`docs/ATRITOS-DE-USO.md`).
+apartment through the MCP server.
 
 ### Added
 

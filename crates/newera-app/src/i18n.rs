@@ -1212,6 +1212,498 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
             ]
         }
         "Aparência" => ["Look", "Aspecto", "Apparence"],
+        // Every piece of the catalog: what the window calls it, and what it
+        // is named when someone drops it on the plan.
+        "Sofá 3 lugares" => ["3-seat sofa", "Sofá de 3 plazas", "Canapé 3 places"],
+        "Sofá 2 lugares" => ["2-seat sofa", "Sofá de 2 plazas", "Canapé 2 places"],
+        "Sofá em L (chaise)" => [
+            "L-shaped sofa (chaise)",
+            "Sofá en L (chaise longue)",
+            "Canapé d'angle (méridienne)",
+        ],
+        "Poltrona" => ["Armchair", "Sillón", "Fauteuil"],
+        "Mesa de centro" => ["Coffee table", "Mesa de centro", "Table basse"],
+        "Mesa lateral" => ["Side table", "Mesa auxiliar", "Table d'appoint"],
+        "Rack de TV" => ["TV unit", "Mueble de TV", "Meuble TV"],
+        "Televisão 55\"" => ["55\" television", "Televisor de 55\"", "Téléviseur 55\""],
+        "Estante" => ["Shelving unit", "Estantería", "Étagère"],
+        "Tapete" => ["Rug", "Alfombra", "Tapis"],
+        "Luminária de piso" => ["Floor lamp", "Lámpara de pie", "Lampadaire"],
+        "Abajur de mesa" => ["Table lamp", "Lámpara de mesa", "Lampe de table"],
+        "Spot embutido LED 7 W" => [
+            "Recessed LED spot 7 W",
+            "Foco LED empotrado 7 W",
+            "Spot LED encastré 7 W",
+        ],
+        "Pendente" => ["Pendant light", "Lámpara colgante", "Suspension"],
+        "Painel LED 60×60 36 W" => [
+            "LED panel 60×60 36 W",
+            "Panel LED 60×60 36 W",
+            "Dalle LED 60×60 36 W",
+        ],
+        "Fita LED (perfil)" => [
+            "LED strip (profile)",
+            "Tira LED (perfil)",
+            "Ruban LED (profilé)",
+        ],
+        "Mesa de jantar 4 lugares" => [
+            "Dining table for 4",
+            "Mesa de comedor de 4",
+            "Table à manger 4 places",
+        ],
+        "Mesa de jantar 6 lugares" => [
+            "Dining table for 6",
+            "Mesa de comedor de 6",
+            "Table à manger 6 places",
+        ],
+        "Mesa com 4 cadeiras" => [
+            "Table with 4 chairs",
+            "Mesa con 4 sillas",
+            "Table avec 4 chaises",
+        ],
+        "Mesa com 6 cadeiras" => [
+            "Table with 6 chairs",
+            "Mesa con 6 sillas",
+            "Table avec 6 chaises",
+        ],
+        "Mesa redonda" => ["Round table", "Mesa redonda", "Table ronde"],
+        "Cadeira" => ["Chair", "Silla", "Chaise"],
+        "Aparador" => ["Sideboard", "Aparador", "Buffet"],
+        "Geladeira" => ["Fridge", "Frigorífico", "Réfrigérateur"],
+        "Fogão 4 bocas" => ["4-burner range", "Cocina de 4 fuegos", "Cuisinière 4 feux"],
+        "Bancada com pia" => [
+            "Countertop with sink",
+            "Encimera con fregadero",
+            "Plan de travail avec évier",
+        ],
+        "Armário de cozinha (baixo)" => [
+            "Base cabinet",
+            "Mueble bajo de cocina",
+            "Meuble bas de cuisine",
+        ],
+        "Armário aéreo" => ["Wall cabinet", "Mueble alto", "Meuble haut"],
+        "Coifa" => ["Range hood", "Campana extractora", "Hotte"],
+        "Lava-louças" => ["Dishwasher", "Lavavajillas", "Lave-vaisselle"],
+        "Micro-ondas" => ["Microwave", "Microondas", "Micro-ondes"],
+        "Cooktop 4 bocas (embutir)" => [
+            "4-burner cooktop (built-in)",
+            "Placa de 4 fuegos (encastrar)",
+            "Table de cuisson 4 feux (encastrable)",
+        ],
+        "Cuba de inox (embutir)" => [
+            "Stainless steel sink (built-in)",
+            "Fregadero de acero inoxidable (encastrar)",
+            "Évier inox (encastrable)",
+        ],
+        "Forno de embutir" => ["Built-in oven", "Horno empotrable", "Four encastrable"],
+        "Ilha de cozinha" => ["Kitchen island", "Isla de cocina", "Îlot de cuisine"],
+        "Banqueta alta" => ["Bar stool", "Taburete alto", "Tabouret de bar"],
+        "Cama de casal" => ["Double bed", "Cama de matrimonio", "Lit double"],
+        "Cama queen" => ["Queen bed", "Cama queen", "Lit queen"],
+        "Cama king" => ["King bed", "Cama king", "Lit king"],
+        "Cama de solteiro" => ["Single bed", "Cama individual", "Lit simple"],
+        "Criado-mudo" => ["Bedside table", "Mesita de noche", "Table de chevet"],
+        "Guarda-roupa" => ["Wardrobe", "Armario ropero", "Armoire"],
+        "Cômoda" => ["Chest of drawers", "Cómoda", "Commode"],
+        "Berço" => ["Cot", "Cuna", "Lit bébé"],
+        "Vaso sanitário" => ["Toilet", "Inodoro", "WC"],
+        "Gabinete com lavatório" => [
+            "Vanity unit with basin",
+            "Mueble con lavabo",
+            "Meuble avec vasque",
+        ],
+        "Box de chuveiro" => ["Shower tray", "Plato de ducha", "Receveur de douche"],
+        "Box de vidro" => [
+            "Glass shower screen",
+            "Mampara de vidrio",
+            "Paroi de douche en verre",
+        ],
+        "Banheira" => ["Bathtub", "Bañera", "Baignoire"],
+        "Máquina de lavar" => ["Washing machine", "Lavadora", "Lave-linge"],
+        "Secadora" => ["Tumble dryer", "Secadora", "Sèche-linge"],
+        "Tanque" => ["Laundry sink", "Lavadero", "Bac à laver"],
+        "Escrivaninha" => ["Desk", "Escritorio", "Bureau"],
+        "Cadeira de escritório" => ["Office chair", "Silla de oficina", "Chaise de bureau"],
+        "Porta" => ["Door", "Puerta", "Porte"],
+        "Porta dupla" => ["Double door", "Puerta doble", "Porte double"],
+        "Porta de correr" => ["Sliding door", "Puerta corredera", "Porte coulissante"],
+        "Portão de garagem" => ["Garage door", "Puerta de garaje", "Porte de garage"],
+        "Vão livre" => ["Opening", "Vano libre", "Ouverture libre"],
+        "Janela" => ["Window", "Ventana", "Fenêtre"],
+        "Janela basculante" => ["Awning window", "Ventana abatible", "Fenêtre à soufflet"],
+        "Porta-janela" => ["French door", "Puerta ventana", "Porte-fenêtre"],
+        "Escada reta" => ["Straight stair", "Escalera recta", "Escalier droit"],
+        "Pilar" => ["Column", "Pilar", "Poteau"],
+        "Coluna redonda" => ["Round column", "Columna redonda", "Colonne ronde"],
+        "Sapata" => ["Footing", "Zapata", "Semelle"],
+        "Viga / caibro" => ["Beam / rafter", "Viga / cabio", "Poutre / chevron"],
+        "Painel" => ["Panel", "Panel", "Panneau"],
+        "Telha ondulada" => ["Corrugated sheet", "Chapa ondulada", "Tôle ondulée"],
+        "Gradil de ferro (guarda-corpo de barras verticais)" => [
+            "Iron railing (vertical bar guard)",
+            "Barandilla de hierro (barrotes verticales)",
+            "Garde-corps en fer (barreaux verticaux)",
+        ],
+        "Guarda-corpo de vidro laminado com corrimão metálico" => [
+            "Laminated glass guard with a metal handrail",
+            "Barandilla de vidrio laminado con pasamanos metálico",
+            "Garde-corps en verre feuilleté avec main courante métallique",
+        ],
+        "Fechamento de vidro da sacada (envidraçamento retrátil)" => [
+            "Balcony glazing (retractable)",
+            "Cerramiento de vidrio del balcón (acristalamiento retráctil)",
+            "Fermeture vitrée du balcon (vitrage rétractable)",
+        ],
+        "Caixa" => ["Box", "Caja", "Caisse"],
+        "Planta em vaso" => ["Potted plant", "Planta en maceta", "Plante en pot"],
+        "Floreira" => ["Planter", "Jardinera", "Jardinière"],
+        "Muro / cerca" => ["Wall / fence", "Muro / valla", "Mur / clôture"],
+        "Piscina" => ["Swimming pool", "Piscina", "Piscine"],
+        "Piscina oval" => ["Oval pool", "Piscina ovalada", "Piscine ovale"],
+        "Espreguiçadeira" => ["Sun lounger", "Tumbona", "Transat"],
+        "Churrasqueira" => ["Barbecue", "Barbacoa", "Barbecue"],
+        "Banco" => ["Bench", "Banco", "Banc"],
+        "Árvore" => ["Tree", "Árbol", "Arbre"],
+        "Carro" => ["Car", "Coche", "Voiture"],
+        "Tomada baixa (30 cm)" => [
+            "Low socket (30 cm)",
+            "Enchufe bajo (30 cm)",
+            "Prise basse (30 cm)",
+        ],
+        "Tomada média (1,10 m)" => [
+            "Mid socket (1.10 m)",
+            "Enchufe medio (1,10 m)",
+            "Prise à mi-hauteur (1,10 m)",
+        ],
+        "Tomada alta (2,20 m)" => [
+            "High socket (2.20 m)",
+            "Enchufe alto (2,20 m)",
+            "Prise haute (2,20 m)",
+        ],
+        "Interruptor simples" => ["Single switch", "Interruptor simple", "Interrupteur simple"],
+        "Interruptor duplo" => ["Double switch", "Interruptor doble", "Interrupteur double"],
+        "Interruptor paralelo (three-way)" => [
+            "Two-way switch (three-way)",
+            "Conmutador (three-way)",
+            "Va-et-vient (three-way)",
+        ],
+        "Ponto de luz no teto" => [
+            "Ceiling light point",
+            "Punto de luz en el techo",
+            "Point lumineux au plafond",
+        ],
+        "Arandela (ponto de luz na parede)" => [
+            "Wall light (light point on the wall)",
+            "Aplique (punto de luz en la pared)",
+            "Applique (point lumineux mural)",
+        ],
+        "Quadro de distribuição" => ["Consumer unit", "Cuadro eléctrico", "Tableau électrique"],
+        "Ponto de ar-condicionado" => [
+            "Air conditioning point",
+            "Punto de aire acondicionado",
+            "Point de climatisation",
+        ],
+        "Ponto para chuveiro elétrico" => [
+            "Electric shower point",
+            "Punto para calentador de ducha",
+            "Point pour chauffe-eau de douche",
+        ],
+        "Tomada de dados / TV" => [
+            "Data / TV socket",
+            "Toma de datos / TV",
+            "Prise données / TV",
+        ],
+        "Ponto de rede RJ45 (Cat 6)" => [
+            "RJ45 network point (Cat 6)",
+            "Punto de red RJ45 (Cat 6)",
+            "Prise réseau RJ45 (Cat 6)",
+        ],
+        "Ponto de TV (coaxial)" => [
+            "TV point (coaxial)",
+            "Punto de TV (coaxial)",
+            "Prise TV (coaxiale)",
+        ],
+        "Ponto de Wi-Fi no teto (access point)" => [
+            "Ceiling Wi-Fi point (access point)",
+            "Punto de Wi-Fi en el techo (punto de acceso)",
+            "Point Wi-Fi au plafond (point d'accès)",
+        ],
+        "Quadro de telecomunicações (rack / DG)" => [
+            "Telecom panel (rack / MDF)",
+            "Cuadro de telecomunicaciones (rack / RITI)",
+            "Coffret de communication (baie / DTI)",
+        ],
+        "Campainha" => ["Doorbell", "Timbre", "Sonnette"],
+        "Torre de tomadas retrátil de embutir (furo 60 mm, 3 tomadas, plugue)" => [
+            "Retractable socket tower, built in (60 mm hole, 3 sockets, plug)",
+            "Torre de enchufes retráctil empotrable (agujero 60 mm, 3 enchufes, clavija)",
+            "Bloc de prises escamotable encastré (perçage 60 mm, 3 prises, fiche)",
+        ],
+        "Torre de tomadas automática com indução (furo 85 mm, ligada à instalação)" => [
+            "Automatic socket tower with induction (85 mm hole, wired in)",
+            "Torre de enchufes automática con inducción (agujero 85 mm, conectada a la instalación)",
+            "Bloc de prises automatique avec induction (perçage 85 mm, raccordé)",
+        ],
+        "Torre de 4 tomadas + USB e indução (furo 100 mm)" => [
+            "4-socket tower + USB and induction (100 mm hole)",
+            "Torre de 4 enchufes + USB e inducción (agujero 100 mm)",
+            "Bloc 4 prises + USB et induction (perçage 100 mm)",
+        ],
+        "Caixa de tomadas de mesa (4 tomadas, RJ45, USB, HDMI; recorte 120×335 mm)" => [
+            "Desk socket box (4 sockets, RJ45, USB, HDMI; 120×335 mm cutout)",
+            "Caja de enchufes de mesa (4 enchufes, RJ45, USB, HDMI; recorte 120×335 mm)",
+            "Boîtier de prises de table (4 prises, RJ45, USB, HDMI ; découpe 120×335 mm)",
+        ],
+        "Tomada de embutir em móvel (furo 35 mm)" => [
+            "Socket built into furniture (35 mm hole)",
+            "Enchufe empotrado en el mueble (agujero 35 mm)",
+            "Prise encastrée dans le meuble (perçage 35 mm)",
+        ],
+        "Relé de automação (atrás do interruptor ou da luminária)" => [
+            "Automation relay (behind the switch or the fixture)",
+            "Relé de automatización (detrás del interruptor o de la luminaria)",
+            "Relais domotique (derrière l'interrupteur ou le luminaire)",
+        ],
+        "Interruptor inteligente" => [
+            "Smart switch",
+            "Interruptor inteligente",
+            "Interrupteur connecté",
+        ],
+        "Dimmer" => ["Dimmer", "Regulador", "Variateur"],
+        "Sensor de presença de teto" => [
+            "Ceiling presence sensor",
+            "Sensor de presencia de techo",
+            "Détecteur de présence au plafond",
+        ],
+        "Fechadura eletrônica" => [
+            "Electronic lock",
+            "Cerradura electrónica",
+            "Serrure électronique",
+        ],
+        "Ponto de água fria" => [
+            "Cold water point",
+            "Punto de agua fría",
+            "Point d'eau froide",
+        ],
+        "Ponto de água quente" => [
+            "Hot water point",
+            "Punto de agua caliente",
+            "Point d'eau chaude",
+        ],
+        "Ponto de esgoto" => ["Drain point", "Punto de desagüe", "Point d'évacuation"],
+        "Caixa sifonada 150×150×50 (ralo)" => [
+            "Trapped gully 150×150×50 (drain)",
+            "Sumidero sifónico 150×150×50",
+            "Siphon de sol 150×150×50",
+        ],
+        "Caixa sifonada 100×150×50 (ralo)" => [
+            "Trapped gully 100×150×50 (drain)",
+            "Sumidero sifónico 100×150×50",
+            "Siphon de sol 100×150×50",
+        ],
+        "Caixa sifonada 150×185×75 (ralo)" => [
+            "Trapped gully 150×185×75 (drain)",
+            "Sumidero sifónico 150×185×75",
+            "Siphon de sol 150×185×75",
+        ],
+        "Ralo sifonado 100 mm (fecho hídrico curto)" => [
+            "Trapped floor drain 100 mm (shallow seal)",
+            "Sumidero sifónico 100 mm (cierre hídrico corto)",
+            "Bonde siphoïde 100 mm (garde d'eau courte)",
+        ],
+        "Ralo seco 100 mm" => [
+            "Dry floor drain 100 mm",
+            "Sumidero seco 100 mm",
+            "Bonde sèche 100 mm",
+        ],
+        "Ralo linear 70 cm (sem sifão)" => [
+            "Linear drain 70 cm (untrapped)",
+            "Canaleta lineal 70 cm (sin sifón)",
+            "Caniveau 70 cm (sans siphon)",
+        ],
+        "Ralo linear sifonado 70 cm" => [
+            "Trapped linear drain 70 cm",
+            "Canaleta lineal sifónica 70 cm",
+            "Caniveau siphoïde 70 cm",
+        ],
+        "Ralo de águas pluviais (varanda descoberta, terraço)" => [
+            "Rainwater drain (open balcony, terrace)",
+            "Sumidero de pluviales (balcón descubierto, terraza)",
+            "Bonde d'eaux pluviales (balcon découvert, terrasse)",
+        ],
+        "Registro" => ["Stopcock", "Llave de paso", "Robinet d'arrêt"],
+        "Caixa de gordura" => ["Grease trap", "Trampa de grasas", "Bac à graisse"],
+        "Grelha de ventilação permanente (gás)" => [
+            "Permanent ventilation grille (gas)",
+            "Rejilla de ventilación permanente (gas)",
+            "Grille de ventilation permanente (gaz)",
+        ],
+        "Tubo de ventilação" => ["Vent pipe", "Tubo de ventilación", "Colonne de ventilation"],
+        "Caixa de inspeção" => [
+            "Inspection chamber",
+            "Arqueta de inspección",
+            "Regard de visite",
+        ],
+        "Hidrômetro" => ["Water meter", "Contador de agua", "Compteur d'eau"],
+        "Ponto de gás" => ["Gas point", "Punto de gas", "Point de gaz"],
+        // What walls are built of and what surfaces are finished with, as
+        // the pickers list them.
+        "Drywall 73 mm" => [
+            "Drywall 73 mm",
+            "Yeso laminado 73 mm",
+            "Plaque de plâtre 73 mm",
+        ],
+        "Drywall 95 mm" => [
+            "Drywall 95 mm",
+            "Yeso laminado 95 mm",
+            "Plaque de plâtre 95 mm",
+        ],
+        "Drywall 115 mm" => [
+            "Drywall 115 mm",
+            "Yeso laminado 115 mm",
+            "Plaque de plâtre 115 mm",
+        ],
+        "Drywall 120 mm chapa dupla" => [
+            "Drywall 120 mm, double board",
+            "Yeso laminado 120 mm, placa doble",
+            "Plaque de plâtre 120 mm, double parement",
+        ],
+        "Tijolo cerâmico 9 cm" => [
+            "Clay brick 9 cm",
+            "Ladrillo cerámico 9 cm",
+            "Brique en terre cuite 9 cm",
+        ],
+        "Tijolo cerâmico 14 cm" => [
+            "Clay brick 14 cm",
+            "Ladrillo cerámico 14 cm",
+            "Brique en terre cuite 14 cm",
+        ],
+        "Tijolo cerâmico 19 cm" => [
+            "Clay brick 19 cm",
+            "Ladrillo cerámico 19 cm",
+            "Brique en terre cuite 19 cm",
+        ],
+        "Bloco de concreto 14 cm" => [
+            "Concrete block 14 cm",
+            "Bloque de hormigón 14 cm",
+            "Bloc de béton 14 cm",
+        ],
+        "Bloco de concreto 19 cm" => [
+            "Concrete block 19 cm",
+            "Bloque de hormigón 19 cm",
+            "Bloc de béton 19 cm",
+        ],
+        "Parede de concreto 10 cm" => [
+            "Concrete wall 10 cm",
+            "Muro de hormigón 10 cm",
+            "Mur en béton 10 cm",
+        ],
+        "Concreto armado 15 cm" => [
+            "Reinforced concrete 15 cm",
+            "Hormigón armado 15 cm",
+            "Béton armé 15 cm",
+        ],
+        "Steel frame 14 cm" => [
+            "Steel frame 14 cm",
+            "Steel frame 14 cm",
+            "Ossature métallique 14 cm",
+        ],
+        "Wood frame 10 cm" => [
+            "Wood frame 10 cm",
+            "Entramado de madera 10 cm",
+            "Ossature bois 10 cm",
+        ],
+        "Divisória de vidro" => ["Glass partition", "Mampara de vidrio", "Cloison vitrée"],
+        "Montante 48 mm + 1 chapa de 12,5 mm em cada face" => [
+            "48 mm stud + one 12.5 mm board each side",
+            "Montante de 48 mm + 1 placa de 12,5 mm por cara",
+            "Montant 48 mm + 1 plaque de 12,5 mm par face",
+        ],
+        "Montante 70 mm + 1 chapa de 12,5 mm em cada face" => [
+            "70 mm stud + one 12.5 mm board each side",
+            "Montante de 70 mm + 1 placa de 12,5 mm por cara",
+            "Montant 70 mm + 1 plaque de 12,5 mm par face",
+        ],
+        "Montante 90 mm + 1 chapa de 12,5 mm em cada face" => [
+            "90 mm stud + one 12.5 mm board each side",
+            "Montante de 90 mm + 1 placa de 12,5 mm por cara",
+            "Montant 90 mm + 1 plaque de 12,5 mm par face",
+        ],
+        "Montante 70 mm + 2 chapas de 12,5 mm em cada face (acústica)" => [
+            "70 mm stud + two 12.5 mm boards each side (acoustic)",
+            "Montante de 70 mm + 2 placas de 12,5 mm por cara (acústica)",
+            "Montant 70 mm + 2 plaques de 12,5 mm par face (acoustique)",
+        ],
+        "Bloco de 9 cm + reboco de 2,5 cm em cada face" => [
+            "9 cm block + 2.5 cm render each side",
+            "Bloque de 9 cm + enfoscado de 2,5 cm por cara",
+            "Bloc de 9 cm + enduit de 2,5 cm par face",
+        ],
+        "Bloco de 14 cm + reboco de 2,5 cm em cada face" => [
+            "14 cm block + 2.5 cm render each side",
+            "Bloque de 14 cm + enfoscado de 2,5 cm por cara",
+            "Bloc de 14 cm + enduit de 2,5 cm par face",
+        ],
+        "Bloco de 19 cm + reboco de 2,5 cm em cada face" => [
+            "19 cm block + 2.5 cm render each side",
+            "Bloque de 19 cm + enfoscado de 2,5 cm por cara",
+            "Bloc de 19 cm + enduit de 2,5 cm par face",
+        ],
+        "Bloco estrutural de 14 cm + revestimento de 1,5 cm em cada face" => [
+            "14 cm structural block + 1.5 cm finish each side",
+            "Bloque estructural de 14 cm + revestimiento de 1,5 cm por cara",
+            "Bloc structurel de 14 cm + revêtement de 1,5 cm par face",
+        ],
+        "Bloco estrutural de 19 cm + revestimento de 1,5 cm em cada face" => [
+            "19 cm structural block + 1.5 cm finish each side",
+            "Bloque estructural de 19 cm + revestimiento de 1,5 cm por cara",
+            "Bloc structurel de 19 cm + revêtement de 1,5 cm par face",
+        ],
+        "Concreto moldado in loco, sistema parede de concreto" => [
+            "Cast-in-place concrete, concrete wall system",
+            "Hormigón moldeado in situ, sistema de muro de hormigón",
+            "Béton coulé en place, système de mur en béton",
+        ],
+        "Parede estrutural de concreto armado" => [
+            "Structural reinforced concrete wall",
+            "Muro estructural de hormigón armado",
+            "Mur structurel en béton armé",
+        ],
+        "Perfil 90 mm + OSB e placa cimentícia/gesso" => [
+            "90 mm profile + OSB and cement/plaster board",
+            "Perfil de 90 mm + OSB y placa de cemento/yeso",
+            "Profilé 90 mm + OSB et plaque ciment/plâtre",
+        ],
+        "Estrutura de madeira com fechamento em chapas" => [
+            "Timber frame closed with boards",
+            "Estructura de madera cerrada con placas",
+            "Ossature bois fermée par des panneaux",
+        ],
+        "Vidro temperado de 10 mm" => [
+            "10 mm toughened glass",
+            "Vidrio templado de 10 mm",
+            "Verre trempé de 10 mm",
+        ],
+        "Madeira (réguas)" => ["Wood (planks)", "Madera (tablas)", "Bois (lames)"],
+        "Taco espinha de peixe" => [
+            "Herringbone parquet",
+            "Parqué en espiga",
+            "Parquet à chevrons",
+        ],
+        "Porcelanato / cerâmica" => [
+            "Porcelain / ceramic tile",
+            "Porcelánico / cerámica",
+            "Grès cérame / carrelage",
+        ],
+        "Azulejo metrô" => ["Subway tile", "Azulejo metro", "Carrelage métro"],
+        "Tijolo aparente" => ["Exposed brick", "Ladrillo visto", "Brique apparente"],
+        "Pedra" => ["Stone", "Piedra", "Pierre"],
+        "Cimento queimado" => ["Polished cement", "Cemento pulido", "Béton ciré"],
+        "Mármore" => ["Marble", "Mármol", "Marbre"],
+        "Carpete" => ["Carpet", "Moqueta", "Moquette"],
+        "Grama" => ["Grass", "Césped", "Gazon"],
+        "Água (piscina)" => ["Water (pool)", "Agua (piscina)", "Eau (piscine)"],
+        "Deck de madeira" => ["Wood deck", "Tarima de madera", "Terrasse en bois"],
         _ => return None,
     })
 }
@@ -1325,6 +1817,21 @@ mod tests {
         );
         // Nothing to put in it, and nothing lost either.
         assert_eq!(fill_in("Salvo em {}", Lang::Pt, &[]), "Salvo em {}");
+    }
+
+    /// Every piece in the catalog is named in all four languages. Change the
+    /// language and the sofa has to stop being a sofá — the catalog is the
+    /// first thing anyone reads in this window.
+    #[test]
+    fn every_piece_of_the_catalog_is_named_in_every_language() {
+        let mut missing: Vec<&str> = Vec::new();
+        for item in newera_catalog::CATALOG {
+            match translations(item.name) {
+                Some(row) if row.iter().all(|t| !t.trim().is_empty()) => {}
+                _ => missing.push(item.name),
+            }
+        }
+        assert!(missing.is_empty(), "not translated: {missing:#?}");
     }
 
     #[test]

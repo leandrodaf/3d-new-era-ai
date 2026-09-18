@@ -7,6 +7,16 @@
   const RAW = `https://raw.githubusercontent.com/${REPO}/main/scripts`;
 
   const EN = {
+    "alt.hero": "Dining room at dusk, rendered by the app",
+    "alt.editor": "The editor with catalog, rendered floor plan and 3D view",
+    "alt.plan": "Rendered floor plan of the apartment",
+    "alt.day": "By day",
+    "alt.night": "At night",
+    "aria.sections": "Sections",
+    "aria.links": "Links",
+    "aria.room": "Room",
+    "aria.client": "AI client",
+    "aria.os": "Operating system",
     "skip": "Skip to content",
     "nav.how": "How it works", "nav.gallery": "Gallery", "nav.ai": "Connect AI", "nav.faq": "FAQ", "nav.download": "Download",
     "hero.eyebrow": "Open source · free · Windows, macOS and Linux",
@@ -61,6 +71,252 @@
     "foot.credits": "Reference plan: <i>Typical apartment floor plan FOCSA Building</i>, Osvaldo Valdes, CC BY-SA 4.0. Textures: ambientCG, CC0."
   };
 
+  const ES = {
+    "alt.hero": "Comedor al atardecer, renderizado por la app",
+    "alt.editor": "El editor con catálogo, plano renderizado y vista 3D",
+    "alt.plan": "Plano renderizado del apartamento",
+    "alt.day": "De día",
+    "alt.night": "De noche",
+    "aria.sections": "Secciones",
+    "aria.links": "Enlaces",
+    "aria.room": "Ambiente",
+    "aria.client": "Cliente de IA",
+    "aria.os": "Sistema operativo",
+    "skip": "Saltar al contenido",
+    "nav.how": "Cómo funciona",
+    "nav.gallery": "Galería",
+    "nav.ai": "Conectar la IA",
+    "nav.faq": "Preguntas",
+    "nav.download": "Descargar",
+    "hero.eyebrow": "Código abierto · gratis · Windows, macOS y Linux",
+    "hero.title1": "Diseñe casas hablando con su IA.",
+    "hero.title2": "Ella dibuja, amuebla y hace las fotos. Usted aprueba.",
+    "hero.download": "Descargar gratis",
+    "hero.see": "Ver cómo funciona",
+    "hero.fig": "FIG. 01 — Comedor al atardecer, renderizado por la app",
+    "works": "Funciona con",
+    "works.more": "y otras vía MCP",
+    "st.strong": "Un editor de arquitectura con un servidor MCP dentro.",
+    "st.rest": "Usted describe lo que quiere; el agente usa las mismas herramientas que usted — paredes, puertas, carpintería, iluminación, cámara — y cada cambio aparece en pantalla, a un Ctrl+Z de distancia.",
+    "product.fig": "FIG. 02 — El editor: catálogo, plano renderizado y 3D en vivo, con la IA trabajando por MCP",
+    "t1.h": "La IA edita el archivo real",
+    "t1.p": "No es un generador de imágenes. El agente edita el proyecto de verdad, en centímetros, y usted ve aparecer cada pared.",
+    "t2.h": "Todo a medida real",
+    "t2.p": "Una cama de 158 × 208 cm mide exactamente eso en el plano, en 3D y en la comprobación de colisiones.",
+    "t3.h": "Funciona en su ordenador",
+    "t3.p": "Su proyecto se queda con usted. Sin cuenta, sin suscripción, sin nube. Renderiza fotos incluso sin tarjeta gráfica.",
+    "cv.h1": "Una conversación, un apartamento.",
+    "cv.h2": "Un plano real de 105 m², construido entero por la IA.",
+    "cv.you": "usted",
+    "cv.prompt": "Levante este plano del FOCSA a escala real, amuéblelo como un apartamento moderno e ilumínelo según la norma.",
+    "cv.c1": "plano a escala",
+    "cv.c2": "paredes y habitaciones",
+    "cv.c3": "abriendo hacia el lado correcto",
+    "cv.c4": "acabados",
+    "cv.c5": "panel ripado",
+    "cv.c6": "cocina y armarios",
+    "cv.c8": "nada bloqueado ✓",
+    "cv.c9": "foto del comedor",
+    "cv.fig": "FIG. 03 — Plano renderizado exportado por la app",
+    "s1": "de plano real, calcado de la imagen",
+    "s2": "muebles en su sitio",
+    "s3": "habitaciones con la iluminación comprobada según la norma",
+    "s4": "herramientas MCP a disposición de la IA",
+    "dn.h1": "Sol de las 3 de la tarde o lámparas encendidas.",
+    "dn.h2": "La misma cámara, las luces que usted puso.",
+    "dn.dining": "Comedor",
+    "dn.kitchen": "Cocina",
+    "dn.suite": "Dormitorio",
+    "dn.fig": "FIG. 04 — Arrastre para comparar · path tracing con el sol según la brújula y luminarias en lúmenes",
+    "dn.aria": "Comparar día y noche",
+    "ft.h1": "Hecho para quien proyecta de verdad.",
+    "ft.h2": "Y para la IA que trabaja a su lado.",
+    "f1.h": "Un plano a partir de una imagen",
+    "f1.p": "Suelte una imagen del plano a escala y la IA encuentra las paredes. También abre proyectos de Sweet Home 3D.",
+    "f2.h": "Carpintería que un taller puede fabricar",
+    "f2.p": "Armarios, paneles ripados, encimeras con huecos para fregadero y placa. Despiece en CSV y DXF.",
+    "f3.h": "Iluminación comprobada según la norma",
+    "f3.p": "Lux por habitación por fotometría, según NBR ISO/CIE 8995-1. La IA añade las luminarias que faltan.",
+    "f4.h": "Ergonomía para quien vive allí",
+    "f4.p": "Circulación, giro de silla de ruedas, el triángulo de la cocina — NBR 9050 y 15575, con la corrección lista.",
+    "f5.h": "Fotos, secciones y vídeos",
+    "f5.p": "Plantas renderizadas, alzados, secciones, vistas aéreas, fotos realistas y vídeos de recorrido.",
+    "f6.h": "Escritorio, navegador y equipos",
+    "f6.p": "El editor en su ordenador o en el navegador, plugins en cualquier lenguaje y varias personas en un mismo proyecto.",
+    "gl.h1": "Todo esto salió de la app.",
+    "gl.h2": "Sin Photoshop, sin granja de render.",
+    "gl.how": "Cómo se hizo →",
+    "g1": "Corte aéreo",
+    "g2": "Panel ripado con TV integrada",
+    "g3": "Cocina en L, terrazo",
+    "g4": "Despacho en casa",
+    "g5": "Dormitorio de noche",
+    "g6": "Salón y comedor, 33 m²",
+    "g7": "Cocina de noche",
+    "g8": "Baño, mármol Nero",
+    "g9": "Dormitorio con armarios",
+    "g10": "Comedor a las 3 de la tarde",
+    "ai.h1": "Conecte la IA que ya usa.",
+    "ai.h2": "Un comando y ya ve su proyecto.",
+    "ai.s1h": "Abra 3D New Era AI",
+    "ai.s1p": "El servidor MCP arranca con la app, en <code>http://127.0.0.1:7878/mcp</code>.",
+    "ai.s2h": "Ejecute el comando de su IA",
+    "ai.s2p": "Solo una vez. Los instaladores ya lo hacen para Claude Code y Codex.",
+    "ai.s3h": "Pida",
+    "ai.s3p": "«Dibuje un dormitorio de 4 × 5 m con una puerta y una ventana, amuéblelo y renderice una foto.»",
+    "ai.other": "DeepSeek y otras",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "dl.h1": "Descargue y empiece ahora.",
+    "dl.h2": "Gratis, sin cuenta, sin contraseña de administrador.",
+    "dl.files": "O descargue el archivo",
+    "dl.first": "Primera vez que abre un archivo descargado",
+    "dl.firstp": "Las apps no están firmadas con un certificado de pago de Apple ni de Microsoft, así que el sistema pregunta una vez. <b>Windows:</b> abra <code>newera-gui.exe</code> y, si aparece SmartScreen, pulse <i>Más información → Ejecutar de todas formas</i>. <b>macOS:</b> mueva la app a Aplicaciones, clic derecho → <i>Abrir</i> (macOS 15+: <i>Ajustes → Privacidad y seguridad → Abrir igualmente</i>). El comando de arriba evita estos avisos.",
+    "dl.notes": "notas de la versión",
+    "dl.license": "MIT o Apache 2.0",
+    "faq.h": "Preguntas frecuentes",
+    "q1": "¿Es realmente gratis?",
+    "a1": "Sí. Es código abierto (MIT o Apache 2.0), sin cuenta y sin suscripción. Solo paga por la IA que elija, si es de pago.",
+    "q2": "¿Necesito saber programar?",
+    "a2": "No. Instale con un comando, abra la app y dibuje con el ratón como en cualquier editor. La IA es opcional — una vez conectada, basta con hablarle.",
+    "q3": "¿Qué IA funciona?",
+    "a3": "Cualquier app que hable MCP: Claude Code, Claude Desktop, Codex, Gemini CLI, Cursor, VS Code, Windsurf, y apps como Cline y Cherry Studio que ejecutan DeepSeek, Qwen, Llama y otros modelos.",
+    "q4": "¿Mi proyecto va a la nube?",
+    "a4": "No. La app y su servidor MCP se ejecutan en su ordenador y solo aceptan conexiones de la misma máquina. El proyecto es su propio archivo <code>.newera</code>.",
+    "q5": "¿Necesito tarjeta gráfica?",
+    "a5": "No. La vista 3D usa la GPU cuando la hay, y las fotos se renderizan en la CPU — incluso en un servidor sin pantalla.",
+    "q6": "¿Abre mis proyectos de Sweet Home 3D?",
+    "a6": "Sí, los archivos <code>.sh3d</code> se abren con paredes, habitaciones, muebles, luces, cámaras y niveles.",
+    "foot.by": "Hecho en Rust por Leandro Ferreira.",
+    "foot.releases": "Versiones",
+    "foot.showcase": "Galería",
+    "foot.issues": "Informar de un problema",
+    "foot.credits": "Plano de referencia: <i>Typical apartment floor plan FOCSA Building</i>, Osvaldo Valdes, CC BY-SA 4.0. Texturas: ambientCG, CC0.",
+  };
+
+  const FR = {
+    "alt.hero": "Salle à manger au crépuscule, rendue par l'app",
+    "alt.editor": "L'éditeur avec catalogue, plan rendu et vue 3D",
+    "alt.plan": "Plan rendu de l'appartement",
+    "alt.day": "De jour",
+    "alt.night": "La nuit",
+    "aria.sections": "Sections",
+    "aria.links": "Liens",
+    "aria.room": "Pièce",
+    "aria.client": "Client IA",
+    "aria.os": "Système",
+    "skip": "Aller au contenu",
+    "nav.how": "Comment ça marche",
+    "nav.gallery": "Galerie",
+    "nav.ai": "Connecter l'IA",
+    "nav.faq": "Questions",
+    "nav.download": "Télécharger",
+    "hero.eyebrow": "Open source · gratuit · Windows, macOS et Linux",
+    "hero.title1": "Concevez des maisons en parlant à votre IA.",
+    "hero.title2": "Elle dessine, meuble et prend les photos. Vous validez.",
+    "hero.download": "Télécharger gratuitement",
+    "hero.see": "Voir comment ça marche",
+    "hero.fig": "FIG. 01 — Salle à manger au crépuscule, rendue par l'app",
+    "works": "Fonctionne avec",
+    "works.more": "et d'autres via MCP",
+    "st.strong": "Un éditeur d'architecture avec un serveur MCP à l'intérieur.",
+    "st.rest": "Vous décrivez ce que vous voulez ; l'agent utilise les mêmes outils que vous — murs, portes, menuiserie, éclairage, caméra — et chaque changement s'affiche à l'écran, à un Ctrl+Z près.",
+    "product.fig": "FIG. 02 — L'éditeur : catalogue, plan rendu et 3D en direct, avec l'IA qui travaille par MCP",
+    "t1.h": "L'IA modifie le vrai fichier",
+    "t1.p": "Ce n'est pas un générateur d'images. L'agent modifie le projet lui-même, au centimètre, et vous voyez chaque mur apparaître.",
+    "t2.h": "Tout à la bonne dimension",
+    "t2.p": "Un lit de 158 × 208 cm fait exactement cela sur le plan, en 3D et dans les contrôles de collision.",
+    "t3.h": "Tourne sur votre ordinateur",
+    "t3.p": "Votre projet reste chez vous. Sans compte, sans abonnement, sans cloud. Les photos se calculent même sans carte graphique.",
+    "cv.h1": "Une conversation, un appartement.",
+    "cv.h2": "Un vrai plan de 105 m², construit entièrement par l'IA.",
+    "cv.you": "vous",
+    "cv.prompt": "Construis ce plan FOCSA à l'échelle réelle, meuble-le comme un appartement moderne et éclaire-le selon la norme.",
+    "cv.c1": "plan à l'échelle",
+    "cv.c2": "murs et pièces",
+    "cv.c3": "ouvrant du bon côté",
+    "cv.c4": "finitions",
+    "cv.c5": "mur à tasseaux",
+    "cv.c6": "cuisine et meubles",
+    "cv.c8": "rien de bloqué ✓",
+    "cv.c9": "photo de la salle à manger",
+    "cv.fig": "FIG. 03 — Plan rendu, exporté par l'app",
+    "s1": "de plan réel, relevé depuis l'image",
+    "s2": "meubles à leur place",
+    "s3": "pièces dont l'éclairage est vérifié selon la norme",
+    "s4": "outils MCP à la disposition de l'IA",
+    "dn.h1": "Soleil de 15 h ou lampes allumées.",
+    "dn.h2": "La même caméra, les lumières que vous avez posées.",
+    "dn.dining": "Salle à manger",
+    "dn.kitchen": "Cuisine",
+    "dn.suite": "Chambre",
+    "dn.fig": "FIG. 04 — Glissez pour comparer · path tracing avec le soleil selon la boussole et des luminaires en lumens",
+    "dn.aria": "Comparer le jour et la nuit",
+    "ft.h1": "Fait pour celles et ceux qui conçoivent vraiment.",
+    "ft.h2": "Et pour l'IA qui travaille à leurs côtés.",
+    "f1.h": "Un plan à partir d'une image",
+    "f1.p": "Déposez une image de plan à l'échelle et l'IA retrouve les murs. Ouvre aussi les projets Sweet Home 3D.",
+    "f2.h": "De la menuiserie qu'un atelier sait fabriquer",
+    "f2.p": "Meubles, panneaux à tasseaux, plans de travail avec découpes d'évier et de table de cuisson. Débits en CSV et DXF.",
+    "f3.h": "Éclairage vérifié selon la norme",
+    "f3.p": "Lux par pièce par photométrie, selon NBR ISO/CIE 8995-1. L'IA ajoute les luminaires qui manquent.",
+    "f4.h": "Ergonomie pour ceux qui y vivent",
+    "f4.p": "Circulation, aire de rotation d'un fauteuil roulant, le triangle de la cuisine — NBR 9050 et 15575, avec la correction prête.",
+    "f5.h": "Photos, coupes et vidéos",
+    "f5.p": "Plans rendus, élévations, coupes, vues aériennes, photos réalistes et vidéos de visite.",
+    "f6.h": "Bureau, navigateur et équipes",
+    "f6.p": "L'éditeur sur votre ordinateur ou dans le navigateur, des plugins dans n'importe quel langage et plusieurs personnes sur un projet.",
+    "gl.h1": "Tout ici est sorti de l'app.",
+    "gl.h2": "Sans Photoshop, sans ferme de rendu.",
+    "gl.how": "Comment c'est fait →",
+    "g1": "Coupe aérienne",
+    "g2": "Mur à tasseaux avec TV intégrée",
+    "g3": "Cuisine en L, terrazzo",
+    "g4": "Bureau à la maison",
+    "g5": "Chambre la nuit",
+    "g6": "Salon et salle à manger, 33 m²",
+    "g7": "Cuisine la nuit",
+    "g8": "Salle de bain, marbre Nero",
+    "g9": "Chambre avec dressings",
+    "g10": "Salle à manger à 15 h",
+    "ai.h1": "Connectez l'IA que vous utilisez déjà.",
+    "ai.h2": "Une commande, et elle voit votre projet.",
+    "ai.s1h": "Ouvrez 3D New Era AI",
+    "ai.s1p": "Le serveur MCP démarre avec l'app, sur <code>http://127.0.0.1:7878/mcp</code>.",
+    "ai.s2h": "Lancez la commande de votre IA",
+    "ai.s2p": "Une seule fois. Les installateurs le font déjà pour Claude Code et Codex.",
+    "ai.s3h": "Demandez",
+    "ai.s3p": "« Dessine une chambre de 4 × 5 m avec une porte et une fenêtre, meuble-la et fais-en une photo. »",
+    "ai.other": "DeepSeek et autres",
+    "copy": "Copier",
+    "copied": "Copié",
+    "dl.h1": "Téléchargez et commencez tout de suite.",
+    "dl.h2": "Gratuit, sans compte, sans mot de passe administrateur.",
+    "dl.files": "Ou téléchargez le fichier",
+    "dl.first": "Première ouverture d'un fichier téléchargé",
+    "dl.firstp": "Les applications ne sont pas signées avec un certificat payant Apple ou Microsoft : le système pose donc la question une fois. <b>Windows :</b> ouvrez <code>newera-gui.exe</code> et, si SmartScreen apparaît, cliquez sur <i>Informations complémentaires → Exécuter quand même</i>. <b>macOS :</b> déplacez l'app dans Applications, clic droit → <i>Ouvrir</i> (macOS 15+ : <i>Réglages → Confidentialité et sécurité → Ouvrir quand même</i>). La commande ci-dessus évite ces messages.",
+    "dl.notes": "notes de version",
+    "dl.license": "MIT ou Apache 2.0",
+    "faq.h": "Questions fréquentes",
+    "q1": "C'est vraiment gratuit ?",
+    "a1": "Oui. C'est open source (MIT ou Apache 2.0), sans compte et sans abonnement. Vous ne payez que l'IA que vous choisissez, si elle est payante.",
+    "q2": "Faut-il savoir programmer ?",
+    "a2": "Non. Installez avec une commande, ouvrez l'app et dessinez à la souris comme dans n'importe quel éditeur. L'IA est optionnelle — une fois connectée, il suffit de lui parler.",
+    "q3": "Quelle IA fonctionne ?",
+    "a3": "Toute application qui parle MCP : Claude Code, Claude Desktop, Codex, Gemini CLI, Cursor, VS Code, Windsurf, et des applications comme Cline et Cherry Studio qui font tourner DeepSeek, Qwen, Llama et d'autres modèles.",
+    "q4": "Mon projet part-il dans le cloud ?",
+    "a4": "Non. L'app et son serveur MCP tournent sur votre ordinateur et n'acceptent que les connexions de la même machine. Le projet est votre propre fichier <code>.newera</code>.",
+    "q5": "Faut-il une carte graphique ?",
+    "a5": "Non. La vue 3D utilise le GPU quand il y en a un, et les photos se calculent sur le CPU — même sur un serveur sans écran.",
+    "q6": "Ouvre-t-il mes projets Sweet Home 3D ?",
+    "a6": "Oui, les fichiers <code>.sh3d</code> s'ouvrent avec murs, pièces, meubles, lumières, caméras et niveaux.",
+    "foot.by": "Écrit en Rust par Leandro Ferreira.",
+    "foot.releases": "Versions",
+    "foot.showcase": "Galerie",
+    "foot.issues": "Signaler un problème",
+    "foot.credits": "Plan de référence : <i>Typical apartment floor plan FOCSA Building</i>, Osvaldo Valdes, CC BY-SA 4.0. Textures : ambientCG, CC0.",
+  };
+
   const T = {
     pt: {
       winLead: "Abra o <b>PowerShell</b> (menu Iniciar → digite “PowerShell”) e cole:",
@@ -79,6 +335,44 @@
         cursor: "Reinicie o Cursor depois de salvar.",
         desktop: "Precisa do Node.js instalado para a ponte mcp-remote. Reinicie o Claude Desktop.",
         other: "O modelo pode ser DeepSeek, Qwen, Llama ou outro: o que importa é o app ter suporte a MCP. No opencode, use o bloco acima em opencode.json."
+      }
+    },
+    es: {
+      winLead: "Abra <b>PowerShell</b> (menú Inicio → escriba «PowerShell») y pegue:",
+      winAfter: "Se instala en segundos, crea accesos directos en el menú Inicio y el Escritorio, y aparece en Configuración → Aplicaciones para desinstalar.",
+      macLead: "Abra el <b>Terminal</b> (⌘ + espacio → «Terminal») y pegue:",
+      macAfter: "Descarga la versión correcta para Apple Silicon o Intel, deja la app en el Launchpad y no pide contraseña. Ejecútelo otra vez para actualizar.",
+      linLead: "Descargue, descomprima y abra:",
+      linAfter: "Necesita las bibliotecas de ventanas del sistema (ya presentes en casi toda distribución con escritorio).",
+      dlWin: "Descargar para Windows", dlMac: "Descargar para Mac", dlLinux: "Descargar para Linux", dlAny: "Descargar gratis",
+      where: { claude: "En el terminal:", codex: "En el terminal:", gemini: "En el terminal:", vscode: "En el terminal:", cursor: "Archivo ~/.cursor/mcp.json", desktop: "Configuración → Desarrollador → Editar configuración", other: "En los ajustes de MCP de la app (Cline, Roo Code, Cherry Studio, LM Studio…)" },
+      note: {
+        claude: "Los instaladores lo registran solos si Claude Code está instalado.",
+        codex: "Los instaladores lo registran solos si Codex está instalado.",
+        gemini: "Después abra Gemini CLI y pídale el proyecto.",
+        vscode: "Úselo en el modo agente de Copilot.",
+        cursor: "Reinicie Cursor después de guardar.",
+        desktop: "Necesita Node.js para el puente mcp-remote. Reinicie Claude Desktop.",
+        other: "El modelo puede ser DeepSeek, Qwen, Llama u otro: lo que importa es que la app hable MCP. En opencode, use el bloque de arriba en opencode.json."
+      }
+    },
+    fr: {
+      winLead: "Ouvrez <b>PowerShell</b> (menu Démarrer → tapez « PowerShell ») et collez :",
+      winAfter: "L'installation prend quelques secondes, ajoute des raccourcis au menu Démarrer et au Bureau, et apparaît dans Paramètres → Applications pour désinstaller.",
+      macLead: "Ouvrez le <b>Terminal</b> (⌘ + espace → « Terminal ») et collez :",
+      macAfter: "Télécharge la bonne version pour Apple Silicon ou Intel, pose l'app dans le Launchpad et ne demande aucun mot de passe. Relancez-le pour mettre à jour.",
+      linLead: "Téléchargez, décompressez et lancez :",
+      linAfter: "Nécessite les bibliothèques de fenêtrage du système (déjà présentes sur la plupart des distributions avec bureau).",
+      dlWin: "Télécharger pour Windows", dlMac: "Télécharger pour Mac", dlLinux: "Télécharger pour Linux", dlAny: "Télécharger gratuitement",
+      where: { claude: "Dans un terminal :", codex: "Dans un terminal :", gemini: "Dans un terminal :", vscode: "Dans un terminal :", cursor: "Fichier ~/.cursor/mcp.json", desktop: "Réglages → Développeur → Modifier la configuration", other: "Dans les réglages MCP de l'app (Cline, Roo Code, Cherry Studio, LM Studio…)" },
+      note: {
+        claude: "Les installateurs l'enregistrent tout seuls si Claude Code est installé.",
+        codex: "Les installateurs l'enregistrent tout seuls si Codex est installé.",
+        gemini: "Ouvrez ensuite Gemini CLI et demandez-lui votre projet.",
+        vscode: "À utiliser dans le mode agent de Copilot.",
+        cursor: "Redémarrez Cursor après avoir enregistré.",
+        desktop: "Nécessite Node.js pour le pont mcp-remote. Redémarrez Claude Desktop.",
+        other: "Le modèle peut être DeepSeek, Qwen, Llama ou un autre : ce qui compte, c'est que l'app parle MCP. Dans opencode, mettez le bloc ci-dessus dans opencode.json."
       }
     },
     en: {
@@ -118,12 +412,43 @@
     linux: `curl -LO https://github.com/${REPO}/releases/latest/download/newera-linux-x64.tar.gz\ntar xzf newera-linux-x64.tar.gz && ./newera/newera`
   };
 
+  // The tab title and the description a link preview shows. The page ships
+  // in English so a shared link reads to the whole world; the visitor's own
+  // language takes over as soon as the script runs.
+  const HEAD = {
+    pt: {
+      title: "3D New Era AI — projete casas conversando com a sua IA",
+      description: "Editor de arquitetura e interiores de código aberto com servidor MCP embutido. Sua IA desenha, mobilia, ilumina pela NBR e fotografa — ao vivo na sua tela. Windows, macOS e Linux."
+    },
+    en: {
+      title: "3D New Era AI — design homes by talking to your AI",
+      description: "Open-source architecture and interiors editor with an MCP server inside. Your AI draws, furnishes, lights to code and renders the photos — live on your screen. Windows, macOS and Linux."
+    },
+    es: {
+      title: "3D New Era AI — diseñe casas hablando con su IA",
+      description: "Editor de arquitectura e interiores de código abierto con servidor MCP dentro. Su IA dibuja, amuebla, ilumina según la norma y fotografía — en vivo en su pantalla. Windows, macOS y Linux."
+    },
+    fr: {
+      title: "3D New Era AI — concevez des maisons en parlant à votre IA",
+      description: "Éditeur d'architecture et d'intérieurs open source avec un serveur MCP intégré. Votre IA dessine, meuble, éclaire selon la norme et fait les photos — en direct sur votre écran. Windows, macOS et Linux."
+    }
+  };
+
   const $ = (s, root = document) => root.querySelector(s);
   const $$ = (s, root = document) => Array.from(root.querySelectorAll(s));
 
   // ---- Language ----
+  // The page is written in Portuguese in the markup; the other three come
+  // from the tables above.
   const PT = {};
   $$("[data-i18n]").forEach((el) => { PT[el.dataset.i18n] = el.innerHTML; });
+  $$("[data-i18n-alt]").forEach((el) => { PT[el.dataset.i18nAlt] ??= el.getAttribute("alt"); });
+  $$("[data-i18n-label]").forEach((el) => {
+    PT[el.dataset.i18nLabel] ??= el.getAttribute("aria-label");
+  });
+  const DICT = { pt: PT, en: EN, es: ES, fr: FR };
+  const TAG = { pt: "pt-BR", en: "en", es: "es", fr: "fr" };
+  const LANGS = Object.keys(DICT);
   let lang = "pt";
   let tab = "claude";
   let os = detectOS();
@@ -131,17 +456,51 @@
   function store(key, value) { try { localStorage.setItem(key, value); } catch (_) { /* private mode */ } }
   function read(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
 
+  /// The two letters of a tag like `pt-BR`, `es-419` or `fr`, when the page
+  /// speaks it.
+  function normalize(tag) {
+    const base = String(tag || "").toLowerCase().slice(0, 2);
+    return LANGS.includes(base) ? base : null;
+  }
+
+  // What the browser asks for, in the order it prefers. English for the rest
+  // of the world, which is what a visitor from anywhere reads.
+  function fromBrowser() {
+    const asked = (navigator.languages && navigator.languages.length)
+      ? navigator.languages
+      : [navigator.language];
+    for (const tag of asked) {
+      const known = normalize(tag);
+      if (known) return known;
+    }
+    return "en";
+  }
+
   function setLang(next) {
-    lang = next === "en" ? "en" : "pt";
-    const dict = lang === "en" ? EN : PT;
+    lang = normalize(next) || "en";
+    const dict = DICT[lang];
     $$("[data-i18n]").forEach((el) => {
       const value = dict[el.dataset.i18n];
       if (value !== undefined) el.innerHTML = value;
     });
-    document.documentElement.lang = lang === "en" ? "en" : "pt-BR";
+    // What a screen reader and a search engine read: the picture
+    // descriptions and the names of the groups of controls.
+    $$("[data-i18n-alt]").forEach((el) => {
+      const value = dict[el.dataset.i18nAlt];
+      if (value !== undefined) el.setAttribute("alt", value);
+    });
+    $$("[data-i18n-label]").forEach((el) => {
+      const value = dict[el.dataset.i18nLabel];
+      if (value !== undefined) el.setAttribute("aria-label", value);
+    });
+    document.documentElement.lang = TAG[lang];
     $$(".lang button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
     const range = $(".compare__range");
-    if (range) range.setAttribute("aria-label", lang === "en" ? EN["dn.aria"] : "Comparar dia e noite");
+    if (range) range.setAttribute("aria-label", dict["dn.aria"] || EN["dn.aria"]);
+    const head = HEAD[lang];
+    document.title = head.title;
+    const description = $('meta[name="description"]');
+    if (description) description.setAttribute("content", head.description);
     renderTab();
     renderOS();
     store("newera-lang", lang);
@@ -286,7 +645,9 @@
   // ---- Start ----
   const params = new URLSearchParams(location.search);
   if (params.get("theme") === "light" || params.get("theme") === "dark") document.documentElement.dataset.theme = params.get("theme");
-  const initial = params.get("lang") || read("newera-lang") || ((navigator.language || "").toLowerCase().startsWith("pt") ? "pt" : "en");
+  // What the address says wins, then what this visitor chose before, then
+  // what their browser asks for.
+  const initial = normalize(params.get("lang")) || normalize(read("newera-lang")) || fromBrowser();
   if (detected) os = detected;
   setLang(initial);
 })();
