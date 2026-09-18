@@ -121,23 +121,24 @@ scripts/ph-stats.mjs --slug 3d-new-era-ai --watch
 
 Precisa do developer token uma vez. O aplicativo OAuth já está criado na sua
 conta — **3D New Era AI — launch dashboard** (id 299674, redirect
-`https://3dneweraai.com/`) — e o token já foi gerado em
-https://www.producthunt.com/v2/oauth/applications. Eu não leio esse token: copie
-da tela e guarde no cofre, sem passar por aqui nem pelo histórico do shell:
+`https://3dneweraai.com/`) — e o token já existe, em
+https://www.producthunt.com/v2/oauth/applications, ao lado de "Token:".
 
-```sh
-op item create --category 'API Credential' --title 'Product Hunt - developer token' \
-  --vault 'Agendo Certo' 'credential[password]'   # cola o token quando ele pedir
-```
+Eu não leio esse token. Ele vai da tela para o cofre sem passar por aqui:
 
-Depois é só rodar com o cofre injetando:
+1. selecione o valor ao lado de "Token:" e copie (⌘C);
+2. rode `scripts/apoio/guardar-token-ph.sh`.
+
+O script guarda em **Agendo Certo › Product Hunt - developer token**, limpa a
+área de transferência e confere o token contra a própria API (`--whoami`) —
+se não for aceito, ele avisa. Depois disso:
 
 ```sh
 op run --env-file <(echo 'PH_TOKEN=op://Agendo Certo/Product Hunt - developer token/credential') -- \
   scripts/ph-stats.mjs --slug 3d-new-era-ai --watch
 ```
 
-Se preferir sem cofre, `export PH_TOKEN=...` na sessão — só não commite.
+Sem cofre dá para `export PH_TOKEN=...` na sessão — só não commite.
 O script **só lê**: não vota, não comenta e não publica nada.
 
 ### Depois do launch

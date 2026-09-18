@@ -33,7 +33,8 @@ const every = Number(flag("every", "120")) * 1000;
 const token = process.env.PH_TOKEN || process.env.PRODUCT_HUNT_TOKEN;
 
 if (has("help") || has("h")) {
-  console.log(`usage: ph-stats.mjs [--slug <slug>] [--watch] [--every <seconds>] [--json]`);
+  console.log(`usage: ph-stats.mjs [--slug <slug>] [--watch] [--every <seconds>] [--json]
+       ph-stats.mjs --whoami        # check the token answers, and for whom`);
   process.exit(0);
 }
 if (!token) {
@@ -58,6 +59,10 @@ async function ask(query, variables) {
   if (body.errors?.length) throw new Error(body.errors.map((e) => e.message).join("; "));
   return body.data;
 }
+
+// Who the token speaks for. Also the cheapest way to tell a good token from a
+// bad one without touching anything.
+const WHOAMI = `query { viewer { user { id name username } } }`;
 
 const POST = `query ($slug: String!) {
   post(slug: $slug) {
@@ -154,6 +159,13 @@ async function once() {
 }
 
 try {
+  if (has("whoami")) {
+    const { viewer } = await ask(WHOAMI, {});
+    const user = viewer?.user;
+    if (!user) throw new Error("the token answered, but for nobody — make a fresh developer token");
+    console.log(`the token works: ${user.name} (@${user.username})`);
+    process.exit(0);
+  }
   await once();
   if (has("watch")) {
     console.log(`\nwatching every ${every / 1000}s — Ctrl+C to stop`);
