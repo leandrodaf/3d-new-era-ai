@@ -131,8 +131,13 @@ await send("Page.enable");
   writeFileSync(plan, Buffer.from(PLAN_PNG, "base64"));
   chooser = null;
   await click(517, 58);
-  for (let i = 0; i < 40 && !chooser; i++) {
-    await sleep(100);
+  // A hidden tab only draws when someone asks for a picture, and the click is
+  // only answered on a frame — so keep asking while waiting, and knock twice
+  // before giving up: a machine rasterising in software takes its time.
+  for (let i = 0; i < 60 && !chooser; i++) {
+    await send("Page.captureScreenshot", { format: "png" });
+    await sleep(200);
+    if (i === 25 && !chooser) await click(517, 58);
   }
   if (chooser) {
     await send("DOM.setFileInputFiles", { backendNodeId: chooser.backendNodeId, files: [plan] });
