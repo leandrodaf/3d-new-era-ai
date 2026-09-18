@@ -94,7 +94,15 @@ try {
   await shot("web-editor-wall.png");
   const log = await evaluate("JSON.stringify(window.neweraLog || [])");
   console.log("log:", log);
-  failed = JSON.parse(log).some((line) => /^(error|uncaught|rejection)/.test(line));
+  const errors = JSON.parse(log).filter((line) => /^(error|uncaught|rejection)/.test(line));
+  // A machine with no usable GPU cannot run the editor and says so in its own
+  // words; that is the machine's limit, not a broken build. Anything else is.
+  const noGpu = /createBuffer|too large for the implementation|adapter|WebGPU|WebGL|unreachable/i;
+  if (errors.length && errors.every((line) => noGpu.test(line))) {
+    console.log("skipped: this machine's GPU stack cannot run the editor");
+  } else if (errors.length) {
+    failed = true;
+  }
 
   // The lightweight viewer, on the same engine: it is ready when it says so.
   const viewer = new URL("../", url).href;

@@ -10,6 +10,11 @@
   #newera { width: 100%; height: 100%; display: block; }
   #loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     color: #9aa1ad; font: 15px system-ui, sans-serif; pointer-events: none; }
+  #failed { position: absolute; inset: 0; display: none; flex-direction: column; gap: 14px;
+    align-items: center; justify-content: center; text-align: center; padding: 24px;
+    color: #e6e8ec; font: 16px/1.5 system-ui, sans-serif; background: #16181d; }
+  #failed a { color: #9fb0ff; }
+  #failed small { color: #6f7581; font-size: 12px; max-width: 60ch; word-break: break-word; }
 </style>
 </head>
 <body>
@@ -25,16 +30,44 @@
   addEventListener("unhandledrejection", (e) => window.neweraLog.push("rejection: " + e.reason));
 </script>
 <div id="loading">Carregando o editor…</div>
+<div id="failed" role="alert">
+  <p id="failed-text">Este navegador não conseguiu iniciar o editor 3D.</p>
+  <p><a href="../../#baixar" id="failed-link">Baixe o aplicativo para o seu computador</a></p>
+  <small id="failed-why"></small>
+</div>
 <script>
-  // The window itself speaks four languages; so does the line before it opens.
-  const WAIT = { en: "Loading the editor…", es: "Cargando el editor…", fr: "Chargement de l'éditeur…" };
+  // The window itself speaks four languages; so do the lines around it.
+  const WORDS = {
+    en: { wait: "Loading the editor…", failed: "This browser could not start the 3D editor. Chrome, Edge and Safari 26 run it; an old browser or a blocked GPU cannot.", download: "Download the app for your computer" },
+    es: { wait: "Cargando el editor…", failed: "Este navegador no pudo iniciar el editor 3D. Chrome, Edge y Safari 26 lo ejecutan; un navegador antiguo o una GPU bloqueada no.", download: "Descargue la aplicación para su ordenador" },
+    fr: { wait: "Chargement de l'éditeur…", failed: "Ce navigateur n'a pas pu démarrer l'éditeur 3D. Chrome, Edge et Safari 26 le font tourner ; un navigateur ancien ou un GPU bloqué, non.", download: "Téléchargez l'application pour votre ordinateur" },
+  };
   const tag = (navigator.languages ?? [navigator.language ?? ""])
     .map((name) => String(name).slice(0, 2).toLowerCase())
-    .find((name) => name === "pt" || name in WAIT) ?? "en";
-  if (tag !== "pt") {
+    .find((name) => name === "pt" || name in WORDS) ?? "en";
+  const words = WORDS[tag];
+  if (words) {
     document.documentElement.lang = tag;
-    document.getElementById("loading").textContent = WAIT[tag];
+    document.getElementById("loading").textContent = words.wait;
+    document.getElementById("failed-text").textContent = words.failed;
+    document.getElementById("failed-link").textContent = words.download;
   }
+
+  // A blank page tells nobody anything: whatever kills the engine — no WebGPU,
+  // a driver that gives up, a panic — is shown, with the way out.
+  let engineFailed = false;
+  window.neweraFail = (why) => {
+    if (engineFailed) return;
+    engineFailed = true;
+    document.getElementById("loading")?.remove();
+    const panel = document.getElementById("failed");
+    panel.style.display = "flex";
+    document.getElementById("failed-why").textContent = String(why ?? "").slice(0, 300);
+  };
+  addEventListener("error", (e) => {
+    if (/unreachable|wasm|webgpu|adapter|createBuffer/i.test(e.message ?? "")) neweraFail(e.message);
+  });
+  addEventListener("unhandledrejection", (e) => neweraFail(e.reason));
 </script>
 <script type="module">
   import init, { start } from "./pkg/newera_editor_web.js";
@@ -50,9 +83,13 @@
       name = decodeURIComponent(url.split("/").pop());
     }
   } catch (_) { /* start empty */ }
-  await init();
-  loading.remove();
-  await start("newera", name, bytes);
+  try {
+    await init();
+    loading.remove();
+    await start("newera", name, bytes);
+  } catch (error) {
+    window.neweraFail(error);
+  }
 </script>
 </body>
 </html>
