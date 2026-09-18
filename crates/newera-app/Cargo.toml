@@ -38,7 +38,15 @@ base64.workspace = true
 js-sys = "0.3"
 wasm-bindgen = "0.2.128"
 wasm-bindgen-futures = "0.4.78"
-web-sys = { version = "0.3", features = ["Blob", "console", "Document", "Element", "HtmlAnchorElement", "HtmlCanvasElement", "Navigator", "Url", "Window"] }
+web-sys = { version = "0.3", features = [
+    "Blob", "console", "Document", "Element", "ErrorEvent", "HtmlAnchorElement",
+    "HtmlCanvasElement", "Location", "MessageEvent", "Navigator", "Request",
+    "RequestInit", "RequestMode", "Response", "Url", "UrlSearchParams",
+    "WebSocket", "Window",
+] }
+# In a browser the tools are called straight, with no session and no socket of
+# their own: the protocol is spoken by the relay in front of the tab.
+newera-mcp.workspace = true
 
 [lints]
 workspace = true

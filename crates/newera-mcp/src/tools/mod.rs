@@ -127,6 +127,12 @@ impl NewEraMcp {
             tool_router,
         }
     }
+
+    /// The tools this server offers, with their schemas — the same list the
+    /// handshake hands out, for whoever has no handshake to ask.
+    pub fn tools(&self) -> Vec<rmcp::model::Tool> {
+        self.tool_router.list_all()
+    }
 }
 
 // The macro generates async trait methods that resolve immediately.

@@ -1883,6 +1883,56 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
             "No se pudo registrar: {}",
             "Impossible d'enregistrer : {}",
         ],
+        "Ligue e esta aba ganha um endereço que a sua IA alcança. O projeto não sai daqui: o servidor no meio só passa recados." => {
+            [
+                "Switch it on and this tab gets an address your AI can reach. The project stays here: the server in between only passes messages.",
+                "Actívelo y esta pestaña obtiene una dirección a la que su IA llega. El proyecto no sale de aquí: el servidor del medio solo pasa mensajes.",
+                "Activez-le et cet onglet reçoit une adresse que votre IA peut joindre. Le projet reste ici : le serveur au milieu ne fait que passer les messages.",
+            ]
+        }
+        "Ligar o MCP nesta aba" => [
+            "Switch the MCP on in this tab",
+            "Activar el MCP en esta pestaña",
+            "Activer le MCP dans cet onglet",
+        ],
+        "Ligando…" => ["Switching on…", "Activando…", "Activation…"],
+        "Esta aba está no ar para a sua IA" => [
+            "This tab is reachable by your AI",
+            "Esta pestaña está al alcance de su IA",
+            "Cet onglet est joignable par votre IA",
+        ],
+        "Quem tiver o endereço abaixo pode editar este projeto: trate como senha." => [
+            "Anyone holding the address below can edit this project: treat it like a password.",
+            "Quien tenga la dirección de abajo puede editar este proyecto: trátela como una contraseña.",
+            "Quiconque détient l'adresse ci-dessous peut modifier ce projet : traitez-la comme un mot de passe.",
+        ],
+        "Não deu para ligar: {}" => [
+            "Could not switch it on: {}",
+            "No se pudo activar: {}",
+            "Impossible de l'activer : {}",
+        ],
+        "Tentar de novo" => ["Try again", "Intentar de nuevo", "Réessayer"],
+        "a ligação com o relay caiu" => [
+            "the link to the relay dropped",
+            "la conexión con el relay se cayó",
+            "la liaison avec le relais est tombée",
+        ],
+        "{} só no aplicativo do computador: aqui ele renderiza na CPU e travaria a aba" => [
+            "{} only in the desktop app: here it renders on the CPU and would freeze the tab",
+            "{} solo en la aplicación de escritorio: aquí renderiza en la CPU y congelaría la pestaña",
+            "{} seulement dans l'application de bureau : ici il rend sur le CPU et figerait l'onglet",
+        ],
+        "MCP desligado · ligar" => [
+            "MCP off · switch on",
+            "MCP apagado · activar",
+            "MCP éteint · activer",
+        ],
+        "Desligar" => ["Switch off", "Apagar", "Éteindre"],
+        "Fecha o endereço. A sua IA perde o acesso na hora; o projeto continua aqui." => [
+            "Closes the address. Your AI loses access at once; the project stays here.",
+            "Cierra la dirección. Su IA pierde el acceso al instante; el proyecto sigue aquí.",
+            "Ferme l'adresse. Votre IA perd l'accès aussitôt ; le projet reste ici.",
+        ],
         _ => return None,
     })
 }

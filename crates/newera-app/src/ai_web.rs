@@ -1,0 +1,288 @@
+//! The browser's side of the MCP: the tab asks a relay for an address, holds a
+//! socket to it, and does the work an AI asks for — in the project on screen.
+//!
+//! A tab cannot listen on a port, so it cannot be an MCP server the way the
+//! desktop is. What it can do is hold one connection outwards. The relay (see
+//! `newera-relay`) gives out an address, speaks the protocol to the AI, and
+//! hands each tool call down this socket; the answers go back the same way.
+//! Nothing of the project is stored there: it passes through.
+//!
+//! Two tools are kept off the list here. `render_photo` and `video` are the
+//! path tracer, which runs for minutes on a CPU — in a tab that means a frozen
+//! window, so the browser advertises what it can actually do.
+
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use newera_core::SharedDocument;
+use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
+
+/// Where the relay lives, unless the address bar says otherwise
+/// (`?relay=http://127.0.0.1:7979` while working on it).
+const RELAY: &str = "https://mcp.3dneweraai.com";
+
+/// Tools the browser does not offer: they would hold the window for minutes.
+const TOO_SLOW_HERE: [&str; 2] = ["render_photo", "video"];
+
+/// Where this tab is in the business of being reachable.
+#[derive(Debug, Clone, Default)]
+pub(crate) enum Link {
+    /// Nobody asked for an address yet.
+    #[default]
+    Off,
+    /// Asking the relay for one.
+    Opening,
+    /// Reachable: this is what goes into the AI client, and the socket that
+    /// makes it true.
+    On {
+        url: String,
+        socket: web_sys::WebSocket,
+    },
+    /// It did not work, and this is what went wrong.
+    Failed { why: String },
+}
+
+impl Link {
+    /// Takes the socket out, when there is one, leaving the state alone.
+    fn take_socket(&mut self) -> Option<web_sys::WebSocket> {
+        match self {
+            Self::On { socket, .. } => Some(socket.clone()),
+            _ => None,
+        }
+    }
+}
+
+/// The link's state, shared with the socket's callbacks.
+pub(crate) type Shared = Rc<RefCell<Link>>;
+
+/// The relay this tab should use.
+fn relay_base() -> String {
+    let from_address = web_sys::window()
+        .and_then(|w| w.location().search().ok())
+        .and_then(|search| web_sys::UrlSearchParams::new_with_str(&search).ok())
+        .and_then(|params| params.get("relay"))
+        .filter(|value| !value.trim().is_empty());
+    from_address.unwrap_or_else(|| RELAY.to_owned())
+}
+
+/// Closes the address. Whoever held it loses the tab at once — the socket is
+/// dropped and the relay has nothing to hand work to.
+pub(crate) fn disconnect(state: &Shared) {
+    if let Some(socket) = state.borrow_mut().take_socket() {
+        let _ = socket.close();
+    }
+    *state.borrow_mut() = Link::Off;
+}
+
+/// Opens a room on the relay and holds it, doing the work that arrives.
+///
+/// Returns immediately: everything after the first request happens in the
+/// browser's own event loop, and `state` is what the window reads to know how
+/// it went.
+pub(crate) fn connect(document: SharedDocument, ctx: eframe::egui::Context, state: Shared) {
+    *state.borrow_mut() = Link::Opening;
+    let base = relay_base();
+    wasm_bindgen_futures::spawn_local(async move {
+        match open_room(&base).await {
+            Ok(room) => hold(&document, &ctx, &state, &base, &room),
+            Err(why) => {
+                *state.borrow_mut() = Link::Failed { why };
+                ctx.request_repaint();
+            }
+        }
+    });
+}
+
+/// What the relay answers when a tab asks for somewhere to be reached.
+#[derive(Debug, serde::Deserialize)]
+struct Room {
+    mcp_path: String,
+    tab_path: String,
+}
+
+async fn open_room(base: &str) -> Result<Room, String> {
+    let options = web_sys::RequestInit::new();
+    options.set_method("POST");
+    options.set_mode(web_sys::RequestMode::Cors);
+    let request = web_sys::Request::new_with_str_and_init(&format!("{base}/rooms"), &options)
+        .map_err(|e| told(&e))?;
+    let window = web_sys::window().ok_or("no window")?;
+    let response = wasm_bindgen_futures::JsFuture::from(window.fetch_with_request(&request))
+        .await
+        .map_err(|e| told(&e))?
+        .dyn_into::<web_sys::Response>()
+        .map_err(|_| "the relay answered something odd".to_owned())?;
+    if !response.ok() {
+        return Err(format!("the relay said {}", response.status()));
+    }
+    let text = wasm_bindgen_futures::JsFuture::from(response.text().map_err(|e| told(&e))?)
+        .await
+        .map_err(|e| told(&e))?
+        .as_string()
+        .unwrap_or_default();
+    serde_json::from_str(&text).map_err(|e| format!("the relay answered something odd: {e}"))
+}
+
+/// Opens the socket and wires what arrives on it to the tools.
+fn hold(
+    document: &SharedDocument,
+    ctx: &eframe::egui::Context,
+    state: &Shared,
+    base: &str,
+    room: &Room,
+) {
+    let ws_url = format!(
+        "{}{}",
+        base.replacen("https://", "wss://", 1)
+            .replacen("http://", "ws://", 1),
+        room.tab_path
+    );
+    let socket = match web_sys::WebSocket::new(&ws_url) {
+        Ok(socket) => socket,
+        Err(err) => {
+            *state.borrow_mut() = Link::Failed { why: told(&err) };
+            ctx.request_repaint();
+            return;
+        }
+    };
+
+    // On open: say what this window can do.
+    let on_open = {
+        let socket = socket.clone();
+        let state = state.clone();
+        let ctx = ctx.clone();
+        let url = format!("{base}{}", room.mcp_path);
+        Closure::<dyn FnMut()>::new(move || {
+            let tools: Vec<serde_json::Value> = newera_mcp::tools()
+                .iter()
+                .filter(|tool| !TOO_SLOW_HERE.contains(&tool.name.as_ref()))
+                .map(|tool| {
+                    serde_json::json!({
+                        "name": tool.name,
+                        "description": tool.description,
+                        "inputSchema": tool.input_schema,
+                    })
+                })
+                .collect();
+            let hello = serde_json::json!({"type": "hello", "tools": tools});
+            let _ = socket.send_with_str(&hello.to_string());
+            *state.borrow_mut() = Link::On {
+                url: url.clone(),
+                socket: socket.clone(),
+            };
+            ctx.request_repaint();
+        })
+    };
+    socket.set_onopen(Some(on_open.as_ref().unchecked_ref()));
+    on_open.forget();
+
+    // On message: a tool to run, or news that an AI turned up.
+    let on_message = {
+        let socket = socket.clone();
+        let ctx = ctx.clone();
+        let document = document.clone();
+        Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |event: web_sys::MessageEvent| {
+            let Some(text) = event.data().as_string() else {
+                return;
+            };
+            let Ok(message) = serde_json::from_str::<serde_json::Value>(&text) else {
+                return;
+            };
+            match message.get("type").and_then(serde_json::Value::as_str) {
+                Some("client") => {
+                    let name = message
+                        .get("name")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("MCP");
+                    let version = message.get("version").and_then(serde_json::Value::as_str);
+                    document
+                        .write()
+                        .agents_mut()
+                        .hello(None, name, version, crate::ai::now_ms());
+                    ctx.request_repaint();
+                }
+                Some("call") => {
+                    let id = message
+                        .get("id")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null);
+                    let name = message
+                        .get("name")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned();
+                    let args = message
+                        .get("args")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null);
+                    let answer = run(&document, &name, args);
+                    document
+                        .write()
+                        .agents_mut()
+                        .called(None, &name, crate::ai::now_ms());
+                    let reply = match answer {
+                        Ok(result) => serde_json::json!({
+                            "type": "result", "id": id, "ok": true, "result": result
+                        }),
+                        Err(why) => serde_json::json!({
+                            "type": "result", "id": id, "ok": false, "error": why
+                        }),
+                    };
+                    let _ = socket.send_with_str(&reply.to_string());
+                    ctx.request_repaint();
+                }
+                _ => {}
+            }
+        })
+    };
+    socket.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
+    on_message.forget();
+
+    // On close or error: say so, instead of leaving an address that answers
+    // nobody.
+    let on_close = {
+        let state = state.clone();
+        let ctx = ctx.clone();
+        Closure::<dyn FnMut()>::new(move || {
+            // Switched off on purpose is not a fault; only a link that was up
+            // and fell has anything to report.
+            if matches!(&*state.borrow(), Link::On { .. } | Link::Opening) {
+                *state.borrow_mut() = Link::Failed {
+                    why: crate::i18n::tr("a ligação com o relay caiu").to_owned(),
+                };
+            }
+            ctx.request_repaint();
+        })
+    };
+    socket.set_onclose(Some(on_close.as_ref().unchecked_ref()));
+    on_close.forget();
+}
+
+/// Runs one tool in this tab's project.
+fn run(
+    document: &SharedDocument,
+    name: &str,
+    args: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    if TOO_SLOW_HERE.contains(&name) {
+        return Err(crate::i18n::fill(
+            "{} só no aplicativo do computador: aqui ele renderiza na CPU e travaria a aba",
+            &[&name],
+        ));
+    }
+    let result = newera_mcp::call(document.clone(), name, args)?;
+    serde_json::to_value(result).map_err(|e| e.to_string())
+}
+
+/// Whatever the browser said went wrong, as a line a person can read.
+fn told(error: &JsValue) -> String {
+    error
+        .as_string()
+        .or_else(|| {
+            error
+                .dyn_ref::<js_sys::Error>()
+                .map(|e| e.message().as_string().unwrap_or_default())
+        })
+        .unwrap_or_else(|| "the browser refused the connection".to_owned())
+}

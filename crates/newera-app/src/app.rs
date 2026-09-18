@@ -102,6 +102,9 @@ pub(crate) struct NewEraApp {
     pub(crate) announced_calls: u64,
     /// A registration started from the AI panel, running in its own thread.
     pub(crate) ai_job: Option<crate::ai::RegisterSlot>,
+    /// In a browser: whether this tab is reachable by an AI, and where.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) ai_link: crate::ai_web::Shared,
     /// Tab being renamed in place: `(variant index, draft name)`.
     pub(crate) renaming_variant: Option<(usize, String)>,
     /// Visitor camera last taken from the document, to follow changes made
@@ -235,6 +238,8 @@ impl NewEraApp {
             announced_agents: 0,
             announced_calls: 0,
             ai_job: None,
+            #[cfg(target_arch = "wasm32")]
+            ai_link: crate::ai_web::Shared::default(),
             renaming_variant: None,
         };
         // The work of the last visit comes back before anything else opens

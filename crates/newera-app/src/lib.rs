@@ -4,6 +4,8 @@
 //! left, the 2D floor plan on top and the native 3D view below it.
 
 mod ai;
+#[cfg(target_arch = "wasm32")]
+mod ai_web;
 mod app;
 mod cabinets;
 mod dialogs;

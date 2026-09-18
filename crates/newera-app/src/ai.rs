@@ -32,9 +32,26 @@ pub(crate) struct Client {
 /// The address to hand out. A window without a server still shows what the
 /// snippet will look like, with the address it would have.
 pub(crate) fn address(app: &NewEraApp) -> String {
+    #[cfg(target_arch = "wasm32")]
+    if let crate::ai_web::Link::On { url, .. } = &*app.ai_link.borrow() {
+        return url.clone();
+    }
     app.mcp_url
         .clone()
         .unwrap_or_else(|| "http://127.0.0.1:7878/mcp".to_owned())
+}
+
+/// Whether an AI can reach this window at all right now — a desktop with its
+/// server up, or a tab that has been switched on.
+pub(crate) fn reachable(app: &NewEraApp) -> bool {
+    #[cfg(target_arch = "wasm32")]
+    {
+        return matches!(&*app.ai_link.borrow(), crate::ai_web::Link::On { .. });
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        app.mcp_url.is_some()
+    }
 }
 
 /// The clients people actually arrive with, each with the one line it wants.
@@ -193,7 +210,7 @@ pub(crate) fn register(app: &mut NewEraApp, program: &'static str, args: Vec<Str
 
 /// Now, in Unix milliseconds. A browser has no `SystemTime`: asking for it
 /// there aborts the whole editor, so the clock comes from the page.
-fn now_ms() -> u64 {
+pub(crate) fn now_ms() -> u64 {
     #[cfg(target_arch = "wasm32")]
     {
         // `Date::now` is milliseconds since the epoch, as a float: whole
@@ -316,7 +333,7 @@ pub(crate) fn announce(app: &mut NewEraApp) {
 pub(crate) fn chip(app: &mut NewEraApp, ui: &mut egui::Ui) {
     let t = crate::theme::of(ui.visuals());
     let pulse = Pulse::read(app);
-    let serving = app.mcp_url.is_some();
+    let serving = reachable(app);
     let (color, text) = match (serving, pulse.newest()) {
         (true, Some(agent)) => (
             if pulse.busy() { t.accent } else { t.ok },
@@ -325,7 +342,7 @@ pub(crate) fn chip(app: &mut NewEraApp, ui: &mut egui::Ui) {
         (true, None) => (t.ok, crate::i18n::tr("MCP · esperando sua IA").to_owned()),
         (false, _) if cfg!(target_arch = "wasm32") => (
             t.ink_faint,
-            crate::i18n::tr("IA: só no aplicativo").to_owned(),
+            crate::i18n::tr("MCP desligado · ligar").to_owned(),
         ),
         (false, _) => (t.ink_faint, crate::i18n::tr("MCP desligado").to_owned()),
     };
@@ -398,13 +415,72 @@ pub(crate) fn menu(app: &mut NewEraApp, ui: &mut egui::Ui) {
     });
 }
 
+/// In a browser: the switch that makes this tab reachable, and what it means.
+///
+/// Nothing is on until somebody asks for it. A tab that is switched on has an
+/// address on the internet; whoever holds it can edit this project, which is
+/// the point and also the warning.
+#[cfg(target_arch = "wasm32")]
+fn switch(app: &mut NewEraApp, ui: &mut egui::Ui, t: crate::theme::Tokens) {
+    let state = app.ai_link.borrow().clone();
+    match state {
+        crate::ai_web::Link::Off => {
+            ui.vertical(|ui| {
+                ui.label(crate::i18n::tr(
+                    "Ligue e esta aba ganha um endereço que a sua IA alcança. O projeto não sai daqui: o servidor no meio só passa recados.",
+                ));
+                if crate::theme::primary(ui, crate::i18n::tr("Ligar o MCP nesta aba")).clicked() {
+                    let (document, ctx, link) = (
+                        app.document.clone(),
+                        ui.ctx().clone(),
+                        app.ai_link.clone(),
+                    );
+                    crate::ai_web::connect(document, ctx, link);
+                }
+            });
+        }
+        crate::ai_web::Link::Opening => {
+            ui.label(crate::i18n::tr("Ligando…"));
+        }
+        crate::ai_web::Link::On { .. } => {
+            ui.vertical(|ui| {
+                ui.label(
+                    RichText::new(crate::i18n::tr("Esta aba está no ar para a sua IA"))
+                        .color(t.ok)
+                        .strong(),
+                );
+                ui.label(
+                    RichText::new(crate::i18n::tr(
+                        "Quem tiver o endereço abaixo pode editar este projeto: trate como senha.",
+                    ))
+                    .color(t.ink_dim)
+                    .small(),
+                );
+            });
+        }
+        crate::ai_web::Link::Failed { why } => {
+            ui.vertical(|ui| {
+                ui.label(
+                    RichText::new(crate::i18n::fill("Não deu para ligar: {}", &[&why]))
+                        .color(t.warn),
+                );
+                if crate::theme::secondary(ui, crate::i18n::tr("Tentar de novo")).clicked() {
+                    let (document, ctx, link) =
+                        (app.document.clone(), ui.ctx().clone(), app.ai_link.clone());
+                    crate::ai_web::connect(document, ctx, link);
+                }
+            });
+        }
+    }
+}
+
 /// The panel itself. Returns whether it should close.
 pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize) -> bool {
     let mut close = false;
     let t = ctx.style_of(ctx.theme());
     let t = crate::theme::of(&t.visuals);
     let url = address(app);
-    let serving = app.mcp_url.is_some();
+    let serving = reachable(app);
     let pulse = Pulse::read(app);
     let clients = clients(&url);
     *chosen = (*chosen).min(clients.len() - 1);
@@ -450,16 +526,36 @@ pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize
                             ui.ctx().copy_text(url.clone());
                             app.set_status(crate::i18n::tr("Endereço copiado"));
                         }
+                        #[cfg(target_arch = "wasm32")]
+                        if ui
+                            .small_button(crate::i18n::tr("Desligar"))
+                            .on_hover_text(crate::i18n::tr(
+                                "Fecha o endereço. A sua IA perde o acesso na hora; o projeto continua aqui.",
+                            ))
+                            .clicked()
+                        {
+                            crate::ai_web::disconnect(&app.ai_link);
+                            app.set_status(crate::i18n::tr("MCP desligado"));
+                        }
                     } else if cfg!(target_arch = "wasm32") {
-                        ui.label(crate::i18n::tr(
-                            "No navegador o editor roda sozinho: o MCP vive no aplicativo do computador.",
-                        ));
+                        #[cfg(target_arch = "wasm32")]
+                        switch(app, ui, t);
                     } else {
                         ui.label(crate::i18n::tr(
                             "O servidor está desligado (--no-server): reabra o aplicativo sem essa opção.",
                         ));
                     }
                 });
+                #[cfg(target_arch = "wasm32")]
+                if serving {
+                    ui.label(
+                        RichText::new(crate::i18n::tr(
+                            "Quem tiver o endereço abaixo pode editar este projeto: trate como senha.",
+                        ))
+                        .color(t.ink_dim)
+                        .small(),
+                    );
+                }
                 ui.horizontal(|ui| {
                     if let Some(agent) = pulse.newest() {
                         crate::app::lamp(ui, if pulse.busy() { t.accent } else { t.ok });

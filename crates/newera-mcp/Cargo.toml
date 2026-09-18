@@ -20,17 +20,22 @@ newera-ergonomics.workspace = true
 newera-plugins.workspace = true
 newera-render.workspace = true
 newera-telemetry.workspace = true
-rmcp = { workspace = true, features = [
-    "server",
-    "macros",
-    "transport-io",
-    "transport-streamable-http-server",
-] }
+rmcp = { workspace = true, features = ["server", "macros"] }
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio-util.workspace = true
 regex-lite = "0.1.9"
+
+# The transports that need an operating system stay off the browser build.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rmcp = { workspace = true, features = ["transport-io", "transport-streamable-http-server"] }
+
+# In a browser the randomness comes from the page.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.4", features = ["wasm_js"] }
+getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+uuid = { version = "1", features = ["js"] }
 
 [dev-dependencies]
 tokio.workspace = true
