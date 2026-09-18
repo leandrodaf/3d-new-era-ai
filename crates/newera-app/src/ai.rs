@@ -20,6 +20,13 @@ pub(crate) struct Client {
     /// What to paste, with this window's address already in it.
     pub(crate) code: String,
     pub(crate) note: &'static str,
+    /// The same thing as a command this window can run itself, when the
+    /// client has a command line: `(program, arguments)`.
+    #[cfg_attr(
+        target_arch = "wasm32",
+        allow(dead_code, reason = "a browser tab runs no command lines")
+    )]
+    pub(crate) run: Option<(&'static str, Vec<String>)>,
 }
 
 /// The address to hand out. A window without a server still shows what the
@@ -41,6 +48,17 @@ pub(crate) fn clients(url: &str) -> Vec<Client> {
             note: crate::i18n::tr(
                 "Os instaladores já registram sozinhos se o Claude Code estiver instalado.",
             ),
+            run: Some((
+                "claude",
+                vec![
+                    "mcp".to_owned(),
+                    "add".to_owned(),
+                    "--transport".to_owned(),
+                    "http".to_owned(),
+                    "newera".to_owned(),
+                    url.to_owned(),
+                ],
+            )),
         },
         Client {
             label: "Claude Desktop",
@@ -51,6 +69,7 @@ pub(crate) fn clients(url: &str) -> Vec<Client> {
             note: crate::i18n::tr(
                 "Precisa do Node.js instalado para a ponte mcp-remote. Reinicie o Claude Desktop.",
             ),
+            run: None,
         },
         Client {
             label: "Codex",
@@ -59,12 +78,33 @@ pub(crate) fn clients(url: &str) -> Vec<Client> {
             note: crate::i18n::tr(
                 "Os instaladores já registram sozinhos se o Codex estiver instalado.",
             ),
+            run: Some((
+                "codex",
+                vec![
+                    "mcp".to_owned(),
+                    "add".to_owned(),
+                    "newera".to_owned(),
+                    "--url".to_owned(),
+                    url.to_owned(),
+                ],
+            )),
         },
         Client {
             label: "Gemini CLI",
             place: terminal,
             code: format!("gemini mcp add --transport http newera {url}"),
             note: crate::i18n::tr("Depois abra o Gemini CLI e peça o projeto."),
+            run: Some((
+                "gemini",
+                vec![
+                    "mcp".to_owned(),
+                    "add".to_owned(),
+                    "--transport".to_owned(),
+                    "http".to_owned(),
+                    "newera".to_owned(),
+                    url.to_owned(),
+                ],
+            )),
         },
         Client {
             label: "VS Code",
@@ -73,6 +113,13 @@ pub(crate) fn clients(url: &str) -> Vec<Client> {
                 "code --add-mcp '{{\"name\":\"newera\",\"type\":\"http\",\"url\":\"{url}\"}}'"
             ),
             note: crate::i18n::tr("Use no modo agente do Copilot."),
+            run: Some((
+                "code",
+                vec![
+                    "--add-mcp".to_owned(),
+                    format!("{{\"name\":\"newera\",\"type\":\"http\",\"url\":\"{url}\"}}"),
+                ],
+            )),
         },
         Client {
             label: "Cursor",
@@ -81,6 +128,7 @@ pub(crate) fn clients(url: &str) -> Vec<Client> {
                 "{{\n  \"mcpServers\": {{\n    \"newera\": {{ \"url\": \"{url}\" }}\n  }}\n}}"
             ),
             note: crate::i18n::tr("Reinicie o Cursor depois de salvar."),
+            run: None,
         },
         Client {
             label: crate::i18n::tr("Outro app"),
@@ -93,8 +141,54 @@ pub(crate) fn clients(url: &str) -> Vec<Client> {
             note: crate::i18n::tr(
                 "O que importa é o app falar MCP: o modelo pode ser qualquer um.",
             ),
+            run: None,
         },
     ]
+}
+
+/// What a registration attempt left behind: the program's name, or why not.
+pub(crate) type RegisterSlot = std::sync::Arc<std::sync::Mutex<Option<Result<String, String>>>>;
+
+/// Whether a command line is installed on this machine, by looking where the
+/// shell would look. Windows keeps its command shims under other extensions.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn installed(program: &str) -> bool {
+    std::env::var_os("PATH").is_some_and(|path| {
+        std::env::split_paths(&path).any(|dir| {
+            let exe = dir.join(program);
+            exe.is_file()
+                || exe.with_extension("exe").is_file()
+                || exe.with_extension("cmd").is_file()
+                || exe.with_extension("bat").is_file()
+        })
+    })
+}
+
+/// Registers this window with a client, for the person, in the background —
+/// the same command the panel shows, run instead of copied.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn register(app: &mut NewEraApp, program: &'static str, args: Vec<String>) {
+    let slot: RegisterSlot = std::sync::Arc::default();
+    app.ai_job = Some(slot.clone());
+    std::thread::spawn(move || {
+        let result = match std::process::Command::new(program).args(&args).output() {
+            Ok(done) if done.status.success() => Ok(program.to_owned()),
+            Ok(done) => {
+                let said = String::from_utf8_lossy(&done.stderr);
+                let said = said.trim();
+                let said = if said.is_empty() {
+                    String::from_utf8_lossy(&done.stdout).trim().to_owned()
+                } else {
+                    said.to_owned()
+                };
+                Err(said.lines().last().unwrap_or("").to_owned())
+            }
+            Err(err) => Err(err.to_string()),
+        };
+        if let Ok(mut guard) = slot.lock() {
+            *guard = Some(result);
+        }
+    });
 }
 
 /// Now, in Unix milliseconds. A browser has no `SystemTime`: asking for it
@@ -102,8 +196,17 @@ pub(crate) fn clients(url: &str) -> Vec<Client> {
 fn now_ms() -> u64 {
     #[cfg(target_arch = "wasm32")]
     {
-        // `Date::now` is milliseconds since the epoch, as a float.
-        js_sys::Date::now().max(0.0) as u64
+        // `Date::now` is milliseconds since the epoch, as a float: whole
+        // numbers, and exact well past this century. The clamp is for a
+        // machine whose clock is set before 1970 or absurdly far ahead.
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a date in milliseconds fits u64 exactly once clamped"
+        )]
+        {
+            js_sys::Date::now().clamp(0.0, 9e15) as u64
+        }
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -158,6 +261,24 @@ impl Pulse {
 /// point of this is that nobody has to go looking to find out whether it
 /// worked.
 pub(crate) fn announce(app: &mut NewEraApp) {
+    // A registration started from the panel finishes in its own thread.
+    let finished = app
+        .ai_job
+        .as_ref()
+        .and_then(|slot| slot.lock().ok().and_then(|mut done| done.take()));
+    if let Some(result) = finished {
+        app.ai_job = None;
+        match result {
+            Ok(program) => app.set_status(crate::i18n::fill(
+                "Registrado no {} — agora é só pedir",
+                &[&program],
+            )),
+            Err(why) => app.set_status(format!(
+                "⚠ {}",
+                crate::i18n::fill("Não deu para registrar: {}", &[&why])
+            )),
+        }
+    }
     let agents: Vec<String> = {
         let doc = app.document.read();
         doc.agents().list().iter().map(|a| a.name.clone()).collect()
@@ -364,15 +485,45 @@ pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize
             .stroke(egui::Stroke::new(1.0, t.rule))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
+                // The snippet is a block of its own: a long address must not
+                // be pushed under the buttons beside it.
+                ui.add(egui::Label::new(RichText::new(&client.code).monospace()).wrap());
+                ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(&client.code).monospace());
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui
                             .button(format!("{} {}", icon::COPY, crate::i18n::tr("Copiar")))
                             .clicked()
                         {
                             ui.ctx().copy_text(client.code.clone());
                             app.set_status(crate::i18n::tr("Copiado"));
+                        }
+                        // When the client has a command line and it is on this
+                        // machine, there is no reason to make anybody open a
+                        // terminal: the window runs it.
+                        #[cfg(not(target_arch = "wasm32"))]
+                        if let Some((program, args)) = &client.run
+                            && installed(program)
+                        {
+                            let busy = app.ai_job.is_some();
+                            let label = format!(
+                                "{} {}",
+                                icon::LIGHTNING,
+                                if busy {
+                                    crate::i18n::tr("Registrando…")
+                                } else {
+                                    crate::i18n::tr("Registrar agora")
+                                }
+                            );
+                            if ui
+                                .add_enabled(!busy && serving, egui::Button::new(label))
+                                .on_hover_text(crate::i18n::tr(
+                                    "Roda esse mesmo comando aqui, sem abrir o terminal.",
+                                ))
+                                .clicked()
+                            {
+                                register(app, program, args.clone());
+                            }
                         }
                     });
                 });
@@ -468,6 +619,37 @@ mod tests {
             assert!(!client.place.is_empty());
             assert!(!client.note.is_empty());
         }
+    }
+
+    /// The clients with a command line carry it ready to run, so the window
+    /// can do the registering instead of asking for a terminal.
+    #[test]
+    fn the_command_line_clients_can_be_registered_from_here() {
+        let clients = super::clients("http://127.0.0.1:7999/mcp");
+        let runnable: Vec<&str> = clients
+            .iter()
+            .filter(|c| c.run.is_some())
+            .map(|c| c.label)
+            .collect();
+        assert!(
+            runnable.contains(&"Claude Code") && runnable.contains(&"Codex"),
+            "expected the CLIs among {runnable:?}"
+        );
+        for client in clients.iter().filter_map(|c| c.run.as_ref()) {
+            assert!(
+                client.1.iter().any(|a| a.contains("127.0.0.1:7999")),
+                "the command must carry this window's address"
+            );
+        }
+    }
+
+    /// Whatever else it finds, it finds the shell's own tools — and does not
+    /// invent a program nobody has.
+    #[cfg(unix)]
+    #[test]
+    fn it_can_tell_what_is_installed() {
+        assert!(super::installed("sh"));
+        assert!(!super::installed("newera-not-a-real-program"));
     }
 
     /// The moment reads as a person would say it.

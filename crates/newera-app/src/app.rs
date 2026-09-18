@@ -98,6 +98,8 @@ pub(crate) struct NewEraApp {
     /// AI clients already announced in the status bar, so a connection is
     /// said once and not on every frame.
     pub(crate) announced_agents: usize,
+    /// A registration started from the AI panel, running in its own thread.
+    pub(crate) ai_job: Option<crate::ai::RegisterSlot>,
     /// Tab being renamed in place: `(variant index, draft name)`.
     pub(crate) renaming_variant: Option<(usize, String)>,
     /// Visitor camera last taken from the document, to follow changes made
@@ -229,6 +231,7 @@ impl NewEraApp {
             mirrored: (0, Instant::now()),
             catalog_query: String::new(),
             announced_agents: 0,
+            ai_job: None,
             renaming_variant: None,
         };
         // The work of the last visit comes back before anything else opens

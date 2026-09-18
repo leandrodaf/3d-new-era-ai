@@ -1866,6 +1866,23 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
             "{} se conectó — su IA ya puede dibujar aquí",
             "{} s'est connecté — votre IA peut dessiner ici",
         ],
+        "Registrar agora" => ["Register now", "Registrar ahora", "Enregistrer maintenant"],
+        "Registrando…" => ["Registering…", "Registrando…", "Enregistrement…"],
+        "Roda esse mesmo comando aqui, sem abrir o terminal." => [
+            "Runs that same command from here, no terminal needed.",
+            "Ejecuta ese mismo comando desde aquí, sin abrir el terminal.",
+            "Exécute cette même commande d'ici, sans ouvrir de terminal.",
+        ],
+        "Registrado no {} — agora é só pedir" => [
+            "Registered with {} — now just ask",
+            "Registrado en {} — ahora solo pida",
+            "Enregistré dans {} — il n'y a plus qu'à demander",
+        ],
+        "Não deu para registrar: {}" => [
+            "Could not register: {}",
+            "No se pudo registrar: {}",
+            "Impossible d'enregistrer : {}",
+        ],
         _ => return None,
     })
 }
