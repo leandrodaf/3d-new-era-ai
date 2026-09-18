@@ -6,6 +6,11 @@
   const MCP = "http://127.0.0.1:7878/mcp";
   const RAW = `https://raw.githubusercontent.com/${REPO}/main/scripts`;
 
+  // The Product Hunt badge in the footer. It only exists after the launch is
+  // live and the post has an id — fill `post` in and the footer shows the
+  // official embed; leave it empty and there is no badge and no request.
+  const PRODUCT_HUNT = { post: "", slug: "3d-new-era-ai" };
+
   const EN = {
     "hero.try": "Open in the browser",
     "nav.try": "Open in the browser",
@@ -700,6 +705,21 @@
   } else {
     reveal.forEach((el) => el.classList.add("is-in"));
   }
+
+  // ---- Product Hunt badge ----
+  (() => {
+    const slot = $("#ph-badge");
+    if (!slot || !PRODUCT_HUNT.post) return;
+    const paint = () => {
+      const dark = document.documentElement.dataset.theme !== "light";
+      const src = `https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=${PRODUCT_HUNT.post}&theme=${dark ? "dark" : "light"}`;
+      slot.innerHTML = `<img src="${src}" width="250" height="54" alt="3D New Era AI on Product Hunt" loading="lazy">`;
+    };
+    slot.href = `https://www.producthunt.com/posts/${PRODUCT_HUNT.slug}?utm_source=badge-featured&utm_medium=badge`;
+    slot.hidden = false;
+    paint();
+    new MutationObserver(paint).observe(document.documentElement, { attributeFilter: ["data-theme"] });
+  })();
 
   // ---- Nav border on scroll ----
   const nav = $(".nav");

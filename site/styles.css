@@ -435,3 +435,9 @@ button { font: inherit; color: inherit; }
   .faq summary { font-size: 18px; }
   .dim--top span { font-size: 10px; }
 }
+
+/* The Product Hunt badge, when there is one. Sits above the credits, on its
+   own line, never pushing the footer around when absent. */
+.footer__badge { padding-block: 10px 0; }
+.footer__badge a[hidden] { display: none; }
+.footer__badge img { display: block; height: 54px; width: auto; }
