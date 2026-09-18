@@ -43,8 +43,8 @@ That is what makes these properties hold everywhere, for free:
 | `newera-mcp` | core, draw, rmcp | MCP tools and their token-efficient wire format. One module per domain under `src/tools/`, each with its own router; `src/tools/mod.rs` maps them. |
 | `newera-render` | core, catalog | 3D meshes, software renderer, photos, videos, GLB/OBJ export. |
 | `newera-plugins` | core | Plugin discovery and runs: external programs that edit through the HTTP API. |
-| `newera-server` | core, mcp, plugins, axum | HTTP transport: REST API, sessions, plugins and the Streamable HTTP MCP endpoint. |
-| `newera-app` | core, eframe | Desktop editor (also built for the browser). Never talks to the network. |
+| `newera-server` | core, mcp, plugins, axum | HTTP transport: REST API, sessions, plugins and the Streamable HTTP MCP endpoint. It also reads the MCP traffic going by — the handshake's client name and each `tools/call` — into `Document::agents`, which is how the window can show that an agent is connected. |
+| `newera-app` | core, eframe | Desktop editor (also built for the browser). Never talks to the network: what it knows about the AI side it reads from the document, beside the collaborators (`src/ai.rs`). |
 | `newera-web`, `newera-editor-web` | core / app | WebAssembly viewer and the full editor in the browser. |
 | `newera` | all | CLI entry point and process wiring. |
 
