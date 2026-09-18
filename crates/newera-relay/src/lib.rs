@@ -311,8 +311,15 @@ async fn tab_socket(
     State(rooms): State<Rooms>,
     Path(room): Path<String>,
     axum::extract::Query(query): axum::extract::Query<TabQuery>,
+    headers: axum::http::HeaderMap,
     upgrade: WebSocketUpgrade,
 ) -> Response {
+    let origin = headers
+        .get(axum::http::header::ORIGIN)
+        .and_then(|v| v.to_str().ok());
+    if !from_the_editor(origin) {
+        return (StatusCode::FORBIDDEN, "not from here").into_response();
+    }
     {
         let mut held = rooms.0.lock().expect("rooms");
         let Some(entry) = held.rooms.get_mut(&room) else {
@@ -324,6 +331,15 @@ async fn tab_socket(
         entry.touched = Instant::now();
     }
     upgrade.on_upgrade(move |socket| hold_tab(socket, rooms, room))
+}
+
+/// Whether a socket handshake came from a page allowed to hold a tab.
+///
+/// A handshake is not a fetch: the browser sends it whatever CORS says, so the
+/// gate has to be here. Something with no origin at all is not a browser — a
+/// script, a check, somebody's own tool — and for those the key is the lock.
+fn from_the_editor(origin: Option<&str>) -> bool {
+    origin.is_none_or(|origin| ORIGINS.contains(&origin))
 }
 
 /// Pumps one tab's socket: work down, answers up, until it goes away.
@@ -694,6 +710,23 @@ mod tests {
         assert!(!same_secret("abc", "abd"));
         assert!(!same_secret("abc", "abcd"));
         assert!(!same_secret("", "a"));
+    }
+
+    /// The socket is not open to any page that asks — CORS does not apply to a
+    /// WebSocket handshake, so the origin is checked where it arrives.
+    #[test]
+    fn a_socket_from_somewhere_else_is_refused() {
+        assert!(from_the_editor(Some("https://3dneweraai.com")));
+        assert!(from_the_editor(Some("http://127.0.0.1:8801")));
+        assert!(!from_the_editor(Some("https://evil.example")));
+        assert!(
+            !from_the_editor(Some("https://3dneweraai.com.evil.example")),
+            "a name that merely starts the same is somewhere else"
+        );
+        assert!(
+            from_the_editor(None),
+            "not a browser: the key is the lock there"
+        );
     }
 
     /// A notification is not answered at all, which is what the protocol says.

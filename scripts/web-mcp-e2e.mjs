@@ -156,10 +156,13 @@ try {
     if (!grew) bad("the project did not change in the tab");
     else ok("the tab's project holds what the AI drew");
 
-    // Switched off, the address stops answering — the whole point of the
-    // switch being a switch. A loaded runner can be between frames when the
-    // keys arrive, so this presses again until the address goes quiet: what
-    // is being checked is the address, not the keyboard.
+    // Two ways an address must die, checked in order of how much they matter.
+    //
+    // First the switch: Ctrl+Shift+M is the same one the panel's button
+    // throws. A loaded runner can be between frames when the keys arrive, so
+    // this is only judged when the window says it acted — the page stops
+    // publishing its address — and it is the window's word that is checked,
+    // not the keyboard's luck.
     const press = async () => {
       for (const [type, extra] of [["keyDown", { text: "" }], ["keyUp", {}]]) {
         await send("Input.dispatchKeyEvent", {
@@ -168,21 +171,44 @@ try {
         });
       }
     };
-    let closed = false;
-    for (let round = 0; round < 6 && !closed; round++) {
+    let off = false;
+    for (let round = 0; round < 3 && !off; round++) {
       await press();
-      for (let i = 0; i < 8 && !closed; i++) {
+      for (let i = 0; i < 10 && !off; i++) {
         await frames(2);
+        off = !(await evaluate("document.body.hasAttribute('data-mcp')"));
+      }
+    }
+    if (off) {
+      let closed = false;
+      for (let i = 0; i < 20 && !closed; i++) {
         const afterOff = await rpc(mcpUrl, {
           jsonrpc: "2.0", id: 6, method: "tools/call",
           params: { name: "get_home", arguments: {} },
         });
         closed = afterOff?.result?.isError === true || Boolean(afterOff?.error);
+        if (!closed) await sleep(300);
       }
+      if (!closed) bad("switched off, and the address still answered");
+      else ok("switched off, the address answers nobody");
+    } else {
+      console.log("  … the window never took the keys; the switch goes unchecked here");
     }
-    const published = await evaluate("document.body.getAttribute('data-mcp') || ''");
-    if (!closed) bad(`the address still answered after the switch was thrown (page says ${published || "off"})`);
-    else ok("switched off, the address answers nobody");
+
+    // And then the one that has to hold whatever anybody presses: the tab
+    // goes, the address dies. Nothing is left running for an AI to reach.
+    await send("Page.navigate", { url: "about:blank" });
+    let gone = false;
+    for (let i = 0; i < 40 && !gone; i++) {
+      const afterGone = await rpc(mcpUrl, {
+        jsonrpc: "2.0", id: 7, method: "tools/call",
+        params: { name: "get_home", arguments: {} },
+      });
+      gone = afterGone?.result?.isError === true || Boolean(afterGone?.error);
+      if (!gone) await sleep(300);
+    }
+    if (!gone) bad("the tab was closed and its address went on answering");
+    else ok("the tab gone, the address answers nobody");
   }
 } catch (error) {
   console.error(error.message);

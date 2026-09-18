@@ -3387,6 +3387,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-tungstenite 0.30.0",
+ "tower",
  "tower-http 0.7.1",
  "tracing",
  "tracing-subscriber",

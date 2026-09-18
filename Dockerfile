@@ -1,4 +1,6 @@
-# The relay that lets an AI reach the editor in someone's browser tab.
+# The relay that lets an AI reach the editor in someone's browser tab — the one
+# service in this repository, and the only thing here that is deployed.
+# It sits at the root because that is where the deploy workflow looks.
 #
 # Two stages: one that has a Rust toolchain, one that has nothing. What ships
 # is a single static-ish binary on a distroless base — no shell, no package

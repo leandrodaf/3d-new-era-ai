@@ -4,7 +4,6 @@ services:
   relay:
     build:
       context: .
-      dockerfile: deploy/relay/Dockerfile
     image: newera-relay:latest
     restart: unless-stopped
     environment:
