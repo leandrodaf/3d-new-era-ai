@@ -26,35 +26,42 @@ const RELAY: &str = "https://mcp.3dneweraai.com";
 const TOO_SLOW_HERE: [&str; 2] = ["render_photo", "video"];
 
 /// Where this tab is in the business of being reachable.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) enum Link {
     /// Nobody asked for an address yet.
     #[default]
     Off,
     /// Asking the relay for one.
     Opening,
-    /// Reachable: this is what goes into the AI client, and the socket that
-    /// makes it true.
-    On {
-        url: String,
-        socket: web_sys::WebSocket,
-    },
+    /// Reachable: this is what goes into the AI client.
+    On { url: String },
     /// It did not work, and this is what went wrong.
     Failed { why: String },
 }
 
-impl Link {
-    /// Takes the socket out, when there is one, leaving the state alone.
-    fn take_socket(&mut self) -> Option<web_sys::WebSocket> {
-        match self {
-            Self::On { socket, .. } => Some(socket.clone()),
-            _ => None,
+/// What the window says, and the socket that makes it true.
+///
+/// The socket is kept beside the state and not inside it: a link that fell
+/// over still has one to close, and forgetting that left the old address
+/// answering after the switch had been thrown — the relay was still holding a
+/// tab nobody had hung up.
+#[derive(Debug, Default)]
+pub(crate) struct Held {
+    pub(crate) link: Link,
+    socket: Option<web_sys::WebSocket>,
+}
+
+impl Held {
+    /// Closes whatever is open, if anything is.
+    fn hang_up(&mut self) {
+        if let Some(socket) = self.socket.take() {
+            let _ = socket.close();
         }
     }
 }
 
 /// The link's state, shared with the socket's callbacks.
-pub(crate) type Shared = Rc<RefCell<Link>>;
+pub(crate) type Shared = Rc<RefCell<Held>>;
 
 /// The relay this tab should use.
 fn relay_base() -> String {
@@ -69,10 +76,10 @@ fn relay_base() -> String {
 /// Closes the address. Whoever held it loses the tab at once — the socket is
 /// dropped and the relay has nothing to hand work to.
 pub(crate) fn disconnect(state: &Shared) {
-    if let Some(socket) = state.borrow_mut().take_socket() {
-        let _ = socket.close();
-    }
-    *state.borrow_mut() = Link::Off;
+    let mut held = state.borrow_mut();
+    held.hang_up();
+    held.link = Link::Off;
+    drop(held);
     published(None);
 }
 
@@ -100,13 +107,19 @@ fn published(url: Option<&str>) {
 /// browser's own event loop, and `state` is what the window reads to know how
 /// it went.
 pub(crate) fn connect(document: SharedDocument, ctx: eframe::egui::Context, state: Shared) {
-    *state.borrow_mut() = Link::Opening;
+    {
+        // Whatever was open before is hung up first: two sockets would mean two
+        // live addresses, and only one of them on screen.
+        let mut held = state.borrow_mut();
+        held.hang_up();
+        held.link = Link::Opening;
+    }
     let base = relay_base();
     wasm_bindgen_futures::spawn_local(async move {
         match open_room(&base).await {
             Ok(room) => hold(&document, &ctx, &state, &base, &room),
             Err(why) => {
-                *state.borrow_mut() = Link::Failed { why };
+                state.borrow_mut().link = Link::Failed { why };
                 ctx.request_repaint();
             }
         }
@@ -160,7 +173,7 @@ fn hold(
     let socket = match web_sys::WebSocket::new(&ws_url) {
         Ok(socket) => socket,
         Err(err) => {
-            *state.borrow_mut() = Link::Failed { why: told(&err) };
+            state.borrow_mut().link = Link::Failed { why: told(&err) };
             ctx.request_repaint();
             return;
         }
@@ -186,10 +199,11 @@ fn hold(
                 .collect();
             let hello = serde_json::json!({"type": "hello", "tools": tools});
             let _ = socket.send_with_str(&hello.to_string());
-            *state.borrow_mut() = Link::On {
-                url: url.clone(),
-                socket: socket.clone(),
-            };
+            {
+                let mut held = state.borrow_mut();
+                held.link = Link::On { url: url.clone() };
+                held.socket = Some(socket.clone());
+            }
             // The page keeps the address where the panel shows it: readable by
             // whoever is already looking at this tab, and by nobody else.
             published(Some(&url));
@@ -266,13 +280,22 @@ fn hold(
     let on_close = {
         let state = state.clone();
         let ctx = ctx.clone();
+        let socket = socket.clone();
         Closure::<dyn FnMut()>::new(move || {
-            // Switched off on purpose is not a fault; only a link that was up
-            // and fell has anything to report.
-            if matches!(&*state.borrow(), Link::On { .. } | Link::Opening) {
-                *state.borrow_mut() = Link::Failed {
-                    why: crate::i18n::tr("a ligação com o relay caiu").to_owned(),
-                };
+            let mut held = state.borrow_mut();
+            // Only the socket that is current speaks for the link: one closed
+            // on the way to a new address has nothing to say about it.
+            if held.socket.as_ref().is_some_and(|open| *open == socket) {
+                held.socket = None;
+                // Switched off on purpose is not a fault; only a link that was
+                // up and fell has anything to report.
+                if matches!(held.link, Link::On { .. } | Link::Opening) {
+                    held.link = Link::Failed {
+                        why: crate::i18n::tr("a ligação com o relay caiu").to_owned(),
+                    };
+                    drop(held);
+                    published(None);
+                }
             }
             ctx.request_repaint();
         })

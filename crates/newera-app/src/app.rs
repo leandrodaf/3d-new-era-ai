@@ -1206,7 +1206,7 @@ impl NewEraApp {
         if pressed(cmd_shift, Key::M) {
             #[cfg(target_arch = "wasm32")]
             {
-                let on = matches!(&*self.ai_link.borrow(), crate::ai_web::Link::On { .. });
+                let on = matches!(self.ai_link.borrow().link, crate::ai_web::Link::On { .. });
                 if on {
                     crate::ai_web::disconnect(&self.ai_link);
                     self.set_status(crate::i18n::tr("MCP desligado"));

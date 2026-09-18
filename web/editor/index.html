@@ -19,7 +19,14 @@
      the editor takes the rest. A note that floats over the canvas covers the
      app's own menus, which on a phone is most of what there is. */
   body { display: flex; flex-direction: column; }
-  #newera { flex: 1 1 auto; width: 100%; min-height: 0; display: block; }
+  /* The editor handles its own gestures: a finger drags the plan, a pinch
+     zooms it, a wheel zooms. Saying so here is what stops the browser from
+     also scrolling the page — and stops the console filling with
+     "Unable to preventDefault inside passive event listener", which is Chrome
+     saying it made the listener passive because nobody claimed the gesture. */
+  #newera { flex: 1 1 auto; width: 100%; min-height: 0; display: block;
+    touch-action: none; overscroll-behavior: none; }
+  html, body { overscroll-behavior: none; touch-action: none; }
   #loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     color: #9aa1ad; font: 15px system-ui, sans-serif; pointer-events: none; }
   #failed { position: absolute; inset: 0; display: none; flex-direction: column; gap: 14px;

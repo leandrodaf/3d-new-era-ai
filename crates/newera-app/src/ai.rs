@@ -33,7 +33,7 @@ pub(crate) struct Client {
 /// snippet will look like, with the address it would have.
 pub(crate) fn address(app: &NewEraApp) -> String {
     #[cfg(target_arch = "wasm32")]
-    if let crate::ai_web::Link::On { url, .. } = &*app.ai_link.borrow() {
+    if let crate::ai_web::Link::On { url } = &app.ai_link.borrow().link {
         return url.clone();
     }
     app.mcp_url
@@ -46,7 +46,7 @@ pub(crate) fn address(app: &NewEraApp) -> String {
 pub(crate) fn reachable(app: &NewEraApp) -> bool {
     #[cfg(target_arch = "wasm32")]
     {
-        return matches!(&*app.ai_link.borrow(), crate::ai_web::Link::On { .. });
+        return matches!(app.ai_link.borrow().link, crate::ai_web::Link::On { .. });
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -422,7 +422,7 @@ pub(crate) fn menu(app: &mut NewEraApp, ui: &mut egui::Ui) {
 /// the point and also the warning.
 #[cfg(target_arch = "wasm32")]
 fn switch(app: &mut NewEraApp, ui: &mut egui::Ui, t: crate::theme::Tokens) {
-    let state = app.ai_link.borrow().clone();
+    let state = app.ai_link.borrow().link.clone();
     match state {
         crate::ai_web::Link::Off => {
             ui.vertical(|ui| {

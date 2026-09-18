@@ -3217,7 +3217,7 @@ dependencies = [
 
 [[package]]
 name = "newera"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3237,7 +3237,7 @@ dependencies = [
 
 [[package]]
 name = "newera-app"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "base64 0.23.1",
  "bytemuck",
@@ -3269,7 +3269,7 @@ dependencies = [
 
 [[package]]
 name = "newera-catalog"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "gltf",
  "newera-core",
@@ -3279,7 +3279,7 @@ dependencies = [
 
 [[package]]
 name = "newera-core"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "geo",
  "image",
@@ -3292,7 +3292,7 @@ dependencies = [
 
 [[package]]
 name = "newera-draw"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "ab_glyph",
  "epaint_default_fonts",
@@ -3307,7 +3307,7 @@ dependencies = [
 
 [[package]]
 name = "newera-editor-web"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "console_error_panic_hook",
  "log",
@@ -3320,7 +3320,7 @@ dependencies = [
 
 [[package]]
 name = "newera-ergonomics"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "geo",
  "newera-core",
@@ -3331,7 +3331,7 @@ dependencies = [
 
 [[package]]
 name = "newera-joinery"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "newera-core",
  "schemars",
@@ -3341,7 +3341,7 @@ dependencies = [
 
 [[package]]
 name = "newera-mcp"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "base64 0.23.1",
  "getrandom 0.3.4",
@@ -3368,7 +3368,7 @@ dependencies = [
 
 [[package]]
 name = "newera-plugins"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "newera-core",
  "serde",
@@ -3377,7 +3377,7 @@ dependencies = [
 
 [[package]]
 name = "newera-relay"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "axum",
  "futures-util",
@@ -3394,7 +3394,7 @@ dependencies = [
 
 [[package]]
 name = "newera-render"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "ab_glyph",
  "bytemuck",
@@ -3412,7 +3412,7 @@ dependencies = [
 
 [[package]]
 name = "newera-server"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "axum",
  "futures-util",
@@ -3433,7 +3433,7 @@ dependencies = [
 
 [[package]]
 name = "newera-sh3d"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "image",
  "newera-catalog",
@@ -3444,7 +3444,7 @@ dependencies = [
 
 [[package]]
 name = "newera-telemetry"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "sentry",
  "serde",
@@ -3456,7 +3456,7 @@ dependencies = [
 
 [[package]]
 name = "newera-web"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "image",
  "newera-core",

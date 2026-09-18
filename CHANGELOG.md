@@ -6,7 +6,36 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-18
+
+The editor answers to an AI from a browser tab, with nothing installed, and is
+usable on a phone.
+
 ### Added
+
+- Your AI can drive the editor **in a browser, with nothing installed**. A tab cannot
+  listen on a port, so it holds a connection outwards instead: switch the MCP on in the
+  AI panel (or Ctrl+Shift+M) and the tab gets an address to paste into Claude Code, Codex,
+  Cursor or anything else that speaks MCP. A small relay (`newera-relay`, in this
+  repository) passes the calls and stores nothing — the project never leaves the tab, the
+  address stops answering the moment it is switched off or the tab is closed, and one
+  room's secrets are useless on another. `render_photo` and `video` are not offered there:
+  they run for minutes on a CPU and would freeze the window.
+- A place in the window that shows the MCP and proves it works: the **AI** menu and a chip
+  in the status bar, a panel with the address, the snippet for each client — with a button
+  that registers it for you when that client's command line is installed — a sentence to
+  ask, and the last twelve tool calls as they land. The window names the client that
+  connected and says each tool as it is used, so a working setup and a typo no longer look
+  the same.
+- Made for a phone. The editor sets its scale to what the screen can hold and, below 720
+  points, shows one thing at a time — catalogue, plan or 3D — with a bar in thumb's reach
+  and Ctrl+1/2/3 for whoever has a keyboard; the toolbar scrolls instead of falling off the
+  edge. On the site every tappable thing gets the 44 px a thumb actually hits and the small
+  print goes up a step. `scripts/mobile-audit.mjs` checks all of it at four real handset
+  sizes, and CI fails on sideways scroll, a target too small or text too small to read.
+- Every MCP tool can be called without a session (`newera_mcp::call`), which is what lets
+  the browser answer for itself; a test walks the server's own tool list and fails if
+  anything is unreachable, so the two cannot drift.
 
 - The window speaks Spanish and French besides Portuguese and English: pick one in
   Help > Idioma / Language, or let it follow the system (`NEWERA_LANG`, `LC_ALL`,
@@ -59,6 +88,20 @@ All notable changes to this project are documented here. The format follows
   a workflow that puts them on Cloudflare Pages on every push.
 
 ### Fixed
+
+- The browser editor stopped loading for anyone who had opened it before: the glue and the
+  wasm keep the same names and a cache can hold one half of each build, which does not
+  link. Both are stamped with the digest of the build now, so a cache can only ever serve a
+  matching pair, and a mismatch that gets through anyway is fetched again past every cache.
+- Switching the browser's MCP off really closes it: the socket was kept inside the
+  state, so a link that had fallen over left nothing to hang up and the old address went
+  on answering while a new one was on screen. The socket is held beside the state now and
+  closed whatever the state says.
+- The console no longer fills with "Unable to preventDefault inside passive event
+  listener": the editor's canvas and the viewer say they handle their own gestures, which
+  is also what stops a phone scrolling the page while a finger drags the plan.
+- The note about WebGL no longer covers the editor's own menus — on a phone that was most
+  of the window — and goes on its own after it has been read.
 
 - The window follows the language of the machine it runs on, which made the interface
   tests read English labels on a macOS runner set to `en_US` and fail the whole suite:
@@ -320,7 +363,8 @@ MCP server, with everything below.
 - `scripts/mcp.sh` / `make mcp` to call MCP tools from the shell.
 - CI for formatting, clippy, tests on Linux/macOS/Windows, MCP smoke test, MSRV and cargo-deny; release builds.
 
-[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.0.0...v1.1.0
