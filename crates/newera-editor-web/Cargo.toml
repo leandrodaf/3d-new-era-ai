@@ -16,6 +16,10 @@ crate-type = ["cdylib", "rlib"]
 console_error_panic_hook = "0.1"
 log = "0.4"
 newera-app.workspace = true
+# Not called from here: it turns on wgpu's WebGL backend so the editor still
+# opens where the browser has no WebGPU (Firefox today, older Safari). egui
+# prefers WebGPU and falls back to this on its own.
+wgpu = { version = "30.0.1", features = ["webgl"] }
 wasm-bindgen = "0.2.128"
 wasm-bindgen-futures = "0.4.78"
 web-sys = { version = "0.3", features = ["console", "Document", "HtmlCanvasElement", "Window"] }

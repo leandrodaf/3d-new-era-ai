@@ -31,6 +31,13 @@ All notable changes to this project are documented here. The format follows
   the visitor's language when a browser cannot start it, and is checked by CI in a real
   headless Chrome: it builds the page, draws a wall with the mouse and loads the viewer,
   failing on anything the page logs.
+- It runs where there is no WebGPU: with wgpu's WebGL backend compiled in, a browser
+  without WebGPU — Firefox today — falls back to WebGL 2 and still draws the plan and the
+  3D view. The page says what happened, since Chrome and Edge are the supported browsers
+  and Firefox is not guaranteed, and CI now draws the wall twice: once with WebGPU and
+  once without.
+- The site header fits a phone: the language switch and the GitHub star count moved into
+  the menu instead of pushing the row off the screen.
 - Found by search and by agents: schema.org data for the program and the questions,
   hreflang for the four languages, a sitemap, a robots.txt that welcomes the crawlers
   behind AI assistants, and an llms.txt that tells an agent what the program is and what

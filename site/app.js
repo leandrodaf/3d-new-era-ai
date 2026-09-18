@@ -7,6 +7,8 @@
   const RAW = `https://raw.githubusercontent.com/${REPO}/main/scripts`;
 
   const EN = {
+    "q7": "Does it run in a browser?",
+    "a7": "The full editor compiles to WebAssembly and runs in a tab. <b>Chrome and Edge</b> are the supported browsers (and Safari 26, which has WebGPU); where there is no WebGPU — Firefox today — it falls back to WebGL and draws everything, but is not guaranteed. For real work, download the app: it is the one that brings the MCP server to your AI.",
     "aria.menu": "Menu",
     "aria.github": "Repository on GitHub",
     "alt.hero": "Dining room at dusk, rendered by the app",
@@ -74,6 +76,8 @@
   };
 
   const ES = {
+    "q7": "¿Funciona en el navegador?",
+    "a7": "El editor completo se compila a WebAssembly y funciona en una pestaña. El soporte oficial es <b>Chrome y Edge</b> (y Safari 26, que ya tiene WebGPU); donde no hay WebGPU —hoy Firefox— pasa a WebGL y lo dibuja todo, pero no lo garantizamos. Para trabajar de verdad, descargue la aplicación: es la que trae el servidor MCP para su IA.",
     "aria.menu": "Menú",
     "aria.github": "Repositorio en GitHub",
     "alt.hero": "Comedor al atardecer, renderizado por la app",
@@ -199,6 +203,8 @@
   };
 
   const FR = {
+    "q7": "Est-ce que ça marche dans le navigateur ?",
+    "a7": "L'éditeur complet se compile en WebAssembly et tourne dans un onglet. Les navigateurs pris en charge sont <b>Chrome et Edge</b> (et Safari 26, qui a WebGPU) ; là où WebGPU manque — Firefox aujourd'hui — il bascule sur WebGL et dessine tout, sans garantie. Pour travailler vraiment, téléchargez l'application : c'est elle qui apporte le serveur MCP à votre IA.",
     "aria.menu": "Menu",
     "aria.github": "Dépôt sur GitHub",
     "alt.hero": "Salle à manger au crépuscule, rendue par l'app",
@@ -538,11 +544,14 @@
 
   // ---- Stars, when GitHub feels like answering ----
   (async () => {
-    const slot = $(".stars__n");
-    if (!slot) return;
+    const slots = $$(".stars__n");
+    if (!slots.length) return;
     const show = (count) => {
-      slot.textContent = count >= 1000 ? `${(count / 1000).toFixed(1)}k` : String(count);
-      slot.hidden = false;
+      const text = count >= 1000 ? `${(count / 1000).toFixed(1)}k` : String(count);
+      for (const slot of slots) {
+        slot.textContent = text;
+        slot.hidden = false;
+      }
     };
     const cached = read("newera-stars");
     if (cached) {

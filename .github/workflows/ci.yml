@@ -109,6 +109,9 @@ jobs:
           for _ in $(seq 1 40); do curl -sf http://127.0.0.1:8790/editor/ >/dev/null && break; sleep 0.25; done
           mkdir -p target/web-e2e
           node scripts/web-editor-e2e.mjs http://127.0.0.1:8790/editor/ target/web-e2e
+      # And again without WebGPU: the path a Firefox visitor lands on.
+      - name: Draw a wall without WebGPU
+        run: NO_WEBGPU=1 node scripts/web-editor-e2e.mjs http://127.0.0.1:8790/editor/ target/web-e2e
       - uses: actions/upload-artifact@v4
         if: always()
         with:

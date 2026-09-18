@@ -14,9 +14,13 @@ const browser = process.env.CHROME
   ?? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
       "/Applications/Chromium.app/Contents/MacOS/Chromium"].find((path) => existsSync(path))
   ?? "google-chrome";
+// NO_WEBGPU=1 checks the other path: the WebGL fallback browsers without
+// WebGPU (Firefox today) land on.
+const webgpu = process.env.NO_WEBGPU !== "1";
 const chrome = spawn(browser, [
-  "--headless=new", `--user-data-dir=${profile}`, "--enable-unsafe-webgpu",
-  "--enable-features=Vulkan", "--use-angle=swiftshader", "--window-size=1440,900",
+  "--headless=new", `--user-data-dir=${profile}`,
+  ...(webgpu ? ["--enable-unsafe-webgpu", "--enable-features=Vulkan"] : ["--disable-features=WebGPU,WebGPUService"]),
+  "--use-angle=swiftshader", "--window-size=1440,900",
   "--remote-debugging-port=9333", "about:blank",
 ], { stdio: "ignore" });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -73,7 +77,7 @@ try {
     if (result.data.length > 20000) break;
   }
   await sleep(1500);
-  await shot("web-editor-start.png");
+  await shot(webgpu ? "web-editor-start.png" : "web-editor-start-webgl.png");
   if (url.includes("project=")) {
     // A project was given: just check it opened without errors.
     const status = await evaluate("document.title");
@@ -91,7 +95,7 @@ try {
   await click(1350, 250);
   await click(1350, 250, 2);
   await sleep(1500);
-  await shot("web-editor-wall.png");
+  await shot(webgpu ? "web-editor-wall.png" : "web-editor-wall-webgl.png");
   const log = await evaluate("JSON.stringify(window.neweraLog || [])");
   console.log("log:", log);
   const errors = JSON.parse(log).filter((line) => /^(error|uncaught|rejection)/.test(line));
@@ -114,7 +118,7 @@ try {
     if (/Pronto|Ready/i.test(ready)) break;
   }
   console.log("viewer:", ready);
-  await shot("web-viewer.png");
+  await shot(webgpu ? "web-viewer.png" : "web-viewer-webgl.png");
   if (!/Pronto|Ready/i.test(ready)) {
     console.error("the viewer did not load the engine");
     failed = true;

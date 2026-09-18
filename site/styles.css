@@ -173,8 +173,9 @@ button { font: inherit; color: inherit; }
   padding: 12px 4px; border-bottom: 1px solid var(--rule);
   font-size: 16px;
 }
-.nav__menu a:last-child { border-bottom: 0; }
 .nav__menu a:hover { color: var(--ink); }
+/* Language and GitHub live in the row until the row runs out of width. */
+.nav__menu-foot { display: none; align-items: center; justify-content: space-between; gap: 10px; padding-top: 16px; }
 
 /* Hero */
 .hero { padding-top: 8px; }
@@ -398,9 +399,12 @@ button { font: inherit; color: inherit; }
   .nav__actions { gap: 8px; }
   .brand { font-size: 15px; gap: 8px; }
   .brand__mark { width: 21px; height: 21px; }
-  .stars { padding: 0 10px; }
-  .stars__n { display: none; }
-  .lang button { padding: 7px 7px; }
+  /* Four languages and a star count do not fit next to the brand and the
+     button that matters: they move into the menu. */
+  .nav__actions > .lang, .nav__actions > .stars { display: none; }
+  .nav__menu-foot { display: flex; }
+  .nav__menu { padding-bottom: 20px; }
+  .nav__menu a { padding: 13px 4px; }
   .hero__frame { height: auto; min-height: 640px; }
   .hero__frame > img { object-position: 62% 50%; }
   .hero__shade { background: linear-gradient(0deg, rgba(10, 9, 8, 0.92) 0%, rgba(10, 9, 8, 0.6) 55%, rgba(10, 9, 8, 0.15) 100%); }

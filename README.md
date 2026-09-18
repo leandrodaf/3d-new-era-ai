@@ -273,6 +273,12 @@ make web-editor   # builds web/editor/pkg with wasm-bindgen
 make web-serve    # viewer on / and editor on /editor/ at 127.0.0.1:8790
 ```
 
+**Browsers.** Supported: **Chrome and Edge**, and Safari 26, which has WebGPU. Where
+WebGPU is missing — Firefox today — the editor falls back to WebGL 2 and still draws
+everything, plan and 3D; it works, but it is not a browser we guarantee, and the page says
+so. A browser with neither gets a message pointing at the download instead of a blank
+page.
+
 To put it on a host of your own, serve the `web/` folder as static files. Two things
 matter: `.wasm` must be served as `application/wasm`, and it must be compressed — the
 editor is about 15 MB raw and roughly a quarter of that gzipped, so

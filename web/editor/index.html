@@ -15,6 +15,13 @@
     color: #e6e8ec; font: 16px/1.5 system-ui, sans-serif; background: #16181d; }
   #failed a { color: #9fb0ff; }
   #failed small { color: #6f7581; font-size: 12px; max-width: 60ch; word-break: break-word; }
+  #notice { position: absolute; top: 0; left: 0; right: 0; display: none; gap: 12px;
+    align-items: center; justify-content: center; padding: 8px 14px;
+    background: #2a2417; color: #e8b165; border-bottom: 1px solid #3d3a33;
+    font: 13px/1.4 system-ui, sans-serif; }
+  #notice button { border: 0; background: none; color: inherit; cursor: pointer; font: inherit;
+    padding: 0 4px; opacity: 0.7; }
+  #notice button:hover { opacity: 1; }
 </style>
 </head>
 <body>
@@ -30,6 +37,10 @@
   addEventListener("unhandledrejection", (e) => window.neweraLog.push("rejection: " + e.reason));
 </script>
 <div id="loading">Carregando o editor…</div>
+<div id="notice" role="status">
+  <span id="notice-text"></span>
+  <button type="button" id="notice-close" aria-label="Fechar">✕</button>
+</div>
 <div id="failed" role="alert">
   <p id="failed-text">Este navegador não conseguiu iniciar o editor 3D.</p>
   <p><a href="../../#baixar" id="failed-link">Baixe o aplicativo para o seu computador</a></p>
@@ -38,20 +49,38 @@
 <script>
   // The window itself speaks four languages; so do the lines around it.
   const WORDS = {
-    en: { wait: "Loading the editor…", failed: "This browser could not start the 3D editor. Chrome, Edge and Safari 26 run it; an old browser or a blocked GPU cannot.", download: "Download the app for your computer" },
-    es: { wait: "Cargando el editor…", failed: "Este navegador no pudo iniciar el editor 3D. Chrome, Edge y Safari 26 lo ejecutan; un navegador antiguo o una GPU bloqueada no.", download: "Descargue la aplicación para su ordenador" },
-    fr: { wait: "Chargement de l'éditeur…", failed: "Ce navigateur n'a pas pu démarrer l'éditeur 3D. Chrome, Edge et Safari 26 le font tourner ; un navigateur ancien ou un GPU bloqué, non.", download: "Téléchargez l'application pour votre ordinateur" },
+    pt: { webgl: "Sem WebGPU: o editor está rodando em WebGL. Funciona, mas o suporte oficial é no Chrome e no Edge — no Firefox não garantimos." },
+    en: { wait: "Loading the editor…", failed: "This browser could not start the 3D editor. Chrome, Edge and Safari 26 run it; an old browser or a blocked GPU cannot.", download: "Download the app for your computer", webgl: "No WebGPU here: the editor is running on WebGL. It works, but Chrome and Edge are the supported browsers — Firefox is not guaranteed." },
+    es: { wait: "Cargando el editor…", failed: "Este navegador no pudo iniciar el editor 3D. Chrome, Edge y Safari 26 lo ejecutan; un navegador antiguo o una GPU bloqueada no.", download: "Descargue la aplicación para su ordenador", webgl: "Sin WebGPU: el editor está funcionando en WebGL. Funciona, pero el soporte oficial es Chrome y Edge — en Firefox no lo garantizamos." },
+    fr: { wait: "Chargement de l'éditeur…", failed: "Ce navigateur n'a pas pu démarrer l'éditeur 3D. Chrome, Edge et Safari 26 le font tourner ; un navigateur ancien ou un GPU bloqué, non.", download: "Téléchargez l'application pour votre ordinateur", webgl: "Pas de WebGPU : l'éditeur tourne en WebGL. Cela fonctionne, mais les navigateurs pris en charge sont Chrome et Edge — Firefox n'est pas garanti." },
   };
   const tag = (navigator.languages ?? [navigator.language ?? ""])
     .map((name) => String(name).slice(0, 2).toLowerCase())
     .find((name) => name === "pt" || name in WORDS) ?? "en";
-  const words = WORDS[tag];
-  if (words) {
+  const words = WORDS[tag] ?? WORDS.en;
+  if (tag !== "pt") {
     document.documentElement.lang = tag;
     document.getElementById("loading").textContent = words.wait;
     document.getElementById("failed-text").textContent = words.failed;
     document.getElementById("failed-link").textContent = words.download;
   }
+
+  // Without WebGPU the editor falls back to WebGL: it draws everything, but
+  // it is not the browser this is supported on. Say so once, dismissible.
+  (async () => {
+    let webgpu = false;
+    try {
+      webgpu = Boolean(navigator.gpu && (await navigator.gpu.requestAdapter()));
+    } catch (_) { /* the API is there but refuses: same as not having it */ }
+    if (webgpu || localStorage.getItem("newera-webgl-notice") === "seen") return;
+    const notice = document.getElementById("notice");
+    document.getElementById("notice-text").textContent = words.webgl;
+    notice.style.display = "flex";
+    document.getElementById("notice-close").addEventListener("click", () => {
+      notice.style.display = "none";
+      try { localStorage.setItem("newera-webgl-notice", "seen"); } catch (_) { /* private mode */ }
+    });
+  })();
 
   // A blank page tells nobody anything: whatever kills the engine — no WebGPU,
   // a driver that gives up, a panic — is shown, with the way out.
