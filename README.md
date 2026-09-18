@@ -157,6 +157,13 @@ that address like a password: whoever has it can edit the project that is
 open. `render_photo` and `video` are not offered there — they run for minutes
 on a CPU and would freeze the window; that is what the app is for.
 
+The relay is in this repository (`newera-relay`) and is a service like any
+other: `cargo run -p newera-relay` puts one on `127.0.0.1:7979`, and
+`/app/?relay=http://127.0.0.1:7979` points the editor at it — which is how to
+run this whole path on your own machine, or on your own server. Whatever it is
+pointed at, nothing of the project is stored there: the calls pass through and
+the drawing stays in the tab.
+
 The window does this part for you: the **AI** menu (or the MCP chip in the
 status bar) opens a panel with the address, the snippet for whichever client
 you use, and — when that client has a command line and it is installed — a
