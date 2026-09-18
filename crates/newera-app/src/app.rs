@@ -98,6 +98,8 @@ pub(crate) struct NewEraApp {
     /// AI clients already announced in the status bar, so a connection is
     /// said once and not on every frame.
     pub(crate) announced_agents: usize,
+    /// Tool calls already named in the status bar.
+    pub(crate) announced_calls: u64,
     /// A registration started from the AI panel, running in its own thread.
     pub(crate) ai_job: Option<crate::ai::RegisterSlot>,
     /// Tab being renamed in place: `(variant index, draft name)`.
@@ -231,6 +233,7 @@ impl NewEraApp {
             mirrored: (0, Instant::now()),
             catalog_query: String::new(),
             announced_agents: 0,
+            announced_calls: 0,
             ai_job: None,
             renaming_variant: None,
         };
@@ -2761,8 +2764,16 @@ mod tests {
         }
         h.run_steps(3);
         h.get_by_label_contains("CLAUDE-CODE · 1");
-        // And it says so once, where messages go.
+        // And it says so once, where messages go — then names each tool as
+        // it lands, so the work is visible without opening anything.
         h.get_by_label_contains("claude-code conectou");
+        {
+            let mut doc = h.state().document.write();
+            doc.agents_mut()
+                .called(Some("s1"), "render_photo", newera_core::collab::now_ms());
+        }
+        h.run_steps(3);
+        h.get_by_label_contains("render_photo · claude-code");
     }
 
     #[test]

@@ -279,10 +279,27 @@ pub(crate) fn announce(app: &mut NewEraApp) {
             )),
         }
     }
-    let agents: Vec<String> = {
+    let (agents, calls, last): (Vec<String>, u64, Option<(String, String)>) = {
         let doc = app.document.read();
-        doc.agents().list().iter().map(|a| a.name.clone()).collect()
+        let agents = doc.agents();
+        (
+            agents.list().iter().map(|a| a.name.clone()).collect(),
+            agents.calls(),
+            agents
+                .recent()
+                .last()
+                .map(|c| (c.tool.clone(), c.agent.clone())),
+        )
     };
+    // Every tool the agent uses says its name where messages go: from across
+    // the room that is the difference between "it is working" and silence.
+    if calls > app.announced_calls {
+        app.announced_calls = calls;
+        if let Some((tool, agent)) = last {
+            // Two proper names and a dot: nothing here to translate.
+            app.set_status(format!("{tool} · {agent}"));
+        }
+    }
     if agents.len() <= app.announced_agents {
         return;
     }
