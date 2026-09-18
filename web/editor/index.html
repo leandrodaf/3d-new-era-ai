@@ -25,6 +25,17 @@
   addEventListener("unhandledrejection", (e) => window.neweraLog.push("rejection: " + e.reason));
 </script>
 <div id="loading">Carregando o editor…</div>
+<script>
+  // The window itself speaks four languages; so does the line before it opens.
+  const WAIT = { en: "Loading the editor…", es: "Cargando el editor…", fr: "Chargement de l'éditeur…" };
+  const tag = (navigator.languages ?? [navigator.language ?? ""])
+    .map((name) => String(name).slice(0, 2).toLowerCase())
+    .find((name) => name === "pt" || name in WAIT) ?? "en";
+  if (tag !== "pt") {
+    document.documentElement.lang = tag;
+    document.getElementById("loading").textContent = WAIT[tag];
+  }
+</script>
 <script type="module">
   import init, { start } from "./pkg/newera_editor_web.js";
 

@@ -1,14 +1,20 @@
-// End-to-end check of the browser editor: draws a wall with the mouse in
-// headless Chrome (WebGPU) and saves screenshots before and after.
+// End-to-end check of what runs in a browser: draws a wall with the mouse in
+// the editor (headless Chrome, WebGPU) and loads the lightweight viewer, with
+// screenshots of both. Any error the page logs fails the run.
 // Usage: node scripts/web-editor-e2e.mjs http://127.0.0.1:8790/editor/ out-dir
 import { spawn } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const [url = "http://127.0.0.1:8790/editor/", out = "."] = process.argv.slice(2);
 const profile = mkdtempSync(join(tmpdir(), "newera-e2e-"));
-const chrome = spawn("google-chrome", [
+// Where Chrome is called on each machine; CHROME=<path> overrides.
+const browser = process.env.CHROME
+  ?? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "/Applications/Chromium.app/Contents/MacOS/Chromium"].find((path) => existsSync(path))
+  ?? "google-chrome";
+const chrome = spawn(browser, [
   "--headless=new", `--user-data-dir=${profile}`, "--enable-unsafe-webgpu",
   "--enable-features=Vulkan", "--use-angle=swiftshader", "--window-size=1440,900",
   "--remote-debugging-port=9333", "about:blank",
@@ -89,6 +95,22 @@ try {
   const log = await evaluate("JSON.stringify(window.neweraLog || [])");
   console.log("log:", log);
   failed = JSON.parse(log).some((line) => /^(error|uncaught|rejection)/.test(line));
+
+  // The lightweight viewer, on the same engine: it is ready when it says so.
+  const viewer = new URL("../", url).href;
+  await send("Page.navigate", { url: viewer });
+  let ready = "";
+  for (let i = 0; i < 100; i++) {
+    await sleep(200);
+    ready = await evaluate("document.getElementById('status')?.textContent ?? ''");
+    if (/Pronto|Ready/i.test(ready)) break;
+  }
+  console.log("viewer:", ready);
+  await shot("web-viewer.png");
+  if (!/Pronto|Ready/i.test(ready)) {
+    console.error("the viewer did not load the engine");
+    failed = true;
+  }
 } catch (error) {
   if (!error.done) {
     console.error(error.message);

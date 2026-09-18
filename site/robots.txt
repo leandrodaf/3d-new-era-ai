@@ -1,0 +1,29 @@
+# Everything here is meant to be read, by people and by machines alike.
+# (GitHub Pages serves this file only for a custom domain; the sitemap is
+# submitted to search consoles by hand.)
+User-agent: *
+Allow: /
+
+# The crawlers that feed AI assistants are welcome: this is a tool for them.
+User-agent: GPTBot
+Allow: /
+User-agent: OAI-SearchBot
+Allow: /
+User-agent: ChatGPT-User
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: Claude-User
+Allow: /
+User-agent: Claude-SearchBot
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: Google-Extended
+Allow: /
+User-agent: Applebot-Extended
+Allow: /
+User-agent: CCBot
+Allow: /
+
+Sitemap: https://leandrodaf.github.io/3d-new-era-ai/sitemap.xml

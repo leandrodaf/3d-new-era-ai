@@ -101,6 +101,10 @@ const ROUND: CornerRadius = CornerRadius::same(6);
 
 /// Installs both themes. Which one shows is up to [`set_preference`].
 pub(crate) fn apply(ctx: &egui::Context) {
+    // A page has no window decorations to keep in step with the theme, and
+    // the browser backend logs every such command it cannot carry out.
+    #[cfg(target_arch = "wasm32")]
+    ctx.options_mut(|options| options.sync_window_theme = false);
     ctx.set_visuals_of(egui::Theme::Dark, visuals(NIGHT));
     ctx.set_visuals_of(egui::Theme::Light, visuals(DAY));
     ctx.all_styles_mut(|style| {

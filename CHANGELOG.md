@@ -36,6 +36,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The window follows the language of the machine it runs on, which made the interface
+  tests read English labels on a macOS runner set to `en_US` and fail the whole suite:
+  under test it now speaks the language the code is written in, whatever the machine says.
+
 - Dialogs read as part of the program: one width, a titled head, fields grouped under
   mono headings, a body that scrolls instead of running off the screen, and one footer
   with the action filled in the accent and the way out beside it.

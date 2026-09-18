@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<title>3D New Era AI — Visualizador</title>
+<title>3D New Era AI — Viewer</title>
+<meta name="robots" content="noindex">
 <style>
   :root { --bg: #16181d; --panel: #1f2229; --ink: #e6e8ec; --muted: #9aa1ad; --accent: #3b82f6; }
   * { box-sizing: border-box; }
@@ -27,12 +28,12 @@
 <body>
 <header>
   <h1>3D New Era AI</h1>
-  <label class="file">Abrir projeto (.newera)<input id="file" type="file" accept=".newera,.json"></label>
-  <span id="status">Carregando o motor…</span>
+  <label class="file"><span data-t="open">Abrir projeto (.newera)</span><input id="file" type="file" accept=".newera,.json"></label>
+  <span id="status" data-t="loading">Carregando o motor…</span>
 </header>
 <main>
-  <section id="plan"><h2>Planta baixa</h2></section>
-  <section id="view"><h2>3D</h2><img id="image" alt=""><span class="hint">Arraste para girar</span></section>
+  <section id="plan"><h2 data-t="plan">Planta baixa</h2></section>
+  <section id="view"><h2>3D</h2><img id="image" alt=""><span class="hint" data-t="drag">Arraste para girar</span></section>
 </main>
 <script type="module" src="viewer.js"></script>
 </body>

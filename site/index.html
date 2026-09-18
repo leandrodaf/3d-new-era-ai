@@ -5,7 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>3D New Era AI — design homes by talking to your AI</title>
 <meta name="description" content="Open-source architecture and interiors editor with an MCP server inside. Your AI draws, furnishes, lights to code and renders the photos — live on your screen. Windows, macOS and Linux.">
-<meta name="theme-color" content="#f4f1ea">
+<meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12110f" media="(prefers-color-scheme: dark)">
+<meta name="author" content="Leandro Ferreira">
+<meta name="application-name" content="3D New Era AI">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <link rel="canonical" href="https://leandrodaf.github.io/3d-new-era-ai/">
 <link rel="alternate" hreflang="pt-BR" href="https://leandrodaf.github.io/3d-new-era-ai/?lang=pt">
 <link rel="alternate" hreflang="en" href="https://leandrodaf.github.io/3d-new-era-ai/?lang=en">
@@ -24,8 +28,13 @@
 <meta property="og:locale:alternate" content="pt_BR">
 <meta property="og:locale:alternate" content="es_ES">
 <meta property="og:locale:alternate" content="fr_FR">
+<meta property="og:image:alt" content="A floor plan and a rendered 3D view side by side in the 3D New Era AI editor">
+<meta property="og:image:type" content="image/jpeg">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="3D New Era AI — design homes by talking to your AI">
+<meta name="twitter:description" content="Open-source architecture editor with an MCP server inside. The AI draws, furnishes, lights and renders. Free for Windows, macOS and Linux.">
 <meta name="twitter:image" content="https://leandrodaf.github.io/3d-new-era-ai/og.jpg">
+<meta name="twitter:image:alt" content="A floor plan and a rendered 3D view side by side in the 3D New Era AI editor">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="icon-256.png" sizes="256x256" type="image/png">
 <link rel="apple-touch-icon" href="icon-256.png">
@@ -33,6 +42,100 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://leandrodaf.github.io/3d-new-era-ai/#app",
+      "name": "3D New Era AI",
+      "alternateName": "3D New Era",
+      "applicationCategory": "DesignApplication",
+      "applicationSubCategory": "Home design, floor plan and interior design editor",
+      "operatingSystem": "Windows 10+, macOS 11+, Linux",
+      "softwareVersion": "1.3.0",
+      "url": "https://leandrodaf.github.io/3d-new-era-ai/",
+      "downloadUrl": "https://github.com/leandrodaf/3d-new-era-ai/releases/latest",
+      "installUrl": "https://github.com/leandrodaf/3d-new-era-ai#install",
+      "codeRepository": "https://github.com/leandrodaf/3d-new-era-ai",
+      "programmingLanguage": "Rust",
+      "license": "https://github.com/leandrodaf/3d-new-era-ai/blob/main/LICENSE-MIT",
+      "isAccessibleForFree": true,
+      "inLanguage": ["pt-BR", "en", "es", "fr"],
+      "image": "https://leandrodaf.github.io/3d-new-era-ai/og.jpg",
+      "screenshot": "https://leandrodaf.github.io/3d-new-era-ai/images/editor.png",
+      "description": "Open-source architecture and interior design editor with a Model Context Protocol (MCP) server built in: an AI agent draws walls, doors and windows, furnishes rooms, builds joinery, checks lighting and ergonomics against standards, and renders photos and videos — on your own computer, with undo.",
+      "featureList": [
+        "MCP server so Claude, Codex, Gemini, Cursor, VS Code and any MCP client edit the project",
+        "2D floor plan and real-time 3D view, everything in centimeters",
+        "Traces walls from a floor plan image and opens Sweet Home 3D (.sh3d) projects",
+        "Joinery: cabinets, slatted panels and countertops, with cut lists in CSV and DXF",
+        "Lighting checked by photometry against NBR ISO/CIE 8995-1",
+        "Ergonomics and accessibility checks (NBR 9050, NBR 15575)",
+        "Electrical, telecom and plumbing projects with load schedule and NBR 5410 checks",
+        "Path-traced photos, rendered plans, elevations, sections and walkthrough videos",
+        "Runs offline on the CPU, no account and no subscription"
+      ],
+      "keywords": "home design, floor plan software, interior design, architecture, CAD, 3D, MCP server, Model Context Protocol, AI agent, Sweet Home 3D alternative, open source, Rust",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "author": { "@id": "https://leandrodaf.github.io/3d-new-era-ai/#author" },
+      "publisher": { "@id": "https://leandrodaf.github.io/3d-new-era-ai/#author" }
+    },
+    {
+      "@type": "Person",
+      "@id": "https://leandrodaf.github.io/3d-new-era-ai/#author",
+      "name": "Leandro Ferreira",
+      "url": "https://github.com/leandrodaf"
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://leandrodaf.github.io/3d-new-era-ai/#site",
+      "name": "3D New Era AI",
+      "url": "https://leandrodaf.github.io/3d-new-era-ai/",
+      "inLanguage": ["pt-BR", "en", "es", "fr"],
+      "about": { "@id": "https://leandrodaf.github.io/3d-new-era-ai/#app" }
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://leandrodaf.github.io/3d-new-era-ai/#faq",
+      "inLanguage": "en",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Is it really free?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. It is open source (MIT or Apache 2.0), with no account and no subscription. You only pay for the AI you choose, if it is a paid one." }
+        },
+        {
+          "@type": "Question",
+          "name": "Do I need to know how to code?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. Install with one command, open the app and draw with the mouse like any editor. The AI is optional \u2014 once connected, you just talk to it." }
+        },
+        {
+          "@type": "Question",
+          "name": "Which AI works with it?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Any app that speaks MCP: Claude Code, Claude Desktop, Codex, Gemini CLI, Cursor, VS Code, Windsurf, and apps like Cline and Cherry Studio that run DeepSeek, Qwen, Llama and other models." }
+        },
+        {
+          "@type": "Question",
+          "name": "Does my project go to the cloud?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. The app and its MCP server run on your computer and only accept connections from the same machine. The project is your own .newera file." }
+        },
+        {
+          "@type": "Question",
+          "name": "Do I need a graphics card?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. The 3D view uses the GPU when there is one, and photos render on the CPU \u2014 even on a headless server." }
+        },
+        {
+          "@type": "Question",
+          "name": "Does it open my Sweet Home 3D projects?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes, .sh3d files open with walls, rooms, furniture, lights, cameras and levels." }
+        }
+      ]
+    }
+  ]
+}
+</script>
 </head>
 <body>
 
@@ -51,16 +154,31 @@
       <a href="#faq" data-i18n="nav.faq">Dúvidas</a>
     </nav>
     <div class="nav__actions">
+      <a class="stars" href="https://github.com/leandrodaf/3d-new-era-ai" rel="noopener"
+         data-i18n-label="aria.github" aria-label="Repositório no GitHub">
+        <svg viewBox="0 0 16 16" aria-hidden="true" width="15" height="15"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        <span class="stars__n" hidden></span>
+      </a>
       <div class="lang" role="group" aria-label="Idioma / Language / Idioma / Langue">
         <button type="button" data-lang="pt" aria-pressed="true" lang="pt-BR" title="Português (Brasil)">PT</button>
         <button type="button" data-lang="en" aria-pressed="false" lang="en" title="English">EN</button>
         <button type="button" data-lang="es" aria-pressed="false" lang="es" title="Español">ES</button>
         <button type="button" data-lang="fr" aria-pressed="false" lang="fr" title="Français">FR</button>
       </div>
-      <a class="btn btn--ghost btn--sm hide-sm" href="https://github.com/leandrodaf/3d-new-era-ai" rel="noopener">GitHub</a>
       <a class="btn btn--ink btn--sm" href="#baixar" data-i18n="nav.download">Baixar</a>
+      <button class="nav__toggle" type="button" aria-expanded="false" aria-controls="nav-menu"
+              data-i18n-label="aria.menu" aria-label="Menu">
+        <svg viewBox="0 0 20 20" aria-hidden="true" width="18" height="18"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M3 6h14M3 10h14M3 14h14"/></svg>
+      </button>
     </div>
   </div>
+  <nav class="nav__menu" id="nav-menu" data-i18n-label="aria.sections" aria-label="Seções" hidden>
+    <a href="#como" data-i18n="nav.how">Como funciona</a>
+    <a href="#galeria" data-i18n="nav.gallery">Galeria</a>
+    <a href="#ia" data-i18n="nav.ai">Conectar IA</a>
+    <a href="#faq" data-i18n="nav.faq">Dúvidas</a>
+    <a href="https://github.com/leandrodaf/3d-new-era-ai" rel="noopener">GitHub</a>
+  </nav>
 </header>
 
 <main id="main">

@@ -1,0 +1,55 @@
+# 3D New Era AI
+
+> An open-source architecture and interior design editor with a Model Context
+> Protocol (MCP) server built in. An AI agent draws walls, doors and windows,
+> furnishes rooms, builds joinery, checks lighting and ergonomics against
+> standards, and renders photos and videos — on the user's own computer, in
+> centimeters, with undo. Free, MIT or Apache 2.0, for Windows, macOS and Linux.
+
+3D New Era AI is a desktop program (Rust, ~30 MB, no account, no cloud). Opening
+it starts an MCP server on `http://127.0.0.1:7878/mcp`, bound to loopback, so any
+MCP client — Claude Code, Claude Desktop, Codex, Gemini CLI, Cursor, VS Code,
+Windsurf, Cline, Cherry Studio — edits the same project the person has on screen.
+Every call is a document command: it shows up in the window immediately and is
+undone with Ctrl+Z. The interface speaks Portuguese, English, Spanish and French.
+
+## What an agent can do over MCP
+
+- Draw and modify walls, rooms, doors, windows, dimensions, texts and polylines,
+  in centimeters, on any storey of the project.
+- Place furniture from a 128-piece catalog with real sizes, and import 3D models
+  (glTF, OBJ, Sweet Home 3D libraries).
+- Build joinery that a workshop can make: cabinets, slatted panels, wardrobes and
+  countertops with sink and cooktop cutouts, with cut lists in CSV and DXF.
+- Lay out electrical, telecom and plumbing projects: points, circuits, a load
+  schedule checked against NBR 5410, runs routed along walls and slabs with their
+  bill of materials.
+- Check lighting by photometry against NBR ISO/CIE 8995-1, and ergonomics and
+  accessibility against NBR 9050 and NBR 15575 — each finding with the fix ready.
+- Render: floor plans as PDF, SVG and PNG, elevations, sections, aerial views,
+  path-traced photos and walkthrough videos, all on the CPU when there is no GPU.
+- Read the project back: dimensions, areas, quantities, bills of materials.
+
+## Install
+
+- Windows: `irm https://raw.githubusercontent.com/leandrodaf/3d-new-era-ai/main/scripts/install-windows.ps1 | iex`
+- macOS: `curl -fsSL https://raw.githubusercontent.com/leandrodaf/3d-new-era-ai/main/scripts/install-macos.sh | bash`
+- Linux: download `newera-linux-x64.tar.gz` from the releases page and run `./newera/newera`
+
+The Windows and macOS installers register the MCP server with Claude Code and
+Codex when they are installed. For other clients:
+`claude mcp add --transport http newera http://127.0.0.1:7878/mcp`
+
+## Links
+
+- [Site](https://leandrodaf.github.io/3d-new-era-ai/): what it is, gallery, how to connect an AI.
+- [Repository](https://github.com/leandrodaf/3d-new-era-ai): source, issues, releases.
+- [README](https://github.com/leandrodaf/3d-new-era-ai#readme): install, MCP tools, architecture.
+- [Roadmap](https://github.com/leandrodaf/3d-new-era-ai/blob/main/docs/ROADMAP.md): what is done and what is next.
+- [Changelog](https://github.com/leandrodaf/3d-new-era-ai/blob/main/CHANGELOG.md): every release.
+- [Releases](https://github.com/leandrodaf/3d-new-era-ai/releases/latest): the builds to download.
+
+## Also known as
+
+Home design software, floor plan editor, interior design tool, CAD for homes,
+Sweet Home 3D alternative, AI architecture assistant, MCP server for design.

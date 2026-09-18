@@ -144,8 +144,10 @@ impl NewEraApp {
             .and_then(|s| eframe::get_value::<Settings>(s, SETTINGS_KEY));
         // Nothing saved yet: the language the system asks for. A settings
         // file already there keeps the language it was left in — its owner
-        // chose it, whatever the system says.
-        let first_run = stored.is_none();
+        // chose it, whatever the system says. Under test the window speaks
+        // the language the code is written in, whatever machine it runs on:
+        // the tests read the labels as they appear in the source.
+        let first_run = stored.is_none() && !cfg!(test);
         let mut settings = stored.unwrap_or_default();
         let lang = settings.lang.unwrap_or_else(|| {
             if settings.english {

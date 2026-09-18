@@ -6,10 +6,14 @@
 [![Licença: MIT OU Apache-2.0](https://img.shields.io/badge/licen%C3%A7a-MIT%20OU%20Apache--2.0-blue.svg)](LICENSE-MIT)
 [![Última versão](https://img.shields.io/github/v/release/leandrodaf/3d-new-era-ai?label=vers%C3%A3o)](https://github.com/leandrodaf/3d-new-era-ai/releases/latest)
 
-Um editor de projetos de interiores e arquitetura de código aberto, feito em Rust e
-inspirado no Sweet Home 3D, que já nasceu **nativo para IA**: o editor vem com um servidor
+Um editor de **projetos de casa, planta baixa e interiores** de código aberto, feito em
+Rust e inspirado no Sweet Home 3D — para Windows, macOS e Linux — que já nasceu **nativo
+para IA**: o editor vem com um servidor
 [Model Context Protocol](https://modelcontextprotocol.io) embutido, então um agente de IA
-projeta junto com você e cada alteração aparece na tela na hora.
+desenha paredes, mobilia cômodos, projeta a marcenaria, confere iluminação e ergonomia
+pelas normas e renderiza as fotos junto com você, com cada alteração aparecendo na tela na
+hora e a um Ctrl+Z de distância. Tudo roda na sua máquina: sem conta, sem assinatura, sem
+nuvem. A interface fala português, inglês, espanhol e francês.
 
 ![Editor com um apartamento de 105 m² mobiliado: catálogo, planta humanizada e vista 3D ao vivo](docs/images/editor.png)
 

@@ -7,6 +7,8 @@
   const RAW = `https://raw.githubusercontent.com/${REPO}/main/scripts`;
 
   const EN = {
+    "aria.menu": "Menu",
+    "aria.github": "Repository on GitHub",
     "alt.hero": "Dining room at dusk, rendered by the app",
     "alt.editor": "The editor with catalog, rendered floor plan and 3D view",
     "alt.plan": "Rendered floor plan of the apartment",
@@ -72,6 +74,8 @@
   };
 
   const ES = {
+    "aria.menu": "Menú",
+    "aria.github": "Repositorio en GitHub",
     "alt.hero": "Comedor al atardecer, renderizado por la app",
     "alt.editor": "El editor con catálogo, plano renderizado y vista 3D",
     "alt.plan": "Plano renderizado del apartamento",
@@ -195,6 +199,8 @@
   };
 
   const FR = {
+    "aria.menu": "Menu",
+    "aria.github": "Dépôt sur GitHub",
     "alt.hero": "Salle à manger au crépuscule, rendue par l'app",
     "alt.editor": "L'éditeur avec catalogue, plan rendu et vue 3D",
     "alt.plan": "Plan rendu de l'appartement",
@@ -507,6 +513,56 @@
   }
 
   $$(".lang button").forEach((b) => b.addEventListener("click", () => setLang(b.dataset.lang)));
+
+  // ---- The menu a narrow window gets ----
+  const toggle = $(".nav__toggle");
+  const menu = $(".nav__menu");
+  function openMenu(open) {
+    if (!toggle || !menu) return;
+    toggle.setAttribute("aria-expanded", String(open));
+    menu.hidden = !open;
+  }
+  if (toggle && menu) {
+    toggle.addEventListener("click", () => {
+      openMenu(toggle.getAttribute("aria-expanded") !== "true");
+    });
+    menu.addEventListener("click", (event) => {
+      if (event.target.closest("a")) openMenu(false);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") openMenu(false);
+    });
+    // A window wide enough for the row of links has no use for the panel.
+    addEventListener("resize", () => { if (innerWidth > 1000) openMenu(false); });
+  }
+
+  // ---- Stars, when GitHub feels like answering ----
+  (async () => {
+    const slot = $(".stars__n");
+    if (!slot) return;
+    const show = (count) => {
+      slot.textContent = count >= 1000 ? `${(count / 1000).toFixed(1)}k` : String(count);
+      slot.hidden = false;
+    };
+    const cached = read("newera-stars");
+    if (cached) {
+      const [count, at] = cached.split(":").map(Number);
+      if (count > 0) show(count);
+      // A day old is old enough to ask again.
+      if (Date.now() - at < 864e5) return;
+    }
+    try {
+      const response = await fetch(`https://api.github.com/repos/${REPO}`, {
+        headers: { Accept: "application/vnd.github+json" }
+      });
+      if (!response.ok) return;
+      const { stargazers_count: count } = await response.json();
+      if (typeof count === "number") {
+        show(count);
+        store("newera-stars", `${count}:${Date.now()}`);
+      }
+    } catch (_) { /* offline, rate limited, blocked: the mark stands alone */ }
+  })();
 
   // ---- OS detection ----
   function detectOS() {

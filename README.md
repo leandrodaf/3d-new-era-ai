@@ -6,10 +6,14 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 [![Latest release](https://img.shields.io/github/v/release/leandrodaf/3d-new-era-ai)](https://github.com/leandrodaf/3d-new-era-ai/releases/latest)
 
-An open-source home design editor in Rust, inspired by Sweet Home 3D, that is
-**AI-native from day one**: the editor ships with a built-in
-[Model Context Protocol](https://modelcontextprotocol.io) server, so an AI agent
-can design alongside you and every change shows up live on screen.
+An open-source **home design, floor plan and interior design editor** written in Rust —
+a Sweet Home 3D alternative for Windows, macOS and Linux — that is **AI-native from day
+one**: the editor ships with a built-in
+[Model Context Protocol](https://modelcontextprotocol.io) server, so an AI agent draws
+walls, furnishes rooms, builds joinery, checks lighting and ergonomics against standards
+and renders the photos alongside you, with every change showing up live on screen and one
+Ctrl+Z away. Everything runs on your own machine: no account, no subscription, no cloud.
+The interface speaks Portuguese, English, Spanish and French.
 
 ![Editor with a furnished 105 m² apartment: catalog, rendered floor plan and live 3D view](docs/images/editor.png)
 
@@ -258,6 +262,28 @@ to listen beyond loopback), log filter via `NEWERA_LOG`, `NEWERA_RENDER_THREADS`
 photo renders (half the cores by default). The server binds to loopback by default and
 validates the `Host` header. On Windows, `newera-gui.exe` opens the editor without a
 console window.
+
+### In the browser
+
+The same editor compiles to WebAssembly and runs in a page, with no server behind it:
+the project lives in the tab and is saved to a file with *Save*.
+
+```sh
+make web-editor   # builds web/editor/pkg with wasm-bindgen
+make web-serve    # viewer on / and editor on /editor/ at 127.0.0.1:8790
+```
+
+To put it on a host of your own, serve the `web/` folder as static files. Two things
+matter: `.wasm` must be served as `application/wasm`, and it must be compressed — the
+editor is about 15 MB raw and roughly a quarter of that gzipped, so
+`gzip_types application/wasm;` (nginx) or the equivalent is the difference between a
+three-second load and a thirty-second one. Nothing else is needed: no COOP/COEP headers,
+no backend, no database. The MCP server is part of the desktop program and is not built
+into the page — a browser tab is for drawing and showing, and the agent works against the
+app running on someone's machine.
+
+`scripts/web-editor-e2e.mjs` is the check CI runs on it: headless Chrome, draws a wall
+with the mouse, opens the viewer, and fails on any error the page logs.
 
 ## Project layout
 

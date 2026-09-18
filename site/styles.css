@@ -132,7 +132,7 @@ button { font: inherit; color: inherit; }
 }
 .nav.is-scrolled { border-bottom-color: var(--rule); }
 .nav__row { display: flex; align-items: center; gap: 24px; height: 64px; }
-.brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 700; letter-spacing: -0.02em; font-size: 17px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 700; letter-spacing: -0.02em; font-size: 17px; white-space: nowrap; }
 .brand em { font-style: normal; color: var(--graphite); font-weight: 500; }
 .brand__mark { width: 24px; height: 24px; }
 .nav__links { display: flex; gap: 26px; margin-left: 18px; }
@@ -142,6 +142,39 @@ button { font: inherit; color: inherit; }
 .lang { display: inline-flex; border: 1px solid var(--rule-2); border-radius: 999px; padding: 3px; }
 .lang button { border: 0; background: none; font: 500 12px/1 var(--mono); padding: 7px 9px; border-radius: 999px; cursor: pointer; color: var(--graphite); }
 .lang button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+
+/* GitHub, with the star count when the API answers */
+.stars {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 36px; padding: 0 12px; border-radius: 999px;
+  border: 1px solid var(--rule-2); color: var(--ink-2); text-decoration: none;
+  font: 500 13px/1 var(--mono);
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.stars:hover { border-color: var(--ink); color: var(--ink); }
+.stars__n::before { content: "★ "; color: var(--accent); }
+
+/* The menu a phone gets instead of the row of links */
+.nav__toggle {
+  display: none; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0;
+  border: 1px solid var(--rule-2); border-radius: 999px;
+  background: none; color: var(--ink); cursor: pointer;
+}
+.nav__toggle[aria-expanded="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.nav__menu[hidden] { display: none; }
+.nav__menu {
+  border-top: 1px solid var(--rule);
+  padding: 8px var(--gutter) 18px;
+  display: grid; gap: 2px;
+}
+.nav__menu a {
+  text-decoration: none; color: var(--ink-2);
+  padding: 12px 4px; border-bottom: 1px solid var(--rule);
+  font-size: 16px;
+}
+.nav__menu a:last-child { border-bottom: 0; }
+.nav__menu a:hover { color: var(--ink); }
 
 /* Hero */
 .hero { padding-top: 8px; }
@@ -348,6 +381,7 @@ button { font: inherit; color: inherit; }
 /* Responsive */
 @media (max-width: 1000px) {
   .nav__links { display: none; }
+  .nav__toggle { display: inline-flex; }
   .convo__grid, .connect__grid, .dl__grid { grid-template-columns: 1fr; }
   .grid6 { grid-template-columns: repeat(2, 1fr); }
   .stats { grid-template-columns: repeat(2, 1fr); }
@@ -360,7 +394,13 @@ button { font: inherit; color: inherit; }
 @media (max-width: 640px) {
   body { font-size: 16px; }
   .hide-sm { display: none; }
-  .nav__row { gap: 12px; }
+  .nav__row { gap: 10px; }
+  .nav__actions { gap: 8px; }
+  .brand { font-size: 15px; gap: 8px; }
+  .brand__mark { width: 21px; height: 21px; }
+  .stars { padding: 0 10px; }
+  .stars__n { display: none; }
+  .lang button { padding: 7px 7px; }
   .hero__frame { height: auto; min-height: 640px; }
   .hero__frame > img { object-position: 62% 50%; }
   .hero__shade { background: linear-gradient(0deg, rgba(10, 9, 8, 0.92) 0%, rgba(10, 9, 8, 0.6) 55%, rgba(10, 9, 8, 0.15) 100%); }
