@@ -29,11 +29,17 @@ const chrome = spawn(browser, [
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let targets;
-for (let i = 0; i < 50 && !targets; i++) {
+for (let i = 0; i < 150 && !targets; i++) {
   await sleep(200);
   targets = await fetch("http://127.0.0.1:9333/json").then((r) => r.json()).catch(() => null);
 }
-const page = targets.find((t) => t.type === "page");
+// A runner under load can take its time opening Chrome; say what happened
+// instead of tripping over an empty answer.
+const page = targets?.find((t) => t.type === "page");
+if (!page) {
+  console.error("Chrome did not open a debuggable page in 30 s");
+  process.exit(1);
+}
 const ws = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise((r) => ws.addEventListener("open", r));
 let id = 0;
