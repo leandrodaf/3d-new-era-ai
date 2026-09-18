@@ -1,6 +1,6 @@
 # 3D New Era AI
 
-**English** · [Português (Brasil)](README.pt-BR.md) · **[Website](https://leandrodaf.github.io/3d-new-era-ai/?lang=en)**
+**English** · [Português (Brasil)](README.pt-BR.md) · **[Website](https://3dneweraai.com/?lang=en)**
 
 [![CI](https://github.com/leandrodaf/3d-new-era-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/leandrodaf/3d-new-era-ai/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
@@ -272,6 +272,10 @@ the project lives in the tab and is saved to a file with *Save*.
 make web-editor   # builds web/editor/pkg with wasm-bindgen
 make web-serve    # viewer on / and editor on /editor/ at 127.0.0.1:8790
 ```
+
+The published site is built by `scripts/site-build.sh` — landing page at the root, editor
+at `/app/`, viewer at `/viewer/` — and deployed to Cloudflare Pages by
+`.github/workflows/publish.yml` on every push to `main` that touches it.
 
 **Browsers.** Supported: **Chrome and Edge**, and Safari 26, which has WebGPU. Where
 WebGPU is missing — Firefox today — the editor falls back to WebGL 2 and still draws

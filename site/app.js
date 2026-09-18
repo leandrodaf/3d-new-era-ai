@@ -7,6 +7,8 @@
   const RAW = `https://raw.githubusercontent.com/${REPO}/main/scripts`;
 
   const EN = {
+    "hero.try": "Open in the browser",
+    "nav.try": "Open in the browser",
     "q7": "Does it run in a browser?",
     "a7": "The full editor compiles to WebAssembly and runs in a tab. <b>Chrome and Edge</b> are the supported browsers (and Safari 26, which has WebGPU); where there is no WebGPU — Firefox today — it falls back to WebGL and draws everything, but is not guaranteed. For real work, download the app: it is the one that brings the MCP server to your AI.",
     "aria.menu": "Menu",
@@ -76,6 +78,8 @@
   };
 
   const ES = {
+    "hero.try": "Abrir en el navegador",
+    "nav.try": "Abrir en el navegador",
     "q7": "¿Funciona en el navegador?",
     "a7": "El editor completo se compila a WebAssembly y funciona en una pestaña. El soporte oficial es <b>Chrome y Edge</b> (y Safari 26, que ya tiene WebGPU); donde no hay WebGPU —hoy Firefox— pasa a WebGL y lo dibuja todo, pero no lo garantizamos. Para trabajar de verdad, descargue la aplicación: es la que trae el servidor MCP para su IA.",
     "aria.menu": "Menú",
@@ -203,6 +207,8 @@
   };
 
   const FR = {
+    "hero.try": "Ouvrir dans le navigateur",
+    "nav.try": "Ouvrir dans le navigateur",
     "q7": "Est-ce que ça marche dans le navigateur ?",
     "a7": "L'éditeur complet se compile en WebAssembly et tourne dans un onglet. Les navigateurs pris en charge sont <b>Chrome et Edge</b> (et Safari 26, qui a WebGPU) ; là où WebGPU manque — Firefox aujourd'hui — il bascule sur WebGL et dessine tout, sans garantie. Pour travailler vraiment, téléchargez l'application : c'est elle qui apporte le serveur MCP à votre IA.",
     "aria.menu": "Menu",

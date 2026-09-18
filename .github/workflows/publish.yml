@@ -1,0 +1,50 @@
+name: Publish
+
+# Builds the public site — landing page, browser editor and viewer — and
+# publishes it to Cloudflare Pages at 3dneweraai.com.
+#
+# Needs two repository secrets:
+#   CLOUDFLARE_API_TOKEN   token with "Cloudflare Pages: Edit" on the account
+#   CLOUDFLARE_ACCOUNT_ID  the account the project lives in
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "web/**"
+      - "docs/images/**"
+      - "crates/**"
+      - "scripts/site-build.sh"
+      - ".github/workflows/publish.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: publish
+  cancel-in-progress: true
+
+jobs:
+  pages:
+    name: Cloudflare Pages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.128
+      - name: Build the site
+        run: BUILD_WASM=1 scripts/site-build.sh
+      - name: Check the editor really runs
+        run: |
+          python3 -m http.server 8790 --bind 127.0.0.1 --directory _site &
+          for _ in $(seq 1 40); do curl -sf http://127.0.0.1:8790/app/ >/dev/null && break; sleep 0.25; done
+          mkdir -p target/web-e2e
+          node scripts/web-editor-e2e.mjs http://127.0.0.1:8790/app/ target/web-e2e http://127.0.0.1:8790/viewer/
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy _site --project-name=3dneweraai --branch=main

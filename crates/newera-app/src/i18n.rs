@@ -1704,6 +1704,11 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
         "Grama" => ["Grass", "Césped", "Gazon"],
         "Água (piscina)" => ["Water (pool)", "Agua (piscina)", "Eau (piscine)"],
         "Deck de madeira" => ["Wood deck", "Tarima de madera", "Terrasse en bois"],
+        "Projeto recuperado desta sessão." => [
+            "Project recovered from this session.",
+            "Proyecto recuperado de esta sesión.",
+            "Projet récupéré de cette session.",
+        ],
         _ => return None,
     })
 }

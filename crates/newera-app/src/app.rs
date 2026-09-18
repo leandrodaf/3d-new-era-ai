@@ -65,6 +65,17 @@ pub(crate) enum FurnitureLook {
 
 const SETTINGS_KEY: &str = "newera-settings";
 
+/// Where the browser keeps the project between visits. A tab is closed with
+/// a keystroke and nothing asks twice, so the work is mirrored here as it
+/// goes and offered back when the page opens again.
+#[cfg(target_arch = "wasm32")]
+const AUTOSAVE_KEY: &str = "newera-autosave";
+
+/// How much project the browser's storage takes. Past this the mirror is
+/// skipped rather than filling the quota and failing every later write.
+#[cfg(target_arch = "wasm32")]
+const AUTOSAVE_LIMIT: usize = 3 * 1024 * 1024;
+
 pub(crate) struct NewEraApp {
     pub(crate) document: SharedDocument,
     mcp_url: Option<String>,
@@ -118,6 +129,13 @@ pub(crate) struct NewEraApp {
     /// Frames drawn before the browser canvas got its real size.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     waited_frames: u32,
+    /// Whether the project on screen came back from the browser's storage,
+    /// in which case the page should not open the demo over it.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) restored: bool,
+    /// The revision already mirrored into the browser's storage, and when.
+    #[cfg(target_arch = "wasm32")]
+    mirrored: (u64, Instant),
 }
 
 impl std::fmt::Debug for NewEraApp {
@@ -162,7 +180,12 @@ impl NewEraApp {
         crate::i18n::set(lang);
         crate::theme::set_mode(&cc.egui_ctx, settings.theme);
         let dark = cc.egui_ctx.theme() == egui::Theme::Dark;
-        Self {
+        #[cfg(target_arch = "wasm32")]
+        let restored = cc.storage.and_then(|s| s.get_string(AUTOSAVE_KEY));
+        #[cfg(not(target_arch = "wasm32"))]
+        let restored: Option<String> = None;
+        #[cfg_attr(not(target_arch = "wasm32"), allow(unused_mut))]
+        let mut app = Self {
             document,
             mcp_url,
             tool: Tool::default(),
@@ -192,9 +215,29 @@ impl NewEraApp {
             after_save: None,
             pick_request: None,
             waited_frames: 0,
+            restored: false,
+            #[cfg(target_arch = "wasm32")]
+            mirrored: (0, Instant::now()),
             catalog_query: String::new(),
             renaming_variant: None,
+        };
+        // The work of the last visit comes back before anything else opens
+        // over it. A browser tab closes without asking, and nobody expects a
+        // drawing to survive that unless it does.
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = restored;
+        #[cfg(target_arch = "wasm32")]
+        if let Some(saved) = restored
+            && let Some((name, text)) = saved.split_once('\n')
+        {
+            use base64::Engine as _;
+            if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(text) {
+                app.open_bytes(name, &bytes);
+                app.restored = true;
+                app.set_status(crate::i18n::tr("Projeto recuperado desta sessão."));
+            }
         }
+        app
     }
 
     pub(crate) fn unit(&self) -> LengthUnit {
@@ -211,6 +254,31 @@ impl NewEraApp {
         if let Err(err) = result {
             self.set_status(format!("⚠ {err}"));
         }
+    }
+
+    /// Writes the project into the browser's own storage, so closing the tab
+    /// is not the same as throwing the drawing away. eframe saves on a timer
+    /// and on a page event that never fires, which is no use to someone who
+    /// closes a tab a second after the last wall: this runs from the frame,
+    /// a breath after the document changes.
+    #[cfg(target_arch = "wasm32")]
+    fn mirror(&mut self, storage: &mut dyn eframe::Storage) {
+        use base64::Engine as _;
+
+        let doc = self.document.read();
+        let revision = doc.revision();
+        if revision == self.mirrored.0 {
+            return;
+        }
+        let name = doc.home().name.clone();
+        let bytes = newera_core::to_project_bytes(&doc);
+        drop(doc);
+        if bytes.len() > AUTOSAVE_LIMIT {
+            return;
+        }
+        let text = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        storage.set_string(AUTOSAVE_KEY, format!("{name}\n{text}"));
+        self.mirrored = (revision, Instant::now());
     }
 
     /// The plan is drawn on the paper of the theme in use; when the system
@@ -2327,10 +2395,21 @@ impl eframe::App for NewEraApp {
         }
 
         ctx.request_repaint_after(EXTERNAL_CHANGES_POLL);
+
+        // A browser tab is closed without a question: what was drawn goes to
+        // the browser's storage a moment after it changes, not half a minute.
+        #[cfg(target_arch = "wasm32")]
+        if self.mirrored.1.elapsed() > Duration::from_millis(1500)
+            && let Some(storage) = frame.storage_mut()
+        {
+            self.mirror(storage);
+        }
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, SETTINGS_KEY, &self.settings);
+        #[cfg(target_arch = "wasm32")]
+        self.mirror(storage);
     }
 }
 

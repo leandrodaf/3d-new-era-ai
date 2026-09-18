@@ -26,4 +26,4 @@ Allow: /
 User-agent: CCBot
 Allow: /
 
-Sitemap: https://leandrodaf.github.io/3d-new-era-ai/sitemap.xml
+Sitemap: https://3dneweraai.com/sitemap.xml

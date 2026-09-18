@@ -1,6 +1,6 @@
 # 3D New Era AI
 
-[English](README.md) · **Português (Brasil)** · **[Site](https://leandrodaf.github.io/3d-new-era-ai/)**
+[English](README.md) · **Português (Brasil)** · **[Site](https://3dneweraai.com/)**
 
 [![CI](https://github.com/leandrodaf/3d-new-era-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/leandrodaf/3d-new-era-ai/actions/workflows/ci.yml)
 [![Licença: MIT OU Apache-2.0](https://img.shields.io/badge/licen%C3%A7a-MIT%20OU%20Apache--2.0-blue.svg)](LICENSE-MIT)

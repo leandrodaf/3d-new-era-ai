@@ -16,3 +16,11 @@ __pycache__/
 web/newera_web.wasm
 web/editor/pkg/
 web/*.newera
+# except the home the browser editor opens on, which ships with the page
+!web/demo.newera
+
+# Built by `scripts/site-build.sh`, published to Cloudflare Pages
+/_site
+
+# Wrangler's local cache: account id and deploy state, nothing to version
+.wrangler/

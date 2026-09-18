@@ -50,6 +50,14 @@ All notable changes to this project are documented here. The format follows
   3D view (Shift to slide it), a twist to spin it, and momentum carried through —
   a wheel still zooms, told apart from a glide by how the machine reports it.
 
+- The editor in the browser keeps what was drawn: the project is mirrored into the
+  browser's own storage a moment after every change and opened again on the next visit,
+  so closing a tab is no longer the same as throwing the drawing away. A test draws a
+  wall, reloads the page and fails if it does not come back.
+- The site, the editor and the viewer are published at https://3dneweraai.com — landing
+  page at the root, editor at `/app/`, viewer at `/viewer/` — from one build script, with
+  a workflow that puts them on Cloudflare Pages on every push.
+
 ### Fixed
 
 - The window follows the language of the machine it runs on, which made the interface

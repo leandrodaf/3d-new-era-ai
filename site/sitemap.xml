@@ -2,17 +2,17 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>https://leandrodaf.github.io/3d-new-era-ai/</loc>
+    <loc>https://3dneweraai.com/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
-    <xhtml:link rel="alternate" hreflang="en" href="https://leandrodaf.github.io/3d-new-era-ai/?lang=en"/>
-    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://leandrodaf.github.io/3d-new-era-ai/?lang=pt"/>
-    <xhtml:link rel="alternate" hreflang="es" href="https://leandrodaf.github.io/3d-new-era-ai/?lang=es"/>
-    <xhtml:link rel="alternate" hreflang="fr" href="https://leandrodaf.github.io/3d-new-era-ai/?lang=fr"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://leandrodaf.github.io/3d-new-era-ai/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://3dneweraai.com/?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://3dneweraai.com/?lang=pt"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://3dneweraai.com/?lang=es"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://3dneweraai.com/?lang=fr"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://3dneweraai.com/"/>
   </url>
   <url>
-    <loc>https://leandrodaf.github.io/3d-new-era-ai/llms.txt</loc>
+    <loc>https://3dneweraai.com/llms.txt</loc>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>

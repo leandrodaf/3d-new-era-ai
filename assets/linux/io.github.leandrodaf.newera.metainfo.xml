@@ -36,7 +36,7 @@
     <binary>newera</binary>
     <mediatype>application/x-newera</mediatype>
   </provides>
-  <url type="homepage">https://leandrodaf.github.io/3d-new-era-ai/</url>
+  <url type="homepage">https://3dneweraai.com/</url>
   <url type="bugtracker">https://github.com/leandrodaf/3d-new-era-ai/issues</url>
   <developer id="io.github.leandrodaf"><name>Leandro Ferreira</name></developer>
   <content_rating type="oars-1.1"/>

@@ -7,7 +7,10 @@ import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const [url = "http://127.0.0.1:8790/editor/", out = "."] = process.argv.slice(2);
+// The viewer sits beside the editor when serving web/ (/ and /editor/), and
+// under /viewer/ on the published site: say where it is when it is not the
+// folder above.
+const [url = "http://127.0.0.1:8790/editor/", out = ".", viewerArg] = process.argv.slice(2);
 const profile = mkdtempSync(join(tmpdir(), "newera-e2e-"));
 // Where Chrome is called on each machine; CHROME=<path> overrides.
 const browser = process.env.CHROME
@@ -96,6 +99,30 @@ try {
   await click(1350, 250, 2);
   await sleep(1500);
   await shot(webgpu ? "web-editor-wall.png" : "web-editor-wall-webgl.png");
+
+  // What was drawn has to survive the tab being closed: the project is
+  // mirrored into the browser's storage and opened again on the next visit,
+  // instead of the demo home landing on top of it.
+  const stored = () => evaluate("localStorage.getItem('newera-autosave') || ''");
+  await sleep(2500);
+  const drawn = await stored();
+  if (!drawn) {
+    console.error("nothing was mirrored into the browser's storage");
+    failed = true;
+  }
+  await send("Page.navigate", { url });
+  for (let i = 0; i < 300; i++) {
+    await sleep(200);
+    if (await evaluate("!document.getElementById('loading')")) break;
+  }
+  await sleep(3000);
+  const back = await stored();
+  if (back !== drawn) {
+    console.error("the work did not come back after a reload");
+    failed = true;
+  } else {
+    console.log("autosave: the drawing came back after a reload");
+  }
   const log = await evaluate("JSON.stringify(window.neweraLog || [])");
   console.log("log:", log);
   const errors = JSON.parse(log).filter((line) => /^(error|uncaught|rejection)/.test(line));
@@ -109,7 +136,7 @@ try {
   }
 
   // The lightweight viewer, on the same engine: it is ready when it says so.
-  const viewer = new URL("../", url).href;
+  const viewer = viewerArg ?? new URL("../", url).href;
   await send("Page.navigate", { url: viewer });
   let ready = "";
   for (let i = 0; i < 100; i++) {

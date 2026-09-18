@@ -42,7 +42,8 @@ Codex when they are installed. For other clients:
 
 ## Links
 
-- [Site](https://leandrodaf.github.io/3d-new-era-ai/): what it is, gallery, how to connect an AI.
+- [Site](https://3dneweraai.com/): what it is, gallery, how to connect an AI.
+- [Editor in the browser](https://3dneweraai.com/app/): the full editor as WebAssembly, no install, nothing sent anywhere.
 - [Repository](https://github.com/leandrodaf/3d-new-era-ai): source, issues, releases.
 - [README](https://github.com/leandrodaf/3d-new-era-ai#readme): install, MCP tools, architecture.
 - [Roadmap](https://github.com/leandrodaf/3d-new-era-ai/blob/main/docs/ROADMAP.md): what is done and what is next.

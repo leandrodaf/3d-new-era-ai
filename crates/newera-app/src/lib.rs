@@ -89,7 +89,9 @@ pub async fn start_web(
             eframe::WebOptions::default(),
             Box::new(move |cc| {
                 let mut app = app::NewEraApp::new(cc, document, None);
-                if let Some((name, bytes)) = project {
+                // The demo home is what a first visit opens on; someone who
+                // was already drawing here gets their own work back instead.
+                if let Some((name, bytes)) = project.filter(|_| !app.restored) {
                     app.open_bytes(&name, &bytes);
                 }
                 Ok(Box::new(app))

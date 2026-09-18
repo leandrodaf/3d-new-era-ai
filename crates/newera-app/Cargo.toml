@@ -32,6 +32,9 @@ newera-plugins.workspace = true
 newera-telemetry.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+# The tab can close at any moment: the project is mirrored into the browser's
+# own storage, and that storage takes text.
+base64.workspace = true
 js-sys = "0.3"
 wasm-bindgen = "0.2.128"
 wasm-bindgen-futures = "0.4.78"
