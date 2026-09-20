@@ -164,7 +164,7 @@ pub struct Capacity {
     pub bathrooms: u32,
     pub dining_seats: u32,
     pub living_seats: u32,
-    /// Wardrobe front length in bedrooms, cm.
+    /// Wardrobe front length in bedrooms and dedicated closets, cm.
     pub wardrobe_cm: f64,
 }
 
@@ -288,7 +288,7 @@ impl Review<'_, '_> {
         let scene = self.scene;
         let mut c = Capacity::default();
         for (i, u) in scene.units.iter().enumerate() {
-            let room = self.room_of(i).map(|s| s.what);
+            let room = self.room_of(i);
             match u.what {
                 Use::Bed(n) => c.beds += n,
                 Use::Crib => c.beds += 1,
@@ -296,7 +296,9 @@ impl Review<'_, '_> {
                 Use::Stool => c.dining_seats += 1,
                 Use::Sofa(n) => c.living_seats += n,
                 Use::Armchair => c.living_seats += 1,
-                Use::Wardrobe if room.is_none_or(|r| r == RoomUse::Bedroom) => {
+                Use::Wardrobe
+                    if room.is_none_or(|r| r.what == RoomUse::Bedroom || r.is_closet()) =>
+                {
                     c.wardrobe_cm += u.piece.width;
                 }
                 _ => {}
@@ -407,7 +409,7 @@ impl Review<'_, '_> {
                 Severity::Dica,
                 home,
                 format!(
-                    "{} cm de guarda-roupa nos dormitórios; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns {} cm por adulto e metade por criança: {} cm no total.",
+                    "{} cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns {} cm por adulto e metade por criança: {} cm no total.",
                     cm(c.wardrobe_cm),
                     cm(WARDROBE_PER_ADULT),
                     cm(needed)
@@ -1185,7 +1187,7 @@ impl Review<'_, '_> {
             let missing: Vec<&str> = match what {
                 RoomUse::Bedroom => [
                     (has(&|u| matches!(u, Use::Bed(_) | Use::Crib)), "cama"),
-                    (has(&|u| matches!(u, Use::Wardrobe)), "guarda-roupa"),
+                    (self.scene.wardrobe_serves(&scene.spaces[k]), "guarda-roupa"),
                 ]
                 .into_iter()
                 .filter(|(ok, _)| !ok)
@@ -2487,6 +2489,74 @@ mod tests {
             .findings
             .iter()
             .any(|f| f.severity == severity && f.reference == Some(code))
+    }
+
+    #[test]
+    fn a_connected_closet_serves_its_bedroom_without_counting_laundry_storage() {
+        let mut home = Home::default();
+        for (id, name, x0, x1) in [
+            (1, "Suíte", 0.0, 300.0),
+            (2, "Closet", 312.0, 512.0),
+            (3, "Lavanderia", 524.0, 724.0),
+        ] {
+            home.rooms.push(Room::new(
+                RoomId(id),
+                name,
+                vec![
+                    Point2::new(x0, 0.0),
+                    Point2::new(x1, 0.0),
+                    Point2::new(x1, 300.0),
+                    Point2::new(x0, 300.0),
+                ],
+            ));
+        }
+        let mut wall = Wall::new(
+            WallId(10),
+            Point2::new(306.0, 0.0),
+            Point2::new(306.0, 300.0),
+        );
+        wall.thickness = 12.0;
+        home.walls.push(wall);
+        home.furniture = vec![
+            piece(
+                20,
+                "bed-double",
+                (150.0, 180.0),
+                (158.0, 208.0, 55.0),
+                180.0,
+            ),
+            piece(21, "wardrobe", (412.0, 270.0), (200.0, 50.0, 220.0), 180.0),
+            piece(22, "wardrobe", (412.0, 30.0), (140.0, 50.0, 220.0), 0.0),
+            piece(23, "wardrobe", (624.0, 270.0), (200.0, 50.0, 220.0), 180.0),
+        ];
+        let missing = |h: &Home| {
+            review(h, &Profile::default())
+                .findings
+                .iter()
+                .any(|f| f.message.contains("Falta guarda-roupa"))
+        };
+        let report = review(&home, &Profile::default());
+        assert!((report.capacity.wardrobe_cm - 340.0).abs() < 0.01);
+        assert!(
+            missing(&home),
+            "an adjacent but sealed closet is not access"
+        );
+        let mut door = piece(24, "door", (306.0, 150.0), (80.0, 12.0, 210.0), 90.0);
+        door.opening = Some(newera_core::Opening::default());
+        home.furniture.push(door);
+        assert!(!missing(&home));
+        home.rooms[1].name = "Closet da suíte".into();
+        assert_eq!(review(&home, &Profile::default()).capacity.bedrooms, 1);
+        assert!(!missing(&home));
+        home.furniture[4].opening.as_mut().unwrap().kind = OpeningKind::Window;
+        assert!(missing(&home), "a window does not connect clothing storage");
+        home.furniture[4].opening.as_mut().unwrap().kind = OpeningKind::Passage;
+        assert!(!missing(&home));
+        home.furniture[4].visible = false;
+        assert!(missing(&home));
+        home.furniture[4].visible = true;
+        home.walls.clear();
+        assert!(missing(&home), "a loose opening must not invent an access");
     }
 
     #[test]

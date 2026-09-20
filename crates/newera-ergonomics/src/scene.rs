@@ -338,6 +338,13 @@ fn plain(text: &str) -> String {
         .collect()
 }
 
+fn closet_name(name: &str) -> bool {
+    let name = plain(name);
+    ["closet", "vestiario", "vestidor", "dressing"]
+        .iter()
+        .any(|word| name.contains(word))
+}
+
 fn room_use_by_name(name: &str) -> Option<RoomUse> {
     let n = plain(name);
     let has = |words: &[&str]| words.iter().any(|w| n.contains(w));
@@ -345,6 +352,8 @@ fn room_use_by_name(name: &str) -> Option<RoomUse> {
     Some(
         if has(&["banheiro", "banho", "lavabo", "wc", "bath", "sanitario"]) {
             RoomUse::Bathroom
+        } else if closet_name(name) {
+            RoomUse::Other
         } else if has(&["quarto", "dormitorio", "suite", "bedroom"]) {
             RoomUse::Bedroom
         } else if has(&["cozinha", "kitchen", "copa"]) && !living {
@@ -390,6 +399,11 @@ pub struct Space<'a> {
 }
 
 impl Space<'_> {
+    /// A dedicated clothing room, not a bedroom or a laundry linen cabinet.
+    pub(crate) fn is_closet(&self) -> bool {
+        self.what == RoomUse::Other && closet_name(&self.room.name)
+    }
+
     pub fn label(&self) -> String {
         if self.room.name.is_empty() {
             format!("{} {}", self.what.name(), self.room.id)
@@ -414,6 +428,57 @@ pub struct Scene<'a> {
 }
 
 impl<'a> Scene<'a> {
+    /// A wardrobe in this room or a closet directly across a real wall opening.
+    pub(crate) fn wardrobe_serves(&self, bedroom: &Space<'_>) -> bool {
+        let has_wardrobe = |space: &Space<'_>| {
+            space
+                .units
+                .iter()
+                .any(|&i| self.units[i].what == Use::Wardrobe)
+        };
+        if has_wardrobe(bedroom) {
+            return true;
+        }
+        let bedroom_shape = polygon(&bedroom.room.points);
+        let cuts = newera_core::wall_cuts(&self.home.walls, &self.home.furniture);
+        self.spaces
+            .iter()
+            .filter(|s| s.is_closet() && has_wardrobe(s))
+            .any(|closet| {
+                let shape = polygon(&closet.room.points);
+                self.home.walls.iter().zip(&cuts).any(|(wall, cuts)| {
+                    cuts.iter().any(|cut| {
+                        if cut.bottom > 2.0 || cut.top < 150.0 {
+                            return false;
+                        }
+                        let Some(door) = self.home.furniture.iter().find(|f| f.id == cut.furniture)
+                        else {
+                            return false;
+                        };
+                        if !door
+                            .opening
+                            .as_ref()
+                            .is_some_and(|o| o.kind != newera_core::OpeningKind::Window)
+                        {
+                            return false;
+                        }
+                        let (sin, cos) = door.angle.to_radians().sin_cos();
+                        let reach = wall.thickness.max(door.depth) / 2.0 + 20.0;
+                        let a = geo::Point::new(
+                            door.position.x - sin * reach,
+                            door.position.y + cos * reach,
+                        );
+                        let b = geo::Point::new(
+                            door.position.x + sin * reach,
+                            door.position.y - cos * reach,
+                        );
+                        (bedroom_shape.contains(&a) && shape.contains(&b))
+                            || (bedroom_shape.contains(&b) && shape.contains(&a))
+                    })
+                })
+            })
+    }
+
     /// `home` must already be a single storey's view.
     pub fn new(home: &'a Home) -> Self {
         let mut units = Vec::new();

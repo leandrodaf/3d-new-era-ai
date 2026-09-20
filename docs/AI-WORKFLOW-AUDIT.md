@@ -200,3 +200,15 @@ Atualização de publicação: o [Publish 35509917158](https://github.com/leandr
 - A revisão de ergonomia da planta atual continua com score 0 principalmente por instalações não desenvolvidas: tomadas, circuitos, água e esgoto. Não usar o score como certificação nem inventar infraestrutura apenas para subir a nota.
 - Observação para melhorar o relatório: uma mensagem agrupada de tomadas reuniu Jantar/Estar/Galeria e banheiros sob a justificativa “um junto ao lavatório”. O agrupamento deve preservar a justificativa de cada tipo de ambiente antes de orientar alterações. Recomendações de TV/rede aparecem inclusive em áreas de serviço/banhos; verificar a interpretação e contexto, sem instalar pontos automaticamente só para apagar dicas.
 - A suíte recebe dica de ausência de guarda-roupa apesar do ambiente Closet adjacente. Revisar a associação entre ambientes e capacidade de armazenamento na etapa global, com evidência de acesso e móveis, em vez de aceitar/silenciar automaticamente.
+
+## Closet ligado ao dormitório — reconhecimento automático
+
+- Causa: a capacidade somava apenas guarda-roupas dentro dos dormitórios; o mobiliário mínimo também ignorava o closet adjacente. Isso exigia conferência manual dos 340 cm de armários do closet e da porta de ligação à suíte.
+- Correção: incluir armários de ambientes identificados como closets na capacidade. Para atender ao dormitório, exigir armário e uma porta/passagem que corte uma parede real, com pontos em lados opostos dentro do quarto e do closet. Janela, abertura invisível ou solta não estabelecem acesso. “Closet da suíte” permanece closet, sem aumentar a contagem de quartos; rouparia de lavanderia não conta como guarda-roupa de dormitório.
+- Validação: 26 testes de ergonomia passaram, incluindo closet fechado, porta, passagem, janela, abertura invisível/solta, nome composto e exclusão da lavanderia. Clippy sem avisos. A associação identifica acesso direto; não certifica a circulação livre, que continua sujeita às outras verificações.
+- Conferência no backup real com servidor recompilado: capacidade passou de 180 para 520 cm de guarda-roupa, mantendo dois dormitórios; nenhum aviso “Falta guarda-roupa”. Nenhum móvel foi movido para eliminar esse falso positivo.
+
+## Publicação confirmada das correções de renderização
+
+- Commit `410125f`: Publish `35513780703` concluído com sucesso; CI `35513780685` aprovado em Windows, macOS, Linux e WASM, incluindo Clippy, formato, MSRV e smoke MCP. A correção do teste Windows e o percurso de download de vídeo pelo menu passaram no GitHub.
+- Publicação realizada pelo fluxo do GitHub/Cloudflare Pages. Não foi necessário deploy manual da VPS para essas alterações do editor.
