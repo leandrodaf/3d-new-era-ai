@@ -47,6 +47,21 @@ pub fn segment_durations(keys: &[Camera], speed: f64) -> Vec<f64> {
         .collect()
 }
 
+/// Number of encoded frames, without allocating interpolated cameras.
+/// Uses the same rounding and two-frame minimum as the renderer.
+pub fn frame_count(keys: &[Camera], fps: u32, speed: f64) -> usize {
+    match keys.len() {
+        0 => 0,
+        1 => 1,
+        _ => frames_for_duration(segment_durations(keys, speed).iter().sum(), fps),
+    }
+}
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn frames_for_duration(seconds: f64, fps: u32) -> usize {
+    ((seconds * f64::from(fps.max(1))).round() as usize).max(2)
+}
+
 fn catmull_rom(p0: f64, p1: f64, p2: f64, p3: f64, t: f64) -> f64 {
     let t2 = t * t;
     let t3 = t2 * t;
@@ -67,9 +82,7 @@ pub fn interpolate_path(keys: &[Camera], fps: u32, speed: f64) -> Vec<Camera> {
     let yaws = unwrapped_yaws(keys);
     let durations = segment_durations(keys, speed);
     let total: f64 = durations.iter().sum();
-    let fps = f64::from(fps.max(1));
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let frames = ((total * fps).round() as usize).max(2);
+    let frames = frames_for_duration(total, fps);
     let last = keys.len() - 1;
     (0..frames)
         .map(|frame| {
@@ -449,6 +462,28 @@ pub fn render_video_bytes(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn preview_frame_count_matches_encoded_short_and_rounded_clips() {
+        assert_eq!(frame_count(&[], 25, 1.0), 0);
+        assert_eq!(frame_count(&[Camera::default()], 25, 1.0), 1);
+        for (distance, fps, expected) in [(0.0, 1, 2), (0.0, 25, 5), (26.0, 25, 7)] {
+            let keys = [cam(0.0, 0.0, 0.0), cam(distance, 0.0, 0.0)];
+            let predicted = frame_count(&keys, fps, 1.0);
+            assert_eq!(predicted, expected);
+            let (bytes, info) =
+                render_video_bytes(&Home::default(), &keys, fps, 1.0, (16, 16), None, |_, _| {})
+                    .unwrap();
+            assert_eq!(predicted, info.frames);
+            #[allow(clippy::cast_precision_loss)]
+            let seconds = predicted as f64 / f64::from(fps);
+            assert!((seconds - info.seconds).abs() < f64::EPSILON);
+            let header = bytes.windows(4).position(|w| w == b"avih").unwrap() + 8;
+            let encoded_frames =
+                u32::from_le_bytes(bytes[header + 16..header + 20].try_into().unwrap());
+            assert_eq!(encoded_frames as usize, predicted);
+        }
+    }
+
     #[test]
     fn rejects_unbounded_video_before_allocating_frames() {
         let keys = vec![

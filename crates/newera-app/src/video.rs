@@ -130,12 +130,11 @@ impl VideoWindow {
             video.speed,
             (self.size[0], self.size[1]),
         )?;
-        let frames = newera_render::video::interpolate_path(
+        let frames = newera_render::video::frame_count(
             &home.environment.camera_path,
             video.frame_rate,
             video.speed,
-        )
-        .len();
+        );
         let report = Arc::new(crate::render_job::Report::default());
         let bytes = Arc::new(Mutex::new(None));
         let worker = crate::render_web::Worker::start(
@@ -184,15 +183,21 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
     let environment = app.document.read().home().environment.clone();
     let (mut fps, mut speed) = (environment.video.frame_rate, environment.video.speed);
     let keys = environment.camera_path.len();
-    let seconds: f64 = newera_render::video::segment_durations(&environment.camera_path, speed)
-        .iter()
-        .sum();
+    // Fewer than two points cannot generate a clip. Otherwise show encoded
+    // duration, including rounding and the renderer's two-frame minimum.
+    #[allow(clippy::cast_precision_loss)]
+    let seconds = if keys < 2 {
+        0.0
+    } else {
+        newera_render::video::frame_count(&environment.camera_path, fps, speed) as f64
+            / f64::from(fps.max(1))
+    };
     egui::Window::new(format!("{} {}", icon::FILM_STRIP, tr("Criar vídeo")))
         .open(&mut open)
         .default_width(420.0)
         .show(ctx, |ui| {
             ui.label(format!(
-                "{}: {keys} · {seconds:.1} s",
+                "{}: {keys} · {seconds:.2} s",
                 tr("Pontos do caminho")
             ));
             ui.horizontal_wrapped(|ui| {

@@ -332,6 +332,11 @@ try {
     if (avi.subarray(0,4).toString() !== "RIFF" || avi.subarray(8,12).toString() !== "AVI ") {
       throw new Error("the video UI downloaded invalid bytes");
     }
+    const videoHeader = avi.indexOf('avih') + 8;
+    if (videoHeader < 8 || avi.readUInt32LE(videoHeader + 16) !== 5
+        || avi.readUInt32LE(videoHeader) !== 40000) {
+      throw new Error('the repeated camera points did not produce the predicted five frames at 25 fps');
+    }
     ok("Create video opened from the menu and downloaded a valid AVI");
     const undone = await rpc(mcpUrl, {
       jsonrpc: "2.0", id: 21, method: "tools/call",
