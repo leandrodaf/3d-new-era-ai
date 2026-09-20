@@ -201,40 +201,12 @@ impl Mesh {
                     material.as_ref(),
                 );
             }
-            // Without storeys, the tallest level-topped wall: gables and
-            // other sloping walls peak far above any ceiling.
-            let ceiling_height = storey.map_or_else(
-                || {
-                    view.walls
-                        .iter()
-                        .filter(|w| {
-                            w.height_at_end
-                                .is_none_or(|end| (end - w.height).abs() < 0.5)
-                        })
-                        .map(|w| w.height)
-                        .fold(0.0, f64::max)
-                },
-                |l| l.height,
-            );
-            // Under a roof lower than the ceiling, the roof is the ceiling
-            // (attics, A-frames): a flat one would poke out through it.
-            let under_roof = |room: &newera_core::Room| {
-                room.points.iter().any(|p| {
-                    newera_core::roof_height_at(&view, *p, 0.0)
-                        .is_some_and(|roof| roof < ceiling_height - CEILING_GAP)
-                })
-            };
-            if ceiling_height > 0.0 {
-                for room in view
-                    .rooms
+            for room in &view.rooms {
+                for surface in newera_core::room_ceiling(&view, room)
                     .iter()
-                    .filter(|r| r.ceiling_visible && r.points.len() >= 3 && !under_roof(r))
+                    .filter(|s| s.draw)
                 {
-                    mesh.add_ceiling(
-                        &room.points,
-                        base + ceiling_height - CEILING_GAP,
-                        room.ceiling_material.as_ref(),
-                    );
+                    mesh.add_ceiling(surface, base, room.ceiling_material.as_ref());
                 }
             }
             let cuts = view.wall_cuts();
@@ -498,19 +470,24 @@ impl Mesh {
     }
 
     /// A room ceiling, visible from below only.
-    fn add_ceiling(&mut self, points: &[Point2], height: f64, material: Option<&Material>) {
+    fn add_ceiling(
+        &mut self,
+        patch: &newera_core::CeilingTriangle,
+        base: f64,
+        material: Option<&Material>,
+    ) {
         let surface = self.horizontal(material, CEILING_COLOR);
-        let down: Vec<Point2> = up_facing(points).into_iter().rev().collect();
-        let base = self.next_index();
-        for p in &down {
-            self.vertices
-                .push(surface.vertex(to_world(*p, height), -Vec3::Y));
+        let mut corners = std::array::from_fn(|i| {
+            to_world(patch.points[i], base + patch.heights[i] - CEILING_GAP)
+        });
+        let mut normal = (corners[1] - corners[0])
+            .cross(corners[2] - corners[0])
+            .normalize_or_zero();
+        if normal.y > 0.0 {
+            corners.swap(1, 2);
+            normal = -normal;
         }
-        for [a, b, c] in newera_core::triangulate(&down) {
-            let idx = |i: usize| base + u32::try_from(i).expect("index fits in u32");
-            // `triangulate` keeps the input winding, which now faces down.
-            self.indices.extend([idx(a), idx(b), idx(c)]);
-        }
+        self.add_triangle(corners, normal, &surface);
     }
 
     fn add_triangle(&mut self, corners: [Vec3; 3], normal: Vec3, surface: &Surface) {
@@ -1212,6 +1189,86 @@ mod tests {
                 .push(Wall::new(id, Point2::new(a.0, a.1), Point2::new(b.0, b.1)));
         }
         home
+    }
+
+    #[test]
+    fn rendered_ceiling_follows_declared_height_slope_and_storey_base() {
+        let mut home = Home::default();
+        home.wall_height = 300.0;
+        let points = [
+            Point2::new(0.0, 0.0),
+            Point2::new(400.0, 0.0),
+            Point2::new(400.0, 400.0),
+            Point2::new(0.0, 400.0),
+        ];
+        home.rooms
+            .push(Room::new(newera_core::RoomId(1), "Room", points.to_vec()));
+        home.rooms[0].ceiling_material = Some(Material {
+            color: Some([20, 60, 100]),
+            ..Material::default()
+        });
+        for i in 0..4 {
+            let mut wall = Wall::new(
+                newera_core::WallId(i as u64 + 1),
+                points[i],
+                points[(i + 1) % 4],
+            );
+            wall.height = 200.0 + points[i].x / 2.0;
+            wall.height_at_end = Some(200.0 + points[(i + 1) % 4].x / 2.0);
+            home.walls.push(wall);
+        }
+        let ceiling = |mesh: &Mesh| {
+            mesh.vertices
+                .iter()
+                .filter(|v| {
+                    v.color[..3]
+                        .iter()
+                        .zip(srgb_to_linear([20, 60, 100]))
+                        .all(|(a, b)| (*a - b).abs() < 1e-6)
+                })
+                .copied()
+                .collect::<Vec<_>>()
+        };
+        let flat = build(&home);
+        let vertices = ceiling(&flat);
+        assert!(!vertices.is_empty());
+        assert!(
+            vertices
+                .iter()
+                .all(|v| (v.position[1] - 2.995).abs() < 1e-5 && v.normal[1] < -0.99)
+        );
+        home.rooms[0].ceiling_flat = false;
+        let sloped = build(&home);
+        let vertices = ceiling(&sloped);
+        assert!(!vertices.is_empty());
+        assert!(
+            vertices
+                .iter()
+                .all(|v| (v.position[1] - (1.995 + v.position[0] / 2.0)).abs() < 1e-5)
+        );
+        assert!(
+            vertices
+                .iter()
+                .all(|v| v.normal[1] < -0.8 && v.normal[0].abs() > 0.4)
+        );
+        assert_outward(&sloped);
+        home.levels.push(newera_core::Level {
+            id: LevelId(2),
+            height: 280.0,
+            elevation: 700.0,
+            ..Default::default()
+        });
+        home.selected_level = Some(LevelId(2));
+        home.rooms[0].ceiling_flat = true;
+        let elevated = ceiling(&build(&home));
+        assert_eq!(elevated.len(), vertices.len());
+        assert!(
+            elevated
+                .iter()
+                .all(|v| (v.position[1] - 9.795).abs() < 1e-5)
+        );
+        home.rooms[0].ceiling_visible = false;
+        assert!(ceiling(&build(&home)).is_empty());
     }
 
     #[test]

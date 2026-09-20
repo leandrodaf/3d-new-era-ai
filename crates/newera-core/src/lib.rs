@@ -10,6 +10,7 @@
 mod analysis;
 mod annotations;
 pub mod arrange;
+mod ceiling;
 pub mod collab;
 mod command;
 mod detect;
@@ -51,6 +52,7 @@ pub use annotations::{
     PlanAnnotations, ReferenceItem, RoomReference, TAG_KEY, auto_dimensions, cleared_references,
     fold, room_references, untagged_references,
 };
+pub use ceiling::{CeilingTriangle, room_ceiling};
 pub use command::Command;
 pub use detect::{detect_room, detect_room_with_dividers, interior_point, rooms_following_walls};
 pub use document::{Document, FIRST_VARIANT_NAME, SharedDocument, Variant, VariantInfo};

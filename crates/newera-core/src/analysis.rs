@@ -125,7 +125,7 @@ pub enum Issue {
     /// the relative power an import carries — so every illuminance computed
     /// from it is a guess, and a plan that looks lit can be dark.
     UnratedLight(FurnitureId),
-    /// A luminaire extends above the flat ceiling of its room.
+    /// A luminaire extends above the ceiling surface of its room.
     AboveCeiling {
         piece: FurnitureId,
         room: crate::ids::RoomId,
@@ -390,8 +390,13 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
         }
     }
     // Inspect luminous leaves, never a group's floor-to-ceiling envelope.
-    // Flat room ceilings have an explicit storey height; sloped ceilings are
-    // deliberately excluded until their actual surface is available here.
+    // Use the same storey-relative surface the renderer draws.
+    let ceilings: Vec<_> = home
+        .rooms
+        .iter()
+        .filter(|r| wanted(r.level))
+        .map(|r| (r, crate::room_ceiling(home, r)))
+        .collect();
     for (i, piece) in pieces.iter().enumerate() {
         let luminaire = piece.light.is_some()
             || matches!(
@@ -407,32 +412,25 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
         if !luminaire {
             continue;
         }
-        let room = home
-            .rooms
-            .iter()
-            .filter(|r| {
-                r.ceiling_visible
-                    && r.ceiling_flat
-                    && home.on_level(r.level, levels[i])
-                    && crate::electrical::inside(&r.points, piece.position)
-            })
-            .min_by(|a, b| a.area().total_cmp(&b.area()));
-        let Some(room) = room else {
-            continue;
-        };
-        let ceiling = levels[i]
-            .and_then(|id| home.level(id))
-            .map_or(home.wall_height, |l| l.height);
-        let top = piece.height_range().1;
-        if top > ceiling + 0.5 {
-            issues.push(Issue::AboveCeiling {
-                piece: piece.id,
-                room: room.id,
-                ceiling,
-                top,
-            });
+        for (room, surfaces) in &ceilings {
+            if !home.on_level(room.level, levels[i]) {
+                continue;
+            }
+            if let Some((ceiling, top)) = surfaces
+                .iter()
+                .filter_map(|s| s.excess(piece))
+                .max_by(|(ca, ta), (cb, tb)| (ta - ca).total_cmp(&(tb - cb)))
+            {
+                issues.push(Issue::AboveCeiling {
+                    piece: piece.id,
+                    room: room.id,
+                    ceiling,
+                    top,
+                });
+            }
         }
     }
+
     let footprints: Vec<Polygon<f64>> = pieces
         .iter()
         .map(|f| polygon(&f.projected_footprint()))

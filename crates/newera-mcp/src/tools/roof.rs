@@ -135,9 +135,9 @@ mod tests {
             let (min, max) = low.fold((f32::MAX, f32::MIN), |(a, b), x| (a.min(x), b.max(x)));
             assert!(min < 0.1 && max > 5.9, "{min} {max}");
         }
-        // A room under the A-frame gets no flat ceiling: at the gables' peak it
-        // would stick out through the slopes (seen in photos, which show both
-        // sides of every face).
+        // A room's declared ceiling must stay inside the A-frame. Roof slopes
+        // clip its lower edges instead of allowing a high flat surface to
+        // protrude (photos show both sides of every face).
         let room: CreateParams = serde_json::from_str(
             r#"{"rooms":[{"name":"Sala","pts":[[10,10],[590,10],[590,690],[10,690]]}]}"#,
         )

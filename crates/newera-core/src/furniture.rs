@@ -656,7 +656,7 @@ impl Furniture {
 
     /// Corners of its box after pitch and roll, in the local frame
     /// `(x, y up from its bottom, depth)`, cm.
-    fn tilted_corners(&self) -> Vec<[f64; 3]> {
+    pub(crate) fn tilted_corners(&self) -> Vec<[f64; 3]> {
         let (hw, hd, hh) = (self.width / 2.0, self.depth / 2.0, self.height / 2.0);
         let (sp, cp) = self.pitch.to_radians().sin_cos();
         let (sr, cr) = self.roll.to_radians().sin_cos();

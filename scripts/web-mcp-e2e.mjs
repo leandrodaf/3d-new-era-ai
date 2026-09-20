@@ -274,7 +274,14 @@ try {
       const source = ${JSON.stringify(workerSource)};
       const url = URL.createObjectURL(new Blob([source], {type:'text/javascript'}));
       const camera = { x:0, y:0, z:170, yaw:0, pitch:0, fov:63 };
-      const home = {name:'Worker video', environment:{
+      // Exercise constrained ceiling triangulation in the actual WASM worker.
+      const outline = [[0,0,200],[200,0,400],[400,0,200],[400,400,200],[200,400,400],[0,400,200]];
+      const walls = outline.map((a,i) => {
+        const b=outline[(i+1)%outline.length];
+        return {id:'w'+(i+1),start:a.slice(0,2),end:b.slice(0,2),thickness:15,height:a[2],height_at_end:b[2]};
+      });
+      const rooms=[{id:'r10',name:'Sloped ceiling',points:[[0,0],[400,0],[400,400],[0,400]],ceiling_flat:false}];
+      const home = {name:'Worker video', walls, rooms, environment:{
         ground_color:[168,168,152], sky_color:[204,228,252], light_color:[208,208,208], ceiling_light_color:[208,208,208],
         photo:{width:64,height:64}, video:{width:64,frame_rate:2,speed:2}, camera_path:[camera,{...camera,y:100}]
       }};
@@ -303,7 +310,7 @@ try {
         || videoAudit.restricted.type !== 'error' || !videoAudit.restricted.error.includes('1024')) {
       throw new Error(`video worker failed: ${JSON.stringify(videoAudit)}`);
     }
-    ok("video worker produced an AVI with progress and rejected excessive resolution");
+    ok("video worker rendered a sloped ceiling in WASM, produced an AVI with progress and rejected excessive resolution");
     // Follow the actual web menu through to a downloaded AVI, catching a
     // disabled menu or a disconnected UI even when the worker itself works.
     // Keep enough viewport height for the menu to open below its button.
