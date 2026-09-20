@@ -374,67 +374,7 @@ pub fn photo_home(
     let sky = sky_color.powf(2.2).lerp(Vec3::new(0.05, 0.09, 0.25), dusk) * 1.4 * daylight;
     let sun = sun.filter(|_| elevation > 0.0);
 
-    // Lamps of the storeys shown, in photometric units: 1 scene unit of
-    // irradiance is LUX_PER_UNIT lux (the noon sun is about 3).
-    let lights: Vec<photo::PointLight> =
-        newera_core::lighting::emitters(home, &newera_catalog::light_for)
-            .into_iter()
-            .filter(|e| {
-                home.furniture
-                    .iter()
-                    .find(|f| f.id == e.piece)
-                    .is_some_and(|f| f.visible)
-            })
-            .map(|e| {
-                let color = Vec3::new(e.color[0] as f32, e.color[1] as f32, e.color[2] as f32);
-                let position = Vec3::new(
-                    e.position[0] as f32,
-                    e.position[2] as f32,
-                    e.position[1] as f32,
-                ) * 0.01;
-                let piece = home.furniture.iter().find(|f| f.id == e.piece);
-                let size = piece.map_or(10.0, |f| f.width.max(f.depth)) as f32 * 0.01;
-                match e.distribution {
-                    newera_core::lighting::Distribution::Area {
-                        w,
-                        d,
-                        angle,
-                        upward,
-                    } => {
-                        let (sin, cos) = (angle as f32).to_radians().sin_cos();
-                        let (hw, hd) = (w as f32 * 0.005, d as f32 * 0.005);
-                        photo::PointLight {
-                            position,
-                            intensity: color
-                                * (e.panel_luminance().unwrap_or(0.0) / LUX_PER_UNIT) as f32,
-                            radius: 0.0,
-                            half_angle: 0.0,
-                            panel: Some((
-                                Vec3::new(cos, 0.0, sin) * hw,
-                                Vec3::new(-sin, 0.0, cos) * hd * if upward { -1.0 } else { 1.0 },
-                            )),
-                            clearance: 0.01,
-                        }
-                    }
-                    newera_core::lighting::Distribution::Spot { half } => photo::PointLight {
-                        position,
-                        intensity: color * (e.peak() / LUX_PER_UNIT) as f32,
-                        radius: (size * 0.3).clamp(0.01, 0.04),
-                        half_angle: (half as f32).to_radians(),
-                        panel: None,
-                        clearance: size * 0.6,
-                    },
-                    newera_core::lighting::Distribution::Point => photo::PointLight {
-                        position,
-                        intensity: color * (e.peak() / LUX_PER_UNIT) as f32,
-                        radius: 0.03,
-                        half_angle: 0.0,
-                        panel: None,
-                        clearance: size * 0.6,
-                    },
-                }
-            })
-            .collect();
+    let lights = photo_lights(home);
     let (samples, bounces) = quality.budget();
     let load = |file: &str| {
         newera_core::vfs::read(&newera_core::resolve_asset(assets, file))
@@ -464,6 +404,83 @@ pub fn photo_home(
             load_image: &load,
         },
     )
+}
+
+// Preserve each leaf fixture's optical size when its owner is a larger group.
+#[allow(clippy::cast_possible_truncation)]
+fn photo_lights(home: &newera_core::Home) -> Vec<photo::PointLight> {
+    use glam::Vec3;
+    let levels = mesh::shown_levels(home);
+    // Lamps of the storeys shown, in photometric units: 1 scene unit of
+    // irradiance is LUX_PER_UNIT lux (the noon sun is about 3).
+
+    newera_core::lighting::emitters(home, &newera_catalog::light_for)
+        .into_iter()
+        .filter(|e| {
+            let Some(owner) = home.furniture.iter().find(|f| f.id == e.piece) else {
+                return false;
+            };
+            let Some(source) = home.find_piece(e.source) else {
+                return false;
+            };
+            owner.visible
+                && levels.contains(&home.resolve_level(owner.level))
+                && home.shown_in_3d(owner.discipline, None)
+                && home.shown_in_3d(
+                    source.discipline,
+                    newera_core::layer_in_group(owner, source),
+                )
+        })
+        .map(|e| {
+            let color = Vec3::new(e.color[0] as f32, e.color[1] as f32, e.color[2] as f32);
+            let position = Vec3::new(
+                e.position[0] as f32,
+                e.position[2] as f32,
+                e.position[1] as f32,
+            ) * 0.01;
+            let piece = home.find_piece(e.source);
+            let size = piece.map_or(10.0, |f| f.width.max(f.depth)) as f32 * 0.01;
+            match e.distribution {
+                newera_core::lighting::Distribution::Area {
+                    w,
+                    d,
+                    angle,
+                    upward,
+                } => {
+                    let (sin, cos) = (angle as f32).to_radians().sin_cos();
+                    let (hw, hd) = (w as f32 * 0.005, d as f32 * 0.005);
+                    photo::PointLight {
+                        position,
+                        intensity: color
+                            * (e.panel_luminance().unwrap_or(0.0) / LUX_PER_UNIT) as f32,
+                        radius: 0.0,
+                        half_angle: 0.0,
+                        panel: Some((
+                            Vec3::new(cos, 0.0, sin) * hw,
+                            Vec3::new(-sin, 0.0, cos) * hd * if upward { -1.0 } else { 1.0 },
+                        )),
+                        clearance: 0.01,
+                    }
+                }
+                newera_core::lighting::Distribution::Spot { half } => photo::PointLight {
+                    position,
+                    intensity: color * (e.peak() / LUX_PER_UNIT) as f32,
+                    radius: (size * 0.3).clamp(0.01, 0.04),
+                    half_angle: (half as f32).to_radians(),
+                    panel: None,
+                    clearance: size * 0.6,
+                },
+                newera_core::lighting::Distribution::Point => photo::PointLight {
+                    position,
+                    intensity: color * (e.peak() / LUX_PER_UNIT) as f32,
+                    radius: 0.03,
+                    half_angle: 0.0,
+                    panel: None,
+                    clearance: size * 0.6,
+                },
+            }
+        })
+        .collect()
 }
 
 /// Renders a home from a point of view: builds the mesh, loads models and
@@ -521,6 +538,138 @@ pub fn render_home(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn photo_lights_follow_geometry_storeys_and_layer_visibility() {
+        use newera_core::{
+            Discipline, Furniture, FurnitureId, Home, Level, LevelId, Light, PlanLayer,
+        };
+        let mut home = Home::default();
+        home.levels = vec![
+            Level {
+                id: LevelId(1),
+                ..Level::default()
+            },
+            Level {
+                id: LevelId(2),
+                elevation: 300.0,
+                ..Level::default()
+            },
+        ];
+        home.selected_level = Some(LevelId(1));
+        home.environment.all_levels_visible = false;
+        let fixture = Furniture {
+            id: FurnitureId(3),
+            catalog: "downlight".into(),
+            width: 10.0,
+            depth: 10.0,
+            height: 5.0,
+            light: Some(Light::led(800.0, 3000.0, (0.5, 0.5, 0.0))),
+            ..Furniture::default()
+        };
+        home.furniture.push(Furniture {
+            id: FurnitureId(4),
+            catalog: "group".into(),
+            level: Some(LevelId(2)),
+            children: vec![fixture],
+            ..Furniture::default()
+        });
+        assert!(photo_lights(&home).is_empty(), "upper floor is not drawn");
+        home.environment.all_levels_visible = true;
+        assert_eq!(photo_lights(&home).len(), 1);
+        home.levels[1].viewable = false;
+        assert!(
+            photo_lights(&home).is_empty(),
+            "hidden floor must not light the visible scene"
+        );
+        home.levels[1].viewable = true;
+        home.environment.all_levels_visible = false;
+        home.selected_level = Some(LevelId(2));
+        assert_eq!(photo_lights(&home).len(), 1);
+        home.hidden_layers.push(PlanLayer::Lighting);
+        assert!(photo_lights(&home).is_empty());
+        home.show_all_in_3d = true;
+        assert_eq!(photo_lights(&home).len(), 1);
+        home.show_all_in_3d = false;
+        home.hidden_layers.clear();
+        home.hidden_disciplines.push(Discipline::Electrical);
+        assert!(photo_lights(&home).is_empty());
+        home.hidden_disciplines.clear();
+        home.furniture[0].discipline = Some(Discipline::Plumbing);
+        home.hidden_disciplines.push(Discipline::Plumbing);
+        assert!(
+            photo_lights(&home).is_empty(),
+            "owner discipline hides its lights too"
+        );
+        home.show_all_in_3d = true;
+        assert_eq!(photo_lights(&home).len(), 1);
+        // Visibility is a render choice, not removal of the modeled fixture.
+        assert_eq!(
+            newera_core::lighting::emitters(&home, &newera_catalog::light_for).len(),
+            1
+        );
+    }
+
+    #[test]
+    fn grouping_a_fixture_preserves_its_shadow_clearance_and_emission() {
+        use newera_core::{Furniture, FurnitureId, Home, Light};
+        for kind in ["point", "spot", "panel"] {
+            let mut light = Light::led(800.0, 3000.0, (0.5, 0.5, 0.5));
+            if kind == "spot" {
+                light.beam = Some(60.0);
+            }
+            if kind == "panel" {
+                light.area = Some([10.0, 10.0]);
+                light.panel_upward = Some(true);
+            }
+            let fixture = Furniture {
+                id: FurnitureId(1),
+                catalog: "box".into(),
+                width: 10.0,
+                depth: 10.0,
+                height: 5.0,
+                elevation: 290.0,
+                light: Some(light),
+                ..Furniture::default()
+            };
+            let mut home = Home::default();
+            home.furniture.push(fixture.clone());
+            let before = photo_lights(&home);
+            assert_eq!(before.len(), 1);
+            assert!(
+                before[0].clearance < 0.1,
+                "small fixture must not ignore room-sized obstacles"
+            );
+            let nested = Furniture {
+                id: FurnitureId(2),
+                catalog: "group".into(),
+                width: 400.0,
+                depth: 500.0,
+                children: vec![fixture],
+                ..Furniture::default()
+            };
+            home.furniture = vec![Furniture {
+                id: FurnitureId(3),
+                catalog: "group".into(),
+                width: 1000.0,
+                depth: 1000.0,
+                children: vec![nested],
+                ..Furniture::default()
+            }];
+            let emitters = newera_core::lighting::emitters(&home, &newera_catalog::light_for);
+            assert_eq!(emitters[0].piece, FurnitureId(3));
+            assert_eq!(emitters[0].source, FurnitureId(1));
+            assert_eq!(photo_lights(&home), before, "{kind} changed when grouped");
+            home.furniture[0].children[0].children[0].visible = false;
+            assert!(photo_lights(&home).is_empty());
+            home.furniture[0].children[0].children[0].visible = true;
+            home.furniture[0].children[0].visible = false;
+            assert!(photo_lights(&home).is_empty());
+            home.furniture[0].children[0].visible = true;
+            home.furniture[0].visible = false;
+            assert!(photo_lights(&home).is_empty());
+        }
+    }
+
     use newera_core::{Command, Document, Point2, Room, Wall};
 
     use super::*;

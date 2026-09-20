@@ -8,6 +8,31 @@ use bytemuck::{Pod, Zeroable};
 use glam::{Vec3, Vec4};
 use newera_core::{ElementId, Furniture, Home, LevelId, Material, Point2, Wall, WallCut};
 
+/// The storeys whose geometry and lights are included in the 3D scene.
+pub(crate) fn shown_levels(home: &Home) -> Vec<Option<LevelId>> {
+    if home.levels.is_empty() {
+        vec![None]
+    } else {
+        let sorted = home.sorted_levels();
+        let current = home.current_level();
+        let upto = sorted
+            .iter()
+            .position(|l| Some(l.id) == current)
+            .unwrap_or(sorted.len().saturating_sub(1));
+        let shown = if home.environment.all_levels_visible {
+            sorted.len()
+        } else {
+            upto + 1
+        };
+        sorted
+            .iter()
+            .take(shown)
+            .filter(|l| l.viewable)
+            .map(|l| Some(l.id))
+            .collect()
+    }
+}
+
 /// Elements drawn highlighted.
 pub type Selection = std::collections::BTreeSet<ElementId>;
 
@@ -150,29 +175,7 @@ impl Mesh {
     pub fn from_home(home: &Home, selection: &Selection, models: ModelSource<'_>) -> Self {
         let mut mesh = Self::default();
         mesh.add_ground(home);
-        // Show the viewable storeys up to the one being edited (in elevation,
-        // then layout order), so its inside stays visible.
-        let levels: Vec<Option<LevelId>> = if home.levels.is_empty() {
-            vec![None]
-        } else {
-            let sorted = home.sorted_levels();
-            let current = home.current_level();
-            let upto = sorted
-                .iter()
-                .position(|l| Some(l.id) == current)
-                .unwrap_or(sorted.len().saturating_sub(1));
-            let shown = if home.environment.all_levels_visible {
-                sorted.len()
-            } else {
-                upto + 1
-            };
-            sorted
-                .iter()
-                .take(shown)
-                .filter(|l| l.viewable)
-                .map(|l| Some(l.id))
-                .collect()
-        };
+        let levels = shown_levels(home);
         for level in levels {
             let view = home.level_view(level);
             let base = home.elevation_of(level);

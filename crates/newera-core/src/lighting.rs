@@ -143,7 +143,10 @@ pub enum Distribution {
 /// One source of light in the home, ready for photometry.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Emitter {
+    /// Top-level owner used to associate reports with the selectable assembly.
     pub piece: FurnitureId,
+    /// Visible leaf fixture that physically emits this light.
+    pub source: FurnitureId,
     pub level: Option<LevelId>,
     /// Plan position and height above the ground floor, cm.
     pub position: [f64; 3],
@@ -284,6 +287,7 @@ pub fn emitters(home: &Home, preset: &dyn Fn(&Furniture) -> Option<Light>) -> Ve
                 };
                 out.push(Emitter {
                     piece: top.id,
+                    source: piece.id,
                     level: home.resolve_level(piece.level.or(top.level)),
                     position: [at.x, at.y, z],
                     flux: flux / share,
