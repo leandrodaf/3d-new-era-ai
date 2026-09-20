@@ -332,58 +332,8 @@ pub(crate) fn announce(app: &mut NewEraApp) {
     ));
 }
 
-/// The MCP chip in the status bar: state, who is connected, and a light that
-/// blinks when a tool lands. Clicking it opens the panel.
-pub(crate) fn chip(app: &mut NewEraApp, ui: &mut egui::Ui) {
-    let t = crate::theme::of(ui.visuals());
-    let pulse = Pulse::read(app);
-    let serving = reachable(app);
-    let (color, text) = match (serving, pulse.newest()) {
-        (true, Some(agent)) => (
-            if pulse.busy() { t.accent } else { t.ok },
-            crate::i18n::fill("{} · {} chamadas", &[&agent.name, &pulse.calls]),
-        ),
-        (true, None) => (t.ok, crate::i18n::tr("MCP · esperando sua IA").to_owned()),
-        (false, _) if cfg!(target_arch = "wasm32") => (
-            t.ink_faint,
-            crate::i18n::tr("MCP desligado · ligar").to_owned(),
-        ),
-        (false, _) => (t.ink_faint, crate::i18n::tr("MCP desligado").to_owned()),
-    };
-    crate::app::lamp(ui, color);
-    let chip = ui
-        .add(
-            egui::Button::new(crate::theme::fig(ui.visuals(), &text).color(color))
-                .frame(false)
-                .sense(egui::Sense::click()),
-        )
-        .on_hover_text(crate::i18n::tr("Conectar sua IA — clique para ver como"));
-    if chip.clicked() {
-        app.dialog = Some(crate::dialogs::Dialog::ConnectAi { client: 0 });
-    }
-    // While an agent is at work the window has something new to show every
-    // moment: keep the clock and the light moving without spinning the CPU.
-    if serving {
-        ui.ctx()
-            .request_repaint_after(std::time::Duration::from_millis(if pulse.busy() {
-                150
-            } else {
-                800
-            }));
-    }
-}
-
-/// The button in the top bar. It is the first thing in the window and it is
-/// meant to be: an editor whose point is that an AI can drive it should say so
-/// before anything else, and say where it stands — waiting, connected, at
-/// work — without being opened.
-///
-/// Not on a phone: there the row has no room for it, and the chip in the
-/// status bar already says the same thing in the space of two words.
+/// Icon-only AI control in its own toolbar group, immediately after Frame.
 pub(crate) fn button(app: &mut NewEraApp, ui: &mut egui::Ui) {
-    if ui.ctx().content_rect().width() < crate::app::NARROW {
-        return;
-    }
     let t = crate::theme::of(ui.visuals());
     let pulse = Pulse::read(app);
     let live = reachable(app);
@@ -391,50 +341,43 @@ pub(crate) fn button(app: &mut NewEraApp, ui: &mut egui::Ui) {
 
     // Three states, three different things to say — and the one that needs a
     // person to act is the loud one.
-    let (fill, ink, edge, text) = match (&agent, live) {
-        (Some(name), _) => (
+    let (fill, ink, edge) = match (&agent, live) {
+        (Some(_), true) => (
             t.accent_soft,
             if pulse.busy() { t.accent_strong } else { t.ok },
             if pulse.busy() { t.accent } else { t.ok },
-            name.clone(),
         ),
-        (None, true) => (
-            t.accent_soft,
-            t.accent,
-            t.accent,
-            crate::i18n::tr("IA · esperando").to_owned(),
-        ),
-        (None, false) => (
-            t.accent,
-            t.deep,
-            t.accent,
-            crate::i18n::tr("Conectar IA").to_owned(),
-        ),
+        (None, true) => (t.accent_soft, t.accent, t.accent),
+        (_, false) => (t.accent, t.deep, t.accent),
     };
-    let hint = match &agent {
-        Some(name) => crate::i18n::fill("{} conectado · {} chamadas", &[name, &pulse.calls]),
-        None if live => crate::i18n::tr("Nenhuma IA conectada ainda").to_owned(),
-        None => crate::i18n::tr("Conectar sua IA — clique para ver como").to_owned(),
+    let hint = match (&agent, live) {
+        (Some(name), true) => {
+            crate::i18n::fill("{} conectado · {} chamadas", &[name, &pulse.calls])
+        }
+        (None, true) => crate::i18n::tr("IA · esperando").to_owned(),
+        (_, false) => crate::i18n::tr("Conectar sua IA — clique para ver como").to_owned(),
     };
 
-    let label = RichText::new(format!("{}  {}", icon::ROBOT, text))
-        .size(13.5)
-        .strong()
-        .color(ink);
+    let label = RichText::new(icon::ROBOT).size(17.0).strong().color(ink);
     let button = egui::Button::new(label)
         .fill(fill)
         .stroke(egui::Stroke::new(1.0, edge))
-        .corner_radius(13)
-        .min_size(egui::vec2(0.0, 26.0));
-    if ui.add(button).on_hover_text(hint).clicked() {
+        .corner_radius(6)
+        .min_size(egui::vec2(28.0, 26.0));
+    let response = ui.add(button);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &hint));
+    if response.on_hover_text(hint).clicked() {
         app.dialog = Some(crate::dialogs::Dialog::ConnectAi { client: 0 });
     }
-    // A live one keeps its dot moving; a dark one has nothing to animate.
-    if pulse.busy() {
+    // Refresh activity colors even when nobody is moving the pointer.
+    if live {
         ui.ctx()
-            .request_repaint_after(std::time::Duration::from_millis(150));
+            .request_repaint_after(std::time::Duration::from_millis(if pulse.busy() {
+                150
+            } else {
+                800
+            }));
     }
-    ui.add_space(10.0);
 }
 
 /// A card: the shape everything in this panel is built from — one surface,

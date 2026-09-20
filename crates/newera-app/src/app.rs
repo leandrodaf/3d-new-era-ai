@@ -1342,11 +1342,6 @@ impl NewEraApp {
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
         egui::MenuBar::new().ui(ui, |ui| {
-            // The AI is not a feature hidden in a menu: it is what this editor
-            // is for. The button sits before everything else, wears the light
-            // that says whether an agent is there, and opens the one panel that
-            // explains how to bring one.
-            crate::ai::button(self, ui);
             ui.menu_button(crate::i18n::tr("Arquivo"), |ui| {
                 if menu_item(ui, icon::FILE_PLUS, crate::i18n::tr("Novo"), "Ctrl+N", true) {
                     self.request(Pending::New);
@@ -1982,6 +1977,7 @@ impl NewEraApp {
                     self.plan.request_fit();
                 }
             });
+            keys(ui, |ui| crate::ai::button(self, ui));
         });
         ui.add_space(2.0);
     }
@@ -2099,7 +2095,6 @@ impl NewEraApp {
         let t = crate::theme::of(ui.visuals());
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
-            crate::ai::chip(self, ui);
             let people: Vec<(String, [u8; 3])> = self
                 .document
                 .read()
@@ -2932,15 +2927,14 @@ mod tests {
         let mut h = app_with_wall();
         h.state_mut().mcp_url = Some("http://127.0.0.1:7878/mcp".to_owned());
         h.run_steps(3);
-        // Nobody yet: the status bar says so, in as many words (the figures
-        // line is set in small capitals, hence the shouting).
-        h.get_by_label_contains("ESPERANDO SUA IA");
+        h.get_by_label_contains("IA · esperando");
 
-        // The panel opens from the button in the top bar — the first thing in
-        // the row, because this editor is for driving with an AI — and it
-        // carries the address to paste.
-        h.get_by_label_contains(&format!("{} ", icon::ROBOT))
-            .click();
+        // The icon in its own toolbar group follows Frame and opens the panel.
+        let frame = h.get_by_label(icon::CORNERS_OUT).rect();
+        let robot = h.get_by_label_contains("IA · esperando").rect();
+        assert!(robot.left() > frame.right());
+        assert!((robot.center().y - frame.center().y).abs() < 2.0);
+        h.get_by_label_contains("IA · esperando").click();
         h.run_steps(3);
         // The command is idempotent on purpose: `claude mcp add` refuses a name
         // that already exists, and somebody who installed the app has one.
@@ -2960,7 +2954,7 @@ mod tests {
             doc.agents_mut().called(Some("s1"), "place", now);
         }
         h.run_steps(3);
-        h.get_by_label_contains("CLAUDE-CODE · 1");
+        h.get_by_label_contains("claude-code conectado · 1 chamadas");
         // And it says so once, where messages go — then names each tool as
         // it lands, so the work is visible without opening anything.
         h.get_by_label_contains("claude-code conectou");
@@ -2973,23 +2967,16 @@ mod tests {
         h.get_by_label_contains("render_photo · claude-code");
     }
 
-    /// On a phone the top bar has room for the menus and nothing else: the AI
-    /// button stands down there, and the chip in the status bar carries the
-    /// same news in two words.
+    /// The same icon remains available in the horizontally scrolling toolbar.
     #[test]
-    fn the_ai_button_stands_down_on_a_narrow_screen() {
+    fn the_ai_button_remains_in_the_narrow_toolbar() {
         let document = SharedDocument::new(Document::default());
         let mut narrow = Harness::builder()
             .with_size(egui::vec2(520.0, 780.0))
             .with_step_dt(1.0 / 60.0)
             .build_eframe(move |cc| NewEraApp::new(cc, document, None));
         narrow.run_steps(5);
-        let found = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            narrow.get_by_label_contains(&format!("{} ", icon::ROBOT));
-        }));
-        assert!(found.is_err(), "the button is for screens that have room");
-        // What a phone gets instead.
-        narrow.get_by_label_contains("MCP");
+        narrow.get_by_label_contains("Conectar sua IA");
     }
 
     #[test]

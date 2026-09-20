@@ -155,3 +155,10 @@ Atualização de publicação: o [Publish 35509917158](https://github.com/leandr
 - Aplicada a redistribuição do bloco de serviço: parede `w312`, apoio `r313`, porta do banho `f314`, lavadora `f315`, secadora `f316` e tanque `f317`; cama de serviço removida e armário reaproveitado como rouparia. Porta `f42` dá acesso ao apoio, `f43` passa a dar acesso independente à lavanderia; banheiro mantém a janela oeste e lavanderia mantém a janela sul. Os dois quartos principais permanecem.
 - `check_layout` retornou `{}` e `render_plan` 1100 × 780 funcionou na aba após as alterações. Checkpoint “Lavanderia independente, banheiros e recorte do cooktop”. Bancada/armários complementares da lavanderia, detalhes decorativos, cotas e revisão visual final continuam pendentes.
 - O canto da cozinha assinalado pelo usuário **não foi preenchido nem reposicionado**. A correção dele permanece reservada à revisão final. Commit `f13f1aa` enviado com o feedback; Publish/CI em andamento na última consulta.
+
+## Controle de IA na barra de ferramentas
+
+- Pedido do usuário: mover o controle de IA para um grupo próprio imediatamente após Frame, exibindo somente o robô. Removidas as versões duplicadas no menu superior e na barra de status; tooltip e nome acessível continuam informando a conexão e as chamadas.
+- Preservadas as cores de desconectado, aguardando, conectado e atividade recente. A atualização periódica acompanha a passagem de atividade para repouso mesmo sem movimento do mouse. Histórico de agente não deve indicar conexão ativa quando o servidor está desligado.
+- Automação de regressão: testes de interface verificam a posição após Frame, abertura do painel, identificação do agente/chamadas e presença na barra rolável em telas estreitas. Suíte do aplicativo: 66 testes passaram, 16 testes opcionais ignorados; Clippy sem avisos.
+- Validação web: build WASM concluído; E2E do editor em Chrome/WebGPU passou (desenho, imagem de fundo, autosave/reload e viewer). Screenshot conferido visualmente: robô isolado após Frame. E2E MCP passou com conexão, 42 ferramentas, alterações na planta, PNGs 2D/3D, reload, desligamento e reconexão no mesmo endereço.
