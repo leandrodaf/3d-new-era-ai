@@ -124,6 +124,19 @@ try {
     if (tools.length < 30) bad(`the tab offered only ${tools.length} tools`);
     else ok(`the tab offered ${tools.length} tools`);
 
+    // Reproduce drivers that reject mapped-at-creation scene buffers, even
+    // for a few MB. A mutation must upload geometry without that crash path.
+    await evaluate(`(() => {
+      if (!globalThis.GPUDevice) return;
+      const original = GPUDevice.prototype.createBuffer;
+      GPUDevice.prototype.createBuffer = function(descriptor) {
+        if (/^scene (vertices|indices)$/.test(descriptor.label) && descriptor.mappedAtCreation) {
+          throw new RangeError('scene buffers cannot be mapped at creation');
+        }
+        return original.call(this, descriptor);
+      };
+    })()`);
+
     const before = await rpc(mcpUrl, {
       jsonrpc: "2.0", id: 3, method: "tools/call",
       params: { name: "get_home", arguments: {} },

@@ -5,7 +5,7 @@
 use bytemuck::{Pod, Zeroable};
 use eframe::egui;
 use eframe::egui_wgpu::RenderState;
-use eframe::wgpu::{self, util::DeviceExt};
+use eframe::wgpu;
 use glam::{Mat4, Vec3};
 use newera_core::{ElementId, Home};
 
@@ -332,7 +332,7 @@ impl SceneView {
             };
             let mesh = Mesh::from_home(home, selection, &models);
             gpu.upload_images(rs, &mesh.images, project);
-            gpu.upload_mesh(&rs.device, &mesh);
+            gpu.upload_mesh(rs, &mesh);
             self.built_for = Some(key);
         }
         #[allow(clippy::cast_precision_loss)]
@@ -722,20 +722,44 @@ impl Gpu {
         self.images = images.to_vec();
     }
 
-    fn upload_mesh(&mut self, device: &wgpu::Device, mesh: &Mesh) {
+    fn upload_mesh(&mut self, rs: &RenderState, mesh: &Mesh) {
+        // WebGPU may reject mapped-at-creation buffers even below the device's
+        // max_buffer_size. Upload through the queue instead: no JS mapping of
+        // the whole scene and no second copy concatenating opaque/glass indices.
+        let vertex_bytes: &[u8] = bytemuck::cast_slice(&mesh.vertices);
+        let opaque_bytes: &[u8] = bytemuck::cast_slice(&mesh.indices);
+        let glass_bytes: &[u8] = bytemuck::cast_slice(&mesh.transparent);
+        let buffer = |label, size: u64, usage| {
+            rs.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size: size.max(4),
+                usage: usage | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            })
+        };
+        let vertices = buffer(
+            "scene vertices",
+            vertex_bytes.len() as u64,
+            wgpu::BufferUsages::VERTEX,
+        );
+        let indices = buffer(
+            "scene indices",
+            (opaque_bytes.len() + glass_bytes.len()) as u64,
+            wgpu::BufferUsages::INDEX,
+        );
+        let upload = |buffer: &wgpu::Buffer, offset: u64, bytes: &[u8]| {
+            // Bound each browser-side transfer, including after large MCP edits.
+            for (i, chunk) in bytes.chunks(64 * 1024).enumerate() {
+                rs.queue
+                    .write_buffer(buffer, offset + (i * 64 * 1024) as u64, chunk);
+            }
+        };
+        upload(&vertices, 0, vertex_bytes);
+        upload(&indices, 0, opaque_bytes);
+        upload(&indices, opaque_bytes.len() as u64, glass_bytes);
         self.mesh = Some(GpuMesh {
-            vertices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("scene vertices"),
-                contents: bytemuck::cast_slice(&mesh.vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            }),
-            indices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("scene indices"),
-                contents: bytemuck::cast_slice(
-                    &[mesh.indices.as_slice(), mesh.transparent.as_slice()].concat(),
-                ),
-                usage: wgpu::BufferUsages::INDEX,
-            }),
+            vertices,
+            indices,
             index_count: u32::try_from(mesh.indices.len()).expect("index count fits in u32"),
             transparent_count: u32::try_from(mesh.transparent.len())
                 .expect("index count fits in u32"),

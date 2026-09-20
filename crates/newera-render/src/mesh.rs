@@ -904,9 +904,9 @@ impl Mesh {
 
     /// Places a catalog or imported mesh in the world.
     ///
-    /// Looks follow the piece: its color replaces every material, else its
-    /// texture covers the whole model, else each model material applies,
-    /// with per-name overrides.
+    /// Catalog models already apply the piece's color to their body, keeping
+    /// glass, hardware and fixtures distinct. Imported models take a global
+    /// color override; textures cover either kind of model.
     fn add_piece(
         &mut self,
         piece: &Furniture,
@@ -930,7 +930,7 @@ impl Mesh {
             let plan = piece.to_plan((f64::from(p[0]), f64::from(p[2])));
             to_world(plan, floor + piece.elevation + f64::from(p[1]))
         };
-        let piece_color = piece.color.map(srgb_to_linear);
+        let piece_color = piece.model.as_ref().and(piece.color).map(srgb_to_linear);
         let piece_texture = piece.texture.as_ref().filter(|t| t.image.is_some());
         // A pattern finish (wood, stone, marble…) laid on every face.
         let piece_pattern = piece
@@ -1601,6 +1601,46 @@ mod material_tests {
     use newera_core::{Material, ModelMaterial};
 
     use super::*;
+
+    #[test]
+    fn recoloring_a_catalog_cabinet_keeps_its_sink_and_hardware_visible() {
+        let mut piece = newera_catalog::find("sink-counter")
+            .unwrap()
+            .instantiate(newera_core::FurnitureId(1), Point2::new(0.0, 0.0));
+        piece.color = Some([72, 91, 81]);
+        let model = newera_catalog::piece_mesh(&piece);
+        let mesh = Mesh::piece_alone(&piece, &model);
+        let green = srgb_to_linear([72, 91, 81]);
+        assert!(mesh.vertices.iter().any(|v| v.color[..3] == green));
+        // The basin, countertop and metal fittings must not become one green
+        // silhouette with the cabinet doors when the body is recolored.
+        let mut colors: Vec<_> = mesh.vertices.iter().map(|v| v.color).collect();
+        colors.sort_by(|a, b| {
+            a.iter()
+                .zip(b)
+                .map(|(a, b)| a.total_cmp(b))
+                .find(|order| !order.is_eq())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        colors.dedup();
+        assert!(
+            colors.len() >= 4,
+            "sink lost its material details: {colors:?}"
+        );
+    }
+
+    #[test]
+    fn imported_models_still_accept_a_global_color_override() {
+        let mut piece = newera_catalog::find("sink-counter")
+            .unwrap()
+            .instantiate(newera_core::FurnitureId(1), Point2::new(0.0, 0.0));
+        let model = newera_catalog::piece_mesh(&piece);
+        piece.model = Some("imported-counter.glb".into());
+        piece.color = Some([72, 91, 81]);
+        let mesh = Mesh::piece_alone(&piece, &model);
+        let green = srgb_to_linear([72, 91, 81]);
+        assert!(mesh.vertices.iter().all(|v| v.color[..3] == green));
+    }
 
     #[test]
     fn override_textures_without_coordinates_are_laid_flat_at_real_size() {
