@@ -211,9 +211,58 @@ impl Wall {
     }
 }
 
+/// Declared room program, independent of its display name. Auto preserves
+/// legacy name/equipment inference; other values are explicit intent.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RoomUse {
+    #[default]
+    Auto,
+    Bedroom,
+    Living,
+    Dining,
+    Kitchen,
+    Bathroom,
+    Laundry,
+    Office,
+    Corridor,
+    Closet,
+    Balcony,
+    Garage,
+    Outdoor,
+    Other,
+}
+
+impl RoomUse {
+    pub fn is_auto(&self) -> bool {
+        *self == Self::Auto
+    }
+
+    /// Canonical terms used by existing discipline classifiers.
+    pub fn semantic_name(self) -> &'static str {
+        match self {
+            Self::Auto | Self::Other => "ambiente",
+            Self::Bedroom => "quarto",
+            Self::Living => "sala de estar",
+            Self::Dining => "sala de jantar",
+            Self::Kitchen => "cozinha",
+            Self::Bathroom => "banheiro",
+            Self::Laundry => "lavanderia",
+            Self::Office => "escritorio",
+            Self::Corridor => "corredor",
+            Self::Closet => "closet",
+            Self::Balcony => "varanda",
+            Self::Garage => "garagem",
+            Self::Outdoor => "area externa",
+        }
+    }
+}
+
 /// A named floor area delimited by a polygon.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Room {
+    #[serde(default, skip_serializing_if = "RoomUse::is_auto")]
+    pub usage: RoomUse,
     pub id: RoomId,
     pub name: String,
     pub points: Vec<Point2>,
@@ -257,9 +306,19 @@ pub struct Room {
 }
 
 impl Room {
+    /// Name to classify by, never the label shown to the user.
+    pub fn semantic_name(&self) -> &str {
+        if self.usage.is_auto() {
+            &self.name
+        } else {
+            self.usage.semantic_name()
+        }
+    }
+
     pub fn new(id: RoomId, name: impl Into<String>, points: Vec<Point2>) -> Self {
         Self {
             id,
+            usage: RoomUse::Auto,
             name: name.into(),
             points,
             floor_visible: true,
@@ -895,6 +954,60 @@ fn invalid<T>(message: &str) -> CoreResult<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn declared_room_program_reaches_lighting_plumbing_and_access_checks() {
+        let mut home = crate::Home::default();
+        let mut room = Room::new(
+            RoomId(1),
+            "Copa decorativa",
+            vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(400.0, 0.0),
+                Point2::new(400.0, 400.0),
+                Point2::new(0.0, 400.0),
+            ],
+        );
+        room.usage = RoomUse::Office;
+        home.rooms.push(room);
+        let light = crate::lighting::room_lighting(
+            &home,
+            &[],
+            &home.rooms[0],
+            80.0,
+            crate::lighting::Reflectance::default(),
+        );
+        assert!((light.target - 500.0).abs() < 0.01);
+        assert!(
+            !crate::plumbing::check(&home)
+                .iter()
+                .any(|f| f.key == "plumb:drain:r1")
+        );
+        home.rooms[0].usage = RoomUse::Bathroom;
+        assert!(
+            crate::plumbing::check(&home)
+                .iter()
+                .any(|f| f.key == "plumb:drain:r1")
+        );
+        home.furniture.push(Furniture {
+            id: crate::FurnitureId(2),
+            opening: Some(crate::Opening::default()),
+            position: Point2::new(1000.0, 1000.0),
+            ..Furniture::default()
+        });
+        assert!(
+            crate::check_layout(&home).iter().any(
+                |issue| matches!(issue,crate::Issue::NoDoor { room, .. } if *room == RoomId(1))
+            )
+        );
+        home.rooms[0].usage = RoomUse::Living;
+        home.rooms[0].name = "Quarto de brincar".into();
+        assert!(
+            !crate::check_layout(&home)
+                .iter()
+                .any(|issue| matches!(issue, crate::Issue::NoDoor { .. }))
+        );
+    }
 
     #[test]
     fn arc_wall_centerline_bulges_left_and_keeps_endpoints() {

@@ -946,6 +946,50 @@ mod tests {
     }
 
     #[test]
+    fn explicit_room_use_is_created_read_updated_and_undone() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_value(serde_json::json!({"rooms":[
+                {"name":"Copa","room_use":"bathroom","pts":[[0,0],[400,0],[400,400],[0,400]]}
+            ]}))
+            .unwrap(),
+        ))
+        .unwrap();
+        {
+            let doc = s.document.read();
+            let room = &doc.home().rooms[0];
+            assert_eq!(room.usage, newera_core::RoomUse::Bathroom);
+            assert_eq!(crate::compact::room(room)["room_use"], "bathroom");
+        }
+        s.update(Parameters(
+            serde_json::from_value(serde_json::json!({"items":[{"id":"r1","name":"Azul"}]}))
+                .unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(
+            s.document.read().home().rooms[0].semantic_name(),
+            "banheiro"
+        );
+        s.update(Parameters(
+            serde_json::from_value(serde_json::json!({"items":[{"id":"r1","room_use":"auto"}]}))
+                .unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(s.document.read().home().rooms[0].semantic_name(), "Azul");
+        s.document.write().undo().unwrap();
+        assert_eq!(
+            s.document.read().home().rooms[0].usage,
+            newera_core::RoomUse::Bathroom
+        );
+        assert!(
+            serde_json::from_value::<crate::edit::UpdateSpec>(
+                serde_json::json!({"id":"r1","room_use":"not_a_room_type"})
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn ergonomics_reviews_the_plan_for_its_people() {
         let s = server();
         let params: CreateParams = serde_json::from_str(

@@ -414,7 +414,7 @@ pub struct Space<'a> {
 impl Space<'_> {
     /// A dedicated clothing room, not a bedroom or a laundry linen cabinet.
     pub(crate) fn is_closet(&self) -> bool {
-        self.what == RoomUse::Other && closet_name(&self.room.name)
+        self.what == RoomUse::Other && closet_name(self.room.semantic_name())
     }
 
     pub fn label(&self) -> String {
@@ -556,7 +556,10 @@ impl<'a> Scene<'a> {
             .collect();
         for space in &mut spaces {
             let has = |f: &dyn Fn(Use) -> bool| space.units.iter().any(|&i| f(units[i].what));
-            space.what = room_use_by_name(&space.room.name).unwrap_or_else(|| {
+            space.what = room_use_by_name(space.room.semantic_name()).unwrap_or_else(|| {
+                if !space.room.usage.is_auto() {
+                    return RoomUse::Other;
+                }
                 if has(&|u| matches!(u, Use::Toilet | Use::Shower | Use::Bathtub)) {
                     RoomUse::Bathroom
                 } else if has(&|u| matches!(u, Use::Bed(_) | Use::Crib)) {

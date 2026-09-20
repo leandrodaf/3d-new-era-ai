@@ -591,7 +591,7 @@ pub fn room_lighting(
     let min = values.iter().copied().fold(f64::MAX, f64::min).min(1e12);
     let max = values.iter().copied().fold(0.0, f64::max);
     let average = direct_avg + indirect;
-    let (target, target_use) = recommended_lux(&room.name);
+    let (target, target_use) = recommended_lux(room.semantic_name());
     RoomLighting {
         room: room.id,
         name: room.name.clone(),

@@ -42,6 +42,9 @@ pub(crate) fn room(r: &newera_core::Room) -> Value {
         ("pts", points(&r.points)),
         ("m2", json!((r.area() / 100.0).round() / 100.0)),
     ]);
+    if !r.usage.is_auto() {
+        v["room_use"] = json!(r.usage);
+    }
     if !r.floor_visible {
         v["floor"] = json!(false);
     }

@@ -568,7 +568,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
     // (São Paulo's sanitary code, Decreto 12.342/78 art. 15 II); where there
     // is a shower or a tub it is a trap box (NBR 8160).
     for room in view.rooms.iter().filter(|r| r.points.len() >= 3) {
-        let name = crate::annotations::fold(&room.name);
+        let name = crate::annotations::fold(room.semantic_name());
         let wet_name = [
             "banh",
             "wc",

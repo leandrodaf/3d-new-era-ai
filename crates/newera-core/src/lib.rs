@@ -54,7 +54,8 @@ pub use command::Command;
 pub use detect::{detect_room, detect_room_with_dividers, interior_point, rooms_following_walls};
 pub use document::{Document, FIRST_VARIANT_NAME, SharedDocument, Variant, VariantInfo};
 pub use elements::{
-    BackgroundImage, Baseboard, Compass, Dimension, Element, Hold, Label, Level, Room, Wall,
+    BackgroundImage, Baseboard, Compass, Dimension, Element, Hold, Label, Level, Room, RoomUse,
+    Wall,
 };
 pub use error::{CoreError, CoreResult};
 pub use furniture::{

@@ -878,7 +878,7 @@ fn rooms_without_door(
     for room in home
         .rooms
         .iter()
-        .filter(|r| r.points.len() >= 3 && wanted(r.level) && private(&r.name))
+        .filter(|r| r.points.len() >= 3 && wanted(r.level) && private(r.semantic_name()))
     {
         let level = home.resolve_level(room.level);
         let openings: Vec<&Furniture> = home

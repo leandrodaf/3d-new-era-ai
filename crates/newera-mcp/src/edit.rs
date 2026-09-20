@@ -57,6 +57,8 @@ pub(crate) struct WallPath {
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct RoomSpec {
+    /// Declared room program, independent of name; auto restores inference.
+    pub room_use: Option<newera_core::RoomUse>,
     pub name: String,
     /// Floor polygon. Omit and give `at` to detect the room enclosed by walls.
     pub pts: Option<Vec<Point2>>,
@@ -444,6 +446,7 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
         };
         let mut room = Room::new(doc.new_room_id(), spec.name, points);
         room.auto = auto;
+        room.usage = spec.room_use.unwrap_or_default();
         room.floor_material = spec
             .floor_mat
             .as_deref()
@@ -569,6 +572,9 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct UpdateSpec {
+    /// Declared room program, independent of name; auto restores inference.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub room_use: Option<newera_core::RoomUse>,
     #[serde(skip_serializing)]
     pub id: String,
     /// Start point (wall, dimension).
@@ -785,6 +791,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 "a", "b", "t", "h", "h_end", "arc", "level", "type", "left", "right", "sides",
             ],
             Element::Room(_) => &[
+                "room_use",
                 "name",
                 "pts",
                 "floor",
@@ -903,6 +910,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 Element::Wall(w)
             }
             Element::Room(mut r) => {
+                r.usage = spec.room_use.unwrap_or(r.usage);
                 r.name = spec.name.unwrap_or(r.name);
                 if spec.pts.is_some() {
                     r.auto = false;

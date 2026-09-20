@@ -282,6 +282,47 @@ struct Review<'s, 'a> {
 }
 
 impl Review<'_, '_> {
+    fn room_program(&mut self) {
+        for space in &self.scene.spaces {
+            let sanitary: Vec<_> = space
+                .units
+                .iter()
+                .filter_map(|&i| {
+                    let u = &self.scene.units[i];
+                    matches!(u.what, Use::Toilet | Use::Shower | Use::Bathtub)
+                        .then_some(u.piece.id.to_string())
+                })
+                .collect();
+            if !sanitary.is_empty()
+                && space.what != RoomUse::Bathroom
+                && (space.what != RoomUse::Other
+                    || space.room.usage == newera_core::RoomUse::Closet)
+            {
+                self.findings.push(Finding {
+                    severity: Severity::Alerta,
+                    place: space.label(),
+                    message: format!("Uso do ambiente como {} conflita com equipamentos sanitários ({}). Confirme o programa e declare room_use; o nome e as peças foram preservados.", space.what.name(), sanitary.join(", ")),
+                    key: format!("room_use:{}", space.room.id),
+                    ..Finding::default()
+                });
+            }
+            if space.what == RoomUse::Bathroom {
+                for &i in &space.units {
+                    let piece = self.scene.units[i].piece;
+                    if piece.catalog == "sink-counter" {
+                        self.findings.push(Finding {
+                            severity: Severity::Dica,
+                            place: space.label(),
+                            message: format!("Pia de cozinha {} usada como lavatório: renomear não altera o equipamento. Confirme se este catálogo corresponde à peça pretendida para o banheiro.", piece.id),
+                            key: format!("bathroom_fixture:{}:{}", space.room.id, piece.id),
+                            ..Finding::default()
+                        });
+                    }
+                }
+            }
+        }
+    }
+
     fn push(&mut self, severity: Severity, place: impl Into<String>, message: impl Into<String>) {
         self.findings.push(Finding {
             severity,
@@ -2347,6 +2388,7 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
     review.clearances();
     review.doors();
     review.rooms();
+    review.room_program();
     review.kitchen();
     review.findings.extend(corners::review(&scene));
     review.screens();
@@ -2539,6 +2581,57 @@ mod tests {
         assert!(home.accepted.is_empty());
         let old: Profile = serde_json::from_str(r#"{"occupants":3}"#).unwrap();
         assert_eq!(old.scope, ReviewScope::default());
+    }
+
+    #[test]
+    fn declared_room_use_survives_names_and_conflicts_are_feedback() {
+        let mut home = Home::default();
+        square(&mut home, "Copa", 400.0, 400.0);
+        home.furniture
+            .push(piece(20, "toilet", (100.0, 100.0), (40.0, 68.0, 80.0), 0.0));
+        let conflict = review(&home, &Profile::default());
+        let finding = conflict
+            .findings
+            .iter()
+            .find(|f| f.key == "room_use:r10")
+            .unwrap();
+        assert!(finding.message.contains("f20"));
+        assert!(finding.fix.is_none());
+        assert_eq!(home.rooms[0].name, "Copa");
+        home.rooms[0].usage = newera_core::RoomUse::Bathroom;
+        assert_eq!(Scene::new(&home).spaces[0].what, RoomUse::Bathroom);
+        assert!(
+            !review(&home, &Profile::default())
+                .findings
+                .iter()
+                .any(|f| f.key == "room_use:r10")
+        );
+        home.rooms[0].name = "Jardim azul".into();
+        home.furniture.push(piece(
+            21,
+            "sink-counter",
+            (250.0, 100.0),
+            (100.0, 50.0, 85.0),
+            0.0,
+        ));
+        home.furniture[1].name = "Lavatório".into();
+        assert!(
+            review(&home, &Profile::default())
+                .findings
+                .iter()
+                .any(|f| f.key == "bathroom_fixture:r10:f21")
+        );
+        home.furniture[1].catalog = "basin-cabinet".into();
+        assert!(
+            !review(&home, &Profile::default())
+                .findings
+                .iter()
+                .any(|f| f.key.starts_with("bathroom_fixture:"))
+        );
+        home.rooms[0].usage = newera_core::RoomUse::Other;
+        assert_eq!(Scene::new(&home).spaces[0].what, RoomUse::Other);
+        home.rooms[0].usage = newera_core::RoomUse::Auto;
+        assert_eq!(Scene::new(&home).spaces[0].what, RoomUse::Bathroom);
     }
 
     fn square(home: &mut Home, name: &str, w: f64, d: f64) {

@@ -134,7 +134,7 @@ enum Wet {
 }
 
 fn room_class(room: &Room) -> Wet {
-    let name = crate::annotations::fold(&room.name);
+    let name = crate::annotations::fold(room.semantic_name());
     let has = |words: &[&str]| words.iter().any(|w| name.contains(w));
     if has(&["cozinha", "copa", "lavanderia", "servico", "gourmet"]) {
         Wet::Kitchen
@@ -198,6 +198,9 @@ fn class_in(home: &Home, room: &Room) -> Wet {
         ((known || named) && room.points.len() >= 3 && inside(&room.points, f.position))
             || f.children.iter().any(|child| bathroom_fixture(child, room))
     }
+    if !room.usage.is_auto() {
+        return room_class(room);
+    }
     let fixtures = home.furniture.iter().any(|f| bathroom_fixture(f, room));
     if fixtures {
         Wet::Bathroom
@@ -211,7 +214,7 @@ fn class_in(home: &Home, room: &Room) -> Wet {
 /// laundries; 3 and 2 in a home theater; 1 and 1 in bathrooms, balconies and
 /// the rest. Circulation, closets and storage are not rooms the table counts.
 fn telecom_outlets(room: &Room, bathroom: bool) -> Option<(usize, usize)> {
-    let name = crate::annotations::fold(&room.name);
+    let name = crate::annotations::fold(room.semantic_name());
     if bathroom {
         return Some((1, 1));
     }
@@ -264,7 +267,7 @@ pub fn in_wet_room(home: &Home, point: &Point) -> bool {
 
 /// Whether a room is one people stay in, where a network point belongs.
 fn long_stay(room: &Room) -> bool {
-    let name = crate::annotations::fold(&room.name);
+    let name = crate::annotations::fold(room.semantic_name());
     [
         "sala",
         "quarto",
@@ -2025,6 +2028,35 @@ mod tests {
 
     use super::*;
     use crate::elements::Room;
+
+    #[test]
+    fn explicit_room_program_wins_over_label_and_fixture_inference() {
+        let mut home = Home::default();
+        let mut r = room(1, "Sala azul", 0.0, 400.0, 400.0);
+        r.usage = crate::RoomUse::Bathroom;
+        home.rooms.push(r);
+        assert_eq!(class_in(&home, &home.rooms[0]), Wet::Bathroom);
+        home.rooms[0].name = "Copa".into();
+        assert_eq!(class_in(&home, &home.rooms[0]), Wet::Bathroom);
+        home.furniture.push(Furniture {
+            id: FurnitureId(2),
+            catalog: "toilet".into(),
+            position: Point2::new(100.0, 100.0),
+            ..Furniture::default()
+        });
+        home.rooms[0].usage = crate::RoomUse::Kitchen;
+        assert_eq!(class_in(&home, &home.rooms[0]), Wet::Kitchen);
+        home.rooms[0].usage = crate::RoomUse::Auto;
+        assert_eq!(class_in(&home, &home.rooms[0]), Wet::Bathroom);
+        let mut serialized = serde_json::to_value(&home.rooms[0]).unwrap();
+        assert!(serialized.get("usage").is_none());
+        let legacy: Room = serde_json::from_value(serialized.clone()).unwrap();
+        assert_eq!(legacy.usage, crate::RoomUse::Auto);
+        serialized["usage"] = serde_json::json!("office");
+        let explicit: Room = serde_json::from_value(serialized).unwrap();
+        assert_eq!(explicit.semantic_name(), "escritorio");
+        assert_eq!(explicit.name, "Copa");
+    }
 
     #[test]
     fn decorative_pots_do_not_turn_living_rooms_into_bathrooms() {

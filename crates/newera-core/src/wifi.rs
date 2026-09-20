@@ -493,7 +493,7 @@ pub fn suggest(
     let wanted: Vec<&crate::elements::Room> = rooms
         .iter()
         .copied()
-        .filter(|r| wants_coverage(&r.name))
+        .filter(|r| wants_coverage(r.semantic_name()))
         .collect();
     // Not in a bathroom (damp, a lowered ceiling), outside or in a shaft.
     let candidates: Vec<(AccessPoint, String)> = wanted
@@ -695,6 +695,21 @@ mod tests {
         with_bath.rooms[1].name = "Banho".into();
         let (points, _) = suggest(&with_bath, Standard::Wifi6e, Band::G6, 280.0);
         assert!(points.iter().all(|(_, room)| room != "Banho"), "{points:?}");
+
+        with_bath.rooms.remove(0);
+        with_bath.rooms[0].name = "Quarto decorativo".into();
+        with_bath.rooms[0].usage = crate::RoomUse::Bathroom;
+        assert!(
+            suggest(&with_bath, Standard::Wifi6e, Band::G6, 280.0)
+                .0
+                .is_empty()
+        );
+        with_bath.rooms[0].usage = crate::RoomUse::Bedroom;
+        assert!(
+            !suggest(&with_bath, Standard::Wifi6e, Band::G6, 280.0)
+                .0
+                .is_empty()
+        );
 
         let (points, short) = suggest(&masonry, Standard::Wifi6, Band::G5, 280.0);
         assert!(

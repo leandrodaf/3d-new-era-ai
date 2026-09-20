@@ -231,7 +231,7 @@ trace_background,undo,update,variants,video";
         assert_eq!(
             // Includes explicit furniture roles, cabinet cutouts and opening checks.
             bytes,
-            87624,
+            88512,
             "a description or schema changed; this test guards a pure move"
         );
     }
