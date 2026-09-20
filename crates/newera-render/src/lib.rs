@@ -250,12 +250,13 @@ fn publish_cache_file(
         std::process::id(),
         NEXT.fetch_add(1, Ordering::Relaxed)
     ));
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temporary)?;
-    let result = write(&mut file);
-    drop(file);
+    let result = {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        write(&mut file)
+    };
     let result = result.and_then(|()| std::fs::rename(&temporary, path));
     if result.is_err() {
         let _ = std::fs::remove_file(&temporary);
