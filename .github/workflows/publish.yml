@@ -51,7 +51,7 @@ jobs:
           PORT=7979 ./target/release/newera-relay &
           for _ in $(seq 1 40); do curl -sf http://127.0.0.1:7979/health >/dev/null && break; sleep 0.25; done
           node scripts/web-mcp-e2e.mjs http://127.0.0.1:8790/app/ http://127.0.0.1:7979
-      - uses: cloudflare/wrangler-action@v3
+      - uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
