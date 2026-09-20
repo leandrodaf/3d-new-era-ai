@@ -317,6 +317,15 @@ fn hold(
         }
     };
 
+    // The emergency responder is owned by JS, not by a wasm_bindgen Closure.
+    if let Some(window) = web_sys::window()
+        && let Ok(callback) =
+            js_sys::Reflect::get(&window, &JsValue::from_str("neweraAttachSocket"))
+        && let Some(callback) = callback.dyn_ref::<js_sys::Function>()
+    {
+        let _ = callback.call1(&JsValue::NULL, socket.as_ref());
+    }
+
     // On open: say what this window can do.
     let on_open = {
         let socket = socket.clone();

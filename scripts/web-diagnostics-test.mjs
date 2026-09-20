@@ -51,3 +51,40 @@ function page() {
   assert.equal(d.operations.length, 1, 'failure snapshot survives cleanup');
 }
 console.log('Editor diagnostics: startup, runtime, concurrent operations and redaction passed');
+
+{
+  class Socket extends EventTarget {
+    readyState=1;
+    sent=[];
+    send(data) {this.sent.push(JSON.parse(data));}
+    call(id,name) {this.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({type:'call',id,name,args:{secret:'never retained'}})}));}
+  }
+  const {context:c} = page();
+  c.neweraReady=true;
+  c.neweraRecovery={state:'saved',saved_revision:42,saved_at:123,secret:'never retained'};
+  const socket=new Socket();
+  c.neweraAttachSocket(socket);
+  for (const data of ['null','not JSON','{"type":"client"}']) socket.dispatchEvent(new MessageEvent('message',{data}));
+  let rustCalls=0;
+  socket.addEventListener('message',()=>rustCalls++);
+  socket.call(1,'get_home');
+  socket.send(JSON.stringify({type:'result',id:1,ok:true,result:{content:[]}}));
+  socket.call(2,'render_plan');
+  socket.call(3,'measure');
+  c.neweraFail('RuntimeError: unreachable token=secret');
+  assert.equal(socket.sent.length,3);
+  assert.deepEqual(socket.sent.slice(1).map(x=>x.id),[2,3]);
+  const failure=JSON.parse(socket.sent[1].result.content[0].text);
+  assert.equal(failure.kind,'editor_runtime_failure');
+  assert.equal(failure.diagnostic.recovery.saved_revision,42);
+  assert.deepEqual(failure.diagnostic.operations.map(o=>o.tool),['render_plan','measure']);
+  assert(!JSON.stringify(failure).includes('secret'));
+  socket.send(JSON.stringify({type:'result',id:2,ok:true,result:{}}));
+  assert.equal(socket.sent.length,3,'late WASM replies must not answer twice');
+  socket.call(4,'get_home');
+  assert.equal(socket.sent.length,4);
+  assert.equal(rustCalls,3,'future calls must not enter the failed WASM handler');
+  socket.readyState=3;
+  socket.dispatchEvent(new Event('close'));
+}
+console.log('Emergency MCP responder: pending calls, future calls, late replies and redaction passed');

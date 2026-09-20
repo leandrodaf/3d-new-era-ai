@@ -91,6 +91,10 @@ try {
   await send("Page.addScriptToEvaluateOnNewDocument", {source: `
     Object.defineProperty(navigator, 'language', {get: () => 'pt-BR'});
     Object.defineProperty(navigator, 'languages', {get: () => ['pt-BR', 'pt']});
+    const NativeSocket=WebSocket;
+    window.WebSocket=class extends NativeSocket {
+      constructor(...args) {super(...args); window.testRelaySocket=this;}
+    };
   `});
   await send("Page.navigate", { url: `${page}?relay=${encodeURIComponent(relay)}` });
   let started = false;
@@ -469,29 +473,45 @@ try {
       else ok("switched on again, at the very same address");
     }
 
-    const diagnostic = JSON.parse(await evaluate(`(() => {
-      window.neweraOperation('begin', null, 'render_plan', 'test-revision');
-      window.dispatchEvent(new ErrorEvent('error', {message: 'Uncaught RuntimeError: unreachable injected-diagnostic-test'}));
-      return JSON.stringify({report: window.neweraDiagnostic, text: document.getElementById('failed-text').textContent});
-    })()`));
-    if (diagnostic.report?.phase !== 'runtime'
-        || diagnostic.report?.operations[0]?.tool !== 'render_plan'
-        || !diagnostic.report?.build || diagnostic.report?.backend === 'unknown'
-        || !diagnostic.text.includes('durante o uso')) bad('runtime failure lost its structured context');
-    else ok('runtime failure identifies phase, operation, revision, build and graphics backend');
+    // Replace the Rust message handler with a real WASM trap. The emergency
+    // responder must answer the in-flight call and future calls without it.
+    await evaluate(`(() => {
+      const bytes=new Uint8Array([0,97,115,109,1,0,0,0,1,4,1,96,0,0,3,2,1,0,7,8,1,4,116,114,97,112,0,0,10,5,1,3,0,0,11]);
+      const trap=new WebAssembly.Instance(new WebAssembly.Module(bytes)).exports.trap;
+      window.failedRuntimeCalls=0;
+      window.testRelaySocket.onmessage=() => {window.failedRuntimeCalls++; trap();};
+    })()`);
+    const failureStart=Date.now();
+    const trapped=await rpc(mcpUrl,{jsonrpc:'2.0',id:50,method:'tools/call',params:{name:'get_home',arguments:{}}});
+    if (!trapped.result?.isError) throw new Error('a WASM trap did not return an MCP tool error');
+    const diagnostic=JSON.parse(trapped.result.content[0].text);
+    if (diagnostic.kind !== 'editor_runtime_failure'
+        || diagnostic.diagnostic.phase !== 'runtime'
+        || diagnostic.diagnostic.operations[0]?.tool !== 'get_home'
+        || !diagnostic.diagnostic.build || diagnostic.diagnostic.backend === 'unknown'
+        || !diagnostic.diagnostic.cause.includes('unreachable')
+        || Date.now()-failureStart > 10000) throw new Error('the emergency reply lost context or waited for the relay timeout');
+    const afterTrap=await rpc(mcpUrl,{jsonrpc:'2.0',id:51,method:'tools/call',params:{name:'get_home',arguments:{}}});
+    if (!afterTrap.result?.isError || await evaluate('window.failedRuntimeCalls') !== 1
+        || JSON.stringify(JSON.parse(afterTrap.result.content[0].text)) !== JSON.stringify(diagnostic)) {
+      throw new Error('future calls re-entered the failed runtime or lost the original failure');
+    }
+    ok('a real WASM trap returns structured MCP diagnostics immediately; future calls bypass the failed handler');
 
     // And then the one that has to hold whatever anybody presses: the tab
     // goes, the address dies. Nothing is left running for an AI to reach.
     // Navigation may retain the document and its socket in the browser's
     // back/forward cache. Close the target to actually exercise tab closure.
-    await send("Target.closeTarget", { targetId: target.id });
+    const closeResult=await send("Target.closeTarget", { targetId: target.id });
+    if (!closeResult.result?.success) throw new Error("Chrome did not close the target");
     let gone = false;
     for (let i = 0; i < 40 && !gone; i++) {
       const afterGone = await rpc(mcpUrl, {
         jsonrpc: "2.0", id: 7, method: "tools/call",
         params: { name: "get_home", arguments: {} },
       });
-      gone = afterGone?.result?.isError === true || Boolean(afterGone?.error);
+      const disconnectText=afterGone?.result?.content?.[0]?.text ?? '';
+      gone = afterGone?.result?.isError === true && /tab (?:is not connected|went away)/.test(disconnectText);
       if (!gone) await sleep(300);
     }
     if (!gone) bad("the tab was closed and its address went on answering");

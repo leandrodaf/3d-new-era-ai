@@ -121,6 +121,42 @@
     }
     activeCalls.delete(token);
   };
+  // Own the emergency path in JavaScript: these listeners survive a Rust/WASM trap.
+  const diagnosticSockets = new Set();
+  window.neweraAttachSocket = (socket) => {
+    const pending = new Map();
+    const send = socket.send.bind(socket);
+    const entry = {pending, fail(id) {
+      if (socket.readyState !== 1) return;
+      try {
+        send(JSON.stringify({type:'result', id, ok:true, result:{isError:true,
+          content:[{type:'text', text:JSON.stringify({kind:'editor_runtime_failure',
+            diagnostic:window.neweraDiagnostic, action:'Reload the editor to restore its last confirmed snapshot.'})}]}}));
+      } catch (_) { /* A closing socket is handled as disconnected by the relay. */ }
+    }};
+    diagnosticSockets.add(entry);
+    socket.addEventListener('message', event => {
+      let message;
+      try { message = JSON.parse(event.data); } catch (_) { return; }
+      if (message?.type !== 'call') return;
+      if (engineFailed) {
+        event.stopImmediatePropagation();
+        entry.fail(message.id);
+        return;
+      }
+      pending.set(JSON.stringify(message.id), {id:message.id, tool:String(message.name).slice(0,80)});
+    }, true);
+    socket.send = function(data) {
+      let message;
+      try { message = JSON.parse(data); } catch (_) { /* Non-JSON transport message. */ }
+      if (message?.type === 'result') {
+        pending.delete(JSON.stringify(message.id));
+        if (engineFailed) return; // The emergency path already answered this call.
+      }
+      return send(data);
+    };
+    socket.addEventListener('close', () => { pending.clear(); diagnosticSockets.delete(entry); });
+  };
   const runtimeWords = {
     pt: "O editor encontrou uma falha durante o uso.",
     en: "The editor encountered an error while running.",
@@ -143,12 +179,23 @@
       phase: window.neweraReady ? "runtime" : "startup",
       build: document.body.getAttribute("data-render-build"),
       backend: document.body.getAttribute("data-editor-backend") ?? "unknown",
-      operations: [...activeCalls.values()],
+      operations: activeCalls.size ? [...activeCalls.values()]
+        : [...diagnosticSockets].flatMap(s => [...s.pending.values()].map(p => ({tool:p.tool, revision:null}))),
+      recovery: window.neweraRecovery ? {
+        state:window.neweraRecovery.state,
+        saved_revision:window.neweraRecovery.saved_revision ?? null,
+        saved_at:window.neweraRecovery.saved_at ?? null,
+        restored_from_revision:window.neweraRecovery.restored_from_revision ?? null,
+      } : null,
       cause: safeCause(why),
       panic: /unreachable/i.test(String(why))
         ? safeCause((window.neweraLog ?? []).findLast(line => /panicked at|no filesystem on this platform/i.test(line)) ?? "")
         : "",
     };
+    for (const socket of diagnosticSockets) {
+      for (const {id} of socket.pending.values()) socket.fail(id);
+      socket.pending.clear();
+    }
     if (window.neweraReady) document.getElementById("failed-text").textContent = runtimeWords[tag];
     document.getElementById("loading")?.remove();
     const panel = document.getElementById("failed");
