@@ -18,9 +18,16 @@ struct Ctx {
     d: f64,
     h: f64,
     c: Paint,
+    explicit_color: Option<Paint>,
 }
 
 impl Ctx {
+    /// Keep the model's original stock palette unless the user sets a color.
+    fn body_or_default(&self, color: [u8; 3]) -> Paint {
+        self.explicit_color
+            .unwrap_or_else(|| Paint::body(crate::mesh::rgb(color)))
+    }
+
     /// Box by explicit bounds (cm) in the local frame.
     fn cube(&mut self, x: [f64; 2], y: [f64; 2], z: [f64; 2], color: Paint) {
         self.m.cuboid([x[0], y[0], z[0]], [x[1], y[1], z[1]], color);
@@ -126,6 +133,7 @@ pub(crate) fn build(model: Model, piece: &Furniture, color: Rgb) -> Mesh {
         d: piece.depth,
         h: piece.height,
         c: Paint::body(color),
+        explicit_color: piece.color.map(|_| Paint::body(color)),
     };
     let opening = piece.opening.as_ref();
     match model {
@@ -736,19 +744,19 @@ fn tv(ctx: &mut Ctx) {
         [-w * 0.15, w * 0.15],
         [0.0, 1.5],
         [-d / 2.0, d / 2.0],
-        Paint::body(crate::mesh::rgb(DARK)),
+        ctx.body_or_default(DARK),
     );
     ctx.cube(
         [-3.0, 3.0],
         [0.0, foot + 5.0],
         [-1.0, 1.0],
-        Paint::body(crate::mesh::rgb(DARK)),
+        ctx.body_or_default(DARK),
     );
     ctx.cube(
         [-w / 2.0, w / 2.0],
         [foot, h],
         [-d * 0.2, d * 0.2],
-        Paint::body(crate::mesh::rgb(DARK)),
+        ctx.body_or_default(DARK),
     );
     ctx.cube(
         [-w / 2.0 + 1.5, w / 2.0 - 1.5],
@@ -1034,7 +1042,7 @@ fn cooktop(ctx: &mut Ctx) {
         [-w / 2.0, w / 2.0],
         [h - glass, h],
         [-d / 2.0, d / 2.0],
-        Paint::body(crate::mesh::rgb([22, 22, 26])),
+        ctx.body_or_default([22, 22, 26]),
     );
     for (sx, sz, r) in [
         (-0.22, -0.2, 7.0),
@@ -1266,7 +1274,7 @@ fn door(ctx: &mut Ctx, leaves: u8, sliding: bool) {
     let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
     let frame = 5.0;
     let trim = if sliding {
-        Paint::body(crate::mesh::rgb([240, 238, 232]))
+        ctx.body_or_default([240, 238, 232])
     } else {
         rgb([240, 238, 232])
     };
@@ -1336,7 +1344,7 @@ fn door(ctx: &mut Ctx, leaves: u8, sliding: bool) {
 fn window(ctx: &mut Ctx, panes: u8, _is_window: bool) {
     let (w, d, h) = (ctx.w, ctx.d, ctx.h);
     let frame = 5.0;
-    let white = Paint::body(crate::mesh::rgb([245, 245, 242]));
+    let white = ctx.body_or_default([245, 245, 242]);
     ctx.cube(
         [-w / 2.0, w / 2.0],
         [0.0, frame],
@@ -1377,7 +1385,7 @@ fn window(ctx: &mut Ctx, panes: u8, _is_window: bool) {
 
 fn passage(ctx: &mut Ctx) {
     let (w, d, h) = (ctx.w, ctx.d, ctx.h);
-    let trim = Paint::body(crate::mesh::rgb([240, 238, 232]));
+    let trim = ctx.body_or_default([240, 238, 232]);
     ctx.cube(
         [-w / 2.0, -w / 2.0 + 2.0],
         [0.0, h],

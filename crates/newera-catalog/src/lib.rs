@@ -1915,6 +1915,41 @@ mod tests {
     use super::*;
 
     #[test]
+    fn explicit_colors_recolor_every_primary_surface_and_preserve_fixed_materials() {
+        for item in CATALOG {
+            let mut piece = item.instantiate(FurnitureId(1), Point2::new(0.0, 0.0));
+            let original = piece_mesh(&piece);
+            piece.color = Some([13, 77, 151]);
+            let recolored = piece_mesh(&piece);
+            assert_eq!(
+                original.positions, recolored.positions,
+                "{} geometry changed",
+                item.id
+            );
+            assert_eq!(original.finishable, recolored.finishable);
+            for (i, (before, after)) in original.colors.iter().zip(&recolored.colors).enumerate() {
+                let same = before.iter().zip(after).all(|(a, b)| (a - b).abs() < 1e-6);
+                if original.finishable.get(i).copied().unwrap_or(true) {
+                    assert!(
+                        !same,
+                        "{} ignores the explicit body color at vertex {i}",
+                        item.id
+                    );
+                } else {
+                    assert!(same, "{} recolored a fixed material at vertex {i}", item.id);
+                }
+            }
+            piece.color = None;
+            assert_eq!(
+                piece_mesh(&piece),
+                original,
+                "{} default appearance changed",
+                item.id
+            );
+        }
+    }
+
+    #[test]
     fn every_item_has_a_unique_id_and_sane_size() {
         let mut ids = std::collections::HashSet::new();
         for item in CATALOG {
