@@ -405,10 +405,24 @@ try {
       throw new Error('reloading after a runtime failure lost the confirmed snapshot');
     }
     ok('after an injected runtime failure, reload restored the confirmed project geometry and saved revision');
-    await evaluate(`(() => {
+    const legacySnapshotInstalled = await evaluate(`(() => {
       const snapshot=JSON.parse(localStorage.getItem('newera-autosave'));
-      localStorage.setItem('newera-autosave', snapshot.name + '\\n' + snapshot.data);
+      const legacy=snapshot.name + '\\n' + snapshot.data;
+      localStorage.setItem('newera-autosave', legacy);
+      // The current editor may autosave while navigation is still waiting
+      // for beforeunload. Keep this fixture intact until its realm is gone;
+      // the destination page gets the real Storage prototype again.
+      const setItem=Storage.prototype.setItem;
+      Storage.prototype.setItem=function(key,value) {
+        if (this === localStorage && key === 'newera-autosave') {
+          throw new DOMException('Legacy fixture pending reload', 'QuotaExceededError');
+        }
+        return setItem.call(this,key,value);
+      };
+      return localStorage.getItem('newera-autosave') === legacy;
     })()`);
+    if (!legacySnapshotInstalled) throw new Error('could not install legacy browser snapshot');
+    await sleep(2000);
     await send("Page.navigate", {url:`${page}?relay=${encodeURIComponent(relay)}`});
     let legacyHome;
     for (let i=0;i<60;i++) {
@@ -416,7 +430,9 @@ try {
       try { legacyHome=await readHome(); } catch { continue; }
       if (legacyHome.recovery?.legacy) break;
     }
-    if (!legacyHome?.recovery?.legacy || legacyHome.recovery.restored_from_revision !== null || legacyHome.name !== beforeReload.name) throw new Error('legacy browser snapshot was not restored');
+    if (!legacyHome?.recovery?.legacy || legacyHome.recovery.restored_from_revision !== null || legacyHome.name !== beforeReload.name) {
+      throw new Error(`legacy browser snapshot was not restored: ${JSON.stringify(legacyHome?.recovery)}`);
+    }
     ok('legacy browser snapshots still restore without pretending their saved revision is known');
 
 
