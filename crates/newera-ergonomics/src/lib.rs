@@ -2312,6 +2312,9 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
     for f in review.findings {
         match findings.iter_mut().find(|g| {
             g.severity == f.severity
+                // Imported discipline findings keep independent stable keys:
+                // accepting one room must not silence another room's defect.
+                && g.key == f.key
                 && g.message == f.message
                 && g.reference == f.reference
                 && g.fix.is_none()
@@ -2489,6 +2492,54 @@ mod tests {
             .findings
             .iter()
             .any(|f| f.severity == severity && f.reference == Some(code))
+    }
+
+    #[test]
+    fn identical_discipline_messages_keep_each_rooms_acceptance_key() {
+        let mut home = Home::default();
+        for (id, x) in [(1, 0.0), (2, 400.0)] {
+            home.rooms.push(Room::new(
+                RoomId(id),
+                format!("Banho {id}"),
+                vec![
+                    Point2::new(x, 0.0),
+                    Point2::new(x + 300.0, 0.0),
+                    Point2::new(x + 300.0, 300.0),
+                    Point2::new(x, 300.0),
+                ],
+            ));
+        }
+        home.furniture
+            .push(piece(3, "toilet", (100.0, 100.0), (40.0, 65.0, 80.0), 0.0));
+        let before = review(&home, &Profile::default());
+        let keys = ["elec:outlets:r1", "elec:outlets:r2"];
+        for key in keys {
+            assert!(
+                before.findings.iter().any(|f| f.key == key),
+                "{key} must survive grouping"
+            );
+        }
+        home.accepted
+            .insert(keys[0].into(), "First bathroom reviewed".into());
+        let after = review(&home, &Profile::default());
+        assert!(
+            after
+                .findings
+                .iter()
+                .find(|f| f.key == keys[0])
+                .unwrap()
+                .accepted
+                .is_some()
+        );
+        assert!(
+            after
+                .findings
+                .iter()
+                .find(|f| f.key == keys[1])
+                .unwrap()
+                .accepted
+                .is_none()
+        );
     }
 
     #[test]

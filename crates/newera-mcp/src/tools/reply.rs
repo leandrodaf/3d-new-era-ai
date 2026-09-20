@@ -236,12 +236,8 @@ pub(super) fn preview_with(
         newera_ergonomics::review(&before, &profile),
         newera_ergonomics::review(&after, &profile),
     );
-    // Findings are matched without their numbers, so one that merely got
-    // better reads as improved rather than as one gone and one new.
-    let key = |f: &newera_ergonomics::Finding| {
-        let text: String = f.message.chars().filter(|c| !c.is_ascii_digit()).collect();
-        format!("{} {text}", f.place)
-    };
+    // Stable rule/element identity survives a renamed room or changed measure.
+    let key = |f: &newera_ergonomics::Finding| f.key.clone();
     let old_keys: std::collections::BTreeSet<String> = was.findings.iter().map(&key).collect();
     let new_keys: std::collections::BTreeSet<String> = now.findings.iter().map(&key).collect();
     let object = out.as_object_mut().expect("object");
@@ -263,6 +259,22 @@ pub(super) fn preview_with(
         if !list.is_empty() {
             object.insert(label.to_owned(), serde_json::json!(list));
         }
+    }
+    let changed: Vec<serde_json::Value> =
+        now.findings
+            .iter()
+            .filter_map(|f| {
+                let old = was.findings.iter().find(|old| old.key == f.key)?;
+                (old.message != f.message || old.place != f.place || old.severity != f.severity)
+                    .then(|| {
+                        serde_json::json!({"key":f.key,
+                "from":{"sev":old.severity,"place":old.place,"msg":old.message},
+                "to":{"sev":f.severity,"place":f.place,"msg":f.message}})
+                    })
+            })
+            .collect();
+    if !changed.is_empty() {
+        object.insert("findings_changed".into(), serde_json::json!(changed));
     }
     if brief {
         // The parts a group rebuilds are not a decision; the roots are.

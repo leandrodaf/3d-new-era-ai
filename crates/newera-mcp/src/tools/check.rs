@@ -477,6 +477,58 @@ mod tests {
     }
 
     #[test]
+    fn renaming_a_room_changes_the_description_not_the_missing_installation() {
+        let s = server();
+        {
+            let mut doc = s.document.write();
+            doc.execute(Command::insert(newera_core::Room::new(
+                newera_core::RoomId(1),
+                "Banho social",
+                vec![
+                    newera_core::Point2::new(0.0, 0.0),
+                    newera_core::Point2::new(300.0, 0.0),
+                    newera_core::Point2::new(300.0, 300.0),
+                    newera_core::Point2::new(0.0, 300.0),
+                ],
+            )))
+            .unwrap();
+            doc.execute(Command::insert(newera_core::Furniture {
+                id: newera_core::FurnitureId(2),
+                catalog: "toilet".into(),
+                position: newera_core::Point2::new(100.0, 100.0),
+                ..newera_core::Furniture::default()
+            }))
+            .unwrap();
+        }
+        let dry = s
+            .update(Parameters(
+                serde_json::from_str(
+                    r#"{"items":[{"id":"r1","name":"Banho de hóspedes"}],"dry":true}"#,
+                )
+                .unwrap(),
+            ))
+            .unwrap();
+        let dry: serde_json::Value = serde_json::from_str(&dry).unwrap();
+        for field in ["resolved", "new_findings"] {
+            assert!(
+                dry[field].as_array().is_none_or(|rows| rows
+                    .iter()
+                    .all(|r| !r.to_string().contains("tomadas de uso geral"))),
+                "{dry}"
+            );
+        }
+        assert!(
+            dry["findings_changed"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|f| f["key"] == "elec:outlets:r1"),
+            "{dry}"
+        );
+        assert_eq!(s.document.read().home().rooms[0].name, "Banho social");
+    }
+
+    #[test]
     fn ceiling_excess_is_measured_and_a_dry_move_reports_its_resolution() {
         let s = server();
         {

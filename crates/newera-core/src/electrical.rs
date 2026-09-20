@@ -167,16 +167,38 @@ fn room_class(room: &Room) -> Wet {
 /// A toilet, a shower, a basin or a bath make a bathroom whatever it is
 /// called: "Banho suíte" has "suíte" in its name and is no bedroom.
 fn class_in(home: &Home, room: &Room) -> Wet {
-    let fixtures = home.furniture.iter().flat_map(Furniture::flatten).any(|f| {
-        let name = crate::annotations::fold(&f.name);
-        let bathroom_piece = matches!(
+    fn bathroom_fixture(f: &Furniture, room: &Room) -> bool {
+        if !f.visible {
+            return false;
+        }
+        let known = matches!(
             f.catalog.as_str(),
             "toilet" | "shower" | "shower-glass" | "bathtub" | "basin-cabinet"
-        ) || ["vaso", "box ", "lavatorio", "chuveiro", "banheira", "bide"]
+        );
+        let generic = matches!(
+            f.catalog.as_str(),
+            "" | "imported" | "box" | "solid" | "group"
+        );
+        let name = crate::annotations::fold(&f.name);
+        // "Vaso" alone also names flower pots; named catalog objects retain
+        // their identity even if a decorative name mentions bathroom fixtures.
+        let named = generic
+            && [
+                "vaso sanitario",
+                "bacia sanitaria",
+                "lavatorio",
+                "chuveiro",
+                "banheira",
+                "bide",
+                "box de banho",
+                "box do chuveiro",
+            ]
             .iter()
             .any(|w| name.contains(w));
-        bathroom_piece && room.points.len() >= 3 && inside(&room.points, f.position)
-    });
+        ((known || named) && room.points.len() >= 3 && inside(&room.points, f.position))
+            || f.children.iter().any(|child| bathroom_fixture(child, room))
+    }
+    let fixtures = home.furniture.iter().any(|f| bathroom_fixture(f, room));
     if fixtures {
         Wet::Bathroom
     } else {
@@ -2003,6 +2025,51 @@ mod tests {
 
     use super::*;
     use crate::elements::Room;
+
+    #[test]
+    fn decorative_pots_do_not_turn_living_rooms_into_bathrooms() {
+        let mut home = Home::default();
+        home.rooms.push(room(1, "Estar", 0.0, 400.0, 400.0));
+        home.furniture.push(Furniture {
+            id: FurnitureId(2),
+            catalog: "plant".into(),
+            name: "Vaso com planta".into(),
+            position: Point2::new(200.0, 200.0),
+            ..Furniture::default()
+        });
+        let outlets = |h: &Home| {
+            check(h)
+                .into_iter()
+                .find(|f| f.key == "elec:outlets:r1")
+                .unwrap()
+                .message
+        };
+        assert_eq!(class_in(&home, &home.rooms[0]), Wet::Living);
+        assert!(outlets(&home).contains("5 m de perímetro"));
+        assert!(!outlets(&home).contains("lavatório"));
+        home.furniture[0].catalog = "imported".into();
+        assert_eq!(class_in(&home, &home.rooms[0]), Wet::Living);
+        home.furniture[0].name = "Vaso sanitário".into();
+        assert_eq!(class_in(&home, &home.rooms[0]), Wet::Bathroom);
+        assert!(outlets(&home).contains("lavatório"));
+        home.furniture[0].visible = false;
+        assert_eq!(class_in(&home, &home.rooms[0]), Wet::Living);
+        home.furniture[0].visible = true;
+        home.furniture[0].catalog = "toilet".into();
+        home.furniture[0].name = "Peça renomeada".into();
+        assert_eq!(class_in(&home, &home.rooms[0]), Wet::Bathroom);
+        let child = home.furniture.remove(0);
+        home.furniture.push(Furniture {
+            id: FurnitureId(3),
+            catalog: "group".into(),
+            visible: false,
+            children: vec![child],
+            ..Furniture::default()
+        });
+        assert_eq!(class_in(&home, &home.rooms[0]), Wet::Living);
+        home.furniture[0].visible = true;
+        assert_eq!(class_in(&home, &home.rooms[0]), Wet::Bathroom);
+    }
 
     fn point(id: u64, catalog: &str, at: (f64, f64), circuit: Option<&str>) -> Furniture {
         let mut f = Furniture {
