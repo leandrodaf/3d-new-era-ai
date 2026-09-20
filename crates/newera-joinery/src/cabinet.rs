@@ -48,6 +48,11 @@ pub struct CabinetParams {
     pub plinth: f64,
     /// Holds a cooktop on top: needs the depth for its niche.
     pub cooktop: bool,
+    /// Rectangular opening through the wooden top, `[x, y, w, d]` cm from
+    /// the cabinet's left-back corner. Match the appliance body and the
+    /// countertop cutout; the cut list keeps one board with machining.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_cutout: Option<[f64; 4]>,
     /// Carcass color `[r,g,b]` (default white MDF).
     pub color: Option<[u8; 3]>,
     /// Door and drawer front finish, e.g. `wood` or `#5f6e4a`.
@@ -116,6 +121,7 @@ impl Default for CabinetParams {
             dividers: None,
             plinth: 10.0,
             cooktop: false,
+            top_cutout: None,
             color: None,
             front: None,
             blind_left: 0.0,
@@ -582,7 +588,51 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
         .banded(1, 0),
     );
     parts.push(Part::board("Base", [t, 0.0, plinth], [iw, dc, t], &board, carcass).banded(1, 0));
-    parts.push(Part::board("Tampo", [t, 0.0, h - t], [iw, dc, t], &board, carcass).banded(1, 0));
+    let mut extra_cuts = Vec::new();
+    let mut top = Part::board("Tampo", [t, 0.0, h - t], [iw, dc, t], &board, carcass).banded(1, 0);
+    if let Some([x, y, width, depth]) = p.top_cutout {
+        if ![x, y, width, depth].iter().all(|v| v.is_finite())
+            || width <= 0.0
+            || depth <= 0.0
+            || x < t
+            || y < 0.0
+            || x + width > w - t
+            || y + depth > dc
+        {
+            return Err("O recorte superior deve caber entre as laterais e dentro da profundidade da caixa; use top_cutout = [x, y, largura, profundidade] em cm.".into());
+        }
+        // Four disjoint solids leave an actual void in the rendered model.
+        // They are not four boards to manufacture: retain one machined top.
+        for (label, at, size) in [
+            ("esquerda", [t, 0.0, h - t], [x - t, dc, t]),
+            (
+                "direita",
+                [x + width, 0.0, h - t],
+                [w - t - x - width, dc, t],
+            ),
+            ("atrás", [x, 0.0, h - t], [width, y, t]),
+            ("frente", [x, y + depth, h - t], [width, dc - y - depth, t]),
+        ] {
+            if size[0] > 0.0 && size[1] > 0.0 {
+                let mut strip = Part::board(
+                    &format!("Tampo — {label} do recorte"),
+                    at,
+                    size,
+                    &board,
+                    carcass,
+                );
+                strip.board = None;
+                parts.push(strip);
+            }
+        }
+        top.holes.push([x - t, y, width, depth]);
+        extra_cuts.push(top);
+    } else {
+        parts.push(top);
+        if p.cooktop {
+            notes.push("Armário para cooktop sem recorte no tampo de madeira: defina top_cutout = [x, y, largura, profundidade] conforme o corpo do aparelho; recortar só a pedra não libera a caixa abaixo.".into());
+        }
+    }
     parts.push(Part::board(
         "Fundo",
         [t - GROOVE, BACK_INSET, plinth + t - GROOVE],
@@ -1173,7 +1223,7 @@ pub(crate) fn generate(p: &CabinetParams) -> Result<Output, String> {
         size: [w, d, h],
         hardware,
         notes,
-        extra_cuts: Vec::new(),
+        extra_cuts,
         name: format!("Armário {} × {} × {} cm", num(w), num(d), num(h)),
     })
 }
@@ -1189,6 +1239,63 @@ mod tests {
             .iter()
             .find(|p| p.name == name)
             .unwrap_or_else(|| panic!("no {name}"))
+    }
+
+    #[test]
+    fn a_cooktop_cutout_is_a_real_void_and_one_machined_board() {
+        let p = CabinetParams {
+            w: 70.0,
+            h: 87.0,
+            d: 60.0,
+            shelves: 0,
+            cooktop: true,
+            top_cutout: Some([4.0, 4.0, 62.0, 52.0]),
+            ..CabinetParams::default()
+        };
+        let out = generate(&p).unwrap();
+        let top: Vec<_> = out
+            .parts
+            .iter()
+            .filter(|p| p.name.starts_with("Tampo"))
+            .collect();
+        assert_eq!(top.len(), 4);
+        let area: f64 = top.iter().map(|p| p.size[0] * p.size[1]).sum();
+        assert!((area - ((70.0 - 3.6) * (60.0 - 1.8) - 62.0 * 52.0)).abs() < 1e-8);
+        for part in top {
+            assert!(part.board.is_none());
+            assert!(
+                part.at[0] + part.size[0] <= 4.0
+                    || part.at[0] >= 66.0
+                    || part.at[1] + part.size[1] <= 4.0
+                    || part.at[1] >= 56.0
+            );
+        }
+        assert_eq!(out.extra_cuts.len(), 1);
+        assert_eq!(out.extra_cuts[0].holes, vec![[2.2, 4.0, 62.0, 52.0]]);
+        let restored: CabinetParams =
+            serde_json::from_value(serde_json::to_value(&p).unwrap()).unwrap();
+        assert_eq!(restored.top_cutout, p.top_cutout);
+        for cut in [
+            [0.0, 4.0, 62.0, 52.0],
+            [4.0, 4.0, 70.0, 52.0],
+            [4.0, 4.0, 62.0, -1.0],
+            [4.0, 4.0, 62.0, 60.0],
+        ] {
+            assert!(
+                generate(&CabinetParams {
+                    top_cutout: Some(cut),
+                    ..p.clone()
+                })
+                .is_err()
+            );
+        }
+        let closed = generate(&CabinetParams {
+            top_cutout: None,
+            ..p
+        })
+        .unwrap();
+        assert!(closed.notes.iter().any(|n| n.contains("sem recorte")));
+        assert!(closed.parts.iter().any(|p| p.name == "Tampo"));
     }
 
     #[test]
