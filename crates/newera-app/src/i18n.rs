@@ -2043,7 +2043,15 @@ mod tests {
         let mut missing: Vec<String> = Vec::new();
         let mut rest = code;
         while let Some(at) = rest.find(call) {
+            // Match a function name, not the suffix of from_str or refill.
+            let identifier_prefix = rest[..at]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_alphanumeric() || c == '_');
             rest = &rest[at + call.len()..];
+            if identifier_prefix {
+                continue;
+            }
             let Some(open) = rest.find('"') else { break };
             if rest[..open].contains(|c: char| !c.is_whitespace()) {
                 continue;
@@ -2070,6 +2078,13 @@ mod tests {
             }
         }
         missing
+    }
+
+    #[test]
+    fn translation_scan_matches_function_names_not_identifier_suffixes() {
+        let code = "JsValue::from_str(\"neweraOperation\"); refill(\"buffer\"); i18n::tr(\"Missing UI text\"); tr(\"Salvar\"); fill(\"Missing format {}\", &[]);";
+        assert_eq!(untranslated(code, "tr("), vec!["Missing UI text"]);
+        assert_eq!(untranslated(code, "fill("), vec!["Missing format {}"]);
     }
 
     /// These run beside the tests that drive whole windows, which read the

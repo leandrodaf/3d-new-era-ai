@@ -282,6 +282,13 @@ pub(crate) fn piece(
         if let Some(beam) = light.beam {
             l["beam"] = num(beam);
         }
+        if let Some(watts) = light.watts {
+            l["w"] = num(watts);
+        }
+        if let Some(area) = light.area {
+            l["area"] = json!([num(area[0]), num(area[1])]);
+            l["panel_upward"] = json!(light.panel_upward.unwrap_or(false));
+        }
         v["light"] = l;
     }
     if !f.visible {
@@ -832,6 +839,23 @@ mod tests {
     use newera_core::WallId;
 
     use super::*;
+
+    #[test]
+    fn compact_light_preserves_the_rating_and_emitting_side() {
+        let mut light = newera_core::Light::led(800.0, 3000.0, (0.5, 0.5, 1.0));
+        light.watts = Some(8.0);
+        light.area = Some([100.0, 1.0]);
+        light.panel_upward = Some(true);
+        let f = newera_core::Furniture {
+            light: Some(light),
+            ..newera_core::Furniture::default()
+        };
+        let v = piece(&Home::default(), &[], &f);
+        assert_eq!(
+            v["light"],
+            json!({"lm":800.0,"k":3000,"w":8,"area":[100,1],"panel_upward":true})
+        );
+    }
 
     #[test]
     fn compact_view_omits_defaults_and_rounds() {
