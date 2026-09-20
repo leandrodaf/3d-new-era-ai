@@ -13,6 +13,33 @@ use super::NewEraMcp;
 use super::reply::invalid;
 use crate::compact;
 
+/// Opening spans in each straight host wall's local frame. These are wall-axis
+/// distances, not floor clearances or a claim about the operable sash width.
+pub(super) fn opening_measure(
+    home: &newera_core::Home,
+    piece: &newera_core::Furniture,
+) -> serde_json::Value {
+    let cuts = newera_core::wall_cuts(&home.walls, &home.furniture);
+    let hosts: Vec<_> = home.walls.iter().zip(cuts).filter_map(|(wall, cuts)| {
+        let cut = cuts.iter().find(|cut| cut.furniture == piece.id)?;
+        let adjacent = |before: bool| {
+            cuts.iter().filter(|other| other.furniture != piece.id
+                && other.bottom < cut.top && other.top > cut.bottom)
+                .filter(|other| if before { other.from < cut.from } else { other.from >= cut.from })
+                .map(|other| (if before { cut.from - other.to } else { other.from - cut.to }, other.furniture))
+                .min_by(|a, b| a.0.total_cmp(&b.0))
+                .map(|(gap, id)| serde_json::json!({"id":id.to_string(),"gap":compact::num(gap)}))
+        };
+        Some(serde_json::json!({"wall":wall.id.to_string(),
+            "span":[compact::num(cut.from),compact::num(cut.to)],
+            "width":compact::num(cut.to-cut.from),
+            "to_start":compact::num(cut.from),
+            "to_end":compact::num(wall.start.distance(wall.end)-cut.to),
+            "previous":adjacent(true),"next":adjacent(false)}))
+    }).collect();
+    serde_json::json!({"basis":"wall_axis","hosts":hosts})
+}
+
 /// A point in the plan, or the id of something already drawn.
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 #[serde(untagged)]
@@ -25,7 +52,7 @@ pub(crate) enum Spot {
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct MeasureParams {
     /// What to measure from: an id or `[x,y]`. Alone, reports the free floor
-    /// on all four sides of that piece.
+    /// on all four sides of that piece. Openings instead report wall-axis spans, distances to wall ends and neighboring openings; no floor clearances.
     from: Option<Spot>,
     /// What to measure to: an id or `[x,y]`.
     to: Option<Spot>,
@@ -208,6 +235,11 @@ impl NewEraMcp {
         let piece = home
             .find_piece(id)
             .ok_or_else(|| invalid(format!("no {raw} on this storey")))?;
+        if piece.is_opening() {
+            return Ok(
+                serde_json::json!({"id":raw,"opening":opening_measure(&home, piece)}).to_string(),
+            );
+        }
         let dirs: Vec<Dir> = match &p.dirs {
             Some(raw) => raw
                 .iter()
@@ -247,6 +279,96 @@ impl NewEraMcp {
 mod tests {
     use super::*;
     use crate::tools::server;
+
+    #[test]
+    fn opening_measure_uses_wall_frame_for_diagonal_and_split_hosts() {
+        use newera_core::{Furniture, FurnitureId, Home, Point2, Wall, WallId};
+        let mut home = Home::default();
+        let mut opening = Furniture {
+            id: FurnitureId(3),
+            width: 100.0,
+            depth: 20.0,
+            height: 120.0,
+            elevation: 100.0,
+            opening: Some(newera_core::Opening::default()),
+            ..Furniture::default()
+        };
+        let wall = Wall::new(WallId(1), Point2::new(0.0, 0.0), Point2::new(300.0, 400.0));
+        newera_core::align_to_wall(&mut opening, &wall, 200.0);
+        home.walls.push(wall);
+        home.furniture.push(opening.clone());
+        let value = opening_measure(&home, &opening);
+        assert_eq!(value["hosts"][0]["width"], 100);
+        assert_eq!(value["hosts"][0]["to_start"], 150);
+        assert_eq!(value["hosts"][0]["to_end"], 250);
+        // Split the same wall through the opening: report each actual cut.
+        home.walls[0].end = Point2::new(120.0, 160.0);
+        home.walls.push(Wall::new(
+            WallId(2),
+            Point2::new(120.0, 160.0),
+            Point2::new(300.0, 400.0),
+        ));
+        let value = opening_measure(&home, &opening);
+        assert_eq!(value["hosts"].as_array().unwrap().len(), 2);
+        assert_eq!(value["hosts"][0]["width"], 50);
+        assert_eq!(value["hosts"][1]["width"], 50);
+        home.walls.clear();
+        assert!(
+            opening_measure(&home, &opening)["hosts"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn hosted_openings_measure_jambs_and_neighbors_without_host_penetration() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_value(serde_json::json!({
+                "walls":[{"pts":[[0,0],[1620,0]]}]
+            }))
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_value(serde_json::json!({"items":[
+                {"cat":"window","wall":"w1","along":210,"w":180,"h":140,"elev":110},
+                {"cat":"window","wall":"w1","along":670,"w":180,"h":140,"elev":110}
+            ]}))
+            .unwrap(),
+        ))
+        .unwrap();
+        let measured: serde_json::Value = serde_json::from_str(
+            &s.measure(Parameters(
+                serde_json::from_value(serde_json::json!({"from":"f2"})).unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(measured.get("clear").is_none(), "{measured}");
+        let host = &measured["opening"]["hosts"][0];
+        assert_eq!(host["wall"], "w1");
+        assert_eq!(host["width"], 180);
+        assert_eq!(host["to_start"], 120);
+        assert_eq!(host["to_end"], 1320);
+        assert_eq!(host["next"]["id"], "f3");
+        assert_eq!(host["next"]["gap"], 280);
+        let preview: serde_json::Value = serde_json::from_str(
+            &s.update(Parameters(
+                serde_json::from_value(
+                    serde_json::json!({"dry":true,"items":[{"id":"f2","at":[220,0]}]}),
+                )
+                .unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let clear = &preview["clearances"]["f2"];
+        assert!(clear.get("+x").is_none(), "{preview}");
+        assert_eq!(clear["opening"]["hosts"][0]["to_start"], 130);
+        assert_eq!(clear["opening"]["hosts"][0]["next"]["gap"], 270);
+    }
 
     #[test]
     fn measure_answers_clearances_gaps_and_corridors() {

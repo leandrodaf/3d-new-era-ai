@@ -129,6 +129,15 @@ pub(super) fn preview_with(
         let Some(piece) = view.find_piece(*id) else {
             continue;
         };
+        if piece.is_opening() {
+            clearances.insert(
+                id.to_string(),
+                serde_json::json!({
+                    "opening": super::measure::opening_measure(&view, piece)
+                }),
+            );
+            continue;
+        }
         let sides: serde_json::Map<String, serde_json::Value> = newera_core::Dir::PLAN
             .iter()
             .map(|dir| {
