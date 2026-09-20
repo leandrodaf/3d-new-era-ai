@@ -97,7 +97,7 @@ mod tests {
         unmount(dir);
         let (_, bytes) = files
             .iter()
-            .find(|(p, _)| p.ends_with("render-snapshot-test/a.bin"))
+            .find(|(p, _)| Path::new(p) == dir.join("a.bin"))
             .unwrap();
         assert_eq!(bytes.as_ref(), &[1, 2, 3, 4]);
     }
