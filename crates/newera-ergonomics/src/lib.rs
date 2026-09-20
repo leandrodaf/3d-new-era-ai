@@ -2397,13 +2397,16 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
     review.electrical();
     review.plumbing();
     review.guards();
-    // The same finding on a row of modules is one finding about all of them.
+    // Establish identity before presentation grouping: accepting a warning
+    // for one room or piece must never accept the same text elsewhere.
     let mut findings: Vec<Finding> = Vec::new();
-    for f in review.findings {
+    for mut f in review.findings {
+        if f.key.is_empty() {
+            f.key = key_of(&f);
+        }
         match findings.iter_mut().find(|g| {
             g.severity == f.severity
-                // Imported discipline findings keep independent stable keys:
-                // accepting one room must not silence another room's defect.
+                // All findings, including architecture, keep independent keys.
                 && g.key == f.key
                 && g.message == f.message
                 && g.reference == f.reference
@@ -2421,11 +2424,6 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
     // Each finding gets the name it is accepted by, and the ones already
     // looked at carry the reason instead of the cost.
     for finding in &mut findings {
-        // Findings brought from another check keep the key they are
-        // accepted by there.
-        if finding.key.is_empty() {
-            finding.key = key_of(finding);
-        }
         finding.accepted = home.accepted.get(&finding.key).cloned();
         // The same rule on the same place under an older prefix — a rule that
         // came to cite its source: the acceptance follows it.
@@ -2693,6 +2691,160 @@ mod tests {
             .findings
             .iter()
             .any(|f| f.severity == severity && f.reference == Some(code))
+    }
+
+    #[test]
+    fn identical_architecture_warnings_remain_independent_after_acceptance_and_reordering() {
+        let mut home = Home::default();
+        for (id, x) in [(1, 0.0), (2, 400.0)] {
+            home.rooms.push(Room::new(
+                RoomId(id),
+                "Quarto",
+                vec![
+                    Point2::new(x, 0.0),
+                    Point2::new(x + 300.0, 0.0),
+                    Point2::new(x + 300.0, 300.0),
+                    Point2::new(x, 300.0),
+                ],
+            ));
+        }
+        let warnings = |home: &Home| {
+            review(home, &Profile::default())
+                .findings
+                .into_iter()
+                .filter(|f| f.message.starts_with("Sem janela:"))
+                .collect::<Vec<_>>()
+        };
+        let before = warnings(&home);
+        assert_eq!(
+            before.len(),
+            2,
+            "each room must retain its own warning: {before:#?}"
+        );
+        assert_ne!(before[0].key, before[1].key);
+        let first = before
+            .iter()
+            .find(|f| f.place.ends_with("r1"))
+            .unwrap()
+            .key
+            .clone();
+        let second = before
+            .iter()
+            .find(|f| f.place.ends_with("r2"))
+            .unwrap()
+            .key
+            .clone();
+        home.accepted
+            .insert(first.clone(), "Only the first room reviewed".into());
+        home.rooms.reverse();
+        home.rooms
+            .iter_mut()
+            .find(|r| r.id == RoomId(1))
+            .unwrap()
+            .name = "Quarto renomeado".into();
+        let after = warnings(&home);
+        assert_eq!(after.len(), 2);
+        assert!(
+            after
+                .iter()
+                .find(|f| f.key == first)
+                .unwrap()
+                .accepted
+                .is_some()
+        );
+        assert!(
+            after
+                .iter()
+                .find(|f| f.key == second)
+                .unwrap()
+                .accepted
+                .is_none()
+        );
+        assert!(
+            !orphaned(&home, &Profile::default())
+                .iter()
+                .any(|(key, _)| key == &first)
+        );
+        // Removing the accepted room must not transfer its reason to the other room.
+        home.rooms.retain(|r| r.id != RoomId(1));
+        let remaining = warnings(&home);
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].key, second);
+        assert!(remaining[0].accepted.is_none());
+        assert!(
+            orphaned(&home, &Profile::default())
+                .iter()
+                .any(|(key, _)| key == &first)
+        );
+    }
+
+    #[test]
+    fn identical_piece_warnings_keep_individual_acceptances_when_dimensions_change() {
+        let mut home = Home::default();
+        square(&mut home, "Quarto", 600.0, 500.0);
+        for (id, x) in [(20, 150.0), (21, 450.0)] {
+            home.furniture.push(piece(
+                id,
+                "bed-single",
+                (x, 200.0),
+                (90.0, 200.0, 60.0),
+                0.0,
+            ));
+        }
+        let profile = Profile {
+            wheelchair: true,
+            ..Profile::default()
+        };
+        let warnings = |home: &Home| {
+            review(home, &profile)
+                .findings
+                .into_iter()
+                .filter(|f| f.message.starts_with("Cama a "))
+                .collect::<Vec<_>>()
+        };
+        let before = warnings(&home);
+        assert_eq!(before.len(), 2, "{before:#?}");
+        let first = before
+            .iter()
+            .find(|f| f.place.ends_with("f20"))
+            .unwrap()
+            .key
+            .clone();
+        let second = before
+            .iter()
+            .find(|f| f.place.ends_with("f21"))
+            .unwrap()
+            .key
+            .clone();
+        assert_ne!(first, second);
+        home.accepted
+            .insert(first.clone(), "Reviewed bed 20 only".into());
+        home.furniture.reverse();
+        let bed = home
+            .furniture
+            .iter_mut()
+            .find(|f| f.id == FurnitureId(20))
+            .unwrap();
+        bed.name = "Cama renomeada".into();
+        bed.height = 65.0;
+        let after = warnings(&home);
+        assert_eq!(after.len(), 2);
+        assert!(
+            after
+                .iter()
+                .find(|f| f.key == first)
+                .unwrap()
+                .accepted
+                .is_some()
+        );
+        assert!(
+            after
+                .iter()
+                .find(|f| f.key == second)
+                .unwrap()
+                .accepted
+                .is_none()
+        );
     }
 
     #[test]
