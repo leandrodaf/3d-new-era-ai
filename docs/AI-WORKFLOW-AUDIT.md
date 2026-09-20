@@ -212,3 +212,10 @@ Atualização de publicação: o [Publish 35509917158](https://github.com/leandr
 
 - Commit `410125f`: Publish `35513780703` concluído com sucesso; CI `35513780685` aprovado em Windows, macOS, Linux e WASM, incluindo Clippy, formato, MSRV e smoke MCP. A correção do teste Windows e o percurso de download de vídeo pelo menu passaram no GitHub.
 - Publicação realizada pelo fluxo do GitHub/Cloudflare Pages. Não foi necessário deploy manual da VPS para essas alterações do editor.
+
+## Quarto 2 — detalhamento aplicado antes da consulta sobre pendências
+
+- Escrivaninha encostada à parede oeste (face x=466), cadeira acompanhando o deslocamento e tapete ampliado para 260 × 240 cm, centralizado sob a cama. Cabeceira `f362` de 310 × 4 × 120 cm, com topo 20 cm abaixo do peitoril. Abajures `f363`/`f364` sobre os criados, base a 55 cm, 300 lm/3000 K cada.
+- Leitura posterior na aba confirmou posições e IDs. `check_layout` retornou `{}` tanto online quanto na cópia nativa. Vista “Quarto 2 — cabeceira e leitura” (índice 6) renderizada e inspecionada na cópia nativa; backup versionado atualizado com os mesmos comandos e IDs.
+- A renderização online respondeu “Uma renderização já está em andamento. Aguarde ou cancele.”; nenhuma imagem online desta etapa foi obtida. Não foi cancelado o trabalho em andamento nem atribuída uma causa sem diagnóstico. O MCP continuou respondendo a leitura e checagem.
+- Após a solicitação do usuário para apenas informar as pendências, esta etapa se limitou a verificar e preservar alterações já aplicadas. Nenhuma nova correção da lista de auditoria foi iniciada. Instalações, cotas, revisão global e canto da cozinha continuam pendentes.
