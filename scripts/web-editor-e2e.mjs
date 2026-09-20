@@ -209,7 +209,13 @@ await send("Page.enable");
       }
       await sleep(3000);
       const back = await stored();
-      if (back !== drawn) {
+      // The envelope now includes save time and this session's revision.
+      // Compare the actual project bundle, and require confirmed restoration.
+      const savedSnapshot=JSON.parse(drawn);
+      const restoredSnapshot=JSON.parse(back);
+      const recovery=JSON.parse(await evaluate("JSON.stringify(window.neweraRecovery)"));
+      if (restoredSnapshot.data !== savedSnapshot.data
+          || recovery.restored_from_revision !== savedSnapshot.revision) {
         await complain("the work did not come back after a reload");
       } else {
         console.log("autosave: the drawing came back after a reload");
