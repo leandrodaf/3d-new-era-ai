@@ -80,6 +80,7 @@ fn get(object: &JsValue, key: &str) -> JsValue {
 impl Worker {
     pub(crate) fn start(
         mut request: serde_json::Value,
+        paths: Vec<String>,
         report: Arc<Report>,
         result: Outcome,
         ctx: egui::Context,
@@ -88,13 +89,17 @@ impl Worker {
         let budget = budget();
         bound_request(&mut request, budget)?;
         request["render_budget"] = serde_json::json!(budget);
+        let dir = request["assets"].as_str().map(std::path::PathBuf::from);
+        let paths = paths
+            .into_iter()
+            .map(|p| newera_core::resolve_asset(dir.as_deref(), &p));
         let request = request.to_string();
         if request.len() > budget.scene_bytes {
             return Err("Cena excede o limite de renderização do navegador.".into());
         }
         let assets = js_sys::Array::new();
         let transfers = js_sys::Array::new();
-        for (path, bytes) in newera_core::vfs::snapshot(budget.asset_bytes)? {
+        for (path, bytes) in newera_core::vfs::snapshot_paths(paths, budget.asset_bytes)? {
             let bytes = js_sys::Uint8Array::from(bytes.as_ref());
             transfers.push(&bytes.buffer());
             assets.push(&js_sys::Array::of2(&path.into(), &bytes));
@@ -333,11 +338,14 @@ pub(crate) async fn mcp(
 ) -> Result<serde_json::Value, String> {
     let report = Arc::new(Report::default());
     let result = Arc::new(Mutex::new(None));
-    let request = {
+    let (request, paths) = {
         let doc = document.read();
-        serde_json::json!({"kind":"mcp", "home":doc.home(), "assets":doc.asset_dir(), "name":name, "args":args})
+        (
+            serde_json::json!({"kind":"mcp", "home":doc.home(), "assets":doc.asset_dir(), "name":name, "args":args}),
+            doc.home().asset_paths(),
+        )
     };
-    let _worker = Worker::start(request, report.clone(), result.clone(), ctx.clone())?;
+    let _worker = Worker::start(request, paths, report.clone(), result.clone(), ctx.clone())?;
     MCP_REPORT.with(|slot| *slot.borrow_mut() = Some(report.clone()));
     ctx.request_repaint();
     let started = web_time::Instant::now();

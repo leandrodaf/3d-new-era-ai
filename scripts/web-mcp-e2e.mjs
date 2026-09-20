@@ -11,6 +11,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const [page = "http://127.0.0.1:8801/app/", relay = "http://127.0.0.1:7979"] =
   process.argv.slice(2);
@@ -445,6 +446,49 @@ try {
       throw new Error(`legacy browser snapshot was not restored: ${JSON.stringify(legacyHome?.recovery)}`);
     }
     ok('legacy browser snapshots still restore without pretending their saved revision is known');
+
+    // A mounted but unused 16 MiB import must not exhaust the 8 MiB worker
+    // budget. Open a real bundle via the same recovery path just verified.
+    const assetBundle = execFileSync('python3', [
+      fileURLToPath(new URL('./fixtures/render-assets.py', import.meta.url)),
+      fileURLToPath(new URL('../web/demo.newera', import.meta.url)),
+    ]).toString('base64');
+    await evaluate(`(() => {
+      localStorage.setItem('newera-autosave', JSON.stringify({version:1,name:'assets.newera',revision:1,saved_at:Date.now(),data:${JSON.stringify(assetBundle)}}));
+      const setItem=Storage.prototype.setItem;
+      Storage.prototype.setItem=function(key,value) {
+        if(this===localStorage && key==='newera-autosave') throw new DOMException('Fixture pending reload','QuotaExceededError');
+        return setItem.call(this,key,value);
+      };
+    })()`);
+    await send('Page.navigate', {url:`${page}?relay=${encodeURIComponent(relay)}`});
+    let assetHome;
+    for(let i=0;i<60;i++) {
+      await frames(3);
+      try {assetHome=await readHome();} catch {continue;}
+      if(assetHome.name==='Asset snapshot fixture') break;
+    }
+    if(assetHome?.name!=='Asset snapshot fixture') throw new Error('asset bundle did not load');
+    await evaluate(`(() => {
+      const Original=window.Worker;
+      window.Worker=class extends Original {
+        postMessage(data,transfer) {
+          const buffers=data.assets.map(pair=>pair[1].buffer);
+          const files=data.assets.map(pair=>pair[0].split('/').pop()).sort();
+          super.postMessage(data,transfer);
+          window.assetTransfer={files,detached:buffers.every(b=>b.byteLength===0)};
+        }
+      };
+    })()`);
+    const assetRender=await rpc(mcpUrl,{jsonrpc:'2.0',id:46,method:'tools/call',
+      params:{name:'render_3d',arguments:{w:320,h:240}}});
+    const assetTransfer=await evaluate('window.assetTransfer');
+    if(assetRender.result?.isError || !assetRender.result?.content?.some(c=>c.type==='image')
+        || !assetTransfer?.detached
+        || JSON.stringify(assetTransfer.files)!==JSON.stringify(['sample.mtl','sample.obj','wood grain.png'])) {
+      throw new Error(`referenced assets were not selected/transferred: ${JSON.stringify(assetTransfer)}`);
+    }
+    ok('real bundle renders with OBJ/MTL/PNG dependencies; unused imports stay out and buffers are transferred');
 
 
 

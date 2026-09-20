@@ -142,6 +142,7 @@ impl VideoWindow {
             serde_json::json!({
                 "kind":"video", "home":home, "assets":doc.asset_dir(), "size":self.size,
             }),
+            home.asset_paths(),
             report.clone(),
             bytes.clone(),
             ctx.clone(),

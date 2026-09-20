@@ -107,6 +107,7 @@ impl PhotoWindow {
                 "eye":view.eye.to_array(), "target":view.target.to_array(), "fov":view.fov_y,
                 "ortho":view.ortho, "near":view.near, "time":time, "quality":format!("{quality:?}")
             }),
+            home.asset_paths(),
             report.clone(),
             slot.clone(),
             ctx.clone(),

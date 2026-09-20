@@ -492,9 +492,54 @@ impl Home {
 
     /// Every file path the home refers to.
     pub fn asset_paths(&self) -> Vec<String> {
+        fn material(out: &mut Vec<String>, m: Option<&crate::Material>) {
+            if let Some(path) = m.and_then(|m| m.image.as_ref()) {
+                out.push(path.clone());
+            }
+        }
+        fn piece(out: &mut Vec<String>, f: &Furniture) {
+            out.extend(
+                [&f.model, &f.info.icon, &f.info.plan_icon]
+                    .into_iter()
+                    .flatten()
+                    .cloned(),
+            );
+            material(out, f.texture.as_ref());
+            for m in &f.materials {
+                material(out, m.texture.as_ref());
+            }
+            for child in &f.children {
+                piece(out, child);
+            }
+        }
         let mut out = Vec::new();
-        self.clone()
-            .for_each_asset_mut(&mut |p| out.push(p.clone()));
+        if let Some(bg) = &self.background {
+            out.push(bg.path.clone());
+        }
+        for level in &self.levels {
+            if let Some(bg) = &level.background {
+                out.push(bg.path.clone());
+            }
+        }
+        for wall in &self.walls {
+            material(&mut out, wall.left_side.as_ref());
+            material(&mut out, wall.right_side.as_ref());
+            for b in [&wall.left_baseboard, &wall.right_baseboard]
+                .into_iter()
+                .flatten()
+            {
+                material(&mut out, b.material.as_ref());
+            }
+        }
+        for room in &self.rooms {
+            material(&mut out, room.floor_material.as_ref());
+            material(&mut out, room.ceiling_material.as_ref());
+        }
+        for f in &self.furniture {
+            piece(&mut out, f);
+        }
+        material(&mut out, self.environment.ground_texture.as_ref());
+        material(&mut out, self.environment.sky_texture.as_ref());
         out
     }
 
@@ -559,6 +604,74 @@ impl Home {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reading_asset_paths_matches_the_relocation_visitor_for_every_surface() {
+        let material = |name: &str| {
+            Some(crate::Material {
+                image: Some(name.into()),
+                ..crate::Material::default()
+            })
+        };
+        let background = |name: &str| {
+            Some(crate::BackgroundImage {
+                path: name.into(),
+                ..crate::BackgroundImage::default()
+            })
+        };
+        let mut home = Home {
+            background: background("background"),
+            ..Home::default()
+        };
+        home.levels.push(crate::Level {
+            background: background("level"),
+            ..crate::Level::default()
+        });
+        let mut wall = Wall::new(WallId(1), Point2::new(0.0, 0.0), Point2::new(100.0, 0.0));
+        wall.left_side = material("wall-left");
+        wall.right_side = material("wall-right");
+        wall.left_baseboard = Some(crate::Baseboard {
+            thickness: 1.0,
+            height: 10.0,
+            material: material("base-left"),
+        });
+        wall.right_baseboard = Some(crate::Baseboard {
+            thickness: 1.0,
+            height: 10.0,
+            material: material("base-right"),
+        });
+        home.walls.push(wall);
+        let mut room = Room::new(RoomId(2), "Room", vec![]);
+        room.floor_material = material("floor");
+        room.ceiling_material = material("ceiling");
+        home.rooms.push(room);
+        let mut piece = Furniture {
+            model: Some("model".into()),
+            texture: material("piece"),
+            ..Furniture::default()
+        };
+        piece.info.icon = Some("icon".into());
+        piece.info.plan_icon = Some("plan-icon".into());
+        piece.materials.push(crate::ModelMaterial {
+            name: "finish".into(),
+            key: None,
+            color: None,
+            texture: material("override"),
+            shininess: None,
+        });
+        piece.children.push(Furniture {
+            model: Some("child".into()),
+            ..Furniture::default()
+        });
+        home.furniture.push(piece);
+        home.environment.ground_texture = material("ground");
+        home.environment.sky_texture = material("sky");
+        let read = home.asset_paths();
+        let mut visited = Vec::new();
+        home.for_each_asset_mut(&mut |p| visited.push(p.clone()));
+        assert_eq!(read.len(), 16);
+        assert_eq!(read, visited);
+    }
 
     #[test]
     fn allocated_ids_never_collide_with_existing_elements() {

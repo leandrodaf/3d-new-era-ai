@@ -148,6 +148,13 @@ pub fn resolve_asset(dir: Option<&Path>, stored: &str) -> PathBuf {
 /// textures they name, a glTF's buffers and images. Names are relative to
 /// the model's folder.
 fn model_companions(model: &Path) -> Vec<String> {
+    model_companions_with(model, |p| crate::vfs::read(p).ok())
+}
+
+pub(crate) fn model_companions_with(
+    model: &Path,
+    read: impl Fn(&Path) -> Option<Vec<u8>>,
+) -> Vec<String> {
     let ext = model
         .extension()
         .and_then(|e| e.to_str())
@@ -156,14 +163,14 @@ fn model_companions(model: &Path) -> Vec<String> {
     let Some(dir) = model.parent() else {
         return Vec::new();
     };
-    let text = |p: &Path| crate::vfs::read(p).map(|b| String::from_utf8_lossy(&b).into_owned());
+    let text = |p: &Path| read(p).map(|b| String::from_utf8_lossy(&b).into_owned());
     let mut out = Vec::new();
     match ext.as_str() {
         "obj" => {
-            let Ok(obj) = text(model) else { return out };
+            let Some(obj) = text(model) else { return out };
             for lib in obj.lines().filter_map(|l| l.trim().strip_prefix("mtllib ")) {
                 let lib = lib.trim().to_owned();
-                if let Ok(mtl) = text(&dir.join(&lib)) {
+                if let Some(mtl) = text(&dir.join(&lib)) {
                     for line in mtl.lines() {
                         let line = line.trim();
                         let is_map = ["map_", "bump", "norm", "disp", "refl"]
@@ -172,15 +179,40 @@ fn model_companions(model: &Path) -> Vec<String> {
                         // The file name is the last token (options come first).
                         if is_map && let Some(file) = line.split_whitespace().last() {
                             out.push(file.to_owned());
+                            // The importer also accepts full texture names
+                            // containing spaces. Keep that reference as well.
+                            if let Some((_, rest)) = line.split_once(char::is_whitespace) {
+                                out.push(rest.trim().to_owned());
+                            }
                         }
                     }
                 }
                 out.push(lib);
             }
         }
-        "gltf" => {
-            let Ok(json) = text(model) else { return out };
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&json) {
+        "gltf" | "glb" => {
+            let Some(bytes) = read(model) else { return out };
+            let json = if ext == "glb" {
+                // GLB 2: twelve-byte header, then the mandatory JSON chunk.
+                if bytes.get(..4) != Some(b"glTF")
+                    || bytes.get(4..8) != Some(&2u32.to_le_bytes())
+                    || bytes.get(16..20) != Some(b"JSON")
+                {
+                    return out;
+                }
+                let len =
+                    u32::from_le_bytes(bytes[12..16].try_into().expect("GLB header")) as usize;
+                let Some(end) = 20usize.checked_add(len) else {
+                    return out;
+                };
+                let Some(json) = bytes.get(20..end) else {
+                    return out;
+                };
+                json
+            } else {
+                &bytes
+            };
+            if let Ok(value) = serde_json::from_slice::<serde_json::Value>(json) {
                 for key in ["buffers", "images"] {
                     for item in value[key].as_array().into_iter().flatten() {
                         if let Some(uri) = item["uri"].as_str().filter(|u| !u.starts_with("data:"))
@@ -208,10 +240,7 @@ fn bundle_files(doc: &Document) -> Vec<(PathBuf, String)> {
         }
     };
     for variant in doc.variants() {
-        let mut home = variant.home().clone();
-        let mut paths = Vec::new();
-        home.for_each_asset_mut(&mut |p| paths.push(p.clone()));
-        for stored in paths {
+        for stored in variant.home().asset_paths() {
             let source = resolve_asset(dir.as_deref(), &stored);
             let name = bundle_name(&stored);
             let folder = Path::new(&name)
