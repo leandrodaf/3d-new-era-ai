@@ -125,6 +125,13 @@ pub enum Issue {
     /// the relative power an import carries — so every illuminance computed
     /// from it is a guess, and a plan that looks lit can be dark.
     UnratedLight(FurnitureId),
+    /// A luminaire extends above the flat ceiling of its room.
+    AboveCeiling {
+        piece: FurnitureId,
+        room: crate::ids::RoomId,
+        ceiling: f64,
+        top: f64,
+    },
     /// A bedroom or a bathroom with no door: reached only through open
     /// passages, or not reached at all. Only said once the storey has doors
     /// somewhere — a sketch with no openings yet is not a sealed flat.
@@ -158,6 +165,7 @@ impl Issue {
                 vec![(*f).into()]
             }
             Self::Loose { piece, .. } => vec![(*piece).into()],
+            Self::AboveCeiling { piece, room, .. } => vec![(*piece).into(), (*room).into()],
             Self::OutgrewNiche { piece, host, .. } => vec![(*piece).into(), (*host).into()],
             Self::Turned { piece, .. } | Self::UnclearFront { piece, .. } => {
                 vec![(*piece).into()]
@@ -192,6 +200,7 @@ impl Issue {
             Self::UnclearFront { .. } => "unclear_front",
             Self::NoDoor { .. } => "no_door",
             Self::UnratedLight(_) => "unrated_light",
+            Self::AboveCeiling { .. } => "above_ceiling",
         }
     }
 
@@ -222,9 +231,10 @@ impl Issue {
     /// Whether an accepted key names a layout finding (and not an
     /// ergonomics one, which shares the project's list of acceptances).
     pub fn is_layout_key(key: &str) -> bool {
-        const FAMILIES: [&str; 13] = [
+        const FAMILIES: [&str; 14] = [
             "loose",
             "unrated_light",
+            "above_ceiling",
             "no_door",
             "unclear_front",
             "overlap",
@@ -377,6 +387,50 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
             pieces.push(leaf);
             groups.push(g);
             levels.push(home.resolve_level(top.level));
+        }
+    }
+    // Inspect luminous leaves, never a group's floor-to-ceiling envelope.
+    // Flat room ceilings have an explicit storey height; sloped ceilings are
+    // deliberately excluded until their actual surface is available here.
+    for (i, piece) in pieces.iter().enumerate() {
+        let luminaire = piece.light.is_some()
+            || matches!(
+                piece.catalog.as_str(),
+                "pendant"
+                    | "downlight"
+                    | "led-panel"
+                    | "led-strip"
+                    | "table-lamp"
+                    | "floor-lamp"
+                    | "wall-lamp"
+            );
+        if !luminaire {
+            continue;
+        }
+        let room = home
+            .rooms
+            .iter()
+            .filter(|r| {
+                r.ceiling_visible
+                    && r.ceiling_flat
+                    && home.on_level(r.level, levels[i])
+                    && crate::electrical::inside(&r.points, piece.position)
+            })
+            .min_by(|a, b| a.area().total_cmp(&b.area()));
+        let Some(room) = room else {
+            continue;
+        };
+        let ceiling = levels[i]
+            .and_then(|id| home.level(id))
+            .map_or(home.wall_height, |l| l.height);
+        let top = piece.height_range().1;
+        if top > ceiling + 0.5 {
+            issues.push(Issue::AboveCeiling {
+                piece: piece.id,
+                room: room.id,
+                ceiling,
+                top,
+            });
         }
     }
     let footprints: Vec<Polygon<f64>> = pieces
@@ -1046,6 +1100,68 @@ mod tests {
             pts.iter().map(|&(x, y)| Point2::new(x, y)).collect(),
         ));
         home
+    }
+
+    #[test]
+    fn pendants_above_flat_ceilings_report_excess_and_follow_storey_height() {
+        let mut home = Home::default();
+        home.wall_height = 300.0;
+        home.rooms.push(crate::Room::new(
+            crate::RoomId(1),
+            "Sala",
+            vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(400.0, 0.0),
+                Point2::new(400.0, 400.0),
+                Point2::new(0.0, 400.0),
+            ],
+        ));
+        home.furniture.push(Furniture {
+            id: FurnitureId(2),
+            catalog: "pendant".into(),
+            position: Point2::new(200.0, 200.0),
+            elevation: 250.0,
+            height: 90.0,
+            ..Furniture::default()
+        });
+        let excess = |h: &Home| {
+            check_layout(h)
+                .into_iter()
+                .find(|i| matches!(i, Issue::AboveCeiling { .. }))
+        };
+        let issue = excess(&home).unwrap();
+        assert!(
+            matches!(issue,Issue::AboveCeiling {ceiling,top,..} if (top-ceiling-40.0).abs()<1e-6)
+        );
+        assert!(Issue::is_layout_key(&issue.key()));
+        home.accepted
+            .insert(issue.key(), "reviewed model bounds".into());
+        assert!(!excess(&home).unwrap().is_pending(&home));
+        home.furniture[0].elevation = 210.0;
+        assert!(excess(&home).is_none(), "touching the ceiling is valid");
+        home.levels.push(crate::Level {
+            id: LevelId(3),
+            elevation: 500.0,
+            height: 280.0,
+            ..crate::Level::default()
+        });
+        home.selected_level = Some(LevelId(3));
+        home.rooms[0].level = Some(LevelId(3));
+        home.furniture[0].level = Some(LevelId(3));
+        assert!(
+            matches!(excess(&home),Some(Issue::AboveCeiling {ceiling,top,..}) if (top-ceiling-20.0).abs()<1e-6)
+        );
+        home.furniture[0].visible = false;
+        assert!(excess(&home).is_none());
+        home.furniture[0].visible = true;
+        home.rooms[0].ceiling_flat = false;
+        assert!(
+            excess(&home).is_none(),
+            "do not invent a flat surface for a sloped ceiling"
+        );
+        home.rooms[0].ceiling_flat = true;
+        home.rooms[0].ceiling_visible = false;
+        assert!(excess(&home).is_none());
     }
 
     #[test]

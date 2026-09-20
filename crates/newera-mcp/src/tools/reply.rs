@@ -184,6 +184,9 @@ pub(super) fn preview_with(
                         newera_core::Issue::Blocked { cm, .. } => {
                             row["cm"] = compact::num(*cm);
                         }
+                        newera_core::Issue::AboveCeiling { top, ceiling, .. } => {
+                            row["over"] = compact::num(*top - *ceiling);
+                        }
                         newera_core::Issue::OutgrewNiche { over, .. } => {
                             row["over"] = serde_json::json!(over.map(compact::num));
                         }

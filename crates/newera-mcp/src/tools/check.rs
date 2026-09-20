@@ -169,7 +169,7 @@ impl NewEraMcp {
         out.to_string()
     }
     #[tool(
-        description = "Layout problems: overlap, blocked, in_wall, blocks_door, blocks_window, no_door, unrated_light, turned, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose (a fixed point with nothing to be fixed to: loose in a room, on glass, in a door or window span, hanging under the ceiling, with why); {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under), served (a project point inside a piece on purpose: the water point in the basin, the outlet behind the fridge or set into a cabinet) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocks_window reports nearby tall/elevated solids masking the window, with extent [width,height] cm; compact countertop objects are exempt, so this does not certify sash operation or ventilation. blocks_door includes a 60 cm approach on either face, even for sliding doors and passages. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. unrated_light is a light fixture with neither lumens nor watts — only the relative power an import carries — so the lighting tool's lux for its room are a guess: set its output with update(light={lm or w}). no_door is a bedroom or bathroom (by name) with no door — only open passages, listed, or no way in at all — said once the storey has doors somewhere; a living room, kitchen or balcony left open is not. unclear_front is a group whose parts name fronts on more than one face with no clear winner (candidates, strongest first; placed is the angle's guess every \"in front of\" falls back to) — rename the misleading part or set the angle. Handles weigh most. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. Every row is an object with the `key` it is accepted by (in_wall {key, piece, wall}, blocks_door {key, door, by}). accept=[[key, reason]] marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed under accepted {key, kind, why, extent} with its reason, kept in the project; accept=[[key, \"\"]] takes it back; orphaned [[key, reason]] lists acceptances whose finding is gone on every storey, and prune=true drops them. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing."
+        description = "Layout problems: above_ceiling, overlap, blocked, in_wall, blocks_door, blocks_window, no_door, unrated_light, turned, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose (a fixed point with nothing to be fixed to: loose in a room, on glass, in a door or window span, hanging under the ceiling, with why); {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under), served (a project point inside a piece on purpose: the water point in the basin, the outlet behind the fridge or set into a cabinet) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocks_window reports nearby tall/elevated solids masking the window, with extent [width,height] cm; compact countertop objects are exempt, so this does not certify sash operation or ventilation. blocks_door includes a 60 cm approach on either face, even for sliding doors and passages. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. unrated_light is a light fixture with neither lumens nor watts — only the relative power an import carries — so the lighting tool's lux for its room are a guess: set its output with update(light={lm or w}). no_door is a bedroom or bathroom (by name) with no door — only open passages, listed, or no way in at all — said once the storey has doors somewhere; a living room, kitchen or balcony left open is not. unclear_front is a group whose parts name fronts on more than one face with no clear winner (candidates, strongest first; placed is the angle's guess every \"in front of\" falls back to) — rename the misleading part or set the angle. Handles weigh most. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. above_ceiling reports luminaires above a flat room ceiling, with ceiling/top/over in cm; sloped or hidden ceilings are not inferred. Every row is an object with the `key` it is accepted by (in_wall {key, piece, wall}, blocks_door {key, door, by}). accept=[[key, reason]] marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed under accepted {key, kind, why, extent} with its reason, kept in the project; accept=[[key, \"\"]] takes it back; orphaned [[key, reason]] lists acceptances whose finding is gone on every storey, and prune=true drops them. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing."
     )]
     pub(crate) fn check_layout(
         &self,
@@ -474,6 +474,64 @@ mod tests {
         assert!(s.document.read().home().accepted.is_empty());
         s.document.write().undo().unwrap();
         assert_eq!(s.document.read().home().accepted.len(), 1, "undoable");
+    }
+
+    #[test]
+    fn ceiling_excess_is_measured_and_a_dry_move_reports_its_resolution() {
+        let s = server();
+        {
+            let mut doc = s.document.write();
+            let ceiling = doc.home().wall_height;
+            doc.execute(Command::insert(newera_core::Room::new(
+                newera_core::RoomId(1),
+                "Sala",
+                vec![
+                    newera_core::Point2::new(0.0, 0.0),
+                    newera_core::Point2::new(400.0, 0.0),
+                    newera_core::Point2::new(400.0, 400.0),
+                    newera_core::Point2::new(0.0, 400.0),
+                ],
+            )))
+            .unwrap();
+            doc.execute(Command::insert(newera_core::Furniture {
+                id: newera_core::FurnitureId(2),
+                catalog: "pendant".into(),
+                position: newera_core::Point2::new(200.0, 200.0),
+                elevation: ceiling - 50.0,
+                height: 90.0,
+                ..newera_core::Furniture::default()
+            }))
+            .unwrap();
+        }
+        let check = || {
+            serde_json::from_str::<serde_json::Value>(
+                &s.check_layout(Parameters(serde_json::from_str("{}").unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        assert_eq!(check()["above_ceiling"][0]["over"], 40);
+        let ceiling = s.document.read().home().wall_height;
+        let dry = s
+            .update(Parameters(
+                serde_json::from_value(serde_json::json!({
+                    "items":[{"id":"f2","elev":ceiling-90.0}],"dry":true
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let dry: serde_json::Value = serde_json::from_str(&dry).unwrap();
+        assert!(
+            dry["issues_resolved"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|i| i["kind"] == "above_ceiling")
+        );
+        assert!(
+            check()["above_ceiling"].is_array(),
+            "dry run leaves the drawing untouched"
+        );
     }
 
     #[test]
