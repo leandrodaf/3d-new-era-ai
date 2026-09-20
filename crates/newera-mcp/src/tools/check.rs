@@ -1005,6 +1005,131 @@ mod tests {
     }
 
     #[test]
+    fn ceiling_mode_is_created_read_simulated_updated_and_undone() {
+        let s = server();
+        s.create(Parameters(serde_json::from_value(serde_json::json!({
+            "walls":[{"pts":[[0,0],[400,0],[400,400],[0,400]],"hs":[200,400,400,200],"closed":true}],
+            "rooms":[{"name":"Slope","pts":[[0,0],[400,0],[400,400],[0,400]],"ceiling_flat":false}]
+        })).unwrap())).unwrap();
+        let room_id;
+        let fixture_id;
+        {
+            let mut doc = s.document.write();
+            let room = &doc.home().rooms[0];
+            assert!(
+                !room.ceiling_flat,
+                "create must honor the requested sloping ceiling"
+            );
+            assert_eq!(crate::compact::room(room)["ceiling_flat"], false);
+            room_id = room.id.to_string();
+            fixture_id = doc.new_furniture_id();
+            let elevation = doc.home().wall_height - 10.0;
+            doc.execute(newera_core::Command::insert(newera_core::Furniture {
+                id: fixture_id,
+                catalog: "pendant".into(),
+                position: newera_core::Point2::new(200.0, 200.0),
+                width: 20.0,
+                depth: 20.0,
+                height: 20.0,
+                elevation,
+                ..Default::default()
+            }))
+            .unwrap();
+        }
+        let read: serde_json::Value = serde_json::from_str(
+            &s.get_home(Parameters(
+                serde_json::from_value(serde_json::json!({"kinds":["rooms"]})).unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(read["rooms"][0]["ceiling_flat"], false);
+        let check = || {
+            serde_json::from_str::<serde_json::Value>(
+                &s.check_layout(Parameters(serde_json::from_str("{}").unwrap()))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        assert!(check().get("above_ceiling").is_none());
+        let revision = s.document.read().revision();
+        let dry = s
+            .update(Parameters(
+                serde_json::from_value(serde_json::json!({
+                    "items":[{"id":room_id,"ceiling_flat":true}],"dry":true
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let dry: serde_json::Value = serde_json::from_str(&dry).unwrap();
+        assert!(
+            dry["issues_new"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|i| i["kind"] == "above_ceiling")
+        );
+        assert_eq!(s.document.read().revision(), revision);
+        assert!(!s.document.read().home().rooms[0].ceiling_flat);
+        s.update(Parameters(
+            serde_json::from_value(serde_json::json!({
+                "items":[{"id":room_id,"ceiling_flat":true}]
+            }))
+            .unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(
+            crate::compact::room(&s.document.read().home().rooms[0])["ceiling_flat"],
+            true
+        );
+        assert_eq!(check()["above_ceiling"][0]["over"], 10);
+        s.document.write().undo().unwrap();
+        assert!(!s.document.read().home().rooms[0].ceiling_flat);
+        assert!(check().get("above_ceiling").is_none());
+        s.document.write().redo().unwrap();
+        assert!(s.document.read().home().rooms[0].ceiling_flat);
+        assert_eq!(check()["above_ceiling"][0]["over"], 10);
+        s.document.write().undo().unwrap();
+        // Visibility is independent of the plane/slope choice.
+        s.update(Parameters(
+            serde_json::from_value(serde_json::json!({
+                "items":[{"id":room_id,"ceiling":false}]
+            }))
+            .unwrap(),
+        ))
+        .unwrap();
+        let compact = crate::compact::room(&s.document.read().home().rooms[0]);
+        assert_eq!(compact["ceiling"], false);
+        assert_eq!(compact["ceiling_flat"], false);
+        let before = s.document.read().revision();
+        assert!(
+            s.update(Parameters(
+                serde_json::from_value(serde_json::json!({
+                    "items":[{"id":room_id,"ceiling_flat":true},{"id":fixture_id.to_string(),"ceiling_flat":true}]
+                }))
+                .unwrap()
+            ))
+            .is_err()
+        );
+        assert_eq!(s.document.read().revision(), before);
+        assert!(!s.document.read().home().rooms[0].ceiling_flat);
+        s.create(Parameters(
+            serde_json::from_value(serde_json::json!({
+                "rooms":[{"name":"Default","pts":[[500,0],[900,0],[900,400],[500,400]]}]
+            }))
+            .unwrap(),
+        ))
+        .unwrap();
+        assert!(s.document.read().home().rooms[1].ceiling_flat);
+        assert!(
+            serde_json::from_value::<crate::edit::RoomSpec>(
+                serde_json::json!({"name":"bad","ceiling_flat":"false"})
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn explicit_room_use_is_created_read_updated_and_undone() {
         let s = server();
         s.create(Parameters(

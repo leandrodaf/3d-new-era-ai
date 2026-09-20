@@ -184,6 +184,27 @@ try {
     if (!grew) bad("the project did not change in the tab");
     else ok("the tab's project holds what the AI drew");
 
+    // The ceiling mode is an AI-editable property, independent of visibility.
+    const roomId=afterPlan.rooms?.[0]?.id;
+    const originalCeilingMode=afterPlan.rooms?.[0]?.ceiling_flat;
+    if (!roomId || typeof originalCeilingMode !== 'boolean') throw new Error('ceiling mode is missing from get_home');
+    let ceilingCallId=180;
+    const ceilingCall=async(name,args={})=>{
+      const reply=await rpc(mcpUrl,{jsonrpc:'2.0',id:ceilingCallId++,method:'tools/call',params:{name,arguments:args}});
+      if (reply.error || reply.result?.isError) throw new Error('ceiling MCP call failed: '+JSON.stringify(reply));
+      return reply.result.content.find(c=>c.type==='text').text;
+    };
+    const ceilingHome=async()=>JSON.parse(await ceilingCall('get_home',{kinds:['rooms']}));
+    await ceilingCall('update',{items:[{id:roomId,ceiling_flat:!originalCeilingMode}]});
+    const inclined=await ceilingHome();
+    if (inclined.rooms.find(r=>r.id===roomId)?.ceiling_flat !== !originalCeilingMode) throw new Error('ceiling mode did not change in the browser');
+    await ceilingCall('update',{items:[{id:roomId,ceiling_flat:originalCeilingMode}],dry:true});
+    const simulated=await ceilingHome();
+    if (simulated.rev !== inclined.rev || simulated.rooms.find(r=>r.id===roomId)?.ceiling_flat !== !originalCeilingMode) throw new Error('ceiling dry-run changed the document');
+    await ceilingCall('undo');
+    if ((await ceilingHome()).rooms.find(r=>r.id===roomId)?.ceiling_flat !== originalCeilingMode) throw new Error('undo did not restore the ceiling mode');
+    ok('MCP reads and edits ceiling mode in the browser; dry-run and undo preserve the document');
+
     // Record real worker creation and keep a main-thread heartbeat while photos run.
     await evaluate(`(() => {
       window.renderAudit = { workers: 0, progress: 0, ticks: 0 };

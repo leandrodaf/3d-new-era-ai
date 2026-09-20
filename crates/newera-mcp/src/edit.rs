@@ -68,6 +68,8 @@ pub(crate) struct RoomSpec {
     pub floor_mat: Option<String>,
     /// Ceiling finish.
     pub ceil_mat: Option<String>,
+    /// Ceiling mode: true (default) is flat at storey height; false follows wall profiles. Lower roof panels clip either mode.
+    pub ceiling_flat: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -447,6 +449,7 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
         let mut room = Room::new(doc.new_room_id(), spec.name, points);
         room.auto = auto;
         room.usage = spec.room_use.unwrap_or_default();
+        room.ceiling_flat = spec.ceiling_flat.unwrap_or(true);
         room.floor_material = spec
             .floor_mat
             .as_deref()
@@ -608,6 +611,9 @@ pub(crate) struct UpdateSpec {
     /// Room ceiling visible.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ceiling: Option<bool>,
+    /// Room ceiling mode: true is flat at storey height; false follows wall profiles. Lower roof panels clip either mode; ceiling controls visibility separately.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ceiling_flat: Option<bool>,
     /// Label text.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
@@ -796,6 +802,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 "pts",
                 "floor",
                 "ceiling",
+                "ceiling_flat",
                 "level",
                 "floor_mat",
                 "ceil_mat",
@@ -930,6 +937,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 r.points = spec.pts.unwrap_or(r.points);
                 r.floor_visible = spec.floor.unwrap_or(r.floor_visible);
                 r.ceiling_visible = spec.ceiling.unwrap_or(r.ceiling_visible);
+                r.ceiling_flat = spec.ceiling_flat.unwrap_or(r.ceiling_flat);
                 if let Some(raw) = &spec.floor_mat {
                     r.floor_material = material(raw)?;
                 }

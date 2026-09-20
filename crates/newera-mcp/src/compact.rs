@@ -39,6 +39,7 @@ pub(crate) fn room(r: &newera_core::Room) -> Value {
     let mut v = obj([
         ("id", json!(r.id.to_string())),
         ("name", json!(r.name)),
+        ("ceiling_flat", json!(r.ceiling_flat)),
         ("pts", points(&r.points)),
         ("m2", json!((r.area() / 100.0).round() / 100.0)),
     ]);

@@ -304,7 +304,7 @@
     "name": "checkpoint"
   },
   "create": {
-    "description": "Create walls (polylines; hs = height per point for gables), rooms (pts, or at=[x,y] to detect from walls), dims (a+b or wall id), labels, roofs (rectangle pts, gable|shed, pitch or ridge_h, eave h, overhang, gables=true closes the ends, skylights [{at,w,d}] cut glazed openings) and solids (pts outline raised by h at elev: slabs/mezzanines of any shape; or profile [[u,z]] swept from a to b: gables, ramps) in one atomic step.",
+    "description": "Create walls (polylines; hs = height per point for gables), rooms (pts, or at=[x,y] to detect from walls; ceiling_flat=false follows wall profiles instead of the default flat ceiling), dims (a+b or wall id), labels, roofs (rectangle pts, gable|shed, pitch or ridge_h, eave h, overhang, gables=true closes the ends, skylights [{at,w,d}] cut glazed openings) and solids (pts outline raised by h at elev: slabs/mezzanines of any shape; or profile [[u,z]] swept from a to b: gables, ramps) in one atomic step.",
     "inputSchema": {
       "$defs": {
         "ArrowStyle": {
@@ -543,6 +543,10 @@
             "ceil_mat": {
               "description": "Ceiling finish",
               "type": "string"
+            },
+            "ceiling_flat": {
+              "description": "Ceiling mode: true (default) is flat at storey height; false follows wall profiles. Lower roof panels clip either mode",
+              "type": "boolean"
             },
             "floor_mat": {
               "description": "Floor finish, e.g. `wood` or `tiles #ffffff 60`",
@@ -2212,7 +2216,7 @@
     "name": "undo"
   },
   "update": {
-    "description": "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto, polyline divider); a part of a group takes name, brand, model_name and url on its own — its size and place belong to the group. anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. stretch=[part ids] on a group resize says what takes the change: the listed parts grow or shrink, every other part keeps its size and moves along (uprights stay 5.8 cm while the opening between them grows); without it all parts scale together. dry=true answers what it would do — changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), findings resolved and created as issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the same kind check_layout gives (only real defects: a piece resting or built in is never listed), and issues_changed for a clash that stays but grows or shrinks (extent_was) — without writing anything, so a size can be tried before it is applied; dry=\"summary\" answers the same decision without listing the parts a group rebuilds. Otherwise the reply names what changed. rename {pattern, to, what: names|labels} renames in bulk by a regex (Rust syntax, `(?i)` for any case, `$1` in to): every piece name — parts of groups included — or label text that matches, in one step; with dry it lists them first.",
+    "description": "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto/ceiling_flat, polyline divider); a part of a group takes name, brand, model_name and url on its own — its size and place belong to the group. anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. stretch=[part ids] on a group resize says what takes the change: the listed parts grow or shrink, every other part keeps its size and moves along (uprights stay 5.8 cm while the opening between them grows); without it all parts scale together. dry=true answers what it would do — changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), findings resolved and created as issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the same kind check_layout gives (only real defects: a piece resting or built in is never listed), and issues_changed for a clash that stays but grows or shrinks (extent_was) — without writing anything, so a size can be tried before it is applied; dry=\"summary\" answers the same decision without listing the parts a group rebuilds. Otherwise the reply names what changed. rename {pattern, to, what: names|labels} renames in bulk by a regex (Rust syntax, `(?i)` for any case, `$1` in to): every piece name — parts of groups included — or label text that matches, in one step; with dry it lists them first.",
     "inputSchema": {
       "$defs": {
         "Dry": {
@@ -2403,6 +2407,10 @@
             },
             "ceiling": {
               "description": "Room ceiling visible",
+              "type": "boolean"
+            },
+            "ceiling_flat": {
+              "description": "Room ceiling mode: true is flat at storey height; false follows wall profiles. Lower roof panels clip either mode; ceiling controls visibility separately",
               "type": "boolean"
             },
             "color": {
