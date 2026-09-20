@@ -251,3 +251,40 @@ fn background_queue_discards_outdated_work_and_becomes_idle() {
             .any(|p| p[3] > 0 && p[2] > p[0])
     );
 }
+
+#[test]
+fn cache_publication_hides_partial_writes_and_cleans_failed_encodes() {
+    use std::io::Write;
+    let assets = Assets::new();
+    let path = assets.0.join("atomic.png");
+    let expected = image::RgbaImage::from_pixel(8, 8, image::Rgba([12, 34, 56, 255]));
+    let mut encoded = std::io::Cursor::new(Vec::new());
+    expected
+        .write_to(&mut encoded, image::ImageFormat::Png)
+        .unwrap();
+    let encoded = encoded.into_inner();
+    super::publish_cache_file(&path, |file| {
+        file.write_all(&encoded[..12])?;
+        assert!(
+            !path.exists(),
+            "another provider must not discover a partial PNG"
+        );
+        file.write_all(&encoded[12..])
+    })
+    .unwrap();
+    assert_eq!(image::open(&path).unwrap().to_rgba8(), expected);
+    let error = super::publish_cache_file(&path, |file| {
+        file.write_all(b"partial replacement")?;
+        assert_eq!(image::open(&path).unwrap().to_rgba8(), expected);
+        Err(std::io::Error::other("injected encoding failure"))
+    });
+    assert!(error.is_err());
+    assert_eq!(image::open(&path).unwrap().to_rgba8(), expected);
+    assert!(!std::fs::read_dir(&assets.0).unwrap().any(|entry| {
+        entry
+            .unwrap()
+            .path()
+            .extension()
+            .is_some_and(|ext| ext == "tmp")
+    }));
+}

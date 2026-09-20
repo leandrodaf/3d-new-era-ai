@@ -143,6 +143,9 @@ impl TopViews {
             if let Some(done) = cache.done.get(&key) {
                 return done.clone();
             }
+            if cache.queued.contains(&key) {
+                return None;
+            }
             let path = self.dir.join(format!("{key:016x}.png"));
             if path.exists() {
                 let found = Some(path.display().to_string());
@@ -225,8 +228,39 @@ impl TopViews {
             return None;
         }
         std::fs::create_dir_all(&self.dir).ok();
-        image.save(&path).ok().map(|()| path.display().to_string())
+        publish_cache_file(&path, |file| {
+            image
+                .write_to(file, image::ImageFormat::Png)
+                .map_err(std::io::Error::other)
+        })
+        .ok()
+        .map(|()| path.display().to_string())
     }
+}
+
+// Readers (including other providers) must never observe a partially encoded PNG.
+fn publish_cache_file(
+    path: &Path,
+    write: impl FnOnce(&mut std::fs::File) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let temporary = path.with_extension(format!(
+        "{}.{}.tmp",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)?;
+    let result = write(&mut file);
+    drop(file);
+    let result = result.and_then(|()| std::fs::rename(&temporary, path));
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    result
 }
 
 /// Reuses imported models until their source or companions change, then reloads.
