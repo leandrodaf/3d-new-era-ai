@@ -6,6 +6,55 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-20
+
+### Added
+
+- Browser image and video rendering in disposable workers, with progress, cancellation,
+  time estimates and resource limits based on device capabilities. The page and MCP
+  connection remain responsive while rendering; only one heavy render runs at a time.
+- The AI robot control has its own toolbar group after Frame, preserving connection
+  colors and activity feedback.
+- Layout feedback for blocked door approaches, tall furniture and hoods in front of
+  windows, and unused kitchen corners. Compact countertop appliances are distinguished
+  from tall obstructions; unused corners are reported without automatic rearrangement.
+- Explicit room use independent of room names, scoped architectural review, and MCP
+  controls for flat or wall-following ceilings with preview and undo support.
+- Confirmed browser recovery snapshots, downloadable project backups through MCP, and
+  structured diagnostics that remain available after a fatal WASM error.
+- Rated LED emitters for coves and shadow gaps, cabinet countertop cutouts, and a reviewed
+  project with presentation views in `docs/projects/upper-west-side-revisao.newera`.
+
+### Fixed
+
+- MCP plan rendering no longer uses native filesystem paths in the browser. Scene buffer
+  uploads avoid the mapped-buffer failure reproduced on WebGPU in Linux CI.
+- Render workers receive referenced model dependencies instead of all imported files.
+  Compressed textures are checked against decoded-memory budgets before allocation.
+- Native MCP rendering stays responsive to transport keepalives and cancels abandoned work.
+  Video duration reflects the encoded frame count, including short clips.
+- Catalog body finishes preserve glass, metal, fabric and other secondary materials;
+  explicit colors apply consistently. Bathroom basin interiors are visible through the
+  countertop and cabinet openings.
+- Model and plan-image caches refresh after source, texture or renderer changes. Cached
+  PNG files are published atomically so readers cannot open a partially written image.
+- Rendering and ceiling checks share the declared ceiling surface, including sloping
+  walls, gables, partial roofs and storey elevation. Grouped lights retain their optics
+  and respect source visibility in photos.
+- Tilted box heights and roof fitting use transformed geometry. Wall fitting follows low
+  eaves without producing spikes through the roof. Volume checks detect edge collisions
+  with furniture, walls and door regions; joinery runs clip obstacles to the full height
+  and depth band instead of probing only its center.
+- Hosted opening measurements use the wall frame; explicit furniture orientation selects
+  the correct wall face. Architectural warning acceptances stay independent when grouped.
+- Browser CI tests isolate Chrome ports and profiles and clean up child processes.
+
+### Scope
+
+- The reviewed project is a separate artifact; the bundled browser demo has not been
+  replaced. Remaining design and automation work is documented in
+  `docs/AI-WORKFLOW-AUDIT.md`. Architectural feedback is not engineering certification.
+
 ## [1.4.3] - 2026-09-18
 
 ### Added
@@ -428,7 +477,8 @@ MCP server, with everything below.
 - `scripts/mcp.sh` / `make mcp` to call MCP tools from the shell.
 - CI for formatting, clippy, tests on Linux/macOS/Windows, MCP smoke test, MSRV and cargo-deny; release builds.
 
-[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.3...HEAD
+[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.3...v1.5.0
 [1.4.3]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.0...v1.4.1
