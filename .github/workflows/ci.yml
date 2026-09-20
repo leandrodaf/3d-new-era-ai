@@ -120,6 +120,7 @@ jobs:
       # length — checked at four real handset sizes.
       - name: The site and the editor on a phone
         run: |
+          RUN_CHROME_TESTS=1 node --test scripts/chrome-session.test.mjs
           python3 -m http.server 8801 --bind 127.0.0.1 --directory site &
           for _ in $(seq 1 40); do curl -sf http://127.0.0.1:8801/ >/dev/null && break; sleep 0.25; done
           node scripts/mobile-audit.mjs http://127.0.0.1:8801/ target/mobile
