@@ -12,6 +12,9 @@ pub struct Mesh {
     pub positions: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
     pub colors: Vec<Rgb>,
+    /// Procedural surfaces that accept the piece's global finish. Missing
+    /// entries mean true; fixtures can retain their own ceramic/metal finish.
+    pub finishable: Vec<bool>,
     pub indices: Vec<u32>,
     /// Texture coordinates from the model file; empty or one per vertex.
     pub uvs: Vec<[f32; 2]>,
@@ -90,6 +93,10 @@ pub enum Axis {
 }
 
 impl Mesh {
+    pub(crate) fn protect_finish_since(&mut self, start: usize) {
+        self.finishable.resize(start, true);
+        self.finishable.resize(self.positions.len(), false);
+    }
     fn next(&self) -> u32 {
         u32::try_from(self.positions.len()).expect("mesh fits in u32 indices")
     }
@@ -225,6 +232,13 @@ impl Mesh {
     }
 
     pub fn append(&mut self, other: &Self) {
+        if !self.finishable.is_empty() || !other.finishable.is_empty() {
+            self.finishable.resize(self.positions.len(), true);
+            self.finishable.extend(
+                (0..other.positions.len())
+                    .map(|i| other.finishable.get(i).copied().unwrap_or(true)),
+            );
+        }
         let base = self.next();
         let had_extra = !self.uvs.is_empty() || !self.vertex_materials.is_empty();
         let has_extra = !other.uvs.is_empty() || !other.vertex_materials.is_empty();
@@ -332,6 +346,22 @@ impl Mesh {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    #[test]
+    fn combining_meshes_preserves_protected_finishes_and_default_body_faces() {
+        let mut body = Mesh::default();
+        body.cuboid([0.0; 3], [1.0; 3], [0.5; 3]);
+        let count = body.positions.len();
+        let plain = body.clone();
+        let mut fixture = body.clone();
+        fixture.protect_finish_since(0);
+        body.append(&fixture);
+        body.append(&plain);
+        assert_eq!(body.finishable.len(), count * 3);
+        assert!(body.finishable[..count].iter().all(|v| *v));
+        assert!(body.finishable[count..count * 2].iter().all(|v| !*v));
+        assert!(body.finishable[count * 2..].iter().all(|v| *v));
+    }
 
     pub(crate) fn assert_outward(mesh: &Mesh) {
         for tri in mesh.indices.chunks(3) {

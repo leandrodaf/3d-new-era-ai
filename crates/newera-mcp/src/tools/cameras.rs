@@ -158,13 +158,17 @@ impl NewEraMcp {
                     })
                     .collect();
                 let video = &environment.video;
-                let secs: f64 = newera_render::video::segment_durations(path, video.speed)
-                    .iter()
-                    .sum();
+                #[allow(clippy::cast_precision_loss)]
+                let secs = if path.len() < 2 {
+                    0.0
+                } else {
+                    newera_render::video::frame_count(path, video.frame_rate, video.speed) as f64
+                        / f64::from(video.frame_rate.max(1))
+                };
                 return Ok(serde_json::json!({
                     "fps": video.frame_rate,
                     "speed": compact::num(video.speed),
-                    "secs": compact::num(secs),
+                    "secs": secs,
                     "rows": rows,
                 })
                 .to_string());
@@ -241,7 +245,7 @@ impl NewEraMcp {
                 .map_err(invalid)?;
                 return Ok(serde_json::json!({
                     "frames": info.frames,
-                    "secs": compact::num(info.seconds),
+                    "secs": info.seconds,
                     "bytes": info.bytes,
                 })
                 .to_string());
@@ -259,6 +263,58 @@ mod tests {
     use super::*;
     use crate::edit::CreateParams;
     use crate::tools::server;
+
+    #[test]
+    fn video_list_duration_matches_the_encoded_frames() {
+        let s = server();
+        let listed_seconds = || {
+            let list: serde_json::Value =
+                serde_json::from_str(&s.video(Parameters(VideoParams::default())).unwrap())
+                    .unwrap();
+            list["secs"].as_f64().unwrap()
+        };
+        assert!(listed_seconds().abs() < f64::EPSILON);
+        s.video(Parameters(VideoParams {
+            action: Some("add".into()),
+            ..VideoParams::default()
+        }))
+        .unwrap();
+        assert!(listed_seconds().abs() < f64::EPSILON);
+        for (distance, fps, expected) in [(0.0, 1, 2.0), (0.0, 25, 0.2), (26.0, 25, 0.28)] {
+            let keys = vec![
+                newera_core::Camera::default(),
+                newera_core::Camera {
+                    x: newera_core::Camera::default().x + distance,
+                    ..newera_core::Camera::default()
+                },
+            ];
+            {
+                let mut doc = s.document.write();
+                let mut environment = doc.home().environment.clone();
+                environment.camera_path = keys.clone();
+                environment.video.frame_rate = fps;
+                environment.video.speed = 1.0;
+                doc.execute(Command::SetEnvironment { environment })
+                    .unwrap();
+            }
+            let secs = listed_seconds();
+            assert!((secs - expected).abs() < 1e-9);
+            let (bytes, info) = newera_render::video::render_video_bytes(
+                s.document.read().home(),
+                &keys,
+                fps,
+                1.0,
+                (16, 16),
+                None,
+                |_, _| {},
+            )
+            .unwrap();
+            let header = bytes.windows(4).position(|w| w == b"avih").unwrap() + 8;
+            let frames = u32::from_le_bytes(bytes[header + 16..header + 20].try_into().unwrap());
+            assert!((secs - f64::from(frames) / f64::from(fps)).abs() < 1e-9);
+            assert!((secs - info.seconds).abs() < 1e-9);
+        }
+    }
 
     #[test]
     fn video_path_keyframes_and_render() {

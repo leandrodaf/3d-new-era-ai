@@ -909,7 +909,7 @@ impl Mesh {
     ///
     /// Catalog models already apply the piece's color to their body, keeping
     /// glass, hardware and fixtures distinct. Imported models take a global
-    /// color override; textures cover either kind of model.
+    /// color override. Protected catalog fixtures keep their own finish.
     fn add_piece(
         &mut self,
         piece: &Furniture,
@@ -1018,11 +1018,13 @@ impl Mesh {
                 alpha = alpha.min(0.35);
             }
             let (mut color, mut kind, mut uv) = (raw, 0, [0.0, 0.0]);
+            let finishable =
+                piece.model.is_some() || local.finishable.get(k).copied().unwrap_or(true);
             if let Some(c) = piece_color
                 && piece_pattern.is_none()
             {
                 color = c;
-            } else if let Some((texture, pattern)) = piece_pattern {
+            } else if let Some((texture, pattern)) = piece_pattern.filter(|_| finishable) {
                 uv = planar_uv(position, normal, texture.tile_size());
                 color = srgb_to_linear(
                     texture
@@ -1031,7 +1033,9 @@ impl Mesh {
                         .unwrap_or_else(|| pattern.default_color()),
                 );
                 kind = pattern.index();
-            } else if let (Some(layer), Some(texture)) = (texture_layer, piece_texture) {
+            } else if let (Some(layer), Some(texture)) =
+                (texture_layer.filter(|_| finishable), piece_texture)
+            {
                 // Planar mapping on the face's dominant axis, at the texture's
                 // real size, or one image stretched over each face.
                 uv = if texture.fit {
@@ -1606,6 +1610,72 @@ mod material_tests {
     use super::*;
 
     #[test]
+    fn basin_textures_leave_ceramic_and_hardware_untextured() {
+        for texture in [
+            Material {
+                pattern: Some(newera_core::Pattern::Wood),
+                color: Some([113, 84, 64]),
+                ..Material::default()
+            },
+            Material {
+                image: Some("wood.png".into()),
+                ..Material::default()
+            },
+        ] {
+            let mut piece = newera_catalog::find("basin-cabinet")
+                .unwrap()
+                .instantiate(newera_core::FurnitureId(1), Point2::new(0.0, 0.0));
+            piece.texture = Some(texture);
+            let model = newera_catalog::piece_mesh(&piece);
+            let mesh = Mesh::piece_alone(&piece, &model);
+            let mut protected = 0;
+            let mut finished = 0;
+            for (i, v) in mesh.vertices.iter().enumerate() {
+                if model.finishable.get(i).copied().unwrap_or(true) {
+                    finished += 1;
+                    assert_ne!(v.kind, 0);
+                } else {
+                    protected += 1;
+                    assert_eq!(v.kind, 0);
+                    assert!(
+                        v.color[..3]
+                            .iter()
+                            .zip(model.colors[i])
+                            .all(|(a, b)| (a - b).abs() < 1e-6)
+                    );
+                }
+            }
+            assert!(protected > 0 && finished > 0);
+            for expected in [[235u8, 237, 239], [150, 154, 160]] {
+                let color = expected.map(|v| f32::from(v) / 255.0);
+                let fixture_vertices: Vec<_> = model
+                    .colors
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, raw)| raw.iter().zip(color).all(|(a, b)| (a - b).abs() < 1e-6))
+                    .map(|(i, _)| &mesh.vertices[i])
+                    .collect();
+                assert!(!fixture_vertices.is_empty());
+                assert!(fixture_vertices.iter().all(|v| {
+                    v.kind == 0
+                        && v.color[..3]
+                            .iter()
+                            .zip(color)
+                            .all(|(a, b)| (a - b).abs() < 1e-6)
+                }));
+            }
+            // An explicitly imported model still accepts a global texture.
+            piece.model = Some("imported-basin.glb".into());
+            assert!(
+                Mesh::piece_alone(&piece, &model)
+                    .vertices
+                    .iter()
+                    .all(|v| v.kind != 0)
+            );
+        }
+    }
+
+    #[test]
     fn recoloring_a_catalog_cabinet_keeps_its_sink_and_hardware_visible() {
         let mut piece = newera_catalog::find("sink-counter")
             .unwrap()
@@ -1657,6 +1727,7 @@ mod material_tests {
             ],
             normals: vec![[0.0, 1.0, 0.0]; 4],
             colors: vec![[0.06; 3]; 4],
+            finishable: vec![],
             indices: vec![0, 2, 1, 0, 3, 2],
             uvs: vec![[0.0, 0.0]; 4],
             vertex_materials: vec![0; 4],

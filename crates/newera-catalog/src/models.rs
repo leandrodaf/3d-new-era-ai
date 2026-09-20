@@ -51,6 +51,7 @@ impl Ctx {
     }
 
     fn handle(&mut self, x: f64, y: f64, z: f64, vertical: bool) {
+        let start = self.m.positions.len();
         let (w, h) = if vertical { (1.5, 14.0) } else { (12.0, 1.5) };
         self.cube(
             [x - w / 2.0, x + w / 2.0],
@@ -58,6 +59,7 @@ impl Ctx {
             [z, z + 2.0],
             rgb(METAL),
         );
+        self.m.protect_finish_since(start);
     }
 }
 
@@ -585,6 +587,11 @@ fn office_chair(ctx: &mut Ctx) {
 }
 
 fn cabinet(ctx: &mut Ctx, doors: u8, drawers: u8) {
+    cabinet_body(ctx, doors, drawers, None);
+}
+
+/// An optional central opening [width, depth, bottom] leaves room for a basin.
+fn cabinet_body(ctx: &mut Ctx, doors: u8, drawers: u8, opening: Option<[f64; 3]>) {
     let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
     let plinth = if h > 60.0 { 8.0 } else { 3.0 };
     ctx.cube(
@@ -595,10 +602,20 @@ fn cabinet(ctx: &mut Ctx, doors: u8, drawers: u8) {
     );
     ctx.cube(
         [-w / 2.0, w / 2.0],
-        [plinth, h],
+        [plinth, opening.map_or(h, |o| o[2])],
         [-d / 2.0, d / 2.0 - 2.0],
         c,
     );
+    if let Some([bw, bd, bottom]) = opening {
+        for (x, z) in [
+            ([-w / 2.0, -bw / 2.0], [-d / 2.0, d / 2.0 - 2.0]),
+            ([bw / 2.0, w / 2.0], [-d / 2.0, d / 2.0 - 2.0]),
+            ([-bw / 2.0, bw / 2.0], [-d / 2.0, -bd / 2.0]),
+            ([-bw / 2.0, bw / 2.0], [bd / 2.0, d / 2.0 - 2.0]),
+        ] {
+            ctx.cube(x, [bottom, h], z, c);
+        }
+    }
     let front = d / 2.0 - 2.0;
     let panel = shade(c, 0.05);
     if drawers > 0 {
@@ -1121,20 +1138,48 @@ fn toilet(ctx: &mut Ctx) {
 
 fn basin(ctx: &mut Ctx) {
     let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
-    cabinet(ctx, 2, 0);
-    ctx.cube(
-        [-w / 2.0, w / 2.0],
-        [h - 3.0, h],
-        [-d / 2.0, d / 2.0],
-        shade(c, 0.05),
-    );
+    let (bw, bd) = ((w * 0.6).min(60.0), (d * 0.55).min(32.0));
+    let bottom = h - (h * 0.16).min(15.0);
+    ctx.h = h - 3.0;
+    cabinet_body(ctx, 2, 0, Some([bw, bd, bottom - 1.0]));
+    ctx.h = h;
+    let porcelain = rgb([235, 237, 239]);
+    // Both the worktop and carcass must be open: a bowl painted below a
+    // solid top is invisible, even when its material is a different color.
+    for (x, z) in [
+        ([-w / 2.0, -bw / 2.0], [-d / 2.0, d / 2.0]),
+        ([bw / 2.0, w / 2.0], [-d / 2.0, d / 2.0]),
+        ([-bw / 2.0, bw / 2.0], [-d / 2.0, -bd / 2.0]),
+        ([-bw / 2.0, bw / 2.0], [bd / 2.0, d / 2.0]),
+    ] {
+        ctx.cube(x, [h - 3.0, h], z, shade(c, 0.05));
+    }
+    let fixture_start = ctx.m.positions.len();
+    let ring = |scale: f64, y: f64| {
+        [
+            [-bw * scale / 2.0, y, -bd * scale / 2.0],
+            [bw * scale / 2.0, y, -bd * scale / 2.0],
+            [bw * scale / 2.0, y, bd * scale / 2.0],
+            [-bw * scale / 2.0, y, bd * scale / 2.0],
+        ]
+        .map(|p| Place::HOME.at(p))
+    };
+    let (rim, low) = (ring(1.0, h), ring(0.7, bottom));
+    for i in 0..4 {
+        let j = (i + 1) % 4;
+        ctx.m.polygon(&[rim[j], rim[i], low[i], low[j]], porcelain);
+    }
+    ctx.m.polygon(&[low[3], low[2], low[1], low[0]], porcelain);
+    // Drain sits on the exposed bowl floor; preserve the model's declared
+    // countertop height instead of resizing the entire cabinet for a tap.
     ctx.m.cylinder(
-        [0.0, h - 3.0, 0.0],
+        [0.0, bottom, 0.0],
         Axis::Y,
-        0.4,
-        (w.min(d) * 0.3).min(22.0),
-        rgb([225, 228, 232]),
+        0.15,
+        bw.min(bd) * 0.055,
+        rgb(METAL),
     );
+    ctx.m.protect_finish_since(fixture_start);
 }
 
 fn shower(ctx: &mut Ctx) {
@@ -2179,6 +2224,68 @@ mod solid_tests {
     use newera_core::{Furniture, SolidShape};
 
     use crate::mesh::Rgb;
+
+    // First surface seen from above, including opaque faces that would hide
+    // the bowl. Checking only for porcelain vertices missed the original bug.
+    fn top_hit(mesh: &crate::Mesh, x: f32, z: f32) -> (f32, Rgb, f32) {
+        mesh.indices
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .filter_map(|tri| {
+                let [a, b, c] = [0, 1, 2].map(|i| mesh.positions[tri[i] as usize]);
+                let det = (b[2] - c[2]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[2] - c[2]);
+                if det.abs() < 1e-6 {
+                    return None;
+                }
+                let u = ((b[2] - c[2]) * (x - c[0]) + (c[0] - b[0]) * (z - c[2])) / det;
+                let v = ((c[2] - a[2]) * (x - c[0]) + (a[0] - c[0]) * (z - c[2])) / det;
+                let t = 1.0 - u - v;
+                if u < -1e-5 || v < -1e-5 || t < -1e-5 {
+                    return None;
+                }
+                Some((
+                    u * a[1] + v * b[1] + t * c[1],
+                    mesh.colors[tri[0] as usize],
+                    mesh.normals[tri[0] as usize][1],
+                ))
+            })
+            .max_by(|a, b| a.0.total_cmp(&b.0))
+            .expect("surface under sample")
+    }
+
+    #[test]
+    fn basin_has_an_exposed_recess_and_preserves_countertop_height_and_cabinet_color() {
+        for width in [60.0, 100.0, 120.0] {
+            let piece = Furniture {
+                width,
+                depth: 48.0,
+                height: 85.0,
+                ..Furniture::default()
+            };
+            let brown = crate::mesh::rgb([110, 70, 45]);
+            let mesh = super::build(crate::Model::Basin, &piece, brown);
+            for (x, z) in [(5.0, 0.0), (-5.0, 0.0), (0.0, 10.0), (0.0, -10.0)] {
+                let (height, color, normal_y) = top_hit(&mesh, x, z);
+                assert!(
+                    height < 83.0 && height > 65.0,
+                    "occluded/shallow bowl at {x},{z}: {height}"
+                );
+                assert!(
+                    color
+                        .iter()
+                        .zip(crate::mesh::rgb([235, 237, 239]))
+                        .all(|(a, b)| (a - b).abs() < 1e-6)
+                );
+                assert!(normal_y > 0.1, "bowl faces must face the opening");
+            }
+            #[allow(clippy::cast_possible_truncation)]
+            let (height, _, _) = top_hit(&mesh, (width * 0.45) as f32, 0.0);
+            assert!((height - 85.0).abs() < 1e-4);
+            assert!(mesh.colors.contains(&brown));
+            assert!(mesh.positions.iter().all(|p| p[1] <= 85.0 && p[1] >= 0.0));
+        }
+    }
 
     fn faces_out(mesh: &crate::Mesh) {
         #[allow(clippy::cast_precision_loss)]
