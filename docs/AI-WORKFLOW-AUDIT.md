@@ -219,3 +219,9 @@ Atualização de publicação: o [Publish 35509917158](https://github.com/leandr
 - Leitura posterior na aba confirmou posições e IDs. `check_layout` retornou `{}` tanto online quanto na cópia nativa. Vista “Quarto 2 — cabeceira e leitura” (índice 6) renderizada e inspecionada na cópia nativa; backup versionado atualizado com os mesmos comandos e IDs.
 - A renderização online respondeu “Uma renderização já está em andamento. Aguarde ou cancele.”; nenhuma imagem online desta etapa foi obtida. Não foi cancelado o trabalho em andamento nem atribuída uma causa sem diagnóstico. O MCP continuou respondendo a leitura e checagem.
 - Após a solicitação do usuário para apenas informar as pendências, esta etapa se limitou a verificar e preservar alterações já aplicadas. Nenhuma nova correção da lista de auditoria foi iniciada. Instalações, cotas, revisão global e canto da cozinha continuam pendentes.
+
+## Correção retomada — face de instalação da marcenaria
+
+- Corrigida a causa no código: `joinery(wall, angle)` aplicava o ângulo depois de escolher a face pela posição global da casa. O mesmo comportamento existia em `place` para móveis do catálogo. Agora a orientação explícita escolhe a face antes do deslocamento; sem orientação explícita, permanece o comportamento automático existente.
+- A distância à parede considera a projeção da peça com sua orientação final. Assim, uma peça inclinada não atravessa a parede por usar apenas metade da profundidade como afastamento.
+- Teste de regressão reproduz a parede vertical x=880, espessura 12 cm, com painéis de marcenaria e guarda-roupas voltados para ambos os lados e em ângulo oblíquo. Confirma as faces em x=874/886 e a preservação do ângulo solicitado. Suíte MCP: 107 testes passaram, zero falhas, um opcional ignorado.

@@ -2007,9 +2007,13 @@ fn roof(doc: &mut Document, spec: &RoofSpec) -> EditResult<(newera_core::Furnitu
 }
 
 /// Moves a piece already aligned on a wall's axis so its back touches the
-/// wall face, facing the middle of the house.
-pub(crate) fn back_to_wall(doc: &Document, piece: &mut newera_core::Furniture, wall: &Wall) {
-    let offset = wall.thickness / 2.0 + piece.depth / 2.0;
+/// wall face. An explicit angle chooses the side; otherwise face the house centre.
+pub(crate) fn back_to_wall(
+    doc: &Document,
+    piece: &mut newera_core::Furniture,
+    wall: &Wall,
+    angle: Option<f64>,
+) {
     let a = piece.angle.to_radians();
     let front = (-a.sin(), a.cos());
     let center = doc.home().bounds().map_or(piece.position, |(min, max)| {
@@ -2017,10 +2021,17 @@ pub(crate) fn back_to_wall(doc: &Document, piece: &mut newera_core::Furniture, w
     });
     let toward_center =
         (center.x - piece.position.x) * front.0 + (center.y - piece.position.y) * front.1;
-    let side = if toward_center >= 0.0 { 1.0 } else { -1.0 };
-    if side < 0.0 {
-        piece.angle += 180.0;
-    }
+    let toward = angle.map_or(toward_center, |a| {
+        let a = a.to_radians();
+        -a.sin() * front.0 + a.cos() * front.1
+    });
+    let side = if toward >= 0.0 { 1.0 } else { -1.0 };
+    piece.angle = angle.unwrap_or(piece.angle + if side < 0.0 { 180.0 } else { 0.0 });
+    // Project the final footprint onto the wall normal, including oblique pieces.
+    let (sin, cos) = piece.angle.to_radians().sin_cos();
+    let offset = wall.thickness / 2.0
+        + (cos * front.0 + sin * front.1).abs() * piece.width / 2.0
+        + (-sin * front.0 + cos * front.1).abs() * piece.depth / 2.0;
     piece.position = Point2::new(
         piece.position.x + front.0 * side * offset,
         piece.position.y + front.1 * side * offset,
@@ -2268,7 +2279,7 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
                     piece.depth = depth;
                 }
                 if !piece.is_opening() {
-                    back_to_wall(doc, &mut piece, &wall);
+                    back_to_wall(doc, &mut piece, &wall, spec.angle);
                 }
             }
             (None, Some(at)) => {

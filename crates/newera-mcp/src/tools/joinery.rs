@@ -195,7 +195,7 @@ impl NewEraMcp {
                 .along
                 .unwrap_or_else(|| wall.start.distance(wall.end) / 2.0);
             newera_core::align_to_wall(&mut place, &wall, along);
-            edit::back_to_wall(&doc, &mut place, &wall);
+            edit::back_to_wall(&doc, &mut place, &wall, p.angle);
         }
         if let Some(angle) = p.angle {
             place.angle = angle;
@@ -469,6 +469,53 @@ mod tests {
             skipped.contains("puxador de latão") && skipped.contains("moldura 3D"),
             "a model and a 12 cm block are not boards: {reply}"
         );
+    }
+
+    #[test]
+    fn explicit_front_selects_the_wall_face_for_joinery_and_catalog_pieces() {
+        for angle in [90.0_f64, 270.0, 240.0] {
+            let s = server();
+            s.create(Parameters(
+                serde_json::from_value(serde_json::json!({
+                    "walls": [{"pts": [[880,0],[880,470]], "t":12}]
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+            s.joinery(Parameters(
+                serde_json::from_value(serde_json::json!({
+                    "kind":"slats", "p":{"w":220,"h":260},
+                    "wall":"w1", "along":150, "angle":angle
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+            {
+                let mut doc = s.document.write();
+                crate::edit::place(
+                    &mut doc,
+                    vec![crate::edit::PlaceSpec {
+                        cat: "wardrobe".into(),
+                        wall: Some("w1".into()),
+                        along: Some(350.0),
+                        angle: Some(angle),
+                        ..crate::edit::PlaceSpec::default()
+                    }],
+                )
+                .unwrap();
+            }
+            let doc = s.document.read();
+            for piece in &doc.home().furniture {
+                let (lo, hi) = newera_core::plan_bounds(piece);
+                let face = if angle > 180.0 { lo.x } else { hi.x };
+                let expected = if angle > 180.0 { 886.0 } else { 874.0 };
+                assert!(
+                    (face - expected).abs() < 0.01,
+                    "angle={angle}: {lo:?} {hi:?}"
+                );
+                assert!((piece.angle - angle).abs() < 0.01);
+            }
+        }
     }
 
     #[test]
