@@ -85,6 +85,12 @@ const bad = (what) => { console.error(`  ✗ ${what}`); failed = true; };
 
 try {
   await send("Page.enable");
+  // These canvas hit targets are measured in Portuguese. Linux CI browsers
+  // otherwise pick English, which changes both menu widths and line wrapping.
+  await send("Page.addScriptToEvaluateOnNewDocument", {source: `
+    Object.defineProperty(navigator, 'language', {get: () => 'pt-BR'});
+    Object.defineProperty(navigator, 'languages', {get: () => ['pt-BR', 'pt']});
+  `});
   await send("Page.navigate", { url: `${page}?relay=${encodeURIComponent(relay)}` });
   let started = false;
   for (let i = 0; i < 300 && !started; i++) {
@@ -93,6 +99,7 @@ try {
   }
   if (!started) throw new Error("the editor did not start in 60 s");
   await frames(20);
+  if (await evaluate("navigator.language") !== "pt-BR") throw new Error("the UI fixture language was not applied");
 
   // Nothing is pressed here: a window wide enough to be somebody's desk comes
   // up reachable on its own, which is the whole point — an editor for driving

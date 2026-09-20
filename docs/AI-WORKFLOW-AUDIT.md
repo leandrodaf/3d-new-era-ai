@@ -189,3 +189,14 @@ Atualização de publicação: o [Publish 35509917158](https://github.com/leandr
 
 - Run `35513282420`, job Windows `106084844039`: 155 testes core passaram, um foi ignorado e o novo teste de snapshot falhou ao procurar um caminho com `ends_with("render-snapshot-test/a.bin")`. O arquivo estava presente com separadores nativos do Windows; a busca textual retornou `None`.
 - Correção: comparar com `Path::new(p) == dir.join("a.bin")`, mantendo a verificação de orçamento e de posse dos bytes após desmontagem. A alteração é na asserção do teste. Não atribuir essa falha ao runtime do navegador. A validação Windows ocorrerá novamente no GitHub.
+
+## Publicação — fixture de idioma no E2E
+
+- Publish `35513282527` passou geração de PNGs, responsividade, exclusão de renders, falha/recuperação, cancelamento e AVI no worker; falhou ao procurar o AVI baixado pelo fluxo do menu. O log não registrou panic do editor.
+- O teste de cliques tinha coordenadas de menus em português e dependia do idioma padrão do navegador. Agora a fixture fixa `navigator.language/languages` em pt-BR antes de carregar a página e verifica que isso foi aplicado; a altura do viewport já é fixa para o menu não mudar de lado. Não muda o idioma do produto em uso normal. E2E local completo repetido com sucesso, incluindo o download pelo menu e reconexão.
+
+## Revisão técnica ainda pendente
+
+- A revisão de ergonomia da planta atual continua com score 0 principalmente por instalações não desenvolvidas: tomadas, circuitos, água e esgoto. Não usar o score como certificação nem inventar infraestrutura apenas para subir a nota.
+- Observação para melhorar o relatório: uma mensagem agrupada de tomadas reuniu Jantar/Estar/Galeria e banheiros sob a justificativa “um junto ao lavatório”. O agrupamento deve preservar a justificativa de cada tipo de ambiente antes de orientar alterações. Recomendações de TV/rede aparecem inclusive em áreas de serviço/banhos; verificar a interpretação e contexto, sem instalar pontos automaticamente só para apagar dicas.
+- A suíte recebe dica de ausência de guarda-roupa apesar do ambiente Closet adjacente. Revisar a associação entre ambientes e capacidade de armazenamento na etapa global, com evidência de acesso e móveis, em vez de aceitar/silenciar automaticamente.
