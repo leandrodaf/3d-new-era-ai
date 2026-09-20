@@ -537,6 +537,37 @@ impl<'a> Scene<'a> {
                 });
             }
         }
+        // A cabinet marked for cooking describes a zone until an actual
+        // cooktop is installed. Once present, the appliance supplies the
+        // cooking dimensions and fuel identity; the host remains cabinetry.
+        let cooking_hosts: Vec<usize> = units
+            .iter()
+            .enumerate()
+            .filter(|(_, host)| {
+                host.what == Use::Stove
+                    && host.params.as_ref().is_some_and(|p| p["kind"] == "cabinet")
+                    && units.iter().any(|appliance| {
+                        if appliance.what != Use::Stove || appliance.params.is_some() {
+                            return false;
+                        }
+                        let (lo, hi) = appliance.piece.height_range();
+                        let top = host.piece.height_range().1;
+                        hi - lo <= 20.0
+                            && lo >= top - 15.0
+                            && lo <= top + 10.0
+                            && hi >= top - 5.0
+                            && appliance.piece.projected_footprint().iter().all(|&p| {
+                                let (x, y) = host.piece.to_local(p);
+                                x.abs() <= host.piece.width / 2.0 + 1.0
+                                    && y.abs() <= host.piece.depth / 2.0 + 1.0
+                            })
+                    })
+            })
+            .map(|(i, _)| i)
+            .collect();
+        for i in cooking_hosts {
+            units[i].what = Use::Counter;
+        }
         let footprints: Vec<Polygon<f64>> = units
             .iter()
             .map(|u| polygon(&u.piece.projected_footprint()))

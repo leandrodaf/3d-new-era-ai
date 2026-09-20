@@ -3775,6 +3775,77 @@ mod tests {
     /// What the laboratory knows: capture is the canopy's job, and a hood
     /// narrower than the burners loses the front ones whatever its airflow.
     #[test]
+    fn installed_cooktop_defines_cooking_width_instead_of_its_cabinet() {
+        let mut home = Home::default();
+        square(&mut home, "Cozinha", 400.0, 300.0);
+        let mut host = piece(50, "group", (250.0, 40.0), (70.0, 60.0, 87.0), 0.0);
+        host.properties.insert(
+            "joinery:params".into(),
+            r#"{"kind":"cabinet","cooktop":true}"#.into(),
+        );
+        let mut cooktop = piece(51, "box", (250.0, 40.0), (60.0, 50.0, 6.0), 0.0);
+        cooktop.name = "Cooktop de indução".into();
+        cooktop.elevation = 84.6;
+        let mut hood = piece(52, "hood", (250.0, 40.0), (60.0, 50.0, 60.0), 0.0);
+        hood.elevation = 180.0;
+        home.furniture = vec![host, cooktop, hood];
+        for reverse in [false, true] {
+            if reverse {
+                home.furniture.reverse();
+            }
+            let report = review(&home, &Profile::default());
+            assert!(
+                !report
+                    .findings
+                    .iter()
+                    .any(|f| f.message.starts_with("Coifa de")),
+                "{report:#?}"
+            );
+            assert!(
+                !report
+                    .findings
+                    .iter()
+                    .any(|f| f.message.starts_with("Aparelho a gás")),
+                "{report:#?}"
+            );
+        }
+        home.furniture.reverse();
+        for piece in &mut home.furniture {
+            piece.angle = 90.0;
+        }
+        assert!(
+            !review(&home, &Profile::default())
+                .findings
+                .iter()
+                .any(|f| f.message.starts_with("Coifa de"))
+        );
+        // A genuinely narrower hood still receives feedback.
+        home.furniture[2].width = 50.0;
+        assert!(says(
+            &review(&home, &Profile::default()),
+            Severity::Dica,
+            "Coifa de 50 cm sobre cocção de 60 cm"
+        ));
+        // Missing, hidden, nearby and vertically unrelated appliances do not
+        // replace the cooking zone declared in the cabinet.
+        home.furniture[2].width = 60.0;
+        for (visible, x, z) in [
+            (false, 250.0, 84.6),
+            (true, 100.0, 84.6),
+            (true, 250.0, 150.0),
+        ] {
+            home.furniture[1].visible = visible;
+            home.furniture[1].position.x = x;
+            home.furniture[1].elevation = z;
+            assert!(says(
+                &review(&home, &Profile::default()),
+                Severity::Dica,
+                "Coifa de 60 cm sobre cocção de 70 cm"
+            ));
+        }
+    }
+
+    #[test]
     fn a_hood_narrower_than_the_cooktop_is_reported_and_a_window_softens_the_gas_rule() {
         let mut home = Home::default();
         square(&mut home, "Cozinha", 400.0, 300.0);
