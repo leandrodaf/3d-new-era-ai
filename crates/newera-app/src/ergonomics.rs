@@ -92,6 +92,18 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
         return;
     };
     let revision = app.document.read().revision();
+    if window
+        .report
+        .as_ref()
+        .is_some_and(|(rev, _, _)| *rev != revision)
+    {
+        // Undo and MCP edits must also refresh an already open review panel.
+        window.profile = Profile {
+            city: window.profile.city.clone(),
+            ..Profile::of(app.document.read().home())
+        };
+    }
+    let original_profile = window.profile.clone();
     let stale = window
         .report
         .as_ref()
@@ -162,6 +174,9 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                         "Entre a norma e a lei do município, prevalece o mais restritivo.",
                     ));
             });
+            ui.checkbox(&mut p.scope.electrical, crate::i18n::tr("Incluir elétrica na nota"));
+            ui.checkbox(&mut p.scope.plumbing, crate::i18n::tr("Incluir hidráulica na nota"));
+            ui.label(crate::i18n::tr("Pendências fora do escopo continuam visíveis. A nota não certifica o projeto."));
             ui.separator();
             let Some((_, _, report)) = &window.report else {
                 return;
@@ -243,6 +258,9 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                                 {
                                     select = Some(ids);
                                 }
+                                if !report.scope.includes(finding) {
+                                    ui.weak(crate::i18n::tr("Fora do escopo da nota"));
+                                }
                                 ui.label(&finding.message);
                                 if let Some(source) =
                                     finding.reference.and_then(standards::standard)
@@ -291,6 +309,18 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                 }
             });
         });
+    if original_profile != window.profile {
+        let mut doc = app.document.write();
+        let mut properties = doc.home().properties.clone();
+        let kept = Profile {
+            city: None,
+            ..window.profile.clone()
+        };
+        if let Ok(value) = serde_json::to_string(&kept) {
+            properties.insert(newera_ergonomics::PEOPLE.to_owned(), value);
+            let _ = doc.execute(Command::SetProperties { properties });
+        }
+    }
     if let Some(ids) = select {
         app.selection = ids.into_iter().collect();
     }
@@ -434,5 +464,40 @@ mod tests {
             "{report:#?}"
         );
         assert!(report.score > before);
+        h.get_by_label("Incluir elétrica na nota").click();
+        h.run_steps(3);
+        assert!(
+            !Profile::of(h.state().document.read().home())
+                .scope
+                .electrical
+        );
+        assert!(
+            !h.state()
+                .ergonomics
+                .as_ref()
+                .unwrap()
+                .report
+                .as_ref()
+                .unwrap()
+                .2
+                .scope
+                .electrical
+        );
+        h.state_mut().document.write().undo().unwrap();
+        assert!(
+            Profile::of(h.state().document.read().home())
+                .scope
+                .electrical
+        );
+        h.run_steps(3);
+        assert!(
+            h.state()
+                .ergonomics
+                .as_ref()
+                .unwrap()
+                .profile
+                .scope
+                .electrical
+        );
     }
 }

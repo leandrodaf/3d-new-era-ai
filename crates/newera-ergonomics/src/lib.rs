@@ -42,10 +42,41 @@ use std::fmt::Write as _;
 
 pub use scene::{RoomUse, Scene, Side, Space, Unit, Use};
 
+/// Disciplines included in the habitability score. Architecture is always
+/// included; other findings remain visible even when outside the score.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct ReviewScope {
+    pub electrical: bool,
+    pub plumbing: bool,
+}
+
+impl Default for ReviewScope {
+    fn default() -> Self {
+        Self {
+            electrical: true,
+            plumbing: true,
+        }
+    }
+}
+
+impl ReviewScope {
+    #[must_use]
+    pub fn includes(self, finding: &Finding) -> bool {
+        match finding.discipline() {
+            "electrical" => self.electrical,
+            "plumbing" => self.plumbing,
+            _ => true,
+        }
+    }
+}
+
 /// Who lives there.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct Profile {
+    /// Score scope, persisted with the project; excluded findings stay visible.
+    pub scope: ReviewScope,
     /// People living in the home (default 2).
     pub occupants: u32,
     /// Of them, children (sleep in single beds or cribs).
@@ -65,6 +96,7 @@ pub struct Profile {
 impl Default for Profile {
     fn default() -> Self {
         Self {
+            scope: ReviewScope::default(),
             occupants: 2,
             children: 0,
             elderly: 0,
@@ -156,6 +188,19 @@ pub struct Finding {
     pub probe: Option<serde_json::Value>,
 }
 
+impl Finding {
+    #[must_use]
+    pub fn discipline(&self) -> &'static str {
+        if self.key.starts_with("elec:") || self.reference == Some("nbr5410") {
+            "electrical"
+        } else if self.key.starts_with("plumb:") {
+            "plumbing"
+        } else {
+            "architecture"
+        }
+    }
+}
+
 /// What the home offers its people.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct Capacity {
@@ -170,6 +215,9 @@ pub struct Capacity {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Report {
+    pub scope: ReviewScope,
+    /// Separate heuristic scores; never a certification of a discipline.
+    pub scores: std::collections::BTreeMap<&'static str, u32>,
     /// 100 minus weighted findings.
     pub score: u32,
     pub capacity: Capacity,
@@ -2385,11 +2433,12 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
         }
     }
     // Errors weigh fully; many alerts or tips of a crowded plan level off.
-    let penalty_of = |list: &[Finding]| {
+    let penalty_of = |list: &[Finding], scope: ReviewScope| {
         let count = |sev: Severity| {
             list.iter()
                 .filter(|f| {
-                    f.severity == sev
+                    scope.includes(f)
+                        && f.severity == sev
                         && f.accepted.is_none()
                         && !f.key.starts_with("unused_corner:")
                 })
@@ -2402,13 +2451,27 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
         );
         errors * 12 + alerts.min(6) * 5 + alerts.saturating_sub(6) + tips.min(10)
     };
-    let penalty = penalty_of(&findings);
+    let scores = ["architecture", "electrical", "plumbing"]
+        .into_iter()
+        .map(|discipline| {
+            let selected: Vec<_> = findings
+                .iter()
+                .filter(|f| f.discipline() == discipline)
+                .cloned()
+                .collect();
+            (
+                discipline,
+                100u32.saturating_sub(penalty_of(&selected, ReviewScope::default())),
+            )
+        })
+        .collect();
+    let penalty = penalty_of(&findings, profile.scope);
     // What each one costs: the score without it, minus the score with it.
     // A number that moves without saying why is a number nobody can act on.
     for at in 0..findings.len() {
         let mut without = findings.clone();
         without.remove(at);
-        findings[at].weight = penalty.saturating_sub(penalty_of(&without));
+        findings[at].weight = penalty.saturating_sub(penalty_of(&without, profile.scope));
     }
     // Each source once, in the order the findings first lean on it.
     let mut refs: Vec<&'static Standard> = Vec::new();
@@ -2420,6 +2483,8 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
         }
     }
     Report {
+        scope: profile.scope,
+        scores,
         score: 100u32.saturating_sub(penalty),
         capacity,
         findings,
@@ -2432,6 +2497,49 @@ mod tests {
     use newera_core::{Furniture, FurnitureId, Room, RoomId, Wall, WallId};
 
     use super::*;
+
+    #[test]
+    fn score_scope_keeps_unmodeled_installations_visible_without_penalizing_architecture() {
+        let mut home = Home::default();
+        square(&mut home, "Banho", 400.0, 400.0);
+        home.furniture
+            .push(piece(20, "toilet", (100.0, 100.0), (40.0, 68.0, 80.0), 0.0));
+        let full = review(&home, &Profile::default());
+        let profile = Profile {
+            scope: ReviewScope {
+                electrical: false,
+                plumbing: false,
+            },
+            ..Profile::default()
+        };
+        let architecture = review(&home, &profile);
+        assert_eq!(architecture.findings.len(), full.findings.len());
+        assert_eq!(architecture.scores, full.scores);
+        assert_eq!(architecture.score, architecture.scores["architecture"]);
+        assert!(architecture.score > full.score);
+        for discipline in ["electrical", "plumbing"] {
+            let findings: Vec<_> = architecture
+                .findings
+                .iter()
+                .filter(|f| f.discipline() == discipline)
+                .collect();
+            assert!(!findings.is_empty());
+            assert!(
+                findings
+                    .iter()
+                    .all(|f| f.weight == 0 && f.accepted.is_none())
+            );
+        }
+        assert!(
+            architecture
+                .findings
+                .iter()
+                .any(|f| f.discipline() == "architecture" && f.weight > 0)
+        );
+        assert!(home.accepted.is_empty());
+        let old: Profile = serde_json::from_str(r#"{"occupants":3}"#).unwrap();
+        assert_eq!(old.scope, ReviewScope::default());
+    }
 
     fn square(home: &mut Home, name: &str, w: f64, d: f64) {
         let corners = [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)];

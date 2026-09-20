@@ -355,6 +355,26 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
             "Alguien usa silla de ruedas (NBR 9050)",
             "Une personne en fauteuil roulant (NBR 9050)",
         ],
+        "Incluir elétrica na nota" => [
+            "Include electrical in score",
+            "Incluir electricidad en la nota",
+            "Inclure l’électricité dans la note",
+        ],
+        "Incluir hidráulica na nota" => [
+            "Include plumbing in score",
+            "Incluir fontanería en la nota",
+            "Inclure la plomberie dans la note",
+        ],
+        "Pendências fora do escopo continuam visíveis. A nota não certifica o projeto." => [
+            "Findings outside the scope remain visible. The score does not certify the project.",
+            "Los hallazgos fuera del alcance siguen visibles. La nota no certifica el proyecto.",
+            "Les constats hors périmètre restent visibles. La note ne certifie pas le projet.",
+        ],
+        "Fora do escopo da nota" => [
+            "Outside score scope",
+            "Fuera del alcance de la nota",
+            "Hors périmètre de la note",
+        ],
         "nota de habitabilidade" => [
             "habitability score",
             "nota de habitabilidad",

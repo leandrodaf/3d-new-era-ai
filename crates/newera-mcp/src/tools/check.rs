@@ -12,6 +12,8 @@ use crate::compact;
 /// Who lives there, as far as this call says; the rest is the project's.
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct People {
+    /// Disciplines included in the score. Architecture always counts; excluded findings remain visible. Kept for later reviews and dry runs.
+    scope: Option<newera_ergonomics::ReviewScope>,
     /// People living in the home (default 2).
     occupants: Option<u32>,
     /// Of them, children (sleep in single beds or cribs).
@@ -29,7 +31,8 @@ pub(crate) struct People {
 
 impl People {
     fn given(&self) -> bool {
-        self.occupants.is_some()
+        self.scope.is_some()
+            || self.occupants.is_some()
             || self.children.is_some()
             || self.elderly.is_some()
             || self.wheelchair.is_some()
@@ -40,6 +43,7 @@ impl People {
     fn over(&self, home: &newera_core::Home) -> newera_ergonomics::Profile {
         let kept = newera_ergonomics::Profile::of(home);
         newera_ergonomics::Profile {
+            scope: self.scope.unwrap_or(kept.scope),
             occupants: self.occupants.unwrap_or(kept.occupants),
             children: self.children.unwrap_or(kept.children),
             elderly: self.elderly.unwrap_or(kept.elderly),
@@ -88,7 +92,7 @@ fn round2(v: f64) -> f64 {
 #[tool_router(router = check_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Ergonomics and habitability review for the people living there. It never blocks anything: it reads the drawing and says what it finds, and the drawing stays the user's — somebody sketching to learn or to see an idea is not stopped by a standard. (occupants, children, elderly, wheelchair, stature cm, city; the people given are kept with the project and used when a later call or a dry run gives none, so a dry run's score is the one this review gives): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen (work triangle, counter heights, Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. Reply {score, capacity, findings:[{sev, place, msg, key, weight, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. weight is what the score would gain if that one went away, so a score that moved can be read; key names the finding for accept. src is the source the finding stands on, empty when it is common practice; resolve it in sources instead of asking. tier is the reliability ladder A obliges (Brazilian standard, municipal code) · B references (foreign standard) · C doctrine · D measured · E survey — and it is why a finding is an error or only a tip. fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap). city, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against a standard the more restrictive one wins — set it once with set_home(city=…) so dry runs and check_layout weigh the same rules. accept=[[key, reason]] marks findings already looked at: they stay in the report with their reason and stop costing score, which is what lets a correct plan reach zero pendencies honestly; accept=[[key, empty]] takes it back. orphaned [[key, reason]] lists acceptances no current finding answers to, on any storey, for these people — the problem was fixed, and would come back already silenced; prune=true drops them."
+        description = "Ergonomics and habitability review for the people living there. It never blocks anything: it reads the drawing and says what it finds, and the drawing stays the user's — somebody sketching to learn or to see an idea is not stopped by a standard. (occupants, children, elderly, wheelchair, stature cm, city; the people given are kept with the project and used when a later call or a dry run gives none, so a dry run's score is the one this review gives): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen (work triangle, counter heights, Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. Reply {score, score_basis, scope, scores:{architecture,electrical,plumbing}, layout, coverage, capacity, findings:[{sev, place, msg, key, weight, discipline, in_scope, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. scope={electrical:false,plumbing:false} scores architecture only; all findings remain visible, excluded ones weigh zero. The scope is saved for later reviews and dry runs. layout includes geometric checks on the active storey; coverage declares limits. Scores are heuristic, not project completion or certification. weight is what the score would gain if that one went away, so a score that moved can be read; key names the finding for accept. src is the source the finding stands on, empty when it is common practice; resolve it in sources instead of asking. tier is the reliability ladder A obliges (Brazilian standard, municipal code) · B references (foreign standard) · C doctrine · D measured · E survey — and it is why a finding is an error or only a tip. fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap). city, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against a standard the more restrictive one wins — set it once with set_home(city=…) so dry runs and check_layout weigh the same rules. accept=[[key, reason]] marks findings already looked at: they stay in the report with their reason and stop costing score, which is what lets a correct plan reach zero pendencies honestly; accept=[[key, empty]] takes it back. orphaned [[key, reason]] lists acceptances no current finding answers to, on any storey, for these people — the problem was fixed, and would come back already silenced; prune=true drops them."
     )]
     pub(crate) fn ergonomics(&self, Parameters(p): Parameters<ErgonomicsParams>) -> String {
         let profile = p.people.over(self.document.read().home());
@@ -142,6 +146,8 @@ impl NewEraMcp {
                     "msg": f.message,
                     "key": f.key,
                     "weight": f.weight,
+                    "discipline": f.discipline(),
+                    "in_scope": report.scope.includes(f),
                 });
                 if let Some(code) = f.reference {
                     row["src"] = serde_json::json!(code);
@@ -159,6 +165,18 @@ impl NewEraMcp {
         let codes: Vec<&str> = report.refs.iter().map(|r| r.code).collect();
         let mut out = serde_json::json!({
             "score": report.score,
+            "score_basis": "habitability_heuristic",
+            "scope": report.scope,
+            "scores": report.scores,
+            "layout": compact::issues(&doc.home().level_view(doc.home().current_level()), newera_core::Storeys::Active),
+            "coverage": {
+                "storey": doc.home().current_level().map(|id| id.to_string()),
+                "checked": ["layout_geometry", "use_and_circulation", "opening_obstructions", "habitability", "modeled_electrical_rules", "modeled_plumbing_rules"],
+                "not_verified": ["photometric_simulation", "visual_composition", "manufacturer_clearances", "construction_documents", "complete_regulatory_compliance"],
+                "excluded_findings": "visible_without_score_penalty",
+                "electrical_precondition": "furnished_storey",
+                "completion": "not_certified"
+            },
             "capacity": report.capacity,
             "findings": findings,
             "sources": super::sources(&codes),
@@ -862,6 +880,71 @@ mod tests {
         s.document.write().undo().unwrap();
         assert_eq!(check("{}")["accepted"][0]["key"], key.as_str());
     }
+    #[test]
+    fn review_scope_is_persisted_and_geometry_is_reported_alongside_habitability() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_value(serde_json::json!({
+                "rooms":[{"name":"Quarto","pts":[[0,0],[400,0],[400,400],[0,400]]}]
+            }))
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_value(serde_json::json!({"items":[
+                {"cat":"wardrobe","at":[200,200]}, {"cat":"fridge","at":[200,200]}
+            ]}))
+            .unwrap(),
+        ))
+        .unwrap();
+        let report: serde_json::Value = serde_json::from_str(
+            &s.ergonomics(Parameters(
+                serde_json::from_value(
+                    serde_json::json!({"scope":{"electrical":false,"plumbing":false}}),
+                )
+                .unwrap(),
+            )),
+        )
+        .unwrap();
+        assert_eq!(report["score"], report["scores"]["architecture"]);
+        assert!(!report["layout"].as_object().unwrap().is_empty());
+        assert_eq!(report["coverage"]["completion"], "not_certified");
+        assert!(report["findings"].as_array().unwrap().iter().any(|f| {
+            f["msg"]
+                .as_str()
+                .is_some_and(|msg| msg.contains("Sem janela"))
+        }));
+        assert!(
+            report["findings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|f| f["discipline"] == "electrical"
+                    && f["in_scope"] == false
+                    && f["weight"] == 0)
+        );
+        let kept: serde_json::Value =
+            serde_json::from_str(&s.ergonomics(Parameters(ErgonomicsParams::default()))).unwrap();
+        assert_eq!(kept["scope"], report["scope"]);
+        let dry: serde_json::Value = serde_json::from_str(
+            &s.update(Parameters(
+                serde_json::from_value(
+                    serde_json::json!({"dry":true,"items":[{"id":"f2","name":"Armário"}]}),
+                )
+                .unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(dry["score_scope"], report["scope"]);
+        assert!(s.document.read().home().accepted.is_empty());
+        assert!(
+            !newera_ergonomics::Profile::of(s.document.read().home())
+                .scope
+                .electrical
+        );
+    }
+
     #[test]
     fn ergonomics_reviews_the_plan_for_its_people() {
         let s = server();

@@ -1735,7 +1735,10 @@ impl NewEraApp {
                     "",
                     true,
                 ) {
-                    self.ergonomics.get_or_insert_with(Default::default);
+                    self.ergonomics.get_or_insert_with(|| crate::ergonomics::ErgonomicsWindow {
+                        profile: newera_ergonomics::Profile::of(self.document.read().home()),
+                        ..Default::default()
+                    });
                     ui.close();
                 }
             });

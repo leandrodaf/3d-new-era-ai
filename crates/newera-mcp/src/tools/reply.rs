@@ -247,6 +247,7 @@ pub(super) fn preview_with(
     );
     // Stable rule/element identity survives a renamed room or changed measure.
     let key = |f: &newera_ergonomics::Finding| f.key.clone();
+    out["score_scope"] = serde_json::json!(now.scope);
     let old_keys: std::collections::BTreeSet<String> = was.findings.iter().map(&key).collect();
     let new_keys: std::collections::BTreeSet<String> = now.findings.iter().map(&key).collect();
     let object = out.as_object_mut().expect("object");
