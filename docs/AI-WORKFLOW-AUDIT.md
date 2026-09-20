@@ -242,3 +242,13 @@ Atualização de publicação: o [Publish 35509917158](https://github.com/leandr
 - Defeito adicional corrigido: a interseção da câmera com painéis luminosos testava o lado de visibilidade invertido. Agora usa a normal real da superfície e só mostra sua face luminosa, tanto para cima quanto para baixo.
 - Verificação: 157 testes core e 30 testes de render passaram (um teste opcional core ignorado). Casos novos verificam iluminação do teto sem emissão direta para o piso, intensidade, persistência do parâmetro, leitura de arquivos sem o parâmetro e visibilidade das duas orientações no ray tracer.
 - **Ainda pendente:** gerar automaticamente as fontes nas fitas de sancas/tabicas com comprimento, fluxo e potência coerentes, conectá-las ao levantamento elétrico e atualizar/verificar as sancas da planta. Esta etapa corrige a direção e a visibilidade; não declara a automação das fitas concluída.
+
+## Fitas geradas — emissores e quantitativos reais
+
+- Sancas abertas agora geram painéis emissores voltados para cima; sancas invertidas geram fitas abaixo da borda, voltadas para baixo. Tabicas com LED geram emissores para baixo. Sanca fechada e `led=false` não geram fontes.
+- Cada trecho acompanha o eixo real da fita, com comprimento e rotação próprios, inclusive em paredes oblíquas. A montagem preserva os parâmetros luminosos dos componentes; fotometria e levantamento elétrico passam a enxergá-los.
+- Parâmetros em `p`: `led_lm_m`, `led_w_m`, `led_k`. Padrões de projeto: 1000 lm/m, 10 W/m e 3000 K, informados nas notas e substituíveis pela ficha da fita escolhida. Potência não inclui driver. Valores negativos/não finitos são recusados; temperatura aceita 1000–40000 K.
+- Quantitativo corrigido para somar os eixos das fitas geradas. No teste de sanca aberta de 400 × 300 cm, a borda interna tinha 10,8 m, mas a fita deslocada dentro do canal tem 11,1 m; o relatório agora informa 11,1 m em ambas as orientações do contorno.
+- Testes verificam emissores após montagem/rotação, direções, soma de lúmens e watts por comprimento, presença no levantamento elétrico, ausência de luz quando desligada no gerador e trechos oblíquos. A carga aparente/circuitos segue o módulo elétrico; detectar luminárias não equivale a projetar fontes, drivers e circuitos.
+- As sancas já existentes no backup/aba ainda precisam ser regeneradas e verificadas com esta versão. A mudança de código não altera silenciosamente grupos salvos anteriormente.
+- Validação concluída: 30 testes de marcenaria e 107 testes MCP passaram; um teste opcional MCP ignorado. Clippy dos dois módulos sem avisos. Os testes de marcenaria foram repetidos após o ajuste de pontos médios solicitado pelo Clippy.

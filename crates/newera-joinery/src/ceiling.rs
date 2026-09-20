@@ -41,6 +41,12 @@ pub struct CoveParams {
     pub slot: f64,
     /// LED strip in the channel (default true).
     pub led: bool,
+    /// Design flux per metre; replace with the selected strip specification.
+    pub led_lm_m: f64,
+    /// Electrical watts per metre, excluding the driver.
+    pub led_w_m: f64,
+    /// Color temperature K.
+    pub led_k: f64,
 }
 
 impl Default for CoveParams {
@@ -53,6 +59,9 @@ impl Default for CoveParams {
             drop: 15.0,
             slot: 8.0,
             led: true,
+            led_lm_m: 1000.0,
+            led_w_m: 10.0,
+            led_k: 3000.0,
         }
     }
 }
@@ -70,6 +79,12 @@ pub struct ShadowGapParams {
     pub depth: f64,
     /// Indirect LED light in the gap (default false).
     pub led: bool,
+    /// Design flux per metre; replace with the selected strip specification.
+    pub led_lm_m: f64,
+    /// Electrical watts per metre, excluding the driver.
+    pub led_w_m: f64,
+    /// Color temperature K.
+    pub led_k: f64,
 }
 
 impl Default for ShadowGapParams {
@@ -80,6 +95,9 @@ impl Default for ShadowGapParams {
             gap: 1.5,
             depth: 3.0,
             led: false,
+            led_lm_m: 1000.0,
+            led_w_m: 10.0,
+            led_k: 3000.0,
         }
     }
 }
@@ -182,6 +200,68 @@ fn strips(
         .collect()
 }
 
+/// Each light follows its actual edge, including oblique room outlines.
+fn led_strips(
+    outer: &[[f64; 2]],
+    inner: &[[f64; 2]],
+    z: f64,
+    upward: bool,
+    lm_m: f64,
+    w_m: f64,
+    kelvin: f64,
+) -> Result<Vec<Part>, String> {
+    if ![lm_m, w_m, kelvin]
+        .iter()
+        .all(|v| v.is_finite() && *v > 0.0)
+        || !(1000.0..=40000.0).contains(&kelvin)
+    {
+        return Err(
+            "Informe fluxo e potência positivos e temperatura de 1000 a 40000 K para o LED.".into(),
+        );
+    }
+    Ok((0..outer.len())
+        .map(|i| {
+            let j = (i + 1) % outer.len();
+            let midpoint = |k: usize| {
+                [
+                    outer[k][0].midpoint(inner[k][0]),
+                    outer[k][1].midpoint(inner[k][1]),
+                ]
+            };
+            let (a, b) = (midpoint(i), midpoint(j));
+            let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+            let length = dx.hypot(dy);
+            let width = ((outer[j][0] - outer[i][0]) * (inner[i][1] - outer[i][1])
+                - (outer[j][1] - outer[i][1]) * (inner[i][0] - outer[i][0]))
+                .abs()
+                / (outer[j][0] - outer[i][0])
+                    .hypot(outer[j][1] - outer[i][1])
+                    .max(1e-9);
+            let mut part = Part::solid(
+                &format!("Fita de LED {}", i + 1),
+                [
+                    a[0].midpoint(b[0]) - length / 2.0,
+                    a[1].midpoint(b[1]) - width / 2.0,
+                    z,
+                ],
+                [length, width, 0.3],
+                [255, 236, 180],
+            );
+            part.angle = dy.atan2(dx).to_degrees();
+            let mut light = newera_core::Light::led(
+                lm_m * length / 100.0,
+                kelvin,
+                (0.5, 0.5, if upward { 1.0 } else { 0.0 }),
+            );
+            light.watts = Some(w_m * length / 100.0);
+            light.area = Some([length, width]);
+            light.panel_upward = Some(upward);
+            part.light = Some(light);
+            part
+        })
+        .collect())
+}
+
 fn check_room(pts: &[[f64; 2]], border: f64) -> Result<Vec<[f64; 2]>, String> {
     if pts.len() < 3 || signed_area(pts).abs() < 1.0 {
         return Err("Informe o contorno do cômodo (pts) ou o id do cômodo.".into());
@@ -253,16 +333,15 @@ pub(crate) fn cove(p: &CoveParams) -> Result<Output, String> {
             if p.led && p.kind == CoveType::Open {
                 let led_out = inset(&outer, p.width - BOARD - 3.0).ok_or("Contorno inválido.")?;
                 let led_in = inset(&outer, p.width - BOARD - 2.0).ok_or("Contorno inválido.")?;
-                let mut led = strips(
-                    "Fita de LED",
+                parts.extend(led_strips(
                     &led_out,
                     &led_in,
                     ceiling - drop + BOARD,
-                    0.3,
-                    None,
-                    [255, 236, 180],
-                );
-                parts.append(&mut led);
+                    true,
+                    p.led_lm_m,
+                    p.led_w_m,
+                    p.led_k,
+                )?);
             }
         }
         CoveType::Inverted => {
@@ -302,7 +381,19 @@ pub(crate) fn cove(p: &CoveParams) -> Result<Output, String> {
                 Some(board),
                 PLASTER,
             ));
-            notes.push("Fita de LED voltada para baixo, escondida na borda do rebaixo.".into());
+            if p.led {
+                // Below the inner rim: the emitting face is unobstructed.
+                parts.extend(led_strips(
+                    &slot,
+                    &rim,
+                    ceiling - drop - 0.3,
+                    false,
+                    p.led_lm_m,
+                    p.led_w_m,
+                    p.led_k,
+                )?);
+                notes.push("Fita de LED voltada para baixo, escondida na borda do rebaixo.".into());
+            }
         }
     }
     let mut hardware = vec![format!(
@@ -312,7 +403,20 @@ pub(crate) fn cove(p: &CoveParams) -> Result<Output, String> {
     if p.led && p.kind != CoveType::Closed {
         hardware.push(format!(
             "{} m de fita de LED",
-            num(perimeter(&inner) / 100.0)
+            num(parts
+                .iter()
+                .filter(|p| p.light.is_some())
+                .map(|p| p.size[0])
+                .sum::<f64>()
+                / 100.0)
+        ));
+    }
+    if p.led && p.kind != CoveType::Closed {
+        notes.push(format!(
+            "LED de projeto: {} lm/m, {} W/m, {} K; confirmar fita e driver selecionados.",
+            num(p.led_lm_m),
+            num(p.led_w_m),
+            num(p.led_k)
         ));
     }
     let size = bounds_size(&outer, ceiling);
@@ -359,15 +463,15 @@ pub(crate) fn shadow_gap(p: &ShadowGapParams) -> Result<Output, String> {
     if p.led {
         let led = inset(&outer, p.gap / 2.0).ok_or("Contorno inválido.")?;
         let led_in = inset(&outer, p.gap / 2.0 + 0.3).ok_or("Contorno inválido.")?;
-        parts.extend(strips(
-            "Fita de LED",
+        parts.extend(led_strips(
             &led,
             &led_in,
             p.ceiling - p.depth,
-            0.3,
-            None,
-            [255, 236, 180],
-        ));
+            false,
+            p.led_lm_m,
+            p.led_w_m,
+            p.led_k,
+        )?);
     }
     let mut hardware = vec![format!(
         "{} m de perfil tabica",
@@ -376,7 +480,20 @@ pub(crate) fn shadow_gap(p: &ShadowGapParams) -> Result<Output, String> {
     if p.led {
         hardware.push(format!(
             "{} m de fita de LED",
-            num(perimeter(&outer) / 100.0)
+            num(parts
+                .iter()
+                .filter(|p| p.light.is_some())
+                .map(|p| p.size[0])
+                .sum::<f64>()
+                / 100.0)
+        ));
+    }
+    if p.led {
+        notes.push(format!(
+            "LED de projeto: {} lm/m, {} W/m, {} K; confirmar fita e driver selecionados.",
+            num(p.led_lm_m),
+            num(p.led_w_m),
+            num(p.led_k)
         ));
     }
     Ok(Output {
@@ -414,6 +531,93 @@ mod tests {
     }
 
     #[test]
+    fn led_builds_have_rated_oriented_emitters_and_electrical_points() {
+        use newera_core::{FurnitureId, Home, Point2};
+        for kind in [CoveType::Open, CoveType::Inverted, CoveType::Closed] {
+            let p = CoveParams {
+                pts: room(),
+                kind,
+                led_lm_m: 800.0,
+                led_w_m: 8.0,
+                ..CoveParams::default()
+            };
+            let output = cove(&p).unwrap();
+            let mut next = 10;
+            let group = crate::assemble(
+                &crate::Build::Cove(p),
+                &output,
+                FurnitureId(1),
+                Point2::new(500.0, 500.0),
+                37.0,
+                0.0,
+                &mut || {
+                    next += 1;
+                    FurnitureId(next)
+                },
+            );
+            let mut home = Home::default();
+            home.furniture.push(group);
+            let emitters = newera_core::lighting::emitters(&home, &|_| None);
+            let count = if kind == CoveType::Closed { 0 } else { 4 };
+            assert_eq!(emitters.len(), count);
+            assert_eq!(newera_core::electrical::points(&home).len(), count);
+            let metres: f64 = output
+                .parts
+                .iter()
+                .filter(|p| p.light.is_some())
+                .map(|p| p.size[0] / 100.0)
+                .sum();
+            assert!((emitters.iter().map(|e| e.flux).sum::<f64>() - metres * 800.0).abs() < 1e-6);
+            assert!((emitters.iter().map(|e| e.watts).sum::<f64>() - metres * 8.0).abs() < 1e-6);
+            for e in emitters {
+                let up = e.intensity([0.0, 0.0, 1.0]);
+                let down = e.intensity([0.0, 0.0, -1.0]);
+                assert_eq!(up > 0.0, kind == CoveType::Open);
+                assert_eq!(down > 0.0, kind == CoveType::Inverted);
+            }
+        }
+        let out = shadow_gap(&ShadowGapParams {
+            pts: room(),
+            led: true,
+            ..ShadowGapParams::default()
+        })
+        .unwrap();
+        assert_eq!(out.parts.iter().filter(|p| p.light.is_some()).count(), 4);
+        assert!(
+            out.parts
+                .iter()
+                .filter_map(|p| p.light.as_ref())
+                .all(|l| l.panel_upward == Some(false))
+        );
+        let off = cove(&CoveParams {
+            pts: room(),
+            led: false,
+            ..CoveParams::default()
+        })
+        .unwrap();
+        assert!(off.parts.iter().all(|p| p.light.is_none()));
+        assert!(
+            cove(&CoveParams {
+                pts: room(),
+                led_w_m: -1.0,
+                ..CoveParams::default()
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn oblique_led_edges_keep_their_length_and_orientation() {
+        let outer = vec![[0.0, 0.0], [300.0, 400.0], [100.0, 600.0], [-200.0, 200.0]];
+        let inner = inset(&outer, 1.0).unwrap();
+        let parts = led_strips(&outer, &inner, 250.0, true, 1000.0, 10.0, 3000.0).unwrap();
+        let first = &parts[0];
+        assert!((first.angle - 400.0_f64.atan2(300.0).to_degrees()).abs() < 1e-6);
+        assert!((first.light.as_ref().unwrap().flux() - first.size[0] * 10.0).abs() < 1e-6);
+        assert!((first.size[1] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
     fn coves_follow_the_room_with_mitred_strips_and_led() {
         let out = cove(&CoveParams {
             pts: room(),
@@ -437,9 +641,9 @@ mod tests {
             .find(|p| p.name.starts_with("Espelho"))
             .unwrap();
         assert!((lip.at[2] + lip.size[2] - 252.0).abs() < 1e-9, "{lip:?}");
-        // LED along the inner perimeter: (320 + 220) × 2 = 1080 cm.
+        // Actual LED centreline is inset 36.25 cm: 1400 - 8 × 36.25 = 1110 cm.
         assert!(
-            out.hardware.iter().any(|h| h == "10,8 m de fita de LED"),
+            out.hardware.iter().any(|h| h == "11,1 m de fita de LED"),
             "{:?}",
             out.hardware
         );
@@ -451,7 +655,7 @@ mod tests {
             ..CoveParams::default()
         })
         .unwrap();
-        assert!(other.hardware.contains(&"10,8 m de fita de LED".to_owned()));
+        assert!(other.hardware.contains(&"11,1 m de fita de LED".to_owned()));
 
         assert!(
             cove(&CoveParams {
@@ -495,6 +699,9 @@ mod tests {
         let out = shadow_gap(&ShadowGapParams {
             pts: room(),
             led: true,
+            led_lm_m: 1000.0,
+            led_w_m: 10.0,
+            led_k: 3000.0,
             ..ShadowGapParams::default()
         })
         .unwrap();

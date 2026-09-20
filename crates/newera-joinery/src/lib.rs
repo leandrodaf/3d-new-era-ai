@@ -99,6 +99,10 @@ impl Build {
 pub struct Part {
     /// Workshop name, e.g. `Lateral esquerda`.
     pub name: String,
+    /// Rotation of this part within the assembly.
+    pub angle: f64,
+    /// Rated emitter, when this part is a luminaire.
+    pub light: Option<newera_core::Light>,
     /// Minimum corner, cm.
     pub at: [f64; 3],
     /// Size along x, y, z, cm.
@@ -135,6 +139,8 @@ impl Part {
     ) -> Self {
         Self {
             name: name.to_owned(),
+            angle: 0.0,
+            light: None,
             at,
             size,
             board: Some(board.to_owned()),
@@ -307,7 +313,8 @@ pub fn assemble(
                 catalog: "box".into(),
                 name: part.name.clone(),
                 position: group.to_plan((cx, cy)),
-                angle,
+                angle: angle + part.angle,
+                light: part.light.clone(),
                 elevation: elevation + part.at[2],
                 width: part.size[0].max(0.05),
                 depth: part.size[1].max(0.05),
