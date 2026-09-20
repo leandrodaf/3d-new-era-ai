@@ -42,7 +42,7 @@ web-sys = { version = "0.3", features = [
     "Blob", "BlobPropertyBag", "console", "Document", "Element", "ErrorEvent", "Headers", "HtmlAnchorElement",
     "HtmlCanvasElement", "Location", "MessageEvent", "Navigator", "Request",
     "RequestInit", "RequestMode", "Response", "Url", "UrlSearchParams",
-    "WebSocket", "Window", "Worker", "WorkerOptions", "WorkerType", "DedicatedWorkerGlobalScope",
+    "Storage", "WebSocket", "Window", "Worker", "WorkerOptions", "WorkerType", "DedicatedWorkerGlobalScope",
 ] }
 # In a browser the tools are called straight, with no session and no socket of
 # their own: the protocol is spoken by the relay in front of the tab.

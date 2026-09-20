@@ -330,7 +330,11 @@ fn hold(
                 .map(|tool| {
                     serde_json::json!({
                         "name": tool.name,
-                        "description": tool.description,
+                        "description": if tool.name == "save_home" {
+                            "Download a .newera project backup in the browser. path supplies a filename only. Reports download_started (not disk confirmation) and autosave recovery status; no server file is written.".to_owned()
+                        } else if tool.name == "get_home" {
+                            format!("{} Browser replies also include recovery state, current_revision, saved_revision or restored_from_revision, timestamp and any storage failure.", tool.description.as_deref().unwrap_or(""))
+                        } else { tool.description.as_deref().unwrap_or("").to_owned() },
                         "inputSchema": tool.input_schema,
                     })
                 })
@@ -468,8 +472,47 @@ fn run(
     if TOO_SLOW_HERE.contains(&name) {
         return Err("A ferramenta video salva arquivos no aplicativo. No navegador, use Criar vídeo para baixar o AVI.".into());
     }
+    if name == "save_home" {
+        let doc = document.read();
+        let requested = args["path"].as_str().unwrap_or("projeto.newera");
+        let basename = requested
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or("projeto.newera");
+        let filename = if basename.ends_with(".newera") {
+            basename.to_owned()
+        } else {
+            format!("{basename}.newera")
+        };
+        let bytes = newera_core::to_project_bytes(&doc);
+        let byte_count = bytes.len();
+        let _ = crate::recovery_web::store(&doc, &bytes);
+        crate::files::save_bytes("New Era", "newera", &filename, || Ok(bytes))?;
+        let payload = serde_json::json!({"download_started":true,"name":filename,
+            "revision":doc.revision(),"bytes":byte_count,"recovery":crate::recovery_web::status()});
+        return Ok(serde_json::json!({"content":[{"type":"text","text":payload.to_string()}]}));
+    }
     let result = newera_mcp::call(document.clone(), name, args)?;
-    serde_json::to_value(result).map_err(|e| e.to_string())
+    let mut result = serde_json::to_value(result).map_err(|e| e.to_string())?;
+    if name == "get_home"
+        && let Some(content) = result["content"].as_array_mut()
+    {
+        for item in content {
+            if item["type"] != "text" {
+                continue;
+            }
+            if let Some(text) = item["text"].as_str()
+                && let Ok(mut home) = serde_json::from_str::<serde_json::Value>(text)
+            {
+                let mut recovery = crate::recovery_web::status();
+                recovery["current_revision"] = serde_json::json!(document.read().revision());
+                home["recovery"] = recovery;
+                item["text"] = serde_json::json!(home.to_string());
+            }
+        }
+    }
+
+    Ok(result)
 }
 
 /// Whatever the browser said went wrong, as a line a person can read.

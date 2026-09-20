@@ -15,6 +15,8 @@ mod i18n;
 mod jobs;
 mod panels;
 mod photo;
+#[cfg(target_arch = "wasm32")]
+mod recovery_web;
 mod render_job;
 #[cfg(target_arch = "wasm32")]
 pub mod render_web;

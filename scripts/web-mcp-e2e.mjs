@@ -7,7 +7,7 @@
 //
 // Needs the relay running and the site served. Exits non-zero on any step.
 import "./web-diagnostics-test.mjs";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -171,8 +171,9 @@ try {
       jsonrpc: "2.0", id: 5, method: "tools/call",
       params: { name: "get_home", arguments: {} },
     });
-    const grew = (after?.result?.content?.[0]?.text ?? "").length
-      > (before?.result?.content?.[0]?.text ?? "").length;
+    const beforePlan=JSON.parse(before.result.content[0].text);
+    const afterPlan=JSON.parse(after.result.content[0].text);
+    const grew = (afterPlan.walls?.length ?? 0) === (beforePlan.walls?.length ?? 0) + 1;
     if (!grew) bad("the project did not change in the tab");
     else ok("the tab's project holds what the AI drew");
 
@@ -331,6 +332,53 @@ try {
       bad('real MCP calls did not report their diagnostic lifecycle');
     } else ok('real MCP calls report operation and revision before and after execution');
 
+    const readHome = async () => {
+      const response = await rpc(mcpUrl, {jsonrpc:"2.0",id:40,method:"tools/call",
+        params:{name:"get_home",arguments:{}}});
+      return JSON.parse(response.result.content.find(c=>c.type==='text').text);
+    };
+    await rpc(mcpUrl,{jsonrpc:"2.0",id:41,method:"tools/call",
+      params:{name:"set_home",arguments:{name:"Recovery confirmed"}}});
+    let savedHome;
+    for (let i=0;i<30;i++) {
+      await frames(2); savedHome=await readHome();
+      if (savedHome.recovery.state === 'saved' && savedHome.recovery.saved_revision === savedHome.rev) break;
+    }
+    if (savedHome.recovery.state !== 'saved' || savedHome.recovery.saved_revision !== savedHome.rev) throw new Error('autosave did not confirm the current revision');
+    await evaluate(`(() => {
+      window.snapshotBeforeQuota = localStorage.getItem('newera-autosave');
+      window.storageSetItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function(key,value) {
+        if (key === 'newera-autosave') throw new DOMException('injected quota', 'QuotaExceededError');
+        return window.storageSetItem.call(this,key,value);
+      };
+    })()`);
+    await rpc(mcpUrl,{jsonrpc:"2.0",id:42,method:"tools/call",
+      params:{name:"set_home",arguments:{name:"Recovery after quota"}}});
+    let failedHome;
+    for (let i=0;i<30;i++) {
+      await frames(2); failedHome=await readHome();
+      if (failedHome.recovery.state === 'failed') break;
+    }
+    if (failedHome.recovery.state !== 'failed'
+        || failedHome.recovery.saved_revision !== savedHome.rev
+        || !(await evaluate("localStorage.getItem('newera-autosave') === window.snapshotBeforeQuota"))) {
+      throw new Error('storage failure falsely confirmed or replaced the previous snapshot');
+    }
+    await evaluate('Storage.prototype.setItem = window.storageSetItem');
+    const exported = await rpc(mcpUrl,{jsonrpc:"2.0",id:43,method:"tools/call",
+      params:{name:"save_home",arguments:{path:"recovery-backup.newera"}}});
+    const backupReply=JSON.parse(exported.result.content[0].text);
+    const backupPath=join(downloads,'recovery-backup.newera');
+    for (let i=0;i<30 && !existsSync(backupPath);i++) await frames(1);
+    if (!backupReply.download_started || !existsSync(backupPath)) throw new Error('MCP save_home did not download the backup');
+    const project=JSON.parse(execFileSync('python3',['-c','import zipfile,sys; print(zipfile.ZipFile(sys.argv[1]).read("project.json").decode())',backupPath],{encoding:'utf8'}));
+    if (project.variants[project.active].home.name !== 'Recovery after quota') throw new Error('downloaded backup contains the wrong project');
+    const beforeReload=await readHome();
+    if (beforeReload.recovery.saved_revision !== beforeReload.rev) throw new Error('explicit backup did not recover from quota failure');
+    await evaluate("window.dispatchEvent(new ErrorEvent('error', {message:'RuntimeError: injected recovery failure'}))");
+    ok('autosave confirms revision, preserves the previous snapshot on quota failure, and MCP downloads a real project backup');
+
     // A refresh must not cost the address: the page is reloaded and the same
     // one has to answer again, because it is already pasted into somebody's
     // AI client.
@@ -346,6 +394,28 @@ try {
     }
     if (!backAgain) bad("the address was lost when the page reloaded");
     else ok("reloaded, and the same address still answers");
+    const restoredHome=await readHome();
+    if (restoredHome.name !== beforeReload.name
+        || restoredHome.recovery.restored_from_revision !== beforeReload.rev
+        || ['walls','rooms','furniture'].some(key=>JSON.stringify(restoredHome[key]) !== JSON.stringify(beforeReload[key]))) {
+      throw new Error('reloading after a runtime failure lost the confirmed snapshot');
+    }
+    ok('after an injected runtime failure, reload restored the confirmed project geometry and saved revision');
+    await evaluate(`(() => {
+      const snapshot=JSON.parse(localStorage.getItem('newera-autosave'));
+      localStorage.setItem('newera-autosave', snapshot.name + '\\n' + snapshot.data);
+    })()`);
+    await send("Page.navigate", {url:`${page}?relay=${encodeURIComponent(relay)}`});
+    let legacyHome;
+    for (let i=0;i<60;i++) {
+      await frames(3);
+      try { legacyHome=await readHome(); } catch { continue; }
+      if (legacyHome.recovery?.legacy) break;
+    }
+    if (!legacyHome?.recovery?.legacy || legacyHome.recovery.restored_from_revision !== null || legacyHome.name !== beforeReload.name) throw new Error('legacy browser snapshot was not restored');
+    ok('legacy browser snapshots still restore without pretending their saved revision is known');
+
+
 
     // Two ways an address must die, checked in order of how much they matter.
     //

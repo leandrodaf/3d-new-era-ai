@@ -65,17 +65,6 @@ pub(crate) enum FurnitureLook {
 
 const SETTINGS_KEY: &str = "newera-settings";
 
-/// Where the browser keeps the project between visits. A tab is closed with
-/// a keystroke and nothing asks twice, so the work is mirrored here as it
-/// goes and offered back when the page opens again.
-#[cfg(target_arch = "wasm32")]
-const AUTOSAVE_KEY: &str = "newera-autosave";
-
-/// How much project the browser's storage takes. Past this the mirror is
-/// skipped rather than filling the quota and failing every later write.
-#[cfg(target_arch = "wasm32")]
-const AUTOSAVE_LIMIT: usize = 3 * 1024 * 1024;
-
 /// On a screen too narrow for three columns, one of these is on show.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum Pane {
@@ -166,9 +155,9 @@ pub(crate) struct NewEraApp {
     /// in which case the page should not open the demo over it.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub(crate) restored: bool,
-    /// The revision already mirrored into the browser's storage, and when.
+    /// The last autosave attempt revision and time; not confirmation of persistence.
     #[cfg(target_arch = "wasm32")]
-    mirrored: (u64, Instant),
+    mirrored: (u64, Instant, bool),
 }
 
 impl std::fmt::Debug for NewEraApp {
@@ -214,7 +203,7 @@ impl NewEraApp {
         crate::theme::set_mode(&cc.egui_ctx, settings.theme);
         let dark = cc.egui_ctx.theme() == egui::Theme::Dark;
         #[cfg(target_arch = "wasm32")]
-        let restored = cc.storage.and_then(|s| s.get_string(AUTOSAVE_KEY));
+        let restored = crate::recovery_web::load();
         #[cfg(not(target_arch = "wasm32"))]
         let restored: Option<String> = None;
         #[cfg_attr(not(target_arch = "wasm32"), allow(unused_mut))]
@@ -252,7 +241,7 @@ impl NewEraApp {
             background_dir: None,
             restored: false,
             #[cfg(target_arch = "wasm32")]
-            mirrored: (0, Instant::now()),
+            mirrored: (0, Instant::now(), false),
             catalog_query: String::new(),
             announced_agents: 0,
             announced_calls: 0,
@@ -270,15 +259,20 @@ impl NewEraApp {
         #[cfg(not(target_arch = "wasm32"))]
         let _ = restored;
         #[cfg(target_arch = "wasm32")]
-        if let Some(saved) = restored
-            && let Some((name, text)) = saved.split_once('\n')
-        {
-            use base64::Engine as _;
-            if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(text) {
-                app.open_bytes(name, &bytes);
-                app.restored = true;
-                app.set_status(crate::i18n::tr("Projeto recuperado desta sessão."));
+        match restored {
+            Ok(Some(snapshot)) => {
+                use base64::Engine as _;
+                match base64::engine::general_purpose::STANDARD.decode(&snapshot.data) {
+                    Ok(bytes) if app.open_bytes(&snapshot.name, &bytes) => {
+                        app.restored = true;
+                        crate::recovery_web::restored(&snapshot, app.document.read().revision());
+                        app.set_status(crate::i18n::tr("Projeto recuperado desta sessão."));
+                    }
+                    _ => crate::recovery_web::failed("saved project could not be restored", None),
+                }
             }
+            Err(reason) => crate::recovery_web::failed(&reason, None),
+            Ok(None) => {}
         }
         // In a browser the MCP comes up on its own: this editor is for driving
         // with an AI, and a switch somebody has to find first is a step in the
@@ -321,23 +315,25 @@ impl NewEraApp {
     /// closes a tab a second after the last wall: this runs from the frame,
     /// a breath after the document changes.
     #[cfg(target_arch = "wasm32")]
-    fn mirror(&mut self, storage: &mut dyn eframe::Storage) {
-        use base64::Engine as _;
-
+    fn mirror(&mut self) {
         let doc = self.document.read();
         let revision = doc.revision();
-        if revision == self.mirrored.0 {
+        if revision == self.mirrored.0
+            && (!self.mirrored.2 || self.mirrored.1.elapsed() < Duration::from_secs(30))
+        {
             return;
         }
-        let name = doc.home().name.clone();
-        let bytes = newera_core::to_project_bytes(&doc);
+        let result = crate::recovery_web::save(&doc);
         drop(doc);
-        if bytes.len() > AUTOSAVE_LIMIT {
-            return;
+        // Track attempts only to avoid retrying a full snapshot every frame.
+        // Confirmed persistence is tracked separately by recovery_web.
+        self.mirrored = (revision, Instant::now(), result.is_err());
+        if let Err(reason) = result {
+            self.set_status(crate::i18n::fill(
+                "⚠ Não foi possível salvar: {}",
+                &[&reason],
+            ));
         }
-        let text = base64::engine::general_purpose::STANDARD.encode(&bytes);
-        storage.set_string(AUTOSAVE_KEY, format!("{name}\n{text}"));
-        self.mirrored = (revision, Instant::now());
     }
 
     /// The plan is drawn on the paper of the theme in use; when the system
@@ -2448,7 +2444,9 @@ impl NewEraApp {
         let _ = ctx;
         for picked in crate::files::take_picked() {
             match picked.kind {
-                crate::files::PickKind::Project => self.open_bytes(&picked.name, &picked.bytes),
+                crate::files::PickKind::Project => {
+                    self.open_bytes(&picked.name, &picked.bytes);
+                }
                 crate::files::PickKind::Background => {
                     self.place_background(&picked.name, &picked.bytes);
                 }
@@ -2461,16 +2459,19 @@ impl NewEraApp {
     /// Loads a project from memory: a `.newera` (JSON or bundle, whose models
     /// and textures are mounted in memory) or a Sweet Home 3D `.sh3d`.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-    pub(crate) fn open_bytes(&mut self, name: &str, bytes: &[u8]) {
+    pub(crate) fn open_bytes(&mut self, name: &str, bytes: &[u8]) -> bool {
         let assets = std::path::PathBuf::from("/memory").join(name);
-        if let Some(previous) = self.document.read().asset_dir() {
-            newera_core::vfs::unmount(&previous);
-        }
+        let previous_assets = self.document.read().asset_dir();
         let sh3d = name.to_ascii_lowercase().ends_with(".sh3d");
         if sh3d {
             let stem = name.rsplit_once('.').map_or(name, |(s, _)| s);
-            match newera_sh3d::import_bytes(bytes, stem, &assets) {
+            return match newera_sh3d::import_bytes(bytes, stem, &assets) {
                 Ok((imported, _files)) => {
+                    if let Some(previous) = &previous_assets
+                        && *previous != assets
+                    {
+                        newera_core::vfs::unmount(previous);
+                    }
                     let mut doc = self.document.write();
                     doc.load(imported.home);
                     doc.set_path(None);
@@ -2488,16 +2489,22 @@ impl NewEraApp {
                         ));
                     }
                     self.set_status(status);
+                    true
                 }
-                Err(err) => self.set_status(crate::i18n::fill(
-                    "⚠ Não foi possível abrir {}: {}",
-                    &[&name, &err],
-                )),
-            }
-            return;
+                Err(err) => {
+                    self.set_status(crate::i18n::fill(
+                        "⚠ Não foi possível abrir {}: {}",
+                        &[&name, &err],
+                    ));
+                    false
+                }
+            };
         }
         match newera_core::project_from_bytes(bytes) {
             Ok((project, files)) => {
+                if let Some(previous) = &previous_assets {
+                    newera_core::vfs::unmount(previous);
+                }
                 let bundled = !files.is_empty();
                 newera_core::vfs::mount(&assets, files);
                 let mut doc = self.document.write();
@@ -2507,11 +2514,15 @@ impl NewEraApp {
                 drop(doc);
                 self.after_load();
                 self.set_status(crate::i18n::fill("Aberto: {}", &[&name]));
+                true
             }
-            Err(err) => self.set_status(crate::i18n::fill(
-                "⚠ Não foi possível abrir {}: {}",
-                &[&name, &err],
-            )),
+            Err(err) => {
+                self.set_status(crate::i18n::fill(
+                    "⚠ Não foi possível abrir {}: {}",
+                    &[&name, &err],
+                ));
+                false
+            }
         }
     }
 }
@@ -2667,17 +2678,15 @@ impl eframe::App for NewEraApp {
         // A browser tab is closed without a question: what was drawn goes to
         // the browser's storage a moment after it changes, not half a minute.
         #[cfg(target_arch = "wasm32")]
-        if self.mirrored.1.elapsed() > Duration::from_millis(1500)
-            && let Some(storage) = frame.storage_mut()
-        {
-            self.mirror(storage);
+        if self.mirrored.1.elapsed() > Duration::from_millis(1500) {
+            self.mirror();
         }
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, SETTINGS_KEY, &self.settings);
         #[cfg(target_arch = "wasm32")]
-        self.mirror(storage);
+        self.mirror();
     }
 }
 
@@ -3210,11 +3219,22 @@ mod tests {
             other.execute(Command::insert(wall)).unwrap();
         }
         let json = newera_core::to_project_json(&other);
-        h.state_mut().open_bytes("outra.newera", json.as_bytes());
+        assert!(h.state_mut().open_bytes("outra.newera", json.as_bytes()));
         h.run_steps(2);
         assert_eq!(walls(&h).len(), 2);
         assert!(!h.state().is_modified());
-        h.state_mut().open_bytes("ruim.newera", b"not a project");
+        let assets = std::path::PathBuf::from("/memory/recovery-keeps-assets");
+        newera_core::vfs::mount(&assets, [("model.bin".into(), vec![1, 2, 3])]);
+        h.state_mut()
+            .document
+            .write()
+            .set_asset_dir(Some(assets.clone()));
+        assert!(!h.state_mut().open_bytes("ruim.newera", b"not a project"));
+        assert_eq!(
+            newera_core::vfs::read(&assets.join("model.bin")).unwrap(),
+            vec![1, 2, 3]
+        );
+        newera_core::vfs::unmount(&assets);
         assert_eq!(walls(&h).len(), 2, "a bad file leaves the project alone");
         assert!(
             h.state()
