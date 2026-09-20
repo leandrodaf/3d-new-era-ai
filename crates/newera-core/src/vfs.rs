@@ -3,10 +3,52 @@
 //! their models and textures here, and every loader reads through [`read`].
 
 use std::collections::HashMap;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
-type Files = HashMap<PathBuf, Arc<[u8]>>;
+struct MountedFile {
+    bytes: Arc<[u8]>,
+    fingerprint: u64,
+}
+
+type Files = HashMap<PathBuf, MountedFile>;
+
+/// Cheap change identity for cache validation; mounted bytes are hashed once
+/// on insertion, never copied or rehashed on each frame.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum AssetRevision {
+    Missing,
+    Mounted(u64, usize),
+    Disk {
+        len: u64,
+        modified: Option<std::time::SystemTime>,
+        created: Option<std::time::SystemTime>,
+        #[cfg(unix)]
+        changed: (i64, i64, u64, u64),
+    },
+}
+
+pub fn revision(path: &Path) -> AssetRevision {
+    let guard = FILES
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(file) = guard.as_ref().and_then(|files| files.get(&key(path))) {
+        return AssetRevision::Mounted(file.fingerprint, file.bytes.len());
+    }
+    drop(guard);
+    let Ok(meta) = std::fs::metadata(path) else {
+        return AssetRevision::Missing;
+    };
+    AssetRevision::Disk {
+        len: meta.len(),
+        modified: meta.modified().ok(),
+        created: meta.created().ok(),
+        #[cfg(unix)]
+        changed: (meta.ctime(), meta.ctime_nsec(), meta.dev(), meta.ino()),
+    }
+}
 
 static FILES: RwLock<Option<Files>> = RwLock::new(None);
 
@@ -17,13 +59,25 @@ fn key(path: &Path) -> PathBuf {
 
 /// Makes `files` (relative names) readable under `dir`.
 pub fn mount(dir: &Path, files: impl IntoIterator<Item = (String, Vec<u8>)>) {
+    use std::hash::{Hash, Hasher};
+    let prepared: Vec<_> = files
+        .into_iter()
+        .map(|(name, bytes)| {
+            let mut hash = std::collections::hash_map::DefaultHasher::new();
+            bytes.hash(&mut hash);
+            (
+                key(&dir.join(name)),
+                MountedFile {
+                    fingerprint: hash.finish(),
+                    bytes: bytes.into(),
+                },
+            )
+        })
+        .collect();
     let mut guard = FILES
         .write()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let map = guard.get_or_insert_with(HashMap::new);
-    for (name, bytes) in files {
-        map.insert(key(&dir.join(name)), bytes.into());
-    }
+    guard.get_or_insert_with(HashMap::new).extend(prepared);
 }
 
 /// Forgets every file mounted under `dir`.
@@ -41,7 +95,10 @@ fn mounted(path: &Path) -> Option<Arc<[u8]>> {
     let guard = FILES
         .read()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    guard.as_ref()?.get(&key(path)).cloned()
+    guard
+        .as_ref()?
+        .get(&key(path))
+        .map(|file| file.bytes.clone())
 }
 
 /// Shared mounted files to copy into an isolated renderer.
@@ -55,7 +112,7 @@ pub fn snapshot(limit: usize) -> Result<AssetSnapshot, String> {
     };
     let size = files
         .values()
-        .try_fold(0usize, |n, b| n.checked_add(b.len()))
+        .try_fold(0usize, |n, b| n.checked_add(b.bytes.len()))
         .ok_or("assets exceed render budget")?;
     if size > limit {
         return Err(format!(
@@ -64,7 +121,7 @@ pub fn snapshot(limit: usize) -> Result<AssetSnapshot, String> {
     }
     Ok(files
         .iter()
-        .map(|(p, b)| (p.to_string_lossy().into_owned(), b.clone()))
+        .map(|(p, b)| (p.to_string_lossy().into_owned(), b.bytes.clone()))
         .collect())
 }
 

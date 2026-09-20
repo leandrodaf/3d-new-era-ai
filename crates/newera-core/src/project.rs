@@ -147,7 +147,7 @@ pub fn resolve_asset(dir: Option<&Path>, stored: &str) -> PathBuf {
 /// Files a model needs next to it: an OBJ's material libraries and the
 /// textures they name, a glTF's buffers and images. Names are relative to
 /// the model's folder.
-fn model_companions(model: &Path) -> Vec<String> {
+pub fn model_companions(model: &Path) -> Vec<String> {
     model_companions_with(model, |p| crate::vfs::read(p).ok())
 }
 

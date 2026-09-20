@@ -2,6 +2,7 @@
 //! software renderer so servers and agents can see the home in 3D without
 //! a graphics card.
 
+mod asset_versions;
 mod camera;
 pub mod export;
 pub mod mesh;
@@ -28,9 +29,10 @@ pub struct TopViews {
     /// Also replace catalog symbols (otherwise only imported models).
     pub all: bool,
     /// Render missing images on a worker thread instead of blocking.
-    background: Option<std::sync::mpsc::Sender<newera_core::Furniture>>,
+    background: Option<std::sync::mpsc::Sender<(u64, newera_core::Furniture)>>,
     /// Bumped whenever a background image becomes ready.
     generation: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    source_revision: &'static str,
 }
 
 #[derive(Debug, Default)]
@@ -50,6 +52,7 @@ impl TopViews {
             all,
             background: None,
             generation: std::sync::Arc::default(),
+            source_revision: env!("NEWERA_SOURCE_REVISION"),
         }
     }
 
@@ -57,19 +60,21 @@ impl TopViews {
     /// up once [`TopViews::generation`] changes.
     pub fn in_background(dir: PathBuf, assets: Option<PathBuf>, all: bool) -> Self {
         let mut views = Self::new(dir, assets, all);
-        let (sender, receiver) = std::sync::mpsc::channel::<newera_core::Furniture>();
+        let (sender, receiver) = std::sync::mpsc::channel::<(u64, newera_core::Furniture)>();
         let worker = views.clone();
         std::thread::spawn(move || {
-            for piece in receiver {
-                if let Some(key) = worker.key(&piece) {
-                    let image = worker.produce(&piece, key);
-                    if let Ok(mut cache) = worker.inner.lock() {
+            for (key, piece) in receiver {
+                let image = worker.produce(&piece, key);
+                let unchanged = worker.key(&piece) == Some(key);
+                if let Ok(mut cache) = worker.inner.lock() {
+                    cache.queued.remove(&key);
+                    if unchanged {
                         cache.done.insert(key, image);
                     }
-                    worker
-                        .generation
-                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
+                worker
+                    .generation
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
         });
         views.background = Some(sender);
@@ -107,6 +112,25 @@ impl TopViews {
         // Serialized, the look-defining fields hash stably.
         serde_json::to_string(&copy).ok()?.hash(&mut hasher);
         self.assets.hash(&mut hasher);
+        self.source_revision.hash(&mut hasher);
+        newera_catalog::GENERATOR_REVISION.hash(&mut hasher);
+        let cache = self.inner.lock().ok()?;
+        for part in piece.flatten() {
+            let paths = part
+                .model
+                .iter()
+                .chain(part.texture.iter().filter_map(|t| t.image.as_ref()))
+                .chain(
+                    part.materials
+                        .iter()
+                        .filter_map(|m| m.texture.as_ref()?.image.as_ref()),
+                );
+            for file in paths {
+                let path = newera_core::resolve_asset(self.assets.as_deref(), file);
+                path.hash(&mut hasher);
+                cache.models.asset_version(&path).hash(&mut hasher);
+            }
+        }
         Some(hasher.finish())
     }
 
@@ -126,13 +150,16 @@ impl TopViews {
                 return found;
             }
             if let Some(sender) = &self.background {
-                if cache.queued.insert(key) {
-                    let _ = sender.send(piece.clone());
+                if cache.queued.insert(key) && sender.send((key, piece.clone())).is_err() {
+                    cache.queued.remove(&key);
                 }
                 return None;
             }
         }
         let image = self.produce(piece, key);
+        if self.key(piece) != Some(key) {
+            return None;
+        }
         if let Ok(mut cache) = self.inner.lock() {
             cache.done.insert(key, image.clone());
         }
@@ -193,18 +220,33 @@ impl TopViews {
                 cut_color: None,
             },
         );
+        // Never publish an image under a version that changed while rendering.
+        if self.key(piece) != Some(key) {
+            return None;
+        }
         std::fs::create_dir_all(&self.dir).ok();
         image.save(&path).ok().map(|()| path.display().to_string())
     }
 }
 
-/// Loads imported models once per file and fits them to each piece.
+/// Reuses imported models until their source or companions change, then reloads.
+/// Fits the cached mesh to each piece.
 #[derive(Debug, Default)]
 pub struct ModelCache {
-    models: std::cell::RefCell<HashMap<PathBuf, Option<newera_catalog::Mesh>>>,
+    models: std::cell::RefCell<HashMap<PathBuf, CachedModel>>,
+    versions: std::cell::RefCell<asset_versions::AssetVersions>,
+}
+
+#[derive(Debug)]
+struct CachedModel {
+    version: u64,
+    mesh: Option<newera_catalog::Mesh>,
 }
 
 impl ModelCache {
+    fn asset_version(&self, path: &Path) -> u64 {
+        self.versions.borrow_mut().get(path)
+    }
     /// Mesh of a piece's imported model, rotated and fitted to its box;
     /// `None` when it has no model or the file can't be read.
     pub fn piece_model(
@@ -213,11 +255,19 @@ impl ModelCache {
         assets: Option<&Path>,
     ) -> Option<newera_catalog::Mesh> {
         let path = newera_core::resolve_asset(assets, piece.model.as_deref()?);
+        let version = self.asset_version(&path);
         let mut cache = self.models.borrow_mut();
-        let mut mesh = cache
-            .entry(path.clone())
-            .or_insert_with(|| newera_catalog::load_model(&path).ok().map(|m| m.mesh))
-            .clone()?;
+        let cached = cache.entry(path.clone()).or_insert_with(|| CachedModel {
+            version,
+            mesh: newera_catalog::load_model(&path).ok().map(|m| m.mesh),
+        });
+        if cached.version != version {
+            *cached = CachedModel {
+                version,
+                mesh: newera_catalog::load_model(&path).ok().map(|m| m.mesh),
+            };
+        }
+        let mut mesh = cached.mesh.clone()?;
         mesh.rotate(piece.model_transform.rotation);
         mesh.fit_to(piece.width, piece.depth, piece.height);
         Some(mesh)
@@ -811,3 +861,6 @@ mod tests {
         assert_ne!(pixel(&image, 100, 100), pixel(&image, 2, 2));
     }
 }
+
+#[cfg(test)]
+mod cache_tests;

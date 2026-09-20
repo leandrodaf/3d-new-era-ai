@@ -16,6 +16,8 @@ pub use fixtures::DIFFUSER;
 pub use import::{ImportError, ImportedModel, load_model};
 pub use mesh::{Axis, GLASS, Mesh, MeshMaterial, Rgb, is_glass, rgb, shade};
 use newera_core::{Furniture, Opening, OpeningKind};
+/// Build-time source fingerprint for persistent generated-image caches.
+pub const GENERATOR_REVISION: &str = env!("NEWERA_SOURCE_REVISION");
 pub use symbols::{SymbolShape, plan_symbol};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
