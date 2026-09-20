@@ -501,6 +501,21 @@ impl<'a> Scene<'a> {
             }
             // A group is one piece of furniture made of parts.
             let params = joinery(top);
+            // Perimeter ceiling builds enclose empty room space. Their
+            // generator frame extends to the floor; it is not a solid box.
+            if !top.children.is_empty()
+                && params
+                    .as_ref()
+                    .is_some_and(|p| matches!(p["kind"].as_str(), Some("cove" | "shadow_gap")))
+            {
+                units.extend(top.visible_leaves().into_iter().map(|piece| Unit {
+                    piece,
+                    what: Use::Other,
+                    params: None,
+                    built: None,
+                }));
+                continue;
+            }
             let what = classify(top, params.as_ref());
             units.push(Unit {
                 piece: top,
@@ -1069,6 +1084,76 @@ impl<'a> Scene<'a> {
 #[cfg(test)]
 mod role_tests {
     use super::*;
+
+    #[test]
+    fn ceiling_perimeters_use_visible_components_instead_of_the_room_envelope() {
+        for kind in ["cove", "shadow_gap"] {
+            let mut home = Home::default();
+            let block = Furniture {
+                id: FurnitureId(2),
+                catalog: "armchair".into(),
+                width: 40.0,
+                depth: 40.0,
+                height: 80.0,
+                position: Point2::new(120.0, 60.0),
+                ..Furniture::default()
+            };
+            let mut ceiling_part = block.clone();
+            ceiling_part.id = FurnitureId(3);
+            ceiling_part.elevation = 260.0;
+            ceiling_part.height = 40.0;
+            let mut hidden = block.clone();
+            hidden.id = FurnitureId(4);
+            hidden.visible = false;
+            let group = Furniture {
+                id: FurnitureId(1),
+                width: 400.0,
+                depth: 400.0,
+                height: 300.0,
+                position: Point2::new(200.0, 200.0),
+                children: vec![ceiling_part, hidden],
+                properties: [("joinery:params".into(), format!(r#"{{"kind":"{kind}"}}"#))]
+                    .into_iter()
+                    .collect(),
+                ..Furniture::default()
+            };
+            let door = Furniture {
+                id: FurnitureId(5),
+                position: Point2::new(150.0, 0.0),
+                width: 70.0,
+                depth: 15.0,
+                height: 210.0,
+                opening: Some(newera_core::Opening::default()),
+                ..Furniture::default()
+            };
+            home.furniture = vec![group, block, door];
+            let scene = Scene::new(&home);
+            assert_eq!(scene.units.len(), 2);
+            assert!(
+                scene.overlaps().is_empty(),
+                "{kind}: empty envelope is not solid"
+            );
+            assert!(
+                scene
+                    .door_hits()
+                    .iter()
+                    .all(|(_, i)| scene.id(*i) == FurnitureId(2))
+            );
+            // A real component lowered into the furniture/door must still
+            // obstruct them. The kind is not a blanket collision exemption.
+            home.furniture[0].children[0].elevation = 20.0;
+            let scene = Scene::new(&home);
+            assert_eq!(scene.overlaps().len(), 1, "{kind}");
+            assert!(
+                scene
+                    .door_hits()
+                    .iter()
+                    .any(|(_, i)| scene.id(*i) == FurnitureId(3))
+            );
+            home.furniture[0].visible = false;
+            assert_eq!(Scene::new(&home).units.len(), 1);
+        }
+    }
 
     #[test]
     fn a_vertical_backsplash_is_not_a_counter_because_of_its_name() {
