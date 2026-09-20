@@ -31,6 +31,7 @@
     clippy::cast_precision_loss
 )]
 
+mod corners;
 mod scene;
 
 use newera_core::standards::{self, Confidence, Standard, Tier};
@@ -2297,6 +2298,7 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
     review.doors();
     review.rooms();
     review.kitchen();
+    review.findings.extend(corners::review(&scene));
     review.screens();
     review.reach();
     review.gaps();
@@ -2381,7 +2383,11 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
     let penalty_of = |list: &[Finding]| {
         let count = |sev: Severity| {
             list.iter()
-                .filter(|f| f.severity == sev && f.accepted.is_none())
+                .filter(|f| {
+                    f.severity == sev
+                        && f.accepted.is_none()
+                        && !f.key.starts_with("unused_corner:")
+                })
                 .count() as u32
         };
         let (errors, alerts, tips) = (
@@ -2481,6 +2487,78 @@ mod tests {
             .findings
             .iter()
             .any(|f| f.severity == severity && f.reference == Some(code))
+    }
+
+    #[test]
+    fn unused_kitchen_corner_is_feedback_without_fix_or_score_penalty() {
+        let mut home = Home::default();
+        square(&mut home, "Cozinha", 500.0, 400.0);
+        home.furniture = vec![
+            piece(20, "base-cabinet", (263.5, 37.5), (300.0, 60.0, 90.0), 0.0),
+            piece(21, "fridge", (456.5, 120.0), (70.0, 72.0, 180.0), 90.0),
+        ];
+        let report = review(&home, &Profile::default());
+        let finding = report
+            .findings
+            .iter()
+            .find(|f| f.key.starts_with("unused_corner:"))
+            .unwrap();
+        assert!(finding.message.contains("0.61 m²"), "{finding:?}");
+        assert!(finding.message.contains("f20") && finding.message.contains("f21"));
+        assert_eq!(finding.severity, Severity::Dica);
+        assert!(finding.fix.is_none() && finding.probe.is_none());
+        assert_eq!(finding.weight, 0);
+        let key = finding.key.clone();
+        home.accepted
+            .insert(key.clone(), "Reserva de manutenção confirmada".into());
+        let accepted = review(&home, &Profile::default());
+        assert!(
+            accepted
+                .findings
+                .iter()
+                .any(|f| f.key == key && f.accepted.is_some())
+        );
+        let mut open = home.clone();
+        open.walls.clear();
+        assert!(corners::review(&Scene::new(&open)).is_empty());
+        let mut aisle = home.clone();
+        aisle.furniture[1].position.y = 200.0;
+        assert!(corners::review(&Scene::new(&aisle)).is_empty());
+        let mut filled = home.clone();
+        filled
+            .furniture
+            .push(piece(22, "box", (453.0, 46.25), (79.0, 77.5, 80.0), 0.0));
+        assert!(corners::review(&Scene::new(&filled)).is_empty());
+        let mut raised = home.clone();
+        raised.furniture[0].elevation = 150.0;
+        assert!(corners::review(&Scene::new(&raised)).is_empty());
+        let mut access = home.clone();
+        let mut door = piece(22, "door", (455.0, 0.0), (70.0, 15.0, 210.0), 0.0);
+        door.opening = Some(newera_core::Opening::default());
+        access.furniture.push(door);
+        assert!(corners::review(&Scene::new(&access)).is_empty());
+        for angle in [90.0_f64, 33.0] {
+            let (sin, cos) = angle.to_radians().sin_cos();
+            let rotate = |p: Point2| Point2::new(p.x * cos - p.y * sin, p.x * sin + p.y * cos);
+            let mut rotated = home.clone();
+            for wall in &mut rotated.walls {
+                wall.start = rotate(wall.start);
+                wall.end = rotate(wall.end);
+            }
+            for room in &mut rotated.rooms {
+                for point in &mut room.points {
+                    *point = rotate(*point);
+                }
+            }
+            for item in &mut rotated.furniture {
+                item.position = rotate(item.position);
+                item.angle += angle;
+            }
+            let findings = corners::review(&Scene::new(&rotated));
+            assert_eq!(findings.len(), 1, "{findings:?}");
+            assert_eq!(findings[0].key, key);
+            assert!(findings[0].message.contains("0.61 m²"));
+        }
     }
 
     #[test]
