@@ -286,6 +286,35 @@ pub(super) fn preview_with(
     if !changed.is_empty() {
         object.insert("findings_changed".into(), serde_json::json!(changed));
     }
+    if !after.accepted.is_empty() {
+        let mut cleanup = Vec::new();
+        for (tool, orphaned) in [
+            ("check_layout", newera_core::Issue::orphaned(&after)),
+            ("ergonomics", newera_ergonomics::orphaned(&after, &profile)),
+            ("electrical", newera_core::electrical::orphaned(&after)),
+            ("plumbing", newera_core::plumbing::orphaned(&after)),
+        ] {
+            if orphaned.is_empty() {
+                continue;
+            }
+            let accept: Vec<_> = orphaned.iter().map(|(key, _)| [key.as_str(), ""]).collect();
+            cleanup.push(serde_json::json!({
+                "tool":tool,"arguments":{"accept":accept},"orphaned":orphaned
+            }));
+        }
+        if !cleanup.is_empty() {
+            object.insert(
+                "acceptance_cleanup".into(),
+                serde_json::json!({
+                    "based_on_revision":doc.revision(),
+                    "variant":doc.active_variant(),
+                    "when":"after_applying_the_proposed_edit_and_rechecking_orphans",
+                    "automatic":false,
+                    "calls":cleanup
+                }),
+            );
+        }
+    }
     if brief {
         // The parts a group rebuilds are not a decision; the roots are.
         for key in ["changed", "added", "removed"] {

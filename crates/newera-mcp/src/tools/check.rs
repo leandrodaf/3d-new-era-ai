@@ -456,6 +456,57 @@ mod tests {
         assert!(accepted.get("orphaned").is_none(), "{accepted}");
         check(&format!(r#"{{"accept":[["{a}+{b}","caixa do modelo"]]}}"#));
 
+        let revision = s.document.read().revision();
+        let dry: serde_json::Value = serde_json::from_str(
+            &s.move_elements(Parameters(
+                serde_json::from_str(&format!(
+                    r#"{{"ids":["{b}"],"dx":40,"dy":0,"dry":"summary"}}"#
+                ))
+                .unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let cleanup = &dry["acceptance_cleanup"];
+        assert_eq!(cleanup["based_on_revision"], revision);
+        assert_eq!(cleanup["automatic"], false);
+        let call = cleanup["calls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|call| call["tool"] == "check_layout")
+            .unwrap();
+        assert_eq!(
+            call["orphaned"],
+            serde_json::json!([[format!("overlap:{a}+{b}"), "caixa do modelo"]])
+        );
+        assert_eq!(s.document.read().revision(), revision);
+        assert!(
+            check("{}").get("orphaned").is_none(),
+            "preview must preserve live acceptance"
+        );
+        let bed_preview: serde_json::Value = serde_json::from_str(
+            &s.update(Parameters(
+                serde_json::from_str(&format!(
+                    r#"{{"items":[{{"id":"{bed}","visible":false}}],"dry":true}}"#
+                ))
+                .unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let ergonomics_call = bed_preview["acceptance_cleanup"]["calls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|call| call["tool"] == "ergonomics")
+            .unwrap();
+        assert_eq!(
+            ergonomics_call["orphaned"],
+            serde_json::json!([[key, "corredor de 3 cm"]])
+        );
+        assert_eq!(s.document.read().revision(), revision);
+
         // Both problems are fixed for real: the bed goes, the boxes part.
         s.delete(Parameters(
             serde_json::from_str(&format!(r#"{{"ids":["{bed}"]}}"#)).unwrap(),
@@ -480,6 +531,14 @@ mod tests {
             serde_json::json!([[pair, "caixa do modelo"]]),
             "{layout}"
         );
+
+        // The exact proposed call cleans only its listed keys, in one
+        // undoable command; restoring history also restores the reason.
+        check(&call["arguments"].to_string());
+        assert!(check("{}").get("orphaned").is_none());
+        assert_eq!(review("{}")["orphaned"], after["orphaned"]);
+        s.document.write().undo().unwrap();
+        assert_eq!(check("{}")["orphaned"], layout["orphaned"]);
 
         // Pruned in one step each, and only the ones that are orphans.
         let pruned = review(r#"{"prune":true}"#);
