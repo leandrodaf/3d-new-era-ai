@@ -15,7 +15,7 @@ export async function launchChrome({browser = defaultBrowser(), prefixArgs = [],
   const profile = mkdtempSync(join(tmpdir(), 'newera-mobile-'));
   const child = spawn(browser, [...prefixArgs, '--headless=new', `--user-data-dir=${profile}`,
     '--use-angle=swiftshader', '--remote-debugging-port=0', 'about:blank'],
-    {stdio: ['ignore', 'ignore', 'pipe']});
+    {stdio: ['ignore', 'ignore', 'pipe'], detached: process.platform !== 'win32'});
   let stderr = '';
   let failure;
   let exited = false;
@@ -30,18 +30,25 @@ export async function launchChrome({browser = defaultBrowser(), prefixArgs = [],
   });
   const diagnostics = () => [failure, stderr.trim()].filter(Boolean).join('\n');
   let closed = false;
+  const signalTree = signal => {
+    if (!child.pid) return;
+    try {
+      if (process.platform === 'win32') child.kill(signal);
+      else process.kill(-child.pid, signal);
+    } catch (error) { if (error.code !== 'ESRCH') throw error; }
+  };
   const close = async () => {
     if (closed) return;
     closed = true;
+    // Chromium subprocesses may still write the profile after its parent
+    // exits. This process group belongs exclusively to this launch.
+    signalTree('SIGTERM');
     if (!exited) {
-      child.kill();
       await Promise.race([stopped, sleep(3000, undefined, {ref: false})]);
-      if (!exited) {
-        child.kill('SIGKILL');
-        await stopped;
-      }
     }
-    rmSync(profile, {recursive: true, force: true, maxRetries: 3, retryDelay: 100});
+    signalTree('SIGKILL');
+    await stopped;
+    rmSync(profile, {recursive: true, force: true, maxRetries: 10, retryDelay: 100});
   };
   try {
     const deadline = Date.now() + timeoutMs;

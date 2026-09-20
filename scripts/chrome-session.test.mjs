@@ -19,6 +19,11 @@ fs.writeFileSync(meta, JSON.stringify({pid:process.pid, profile}));
 if (mode === 'exit') { console.error('fixture: GPU startup refused'); process.exit(23); }
 else if (mode === 'stall') { console.error('fixture: endpoint never published'); setInterval(() => {}, 1000); }
 else {
+  if (mode === 'descendant') {
+    const code = "const fs=require('node:fs'); const path=require('node:path'); const [profile,pulse]=process.argv.slice(1); process.on('SIGTERM',()=>{}); setInterval(()=>{fs.mkdirSync(path.join(profile,'Default'),{recursive:true});fs.writeFileSync(path.join(profile,'Default','active'),String(Date.now()));fs.writeFileSync(pulse,String(Date.now()));},10);";
+    const child = require('node:child_process').spawn(process.execPath,['-e',code,profile,meta+'.pulse'],{stdio:'ignore'});
+    fs.writeFileSync(meta,JSON.stringify({pid:process.pid,profile,descendant:child.pid}));
+  }
   let requests = 0;
   const server = http.createServer((req,res) => {
     res.setHeader('content-type','application/json');
@@ -125,4 +130,24 @@ test('mobile audit fails when navigation opens a browser error page',
         return true;
       });
     } finally { rmSync(out,{recursive:true,force:true}); }
+  });
+
+test('cleanup stops a descendant that outlives its parent and writes the profile',
+  {skip: process.platform === 'win32'}, async () => {
+    await withFixture('descendant', async (options,meta) => {
+      const browser = await launchChrome(options);
+      const {descendant,profile} = JSON.parse(readFileSync(meta,'utf8'));
+      try {
+        assert.ok(existsSync(meta+'.pulse'),'descendant is actively writing');
+        await browser.close();
+        const pulse = readFileSync(meta+'.pulse','utf8');
+        await new Promise(resolve => setTimeout(resolve,200));
+        assert.equal(readFileSync(meta+'.pulse','utf8'),pulse,'descendant stopped writing');
+        assertCleaned(meta);
+      } finally {
+        try { process.kill(descendant,'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+        await browser.close();
+        rmSync(profile,{recursive:true,force:true,maxRetries:10,retryDelay:100});
+      }
+    });
   });
