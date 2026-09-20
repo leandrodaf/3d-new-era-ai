@@ -229,9 +229,9 @@ trace_background,undo,update,variants,video";
         assert_eq!(names.join(","), NAMES, "the set of tools changed");
         let bytes = serde_json::to_string(&tools).unwrap().len();
         assert_eq!(
-            // Includes cabinet top_cutout alongside window and door checks.
+            // Includes explicit furniture roles, cabinet cutouts and opening checks.
             bytes,
-            86274,
+            86454,
             "a description or schema changed; this test guards a pure move"
         );
     }

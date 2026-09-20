@@ -412,6 +412,9 @@ impl Default for Furniture {
 }
 
 impl Furniture {
+    /// Explicit functional role, independent of the display name.
+    pub const ROLE_KEY: &str = "newera:role";
+
     fn default_drop_on_top() -> f64 {
         1.0
     }

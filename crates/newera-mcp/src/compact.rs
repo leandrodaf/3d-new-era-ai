@@ -274,6 +274,9 @@ pub(crate) fn piece(
     if let Some(d) = f.discipline {
         v["layer"] = json!(d);
     }
+    if let Some(role) = f.properties.get(newera_core::Furniture::ROLE_KEY) {
+        v["role"] = json!(role);
+    }
     if let Some(light) = &f.light {
         let mut l = json!({"lm": light.flux().round()});
         if let Some(k) = light.kelvin {

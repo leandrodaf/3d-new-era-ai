@@ -712,6 +712,10 @@ pub(crate) struct UpdateSpec {
     /// Furniture brand (references).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub brand: Option<String>,
+    /// Functional role independent of name: `trim`, `backsplash`, `counter`;
+    /// empty restores automatic classification. Does not disable collisions.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
     /// Furniture commercial model.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_name: Option<String>,
@@ -812,6 +816,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 "mirror",
                 "anchor",
                 "stretch",
+                "role",
                 "layer",
                 "visible",
                 "hinge_right",
@@ -1004,6 +1009,18 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                     Some(v) => Some(v),
                     None => old,
                 };
+                if let Some(role) = spec.role {
+                    match role.as_str() {
+                        "" => {
+                            f.properties.remove(newera_core::Furniture::ROLE_KEY);
+                        }
+                        "trim" | "backsplash" | "counter" => {
+                            f.properties
+                                .insert(newera_core::Furniture::ROLE_KEY.into(), role);
+                        }
+                        _ => return Err("role must be trim, backsplash, counter or empty".into()),
+                    }
+                }
                 f.info.brand = text(spec.brand, f.info.brand.take());
                 f.info.model_name = text(spec.model_name, f.info.model_name.take());
                 f.info.url = text(spec.url, f.info.url.take());
@@ -1550,6 +1567,45 @@ mod tests {
         );
         let bad: UpdateSpec = serde_json::from_str(r#"{"id":"r5","floor_mat":"lava"}"#).unwrap();
         assert!(update(&mut doc, vec![bad]).is_err());
+    }
+
+    #[test]
+    fn explicit_furniture_roles_are_readable_reversible_and_validated() {
+        let mut doc = Document::default();
+        let f = newera_core::Furniture {
+            id: newera_core::FurnitureId(1),
+            catalog: "box".into(),
+            ..newera_core::Furniture::default()
+        };
+        doc.execute(Command::insert(f)).unwrap();
+        let set = |doc: &mut Document, role: &str| {
+            update(
+                doc,
+                vec![serde_json::from_value(serde_json::json!({"id":"f1","role":role})).unwrap()],
+            )
+        };
+        set(&mut doc, "backsplash").unwrap();
+        let f = &doc.home().furniture[0];
+        assert_eq!(
+            crate::compact::piece(doc.home(), &[], f)["role"],
+            "backsplash"
+        );
+        set(&mut doc, "invalid").unwrap_err();
+        assert_eq!(
+            doc.home().furniture[0].properties[newera_core::Furniture::ROLE_KEY],
+            "backsplash"
+        );
+        set(&mut doc, "").unwrap();
+        assert!(
+            !doc.home().furniture[0]
+                .properties
+                .contains_key(newera_core::Furniture::ROLE_KEY)
+        );
+        doc.undo().unwrap();
+        assert_eq!(
+            doc.home().furniture[0].properties[newera_core::Furniture::ROLE_KEY],
+            "backsplash"
+        );
     }
 
     #[test]

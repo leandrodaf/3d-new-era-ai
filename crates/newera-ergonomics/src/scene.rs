@@ -89,6 +89,16 @@ fn joinery(piece: &Furniture) -> Option<serde_json::Value> {
 }
 
 fn classify(piece: &Furniture, params: Option<&serde_json::Value>) -> Use {
+    match piece
+        .properties
+        .get(Furniture::ROLE_KEY)
+        .map(String::as_str)
+    {
+        Some("trim" | "backsplash") => return Use::Other,
+        Some("counter") => return Use::Counter,
+        _ => {}
+    }
+
     if let Some(p) = params {
         let (lo, hi) = piece.height_range();
         return match p["kind"].as_str() {
@@ -170,7 +180,7 @@ fn by_name(piece: &Furniture) -> Use {
     let has = |words: &[&str]| words.iter().any(|w| n.contains(w));
     let starts = |words: &[&str]| words.iter().any(|w| n.starts_with(w));
     let (w, h) = (piece.width, piece.height);
-    let (lo, _) = piece.height_range();
+    let (lo, hi) = piece.height_range();
     let cabinet = has(&[
         "gavet", "armario", "gabinete", "portas", "modulo", "balcao", "nicho",
     ]);
@@ -275,7 +285,10 @@ fn by_name(piece: &Furniture) -> Use {
         // height and says nothing about the countertop (EN 1116).
         Use::Appliance
     } else if (cabinet && h >= 60.0 && lo < 20.0 && h <= 100.0)
-        || (has(&["bancada", "tampo", "peninsula"]) && lo >= 60.0)
+        || (has(&["bancada", "tampo", "peninsula"])
+            && lo >= 60.0
+            && (60.0..=115.0).contains(&hi)
+            && piece.width.min(piece.depth) >= 25.0)
     {
         Use::Counter
     } else if (cabinet && h > 150.0) || has(&["rack", "estante", "aparador", "cristaleira"]) {
@@ -1047,5 +1060,46 @@ impl<'a> Scene<'a> {
             y += step;
         }
         best
+    }
+}
+
+#[cfg(test)]
+mod role_tests {
+    use super::*;
+
+    #[test]
+    fn a_vertical_backsplash_is_not_a_counter_because_of_its_name() {
+        let mut piece = Furniture {
+            catalog: "box".into(),
+            width: 355.0,
+            depth: 2.0,
+            height: 18.0,
+            elevation: 90.0,
+            ..Furniture::default()
+        };
+        for name in [
+            "Frontão de pedra — bancada norte",
+            "Frontão de pedra — cozinha",
+            "Tampo",
+            "Bancada",
+        ] {
+            piece.name = name.into();
+            assert_eq!(classify(&piece, None), Use::Other);
+        }
+        piece.depth = 60.0;
+        piece.height = 3.0;
+        piece.elevation = 87.0;
+        assert_eq!(classify(&piece, None), Use::Counter);
+        piece
+            .properties
+            .insert(Furniture::ROLE_KEY.into(), "backsplash".into());
+        assert_eq!(classify(&piece, None), Use::Other);
+        piece.name = "Painel sem nome de bancada".into();
+        assert_eq!(classify(&piece, None), Use::Other);
+        piece
+            .properties
+            .insert(Furniture::ROLE_KEY.into(), "counter".into());
+        piece.name = "Ilha de preparo".into();
+        assert_eq!(classify(&piece, None), Use::Counter);
     }
 }
