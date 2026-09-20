@@ -5,6 +5,7 @@
 //! has to say "`bed-double` at [x, y]". Each item provides a 3D mesh
 //! ([`piece_mesh`]) and an architectural plan symbol ([`plan_symbol`]).
 
+mod finish;
 mod fixtures;
 mod import;
 mod mesh;

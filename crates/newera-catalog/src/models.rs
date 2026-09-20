@@ -4,7 +4,8 @@
 use newera_core::{Furniture, OpeningKind};
 
 use crate::Model;
-use crate::mesh::{Axis, Mesh, Rgb, rgb, shade};
+use crate::finish::{Paint, PaintedMesh, rgb, shade};
+use crate::mesh::{Axis, Mesh, Rgb};
 
 const METAL: [u8; 3] = [150, 154, 160];
 use crate::mesh::GLASS;
@@ -12,20 +13,20 @@ const DARK: [u8; 3] = [40, 42, 48];
 const LINEN: [u8; 3] = [245, 243, 236];
 
 struct Ctx {
-    m: Mesh,
+    m: PaintedMesh,
     w: f64,
     d: f64,
     h: f64,
-    c: Rgb,
+    c: Paint,
 }
 
 impl Ctx {
     /// Box by explicit bounds (cm) in the local frame.
-    fn cube(&mut self, x: [f64; 2], y: [f64; 2], z: [f64; 2], color: Rgb) {
+    fn cube(&mut self, x: [f64; 2], y: [f64; 2], z: [f64; 2], color: Paint) {
         self.m.cuboid([x[0], y[0], z[0]], [x[1], y[1], z[1]], color);
     }
 
-    fn legs(&mut self, inset: f64, top: f64, size: f64, color: Rgb) {
+    fn legs(&mut self, inset: f64, top: f64, size: f64, color: Paint) {
         let (hw, hd) = (
             self.w / 2.0 - inset - size / 2.0,
             self.d / 2.0 - inset - size / 2.0,
@@ -38,7 +39,7 @@ impl Ctx {
 
     /// Straight leg (or post) from the floor, tapering from `size[0]` at the
     /// bottom to `size[1]` at `top`.
-    fn leg(&mut self, x: f64, z: f64, top: f64, size: [f64; 2], color: Rgb) {
+    fn leg(&mut self, x: f64, z: f64, top: f64, size: [f64; 2], color: Paint) {
         let square = |s: f64| [[x - s / 2.0, x + s / 2.0], [z - s / 2.0, z + s / 2.0]];
         prism(
             &mut self.m,
@@ -51,7 +52,6 @@ impl Ctx {
     }
 
     fn handle(&mut self, x: f64, y: f64, z: f64, vertical: bool) {
-        let start = self.m.positions.len();
         let (w, h) = if vertical { (1.5, 14.0) } else { (12.0, 1.5) };
         self.cube(
             [x - w / 2.0, x + w / 2.0],
@@ -59,7 +59,6 @@ impl Ctx {
             [z, z + 2.0],
             rgb(METAL),
         );
-        self.m.protect_finish_since(start);
     }
 }
 
@@ -96,7 +95,7 @@ impl Place {
 /// Box whose bottom face is `lo` and top face is `hi`, from `y[0]` to
 /// `y[1]`. Different spans taper (legs) or shear it (leaning backrests,
 /// stringers); every face stays planar since its edges run along x or z.
-fn prism(m: &mut Mesh, place: Place, y: [f64; 2], lo: Span, hi: Span, color: Rgb) {
+fn prism(m: &mut PaintedMesh, place: Place, y: [f64; 2], lo: Span, hi: Span, color: Paint) {
     let ring = |s: Span, y: f64| {
         [
             [s[0][0], y, s[1][0]],
@@ -116,17 +115,17 @@ fn prism(m: &mut Mesh, place: Place, y: [f64; 2], lo: Span, hi: Span, color: Rgb
 }
 
 /// Upright box in a [`Place`]'s frame.
-fn part(m: &mut Mesh, place: Place, x: [f64; 2], y: [f64; 2], z: [f64; 2], color: Rgb) {
+fn part(m: &mut PaintedMesh, place: Place, x: [f64; 2], y: [f64; 2], z: [f64; 2], color: Paint) {
     prism(m, place, y, [x, z], [x, z], color);
 }
 
 pub(crate) fn build(model: Model, piece: &Furniture, color: Rgb) -> Mesh {
     let mut ctx = Ctx {
-        m: Mesh::default(),
+        m: PaintedMesh::default(),
         w: piece.width,
         d: piece.depth,
         h: piece.height,
-        c: color,
+        c: Paint::body(color),
     };
     let opening = piece.opening.as_ref();
     match model {
@@ -222,8 +221,7 @@ pub(crate) fn build(model: Model, piece: &Furniture, color: Rgb) -> Mesh {
             );
         }
     }
-    ctx.m.fit_to(piece.width, piece.depth, piece.height);
-    ctx.m
+    ctx.m.fit(piece.width, piece.depth, piece.height)
 }
 
 fn sofa(ctx: &mut Ctx, seats: u8) {
@@ -426,7 +424,7 @@ fn table(ctx: &mut Ctx, round: bool) {
 
 /// Rectangular table centered at `center`: a 3 cm top over an apron and
 /// four slim tapered legs.
-fn table_frame(ctx: &mut Ctx, center: [f64; 2], size: [f64; 2], h: f64, c: Rgb) {
+fn table_frame(ctx: &mut Ctx, center: [f64; 2], size: [f64; 2], h: f64, c: Paint) {
     let ([cx, cz], [w, d]) = (center, size);
     let top = 3.0_f64.min(h * 0.08);
     ctx.cube(
@@ -473,7 +471,14 @@ fn chair(ctx: &mut Ctx) {
 /// towards +z: four slim legs, a seat board under a thin cushion, apron
 /// rails, and a backrest panel held above the seat by rear posts that lean
 /// back slightly.
-fn chair_at(m: &mut Mesh, place: Place, size: [f64; 3], seat: f64, wood: Rgb, cushion: Rgb) {
+fn chair_at(
+    m: &mut PaintedMesh,
+    place: Place,
+    size: [f64; 3],
+    seat: f64,
+    wood: Paint,
+    cushion: Paint,
+) {
     let [w, d, h] = size;
     let leg = 3.2_f64.min(w * 0.08);
     let inset = 1.5;
@@ -731,14 +736,19 @@ fn tv(ctx: &mut Ctx) {
         [-w * 0.15, w * 0.15],
         [0.0, 1.5],
         [-d / 2.0, d / 2.0],
-        rgb(DARK),
+        Paint::body(crate::mesh::rgb(DARK)),
     );
-    ctx.cube([-3.0, 3.0], [0.0, foot + 5.0], [-1.0, 1.0], rgb(DARK));
+    ctx.cube(
+        [-3.0, 3.0],
+        [0.0, foot + 5.0],
+        [-1.0, 1.0],
+        Paint::body(crate::mesh::rgb(DARK)),
+    );
     ctx.cube(
         [-w / 2.0, w / 2.0],
         [foot, h],
         [-d * 0.2, d * 0.2],
-        rgb(DARK),
+        Paint::body(crate::mesh::rgb(DARK)),
     );
     ctx.cube(
         [-w / 2.0 + 1.5, w / 2.0 - 1.5],
@@ -1024,7 +1034,7 @@ fn cooktop(ctx: &mut Ctx) {
         [-w / 2.0, w / 2.0],
         [h - glass, h],
         [-d / 2.0, d / 2.0],
-        rgb([22, 22, 26]),
+        Paint::body(crate::mesh::rgb([22, 22, 26])),
     );
     for (sx, sz, r) in [
         (-0.22, -0.2, 7.0),
@@ -1154,7 +1164,6 @@ fn basin(ctx: &mut Ctx) {
     ] {
         ctx.cube(x, [h - 3.0, h], z, shade(c, 0.05));
     }
-    let fixture_start = ctx.m.positions.len();
     let ring = |scale: f64, y: f64| {
         [
             [-bw * scale / 2.0, y, -bd * scale / 2.0],
@@ -1179,7 +1188,6 @@ fn basin(ctx: &mut Ctx) {
         bw.min(bd) * 0.055,
         rgb(METAL),
     );
-    ctx.m.protect_finish_since(fixture_start);
 }
 
 fn shower(ctx: &mut Ctx) {
@@ -1257,7 +1265,11 @@ fn bathtub(ctx: &mut Ctx) {
 fn door(ctx: &mut Ctx, leaves: u8, sliding: bool) {
     let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
     let frame = 5.0;
-    let trim = rgb([240, 238, 232]);
+    let trim = if sliding {
+        Paint::body(crate::mesh::rgb([240, 238, 232]))
+    } else {
+        rgb([240, 238, 232])
+    };
     ctx.cube(
         [-w / 2.0, -w / 2.0 + frame],
         [0.0, h],
@@ -1324,7 +1336,7 @@ fn door(ctx: &mut Ctx, leaves: u8, sliding: bool) {
 fn window(ctx: &mut Ctx, panes: u8, _is_window: bool) {
     let (w, d, h) = (ctx.w, ctx.d, ctx.h);
     let frame = 5.0;
-    let white = rgb([245, 245, 242]);
+    let white = Paint::body(crate::mesh::rgb([245, 245, 242]));
     ctx.cube(
         [-w / 2.0, w / 2.0],
         [0.0, frame],
@@ -1365,7 +1377,7 @@ fn window(ctx: &mut Ctx, panes: u8, _is_window: bool) {
 
 fn passage(ctx: &mut Ctx) {
     let (w, d, h) = (ctx.w, ctx.d, ctx.h);
-    let trim = rgb([240, 238, 232]);
+    let trim = Paint::body(crate::mesh::rgb([240, 238, 232]));
     ctx.cube(
         [-w / 2.0, -w / 2.0 + 2.0],
         [0.0, h],
@@ -2169,6 +2181,7 @@ type Lift<'a> = Box<dyn Fn([f64; 2], f64) -> [f32; 3] + 'a>;
 /// A polygon swept into a closed solid: plan outlines go up by the height,
 /// profiles run along the depth. Points are centered on the piece.
 pub(crate) fn solid(shape: &newera_core::SolidShape, piece: &Furniture, color: Rgb) -> Mesh {
+    use crate::mesh::shade;
     use newera_core::{Point2, SolidShape};
     let mut m = Mesh::default();
     // `ring` in its own 2D plane, `lift(p, t)` puts point p at sweep t ∈ {0, 1}.

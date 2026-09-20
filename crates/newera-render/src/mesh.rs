@@ -1610,6 +1610,90 @@ mod material_tests {
     use super::*;
 
     #[test]
+    fn catalog_finishes_preserve_secondary_surfaces_for_patterns_and_images() {
+        for item in newera_catalog::CATALOG {
+            let mut piece = item.instantiate(newera_core::FurnitureId(1), Point2::new(0.0, 0.0));
+            let model = newera_catalog::piece_mesh(&piece);
+            for texture in [
+                Material {
+                    pattern: Some(newera_core::Pattern::Wood),
+                    color: Some([113, 84, 64]),
+                    ..Material::default()
+                },
+                Material {
+                    image: Some("wood.png".into()),
+                    ..Material::default()
+                },
+            ] {
+                piece.texture = Some(texture);
+                let mesh = Mesh::piece_alone(&piece, &model);
+                assert!(
+                    mesh.vertices.iter().any(|v| v.kind != 0),
+                    "{} has no editable body finish",
+                    item.id
+                );
+                for (i, v) in mesh.vertices.iter().enumerate() {
+                    if model.finishable.get(i).copied().unwrap_or(true) {
+                        assert_ne!(v.kind, 0, "{} body did not receive the finish", item.id);
+                    } else {
+                        assert_eq!(v.kind, 0, "{} secondary surface was textured", item.id);
+                        assert!(
+                            v.color[..3]
+                                .iter()
+                                .zip(model.colors[i])
+                                .all(|(a, b)| (a - b).abs() < 1e-6),
+                            "{} secondary color changed",
+                            item.id
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn glass_diffusers_steel_and_linen_are_not_part_of_the_body_finish() {
+        for (id, color) in [
+            ("sink-counter", [150, 154, 160]),
+            ("window", newera_catalog::GLASS),
+            ("pendant", newera_catalog::DIFFUSER),
+            ("downlight", newera_catalog::DIFFUSER),
+            ("bed-double", [245, 243, 236]),
+            ("stove", [40, 42, 48]),
+        ] {
+            let mut piece = newera_catalog::find(id)
+                .unwrap()
+                .instantiate(newera_core::FurnitureId(1), Point2::new(0.0, 0.0));
+            piece.texture = Some(Material {
+                pattern: Some(newera_core::Pattern::Wood),
+                ..Material::default()
+            });
+            let model = newera_catalog::piece_mesh(&piece);
+            let mesh = Mesh::piece_alone(&piece, &model);
+            let expected = color.map(|c| f32::from(c) / 255.0);
+            let matching: Vec<_> = model
+                .colors
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| c.iter().zip(expected).all(|(a, b)| (a - b).abs() < 1e-6))
+                .map(|(i, _)| &mesh.vertices[i])
+                .collect();
+            assert!(!matching.is_empty(), "{id} fixture was not generated");
+            assert!(
+                matching.iter().all(|v| v.kind == 0
+                    && v.color[..3]
+                        .iter()
+                        .zip(expected)
+                        .all(|(a, b)| (a - b).abs() < 1e-6)),
+                "{id} lost fixture material"
+            );
+            if id == "window" {
+                assert!(matching.iter().all(|v| v.color[3] < 0.4));
+            }
+        }
+    }
+
+    #[test]
     fn basin_textures_leave_ceramic_and_hardware_untextured() {
         for texture in [
             Material {

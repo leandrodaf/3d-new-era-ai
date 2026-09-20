@@ -3,16 +3,19 @@
 
 use newera_core::Furniture;
 
-use crate::mesh::{Axis, Mesh, Rgb, rgb, shade};
+use crate::finish::{Paint, PaintedMesh, rgb, shade};
+use crate::mesh::{Axis, Mesh};
 
 /// Diffuser and lens color of fixtures.
 pub const DIFFUSER: [u8; 3] = [255, 251, 240];
 
 pub(crate) fn build(piece: &Furniture) -> Option<Mesh> {
     let (w, d, h) = (piece.width, piece.depth, piece.height);
-    let body = rgb(piece.color.unwrap_or(crate::find(&piece.catalog)?.color));
+    let body = Paint::body(crate::mesh::rgb(
+        piece.color.unwrap_or(crate::find(&piece.catalog)?.color),
+    ));
     let lens = rgb(DIFFUSER);
-    let mut m = Mesh::default();
+    let mut m = PaintedMesh::default();
     match piece.catalog.as_str() {
         "downlight" => downlight(&mut m, w, h, body, lens),
         "pendant" => pendant(&mut m, w, h, body, lens),
@@ -37,11 +40,10 @@ pub(crate) fn build(piece: &Furniture) -> Option<Mesh> {
         }
         _ => return None,
     }
-    m.fit_to(w, d, h);
-    Some(m)
+    Some(m.fit(w, d, h))
 }
 
-fn downlight(m: &mut Mesh, w: f64, h: f64, body: Rgb, lens: Rgb) {
+fn downlight(m: &mut PaintedMesh, w: f64, h: f64, body: Paint, lens: Paint) {
     let r = w / 2.0;
     // Trim ring just below the ceiling, the lens set into it and the housing
     // above, hidden in the ceiling.
@@ -58,7 +60,7 @@ fn downlight(m: &mut Mesh, w: f64, h: f64, body: Rgb, lens: Rgb) {
     );
 }
 
-fn pendant(m: &mut Mesh, w: f64, h: f64, body: Rgb, lens: Rgb) {
+fn pendant(m: &mut PaintedMesh, w: f64, h: f64, body: Paint, lens: Paint) {
     let r = w / 2.0;
     let shade_h = (w * 0.75).min(h * 0.6);
     // Canopy at the ceiling, cord, dome shade and the bulb inside.
@@ -101,7 +103,7 @@ fn pendant(m: &mut Mesh, w: f64, h: f64, body: Rgb, lens: Rgb) {
 
 /// A cone open at both ends from `r0` at the bottom to `r1` at `height`,
 /// `outside` color outside and `inside` within.
-fn open_cone(m: &mut Mesh, height: f64, r0: f64, r1: f64, outside: Rgb, inside: Rgb) {
+fn open_cone(m: &mut PaintedMesh, height: f64, r0: f64, r1: f64, outside: Paint, inside: Paint) {
     let segments = 28;
     #[allow(clippy::cast_possible_truncation)]
     let point = |i: u32, r: f64, y: f64| {
