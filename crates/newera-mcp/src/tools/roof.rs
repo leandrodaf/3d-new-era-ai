@@ -253,6 +253,18 @@ mod tests {
             let doc = s.document.read();
             let walls = &doc.home().walls;
             assert_eq!(walls.len(), 2, "split at the ridge");
+            assert!(
+                (walls[0].height - 1.0).abs() < 1e-8,
+                "no spike at the first eave"
+            );
+            assert!(
+                (walls[1].height_at_end.unwrap() - 1.0).abs() < 1e-8,
+                "no spike at the last eave"
+            );
+            assert!(
+                (walls[0].height_at_end.unwrap() - 600.0).abs() < 1e-8,
+                "exact roof underside at ridge"
+            );
             let peak = walls
                 .iter()
                 .map(|w| w.height.max(w.height_at_end.unwrap_or(0.0)))

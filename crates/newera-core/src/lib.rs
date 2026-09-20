@@ -37,6 +37,7 @@ pub mod progress;
 mod project;
 mod roof_fit;
 pub mod routing;
+mod solid;
 pub mod standards;
 mod style;
 pub mod tape;

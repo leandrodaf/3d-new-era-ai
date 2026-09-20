@@ -701,29 +701,18 @@ impl Furniture {
         (self.elevation + lo, self.elevation + hi)
     }
 
-    /// Height of its underside above the floor over a plan point (tilted
-    /// pieces are lower at one end), cm.
+    /// Height of the transformed box underside, cm. Returns positive infinity
+    /// outside the box projection; prefer `vertical_range_at` to handle absence.
     pub fn underside_at(&self, p: Point2) -> f64 {
-        if self.pitch == 0.0 && self.roll == 0.0 {
-            return self.elevation;
-        }
-        let (x, depth) = self.to_local(p);
-        let (sp, cp) = self.pitch.to_radians().sin_cos();
-        let (sr, cr) = self.roll.to_radians().sin_cos();
-        // Centerline height under that point, minus half the thickness.
-        let z = if cp.abs() > 1e-6 { depth / cp } else { 0.0 };
-        let x = if cr.abs() > 1e-6 { x / cr } else { 0.0 };
-        let mid = self.elevation + self.height / 2.0 + x * sr * cp - z * sp;
-        mid - (self.height / 2.0 * cp * cr).abs()
+        self.vertical_range_at(p)
+            .map_or(f64::INFINITY, |range| range.0)
     }
 
-    /// Height of its top above the floor over a plan point, cm.
+    /// Height of the transformed box top, cm. Returns negative infinity
+    /// outside the box projection; prefer `vertical_range_at` to handle absence.
     pub fn top_at(&self, p: Point2) -> f64 {
-        if self.pitch == 0.0 && self.roll == 0.0 {
-            return self.elevation + self.height;
-        }
-        let tilt = (self.pitch.to_radians().cos() * self.roll.to_radians().cos()).abs();
-        self.underside_at(p) + self.height * tilt
+        self.vertical_range_at(p)
+            .map_or(f64::NEG_INFINITY, |range| range.1)
     }
 
     /// Plan corners of its bounding box, counter-clockwise on screen.

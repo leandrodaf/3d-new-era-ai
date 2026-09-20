@@ -22,17 +22,6 @@ pub const ROOF_FIT_KEY: &str = "roof:fit";
 /// Default lowest roof height considered, cm: any sloping piece above the floor.
 pub const ROOF_FIT_ABOVE: f64 = 5.0;
 
-fn inside(points: &[Point2], p: Point2) -> bool {
-    let mut odd = false;
-    for i in 0..points.len() {
-        let (a, b) = (points[i], points[(i + 1) % points.len()]);
-        if (a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x {
-            odd = !odd;
-        }
-    }
-    odd
-}
-
 /// Sloped surfaces that can be over something: tilted pieces (roof panels,
 /// rafters) of the home.
 fn slopes(home: &Home) -> Vec<&Furniture> {
@@ -55,8 +44,7 @@ pub fn roof_height_at(home: &Home, p: Point2, above: f64) -> Option<f64> {
 fn lowest(slopes: &[&Furniture], p: Point2, above: f64) -> Option<f64> {
     slopes
         .iter()
-        .filter(|f| inside(&f.projected_footprint(), p))
-        .map(|f| f.underside_at(p))
+        .filter_map(|f| f.vertical_range_at(p).map(|range| range.0))
         .filter(|h| *h >= above)
         .min_by(f64::total_cmp)
 }
@@ -78,14 +66,23 @@ fn profile(
     }
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let n = (length.ceil() as usize).clamp(2, 4000);
+    // A selected roof can descend below the reference near its eaves. Keep
+    // following that surface there; falling back to the original wall height
+    // would create tall spikes through the roof. Entirely low panels remain
+    // excluded, and a segment wholly below the reference is not fitted.
+    let eligible: Vec<_> = slopes
+        .iter()
+        .copied()
+        .filter(|piece| piece.height_range().1 >= above)
+        .collect();
     let mut any = false;
     let samples: Vec<(f64, f64)> = (0..=n)
         .map(|i| {
             #[allow(clippy::cast_precision_loss)]
             let t = i as f64 / n as f64;
             let p = Point2::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
-            let h = lowest(slopes, p, above);
-            any |= h.is_some();
+            let h = lowest(&eligible, p, f64::NEG_INFINITY);
+            any |= h.is_some_and(|height| height >= above);
             (t * length, h.unwrap_or(fallback))
         })
         .collect();
@@ -425,7 +422,16 @@ mod tests {
         // Its box reaches into the slopes, but it was cut to fit under them.
         let mut shaped = home.clone();
         shaped.furniture[2] = fitted.clone();
-        assert!(crate::check_layout(&shaped).is_empty());
+        // The original wall has not been fitted yet: it cuts through both
+        // slopes. Only the glass was fitted in this copy; exact heights expose
+        // the two pre-existing wall intersections without flagging the glass.
+        assert_eq!(
+            crate::check_layout(&shaped),
+            vec![
+                crate::analysis::Issue::InWall(FurnitureId(1), WallId(10)),
+                crate::analysis::Issue::InWall(FurnitureId(2), WallId(10)),
+            ]
+        );
         // Fitted for real, it keeps following: raising the roof raises the wall.
         let mut doc = crate::Document::new(home.clone());
         fit_to_roof(&mut doc, &[ElementId::Wall(WallId(10))], 10.0).unwrap();
