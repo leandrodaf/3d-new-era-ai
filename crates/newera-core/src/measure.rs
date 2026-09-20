@@ -1703,6 +1703,53 @@ fn clauses(name: &str) -> Vec<&str> {
     out
 }
 
+enum NamedMeasure {
+    Envelope,
+    Profile(f64),
+    Unverified,
+}
+
+// Ceiling assembly names describe their section, not the room-sized group
+// envelope. Read the persisted generator parameters without depending on the
+// joinery crate (which itself depends on core).
+fn named_measure(piece: &Furniture, clause: &str, sizes: &[Vec<f64>]) -> NamedMeasure {
+    let kind = piece.properties.get("joinery:kind").map(String::as_str);
+    if !matches!(kind, Some("cove" | "shadow_gap")) {
+        return NamedMeasure::Envelope;
+    }
+    let folded = crate::annotations::fold(clause);
+    if folded.contains("comprimento") || folded.contains("length") || folded.contains("envolvente")
+    {
+        return NamedMeasure::Envelope;
+    }
+    if sizes.len() != 1 || sizes[0].len() != 1 {
+        return NamedMeasure::Unverified;
+    }
+    let key = if folded.contains("teto") || folded.contains("ceiling") {
+        "ceiling"
+    } else if kind == Some("cove") {
+        if folded.contains("queda") || folded.contains("rebaixo") || folded.contains("drop") {
+            "drop"
+        } else if folded.contains("rasgo") || folded.contains("slot") {
+            "slot"
+        } else {
+            "width"
+        }
+    } else if folded.contains("profundidade") || folded.contains("depth") {
+        "depth"
+    } else {
+        "gap"
+    };
+    let measured = piece
+        .properties
+        .get("joinery:params")
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
+        .filter(|params| params["kind"].as_str() == kind)
+        .and_then(|params| params[key].as_f64())
+        .filter(|value| value.is_finite() && *value > 0.0);
+    measured.map_or(NamedMeasure::Unverified, NamedMeasure::Profile)
+}
+
 /// Every annotation checked against the drawing, with how many were.
 #[must_use]
 pub fn check_annotations(home: &Home) -> AnnotationCheck {
@@ -1816,7 +1863,6 @@ pub fn check_annotations(home: &Home) -> AnnotationCheck {
 
     // The names: where a plan drawn by a joiner keeps its sizes.
     for piece in home.furniture.iter().flat_map(Furniture::flatten) {
-        let actual = [piece.width, piece.depth, piece.height];
         for clause in clauses(&piece.name) {
             let sizes = named_sizes(clause);
             if sizes.is_empty() {
@@ -1829,6 +1875,16 @@ pub fn check_annotations(home: &Home) -> AnnotationCheck {
                     .push((piece.id.into(), clause.trim().to_owned()));
                 continue;
             }
+            let actual = match named_measure(piece, clause, &sizes) {
+                NamedMeasure::Envelope => vec![piece.width, piece.depth, piece.height],
+                NamedMeasure::Profile(value) => vec![value],
+                NamedMeasure::Unverified => {
+                    report
+                        .unverified
+                        .push((piece.id.into(), clause.trim().to_owned()));
+                    continue;
+                }
+            };
             report.names += 1;
             let wrong = sizes
                 .iter()
@@ -1917,6 +1973,99 @@ fn written_sizes(text: &str) -> Vec<Vec<f64>> {
 #[cfg(test)]
 mod stale_tests {
     use super::*;
+
+    #[test]
+    fn ceiling_profile_names_use_the_generator_section_not_the_group_box() {
+        for (kind, name, params) in [
+            (
+                "cove",
+                "Sanca perimetral do estar — 18 cm",
+                serde_json::json!({"kind":"cove","width":18,"drop":12,"ceiling":300}),
+            ),
+            (
+                "shadow_gap",
+                "Tabica da galeria — 2 cm",
+                serde_json::json!({"kind":"shadow_gap","gap":2,"depth":4}),
+            ),
+            (
+                "cove",
+                "Sanca 18 cm; queda 12 cm; teto 300 cm; rasgo 6 cm",
+                serde_json::json!({"kind":"cove","width":18,"drop":12,"ceiling":300,"slot":6}),
+            ),
+            (
+                "shadow_gap",
+                "Tabica 2 cm; profundidade 4 cm",
+                serde_json::json!({"kind":"shadow_gap","gap":2,"depth":4}),
+            ),
+            (
+                "cove",
+                "Sanca comprimento 720 cm",
+                serde_json::json!({"kind":"cove","width":18}),
+            ),
+        ] {
+            let mut piece = Furniture {
+                id: crate::FurnitureId(1),
+                name: name.into(),
+                width: 720.0,
+                depth: 450.0,
+                height: 300.0,
+                ..Furniture::default()
+            };
+            piece.properties.insert("joinery:kind".into(), kind.into());
+            piece
+                .properties
+                .insert("joinery:params".into(), params.to_string());
+            let mut home = Home::default();
+            home.furniture.push(piece);
+            let check = check_annotations(&home);
+            assert!(check.names > 0);
+            assert!(check.stale.is_empty(), "{name}: {:?}", check.stale);
+            assert!(check.unverified.is_empty());
+        }
+    }
+
+    #[test]
+    fn changed_or_unverifiable_ceiling_profiles_are_not_silently_accepted() {
+        let mut piece = Furniture {
+            id: crate::FurnitureId(1),
+            name: "Sanca — 18 cm".into(),
+            width: 720.0,
+            depth: 18.0,
+            height: 300.0,
+            ..Furniture::default()
+        };
+        piece
+            .properties
+            .insert("joinery:kind".into(), "cove".into());
+        piece.properties.insert(
+            "joinery:params".into(),
+            r#"{"kind":"cove","width":24,"drop":18}"#.into(),
+        );
+        let mut home = Home::default();
+        home.furniture.push(piece);
+        let check = check_annotations(&home);
+        assert_eq!(
+            check.stale.len(),
+            1,
+            "matching the envelope/drop must not hide a changed width"
+        );
+        assert!((check.stale[0].measured - 24.0).abs() < 1e-9);
+        for invalid in [
+            "{",
+            r#"{"kind":"cove"}"#,
+            r#"{"kind":"shadow_gap","width":18}"#,
+        ] {
+            home.furniture[0]
+                .properties
+                .insert("joinery:params".into(), invalid.into());
+            let check = check_annotations(&home);
+            assert_eq!(check.names, 0);
+            assert_eq!(check.unverified.len(), 1);
+            assert!(check.stale.is_empty());
+        }
+        home.furniture[0].name = "Sanca — 18 × 12 cm".into();
+        assert_eq!(check_annotations(&home).unverified.len(), 1);
+    }
 
     #[test]
     fn a_name_keeps_its_decimal_commas() {
