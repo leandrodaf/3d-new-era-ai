@@ -225,3 +225,12 @@ Atualização de publicação: o [Publish 35509917158](https://github.com/leandr
 - Corrigida a causa no código: `joinery(wall, angle)` aplicava o ângulo depois de escolher a face pela posição global da casa. O mesmo comportamento existia em `place` para móveis do catálogo. Agora a orientação explícita escolhe a face antes do deslocamento; sem orientação explícita, permanece o comportamento automático existente.
 - A distância à parede considera a projeção da peça com sua orientação final. Assim, uma peça inclinada não atravessa a parede por usar apenas metade da profundidade como afastamento.
 - Teste de regressão reproduz a parede vertical x=880, espessura 12 cm, com painéis de marcenaria e guarda-roupas voltados para ambos os lados e em ângulo oblíquo. Confirma as faces em x=874/886 e a preservação do ângulo solicitado. Suíte MCP: 107 testes passaram, zero falhas, um opcional ignorado.
+- Clippy MCP e formatação aprovados; correção enviada no commit `c5c9ddb`.
+
+## Diagnóstico de falhas — fase e contexto da operação
+
+- A tela agora distingue falha de inicialização de falha durante o uso. O backend é obtido do renderizador efetivamente criado, não apenas da disponibilidade da API WebGPU.
+- `window.neweraDiagnostic` preserva em JavaScript a primeira falha, build, backend e ferramentas MCP em execução com suas revisões. Chamadas concorrentes usam identificadores separados; concluir uma leitura não apaga o contexto de uma renderização ainda ativa. O registro não depende de conseguir executar WASM novamente após um trap.
+- A causa recebida é acompanhada da última mensagem de panic disponível quando o erro é `unreachable`. Argumentos das ferramentas não são registrados. URLs, tokens identificados, cabeçalhos Bearer e credenciais JSON reconhecíveis são removidos do texto do diagnóstico. O relatório fica na página; não há envio automático para terceiros.
+- Teste JavaScript cobre inicialização, execução, chamadas concorrentes, preservação da primeira falha e remoção de credenciais. Clippy WASM e build release passaram. O E2E passou a verificar o ciclo real das chamadas MCP e a injetar uma falha no Chrome para conferir fase, ferramenta, revisão, build, backend e mensagem de uso.
+- Limite: a leitura estruturada fica disponível à automação da página. Entregar esse diagnóstico pelo relay quando o runtime principal já abortou ainda exige um canal independente do WASM; não considerar essa parte concluída.

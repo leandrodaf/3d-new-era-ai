@@ -392,6 +392,8 @@ fn hold(
                         .unwrap_or(serde_json::Value::Null);
                     let (document, socket, ctx) = (document.clone(), socket.clone(), ctx.clone());
                     wasm_bindgen_futures::spawn_local(async move {
+                        let diagnostic =
+                            operation("begin", &JsValue::NULL, &name, document.read().revision());
                         let answer = if ["render_plan", "render_3d", "render_photo"]
                             .contains(&name.as_str())
                         {
@@ -399,6 +401,7 @@ fn hold(
                         } else {
                             run(&document, &name, args)
                         };
+                        operation("end", &diagnostic, &name, document.read().revision());
                         document
                             .write()
                             .agents_mut()
@@ -479,4 +482,26 @@ fn told(error: &JsValue) -> String {
                 .map(|e| e.message().as_string().unwrap_or_default())
         })
         .unwrap_or_else(|| "the browser refused the connection".to_owned())
+}
+
+/// Keep diagnostic context in JS so it remains readable after a WASM trap.
+fn operation(event: &str, token: &JsValue, name: &str, revision: u64) -> JsValue {
+    let Some(window) = web_sys::window() else {
+        return JsValue::NULL;
+    };
+    let Ok(callback) = js_sys::Reflect::get(&window, &JsValue::from_str("neweraOperation")) else {
+        return JsValue::NULL;
+    };
+    let Some(callback) = callback.dyn_ref::<js_sys::Function>() else {
+        return JsValue::NULL;
+    };
+    callback
+        .call4(
+            &JsValue::NULL,
+            &JsValue::from_str(event),
+            token,
+            &JsValue::from_str(name),
+            &JsValue::from_str(&revision.to_string()),
+        )
+        .unwrap_or(JsValue::NULL)
 }

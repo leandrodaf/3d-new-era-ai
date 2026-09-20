@@ -109,16 +109,51 @@
   // A blank page tells nobody anything: whatever kills the engine — no WebGPU,
   // a driver that gives up, a panic — is shown, with the way out.
   let engineFailed = false;
+  window.neweraReady = false;
+  const activeCalls = new Map();
+  let sequence = 0;
+  // Only operation names and revisions: never retain arguments, room keys or URLs.
+  window.neweraOperation = (event, token, name, revision) => {
+    if (event === "begin") {
+      const id = ++sequence;
+      activeCalls.set(id, {tool: String(name).slice(0, 80), revision: String(revision)});
+      return id;
+    }
+    activeCalls.delete(token);
+  };
+  const runtimeWords = {
+    pt: "O editor encontrou uma falha durante o uso.",
+    en: "The editor encountered an error while running.",
+    es: "El editor encontró un error durante el uso.",
+    fr: "L’éditeur a rencontré une erreur en cours d’utilisation.",
+  };
+  const safeCause = (why) => String(why ?? "")
+    .replace(/(?:https?|wss?):\/\/[^\s)]+/gi, "[URL]")
+    .replace(/Bearer\s+[^\s,;]+/gi, "Bearer [redacted]")
+    .replace(/"(?:token|tab_key|client_token|authorization|password)"\s*:\s*"[^"]*"/gi, '"credential":"[redacted]"')
+    .replace(/((?:token|tab_key|client_token|authorization|password)\s*[=:]\s*)[^\s,;]+/gi, "$1[redacted]")
+    .slice(0, 600);
   // The note about WebGL sits over the app's own top bar, which on a phone is
   // most of it: it says its piece and leaves.
   window.neweraNoticeTimer = null;
   window.neweraFail = (why) => {
     if (engineFailed) return;
     engineFailed = true;
+    window.neweraDiagnostic = {
+      phase: window.neweraReady ? "runtime" : "startup",
+      build: document.body.getAttribute("data-render-build"),
+      backend: document.body.getAttribute("data-editor-backend") ?? "unknown",
+      operations: [...activeCalls.values()],
+      cause: safeCause(why),
+      panic: /unreachable/i.test(String(why))
+        ? safeCause((window.neweraLog ?? []).findLast(line => /panicked at|no filesystem on this platform/i.test(line)) ?? "")
+        : "",
+    };
+    if (window.neweraReady) document.getElementById("failed-text").textContent = runtimeWords[tag];
     document.getElementById("loading")?.remove();
     const panel = document.getElementById("failed");
     panel.style.display = "flex";
-    document.getElementById("failed-why").textContent = String(why ?? "").slice(0, 300);
+    document.getElementById("failed-why").textContent = JSON.stringify(window.neweraDiagnostic);
   };
   addEventListener("error", (e) => {
     if (/unreachable|wasm|webgpu|adapter|createBuffer/i.test(e.message ?? "")) neweraFail(e.message);
@@ -167,6 +202,7 @@
     }
     loading.remove();
     await glue.start("newera", name, bytes);
+    window.neweraReady = true;
   } catch (error) {
     window.neweraFail(error);
   }

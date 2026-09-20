@@ -6,6 +6,7 @@
 //   node scripts/web-mcp-e2e.mjs http://127.0.0.1:8801/app/ http://127.0.0.1:7979
 //
 // Needs the relay running and the site served. Exits non-zero on any step.
+import "./web-diagnostics-test.mjs";
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -131,6 +132,15 @@ try {
     const tools = list?.result?.tools ?? [];
     if (tools.length < 30) bad(`the tab offered only ${tools.length} tools`);
     else ok(`the tab offered ${tools.length} tools`);
+
+    await evaluate(`(() => {
+      window.diagnosticCalls = [];
+      const original = window.neweraOperation;
+      window.neweraOperation = (...args) => {
+        window.diagnosticCalls.push([args[0], args[2], args[3]]);
+        return original(...args);
+      };
+    })()`);
 
     // Reproduce drivers that reject mapped-at-creation scene buffers, even
     // for a few MB. A mutation must upload geometry without that crash path.
@@ -315,6 +325,12 @@ try {
     }
     ok("the editor still accepts changes after rendering");
 
+    const diagnosticCalls = JSON.parse(await evaluate('JSON.stringify(window.diagnosticCalls)'));
+    if (!diagnosticCalls.some(([event, tool, rev]) => event === 'begin' && tool === 'render_plan' && /^\d+$/.test(rev))
+        || !diagnosticCalls.some(([event, tool]) => event === 'end' && tool === 'render_plan')) {
+      bad('real MCP calls did not report their diagnostic lifecycle');
+    } else ok('real MCP calls report operation and revision before and after execution');
+
     // A refresh must not cost the address: the page is reloaded and the same
     // one has to answer again, because it is already pasted into somebody's
     // AI client.
@@ -382,6 +398,17 @@ try {
       if (back !== mcpUrl) bad(`switched on again under a different address: ${back || "none"}`);
       else ok("switched on again, at the very same address");
     }
+
+    const diagnostic = JSON.parse(await evaluate(`(() => {
+      window.neweraOperation('begin', null, 'render_plan', 'test-revision');
+      window.dispatchEvent(new ErrorEvent('error', {message: 'Uncaught RuntimeError: unreachable injected-diagnostic-test'}));
+      return JSON.stringify({report: window.neweraDiagnostic, text: document.getElementById('failed-text').textContent});
+    })()`));
+    if (diagnostic.report?.phase !== 'runtime'
+        || diagnostic.report?.operations[0]?.tool !== 'render_plan'
+        || !diagnostic.report?.build || diagnostic.report?.backend === 'unknown'
+        || !diagnostic.text.includes('durante o uso')) bad('runtime failure lost its structured context');
+    else ok('runtime failure identifies phase, operation, revision, build and graphics backend');
 
     // And then the one that has to hold whatever anybody presses: the tab
     // goes, the address dies. Nothing is left running for an AI to reach.

@@ -94,6 +94,16 @@ pub async fn start_web(
             canvas,
             eframe::WebOptions::default(),
             Box::new(move |cc| {
+                if let Some(body) = web_sys::window()
+                    .and_then(|w| w.document())
+                    .and_then(|d| d.body())
+                {
+                    let backend = cc.wgpu_render_state.as_ref().map_or_else(
+                        || "WebGL".to_owned(),
+                        |state| format!("{:?}", state.adapter.get_info().backend),
+                    );
+                    let _ = body.set_attribute("data-editor-backend", &backend);
+                }
                 let mut app = app::NewEraApp::new(cc, document, None);
                 // The demo home is what a first visit opens on; someone who
                 // was already drawing here gets their own work back instead.
