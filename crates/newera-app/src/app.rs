@@ -1761,7 +1761,7 @@ impl NewEraApp {
                     icon::FILM_STRIP,
                     crate::i18n::tr("Criar vídeo…"),
                     "",
-                    !cfg!(target_arch = "wasm32"),
+                    true,
                 ) {
                     self.video.get_or_insert_with(Default::default);
                     ui.close();
@@ -2551,6 +2551,8 @@ impl eframe::App for NewEraApp {
         // Long work runs behind a window that says so; while it does, the
         // rest of the interface is there to read but not to touch.
         crate::jobs::show(self, &ctx);
+        #[cfg(target_arch = "wasm32")]
+        crate::render_web::show(&ctx);
         crate::photo::show(self, &ctx);
         crate::video::show(self, &ctx);
         crate::ergonomics::show(self, &ctx);

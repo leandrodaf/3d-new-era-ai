@@ -3,8 +3,9 @@
 //! background thread.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
+#[cfg(test)]
 use std::time::Duration;
 
 use web_time::Instant;
@@ -21,10 +22,21 @@ type Outcome = Result<newera_render::video::VideoInfo, String>;
 /// A running video render.
 struct Job {
     started: Instant,
-    done: Arc<AtomicUsize>,
-    total: Arc<AtomicUsize>,
     outcome: Arc<Mutex<Option<Outcome>>>,
     file: PathBuf,
+    report: Arc<crate::render_job::Report>,
+    #[cfg(target_arch = "wasm32")]
+    web: Option<(
+        crate::render_web::Worker,
+        crate::render_job::ByteOutcome,
+        usize,
+        u32,
+    )>,
+}
+impl Drop for Job {
+    fn drop(&mut self) {
+        self.report.cancelled.store(true, Ordering::Relaxed);
+    }
 }
 
 /// Settings and progress of the video window.
@@ -54,48 +66,95 @@ impl Default for VideoWindow {
 }
 
 impl VideoWindow {
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn start(&mut self, app: &NewEraApp, file: PathBuf) {
+        if let Err(error) = self.begin(app, file.clone()) {
+            self.last = Some((file, Err(error)));
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn begin(&mut self, app: &NewEraApp, file: PathBuf) -> Result<(), String> {
+        let permit = crate::render_job::Permit::acquire()?;
         let (home, assets) = {
             let doc = app.document.read();
             (doc.home().clone(), doc.asset_dir())
         };
-        let done = Arc::new(AtomicUsize::new(0));
-        let total = Arc::new(AtomicUsize::new(0));
         let outcome = Arc::new(Mutex::new(None));
-        let (d, t, o, f) = (
-            Arc::clone(&done),
-            Arc::clone(&total),
-            Arc::clone(&outcome),
-            file.clone(),
-        );
+        let (o, f) = (Arc::clone(&outcome), file.clone());
         let size = (self.size[0], self.size[1]);
+        newera_render::video::validate_video(
+            &home.environment.camera_path,
+            home.environment.video.frame_rate,
+            home.environment.video.speed,
+            size,
+        )?;
+        let report = Arc::new(crate::render_job::Report::default());
+        let watcher: Arc<dyn newera_core::progress::Watcher> = report.clone();
         std::thread::spawn(move || {
+            let _permit = permit;
             let video = &home.environment.video;
-            let result = newera_render::video::render_video(
-                &home,
-                &home.environment.camera_path,
-                video.frame_rate,
-                video.speed,
-                size,
-                assets.as_deref(),
-                &f,
-                |i, n| {
-                    t.store(n, Ordering::Relaxed);
-                    d.store(i, Ordering::Relaxed);
-                },
-            );
+            let result = newera_core::progress::watched(&watcher, || {
+                newera_render::video::render_video(
+                    &home,
+                    &home.environment.camera_path,
+                    video.frame_rate,
+                    video.speed,
+                    size,
+                    assets.as_deref(),
+                    &f,
+                    |_, _| {},
+                )
+            });
             if let Ok(mut guard) = o.lock() {
                 *guard = Some(result);
             }
         });
         self.job = Some(Job {
             started: Instant::now(),
-            done,
-            total,
             outcome,
             file,
+            report,
         });
         self.last = None;
+        Ok(())
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn start_web(&mut self, app: &NewEraApp, ctx: &egui::Context) -> Result<(), String> {
+        let doc = app.document.read();
+        let home = doc.home();
+        let video = &home.environment.video;
+        newera_render::video::validate_video(
+            &home.environment.camera_path,
+            video.frame_rate,
+            video.speed,
+            (self.size[0], self.size[1]),
+        )?;
+        let frames = newera_render::video::interpolate_path(
+            &home.environment.camera_path,
+            video.frame_rate,
+            video.speed,
+        )
+        .len();
+        let report = Arc::new(crate::render_job::Report::default());
+        let bytes = Arc::new(Mutex::new(None));
+        let worker = crate::render_web::Worker::start(
+            &serde_json::json!({
+                "kind":"video", "home":home, "assets":doc.asset_dir(), "size":self.size,
+            }),
+            report.clone(),
+            bytes.clone(),
+            ctx.clone(),
+        )?;
+        self.job = Some(Job {
+            started: Instant::now(),
+            outcome: Arc::new(Mutex::new(None)),
+            file: "video.avi".into(),
+            report,
+            web: Some((worker, bytes, frames, video.frame_rate)),
+        });
+        self.last = None;
+        Ok(())
     }
 
     pub(crate) fn running(&self) -> bool {
@@ -119,8 +178,8 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
         return;
     };
     let mut open = true;
-    #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
     let mut render_to = None;
+    let mut cancel = false;
     let environment = app.document.read().home().environment.clone();
     let (mut fps, mut speed) = (environment.video.frame_rate, environment.video.speed);
     let keys = environment.camera_path.len();
@@ -188,6 +247,9 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                     ui.selectable_value(&mut window.size, size, format!("{}×{}", size[0], size[1]));
                 }
             });
+            if cfg!(target_arch = "wasm32") {
+                ui.weak("Uma tarefa por vez · até 900 quadros · 32 MB · resolução até 1280 × 960");
+            }
             ui.separator();
             ui.horizontal(|ui| {
                 if ui
@@ -197,6 +259,10 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                     )
                     .clicked()
                 {
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        render_to = Some(PathBuf::from("video.avi"));
+                    }
                     #[cfg(not(target_arch = "wasm32"))]
                     {
                         render_to = rfd::FileDialog::new()
@@ -206,15 +272,7 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                     }
                 }
                 if let Some(job) = &window.job {
-                    let total = job.total.load(Ordering::Relaxed).max(1);
-                    let done = job.done.load(Ordering::Relaxed);
-                    #[allow(clippy::cast_precision_loss)]
-                    ui.add(
-                        egui::ProgressBar::new(done as f32 / total as f32)
-                            .text(format!("{done}/{total}"))
-                            .desired_width(160.0),
-                    );
-                    ctx.request_repaint_after(Duration::from_millis(200));
+                    cancel = job.report.ui(ui);
                 }
             });
             match &window.last {
@@ -245,6 +303,26 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
             e.video.speed = speed;
         });
     }
+    if cancel {
+        window.job = None;
+    }
+    #[cfg(target_arch = "wasm32")]
+    if let Some(job) = &window.job
+        && let Some((_, bytes, frames, fps)) = &job.web
+        && let Some(result) = bytes.lock().ok().and_then(|mut g| g.take())
+    {
+        let result = result.and_then(|bytes| {
+            #[allow(clippy::cast_precision_loss)]
+            let info = newera_render::video::VideoInfo {
+                frames: *frames,
+                seconds: *frames as f64 / f64::from(*fps),
+                bytes: bytes.len(),
+            };
+            crate::files::save_bytes("AVI", "avi", "video.avi", || Ok(bytes))?;
+            Ok(info)
+        });
+        *job.outcome.lock().expect("video outcome") = Some(result);
+    }
     let finished = window.job.as_ref().and_then(|job| {
         job.outcome
             .lock()
@@ -265,7 +343,12 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
         window.job = None;
     }
     if let Some(file) = render_to {
+        #[cfg(not(target_arch = "wasm32"))]
         window.start(app, file);
+        #[cfg(target_arch = "wasm32")]
+        if let Err(error) = window.start_web(app, ctx) {
+            window.last = Some((file, Err(error)));
+        }
     }
     if open {
         app.video = Some(window);

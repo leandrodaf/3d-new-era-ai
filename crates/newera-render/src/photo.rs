@@ -1,6 +1,6 @@
 //! Photo renderer: a CPU path tracer over scene meshes with sunlight from
 //! the home's location and time, light sources from furniture, soft
-//! indirect light and translucent glass. Uses every core.
+//! indirect light and translucent glass. Leaves CPU capacity for the editor.
 
 use glam::{Vec3, Vec4};
 use image::{Rgba, RgbaImage};
@@ -627,6 +627,7 @@ fn radiance(
     clippy::cast_sign_loss
 )]
 pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
+    newera_core::progress::step("Preparando cena", 0, 0);
     let mut tris: Vec<[u32; 3]> = Vec::new();
     let mut transparent = Vec::new();
     for (list, clear) in [(&mesh.indices, false), (&mesh.transparent, true)] {
@@ -702,11 +703,16 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
         render_threads()
     };
     let rows_per = h.div_ceil(threads);
+    let watcher = newera_core::progress::listener();
+    let completed = std::sync::atomic::AtomicU64::new(0);
     let work = |chunk_index: usize, chunk: &mut [(Vec3, Surface)]| {
         {
             let (scene, lighting) = (&scene, &lighting);
             {
                 for (i, pixel) in chunk.iter_mut().enumerate() {
+                    if i % w == 0 && watcher.as_ref().is_some_and(|p| p.cancelled()) {
+                        return;
+                    }
                     let (x, y) = (i % w, chunk_index * rows_per + i / w);
                     let mut rng =
                         Rng(((y as u64) << 32 | x as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
@@ -740,6 +746,12 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
                             depth: surface.depth / n,
                         },
                     );
+                    if (i + 1) % w == 0 {
+                        let done = completed.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                        if let Some(p) = &watcher {
+                            p.step("Renderizando imagem", done, h as u64);
+                        }
+                    }
                 }
             }
         }
@@ -755,6 +767,10 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
         });
     }
 
+    if watcher.as_ref().is_some_and(|p| p.cancelled()) {
+        return RgbaImage::new(1, 1);
+    }
+    newera_core::progress::step("Finalizando imagem", 0, 0);
     let mut denoised = denoise(&pixels, w, h);
     white_balance(&mut denoised, WHITE_BALANCE);
     // Auto exposure: bring the scene's average brightness to a middle tone
@@ -781,14 +797,13 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
 /// half the cores. Every core flat out for minutes has tripped a desktop's
 /// power protection, and the machine stays usable while it renders.
 fn render_threads() -> usize {
+    let budget =
+        (std::thread::available_parallelism().map_or(2, std::num::NonZero::get) / 2).clamp(1, 4);
     std::env::var("NEWERA_RENDER_THREADS")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
-        .filter(|&n| n > 0)
-        .unwrap_or_else(|| {
-            std::thread::available_parallelism().map_or(4, std::num::NonZero::get) / 2
-        })
-        .max(1)
+        .unwrap_or(budget)
+        .clamp(1, budget)
 }
 
 /// How far photos are pulled toward neutral (0 none, 1 full gray world):

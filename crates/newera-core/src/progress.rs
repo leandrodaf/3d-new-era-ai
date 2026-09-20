@@ -53,6 +53,11 @@ pub fn watched<T>(watcher: &Arc<dyn Watcher>, work: impl FnOnce() -> T) -> T {
     work()
 }
 
+/// Copies the listener when a bounded worker needs to report to the same UI.
+pub fn listener() -> Option<Arc<dyn Watcher>> {
+    LISTENING.with(|slot| slot.borrow().clone())
+}
+
 /// Says what this thread is working on: `what` it is doing, how many parts are
 /// `done` and how many there are `of`, or 0 when that is not known.
 pub fn step(what: &str, done: u64, of: u64) {

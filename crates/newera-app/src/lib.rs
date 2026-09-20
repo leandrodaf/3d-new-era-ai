@@ -15,6 +15,9 @@ mod i18n;
 mod jobs;
 mod panels;
 mod photo;
+mod render_job;
+#[cfg(target_arch = "wasm32")]
+pub mod render_web;
 #[cfg(test)]
 mod screens;
 mod tabs;

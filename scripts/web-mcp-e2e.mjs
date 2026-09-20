@@ -7,12 +7,13 @@
 //
 // Needs the relay running and the site served. Exits non-zero on any step.
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const [page = "http://127.0.0.1:8801/app/", relay = "http://127.0.0.1:7979"] =
   process.argv.slice(2);
+const workerSource = readFileSync(new URL("../web/editor/render-worker.js", import.meta.url), "utf8");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const profile = mkdtempSync(join(tmpdir(), "newera-mcp-e2e-"));
 const browser = process.env.CHROME
@@ -158,12 +159,26 @@ try {
     if (!grew) bad("the project did not change in the tab");
     else ok("the tab's project holds what the AI drew");
 
+    // Record real worker creation and keep a main-thread heartbeat while photos run.
+    await evaluate(`(() => {
+      window.renderAudit = { workers: 0, progress: 0, ticks: 0 };
+      const Original = window.Worker;
+      window.Worker = class extends Original {
+        constructor(...args) {
+          super(...args); window.renderAudit.workers++; window.lastRenderWorker = this;
+          this.addEventListener('message', ({data}) => {
+            if (data.type === 'progress') window.renderAudit.progress++;
+          });
+        }
+      };
+      window.renderAudit.timer = setInterval(() => window.renderAudit.ticks++, 25);
+    })()`);
     // Rendering used to call std::env::temp_dir through the native image
     // cache. On wasm that panics, killing the editor on the first plan PNG.
-    for (const name of ["render_plan", "render_3d", "render_plan"]) {
+    for (const name of ["render_plan", "render_3d", "render_photo", "render_plan"]) {
       const rendered = await rpc(mcpUrl, {
         jsonrpc: "2.0", id: 20, method: "tools/call",
-        params: { name, arguments: { w: 320, h: 240 } },
+        params: { name, arguments: name === "render_photo" ? { w: 64, h: 48 } : { w: 320, h: 240 } },
       });
       const png = rendered?.result?.content?.find((item) => item.type === "image");
       if (rendered?.result?.isError || !png ||
@@ -175,6 +190,115 @@ try {
       if (fatal) throw new Error(`rendering killed the editor: ${fatal}`);
       ok(`${name} returned a PNG and the editor stayed alive`);
     }
+    const audit = await evaluate("JSON.stringify(window.renderAudit)");
+    const measured = JSON.parse(audit);
+    if (measured.workers !== 4 || measured.progress === 0 || measured.ticks < 4) {
+      throw new Error(`renders did not use responsive workers: ${audit}`);
+    }
+    ok("images ran in disposable workers with progress and a responsive page");
+    // A busy render must leave both ordinary MCP calls and the page usable.
+    // Simulate a worker failure to exercise cleanup and the next render.
+    const pendingPhoto = rpc(mcpUrl, {jsonrpc:"2.0",id:30,method:"tools/call",
+      params:{name:"render_photo",arguments:{w:1280,h:960,quality:"best"}}});
+    for (let i=0;i<40;i++) {
+      if (await evaluate("window.renderAudit.workers > 4")) break;
+      await sleep(50);
+    }
+    const busy = await rpc(mcpUrl, {jsonrpc:"2.0",id:31,method:"tools/call",
+      params:{name:"render_plan",arguments:{w:64,h:64}}});
+    if (!JSON.stringify(busy).includes("andamento")) throw new Error("a second heavy render was not refused");
+    if (process.env.RENDER_SHOT) {
+      await frames(3);
+      const shot = await send("Page.captureScreenshot", {format:"png"});
+      writeFileSync(process.env.RENDER_SHOT, Buffer.from(shot.result.data, "base64"));
+    }
+    const began = Date.now();
+    const during = await rpc(mcpUrl, {jsonrpc:"2.0",id:32,method:"tools/call",params:{name:"get_home",arguments:{}}});
+    if (!during.result || Date.now()-began>3000) throw new Error("MCP blocked behind a render");
+    await evaluate("window.lastRenderWorker.dispatchEvent(new ErrorEvent('error',{message:'e2e render failure'}))");
+    const stopped = await pendingPhoto;
+    if (!JSON.stringify(stopped).includes("e2e render failure")) throw new Error("worker failure was not surfaced");
+    const recovered = await rpc(mcpUrl, {jsonrpc:"2.0",id:33,method:"tools/call",
+      params:{name:"render_plan",arguments:{w:64,h:64}}});
+    if (!recovered.result?.content?.some(c=>c.type==='image')) throw new Error("worker failure leaked the render budget");
+    ok("heavy renders are exclusive; the page/MCP remain responsive and worker failure releases the budget");
+    const cancelledPhoto = rpc(mcpUrl, {jsonrpc:"2.0",id:34,method:"tools/call",
+      params:{name:"render_photo",arguments:{w:1280,h:960,quality:"best"}}});
+    await frames(4);
+    // The render window opens at egui's default (16,16), below its title.
+    await send("Input.dispatchMouseEvent", {type:"mouseMoved",x:62,y:113});
+    await send("Input.dispatchMouseEvent", {type:"mousePressed",x:62,y:113,button:"left",clickCount:1});
+    await send("Input.dispatchMouseEvent", {type:"mouseReleased",x:62,y:113,button:"left",clickCount:1});
+    await frames(3);
+    const cancelled = await cancelledPhoto;
+    if (!JSON.stringify(cancelled).includes("cancelada")) throw new Error("Cancel did not stop the browser render");
+    const afterCancel = await rpc(mcpUrl, {jsonrpc:"2.0",id:35,method:"tools/call",
+      params:{name:"render_plan",arguments:{w:64,h:64}}});
+    if (!afterCancel.result?.content?.some(c=>c.type==='image')) throw new Error("Cancel leaked the render budget");
+    ok("the browser Cancel button stops the worker and allows another render");
+    // Exercise the same worker/export used by the video window, without a
+    // native file dialog. Validate bytes, progress and refusal before allocation.
+    const videoAudit = await evaluate(`(async () => {
+      const source = ${JSON.stringify(workerSource)};
+      const url = URL.createObjectURL(new Blob([source], {type:'text/javascript'}));
+      const camera = { x:0, y:0, z:170, yaw:0, pitch:0, fov:63 };
+      const home = {name:'Worker video', environment:{
+        ground_color:[168,168,152], sky_color:[204,228,252], light_color:[208,208,208], ceiling_light_color:[208,208,208],
+        photo:{width:64,height:64}, video:{width:64,frame_rate:2,speed:2}, camera_path:[camera,{...camera,y:100}]
+      }};
+      const run = size => new Promise((resolve, reject) => {
+        const worker = new Worker(url,{type:'module'});
+        let progress=0;
+        const timer=setTimeout(() => {worker.terminate();reject(new Error('video timeout'));},15000);
+        worker.onmessage=({data})=>{
+          if(data.type==='progress') {progress++;return;}
+          clearTimeout(timer);worker.terminate();
+          resolve({type:data.type,progress,header:data.bytes ? Array.from(data.bytes.slice(0,12)) : [],error:data.error});
+        };
+        worker.onerror=error=>{clearTimeout(timer);worker.terminate();reject(error);};
+        worker.postMessage({module:new URL('./pkg/newera_editor_web.js',location.href).href,
+          request:JSON.stringify({kind:'video',home,size}),assets:[]});
+      });
+      const video=await run([64,64]);
+      const limit=await run([100000,100000]);
+      URL.revokeObjectURL(url);
+      return {video,limit};
+    })()`);
+    if (videoAudit?.video?.type !== 'done' || videoAudit.video.progress < 2 ||
+        Buffer.from(videoAudit.video.header).subarray(0,4).toString() !== 'RIFF' ||
+        Buffer.from(videoAudit.video.header).subarray(8,12).toString() !== 'AVI ' || videoAudit.limit.type !== 'error') {
+      throw new Error(`video worker failed: ${JSON.stringify(videoAudit)}`);
+    }
+    ok("video worker produced an AVI with progress and rejected excessive resolution");
+    // Follow the actual web menu through to a downloaded AVI, catching a
+    // disabled menu or a disconnected UI even when the worker itself works.
+    // Keep enough viewport height for the menu to open below its button.
+    await send("Emulation.setDeviceMetricsOverride", {width:1440,height:900,deviceScaleFactor:1,mobile:false});
+    const downloads = mkdtempSync(join(tmpdir(), "newera-video-download-"));
+    await send("Browser.setDownloadBehavior", {behavior:"allow",downloadPath:downloads});
+    await rpc(mcpUrl, {jsonrpc:"2.0",id:36,method:"tools/call",
+      params:{name:"cameras",arguments:{action:"view",i:0}}});
+    const click = async (x,y) => {
+      await send("Input.dispatchMouseEvent", {type:"mouseMoved",x,y});
+      await send("Input.dispatchMouseEvent", {type:"mousePressed",x,y,button:"left",clickCount:1});
+      await send("Input.dispatchMouseEvent", {type:"mouseReleased",x,y,button:"left",clickCount:1});
+      await frames(2);
+    };
+    await frames(2);
+    await click(169,16); // View menu
+    await click(250,137); // Create video
+    await click(105,104); // add current visitor camera
+    await click(105,104); // repeat: a bounded 0.2-second, five-frame clip
+    await click(122,194); // 320 x 240
+    await click(88,272); // Generate video
+    const movie = join(downloads,"video.avi");
+    for (let i=0;i<20 && !existsSync(movie);i++) await frames(1);
+    if (!existsSync(movie)) throw new Error("the video UI did not download an AVI");
+    const avi = readFileSync(movie);
+    if (avi.subarray(0,4).toString() !== "RIFF" || avi.subarray(8,12).toString() !== "AVI ") {
+      throw new Error("the video UI downloaded invalid bytes");
+    }
+    ok("Create video opened from the menu and downloaded a valid AVI");
     const undone = await rpc(mcpUrl, {
       jsonrpc: "2.0", id: 21, method: "tools/call",
       params: { name: "undo", arguments: {} },

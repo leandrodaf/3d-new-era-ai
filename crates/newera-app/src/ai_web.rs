@@ -7,9 +7,8 @@
 //! hands each tool call down this socket; the answers go back the same way.
 //! Nothing of the project is stored there: it passes through.
 //!
-//! Two tools are kept off the list here. `render_photo` and `video` are the
-//! path tracer, which runs for minutes on a CPU — in a tab that means a frozen
-//! window, so the browser advertises what it can actually do.
+//! Images run in an isolated render worker. The file-based MCP `video` tool
+//! remains desktop-only; the browser's video window downloads an AVI instead.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -28,7 +27,7 @@ const RELAY: &str = "https://mcp.3dneweraai.com";
 const REMEMBERED: &str = "newera-mcp-room";
 
 /// Tools the browser does not offer: they would hold the window for minutes.
-const TOO_SLOW_HERE: [&str; 2] = ["render_photo", "video"];
+const TOO_SLOW_HERE: [&str; 1] = ["video"];
 
 /// Where this tab is in the business of being reachable.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -391,21 +390,30 @@ fn hold(
                         .get("args")
                         .cloned()
                         .unwrap_or(serde_json::Value::Null);
-                    let answer = run(&document, &name, args);
-                    document
-                        .write()
-                        .agents_mut()
-                        .called(None, &name, crate::ai::now_ms());
-                    let reply = match answer {
-                        Ok(result) => serde_json::json!({
-                            "type": "result", "id": id, "ok": true, "result": result
-                        }),
-                        Err(why) => serde_json::json!({
-                            "type": "result", "id": id, "ok": false, "error": why
-                        }),
-                    };
-                    let _ = socket.send_with_str(&reply.to_string());
-                    ctx.request_repaint();
+                    let (document, socket, ctx) = (document.clone(), socket.clone(), ctx.clone());
+                    wasm_bindgen_futures::spawn_local(async move {
+                        let answer = if ["render_plan", "render_3d", "render_photo"]
+                            .contains(&name.as_str())
+                        {
+                            crate::render_web::mcp(&document, &name, args, &ctx).await
+                        } else {
+                            run(&document, &name, args)
+                        };
+                        document
+                            .write()
+                            .agents_mut()
+                            .called(None, &name, crate::ai::now_ms());
+                        let reply = match answer {
+                            Ok(result) => serde_json::json!({
+                                "type": "result", "id": id, "ok": true, "result": result
+                            }),
+                            Err(why) => serde_json::json!({
+                                "type": "result", "id": id, "ok": false, "error": why
+                            }),
+                        };
+                        let _ = socket.send_with_str(&reply.to_string());
+                        ctx.request_repaint();
+                    });
                 }
                 _ => {}
             }
@@ -455,10 +463,7 @@ fn run(
     args: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     if TOO_SLOW_HERE.contains(&name) {
-        return Err(crate::i18n::fill(
-            "{} só no aplicativo do computador: aqui ele renderiza na CPU e travaria a aba",
-            &[&name],
-        ));
+        return Err("A ferramenta video salva arquivos no aplicativo. No navegador, use Criar vídeo para baixar o AVI.".into());
     }
     let result = newera_mcp::call(document.clone(), name, args)?;
     serde_json::to_value(result).map_err(|e| e.to_string())

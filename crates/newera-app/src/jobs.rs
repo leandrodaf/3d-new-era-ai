@@ -17,7 +17,7 @@
 //! into a result nobody reads.
 //!
 //! In the browser there are no threads here: the job runs in place, as the
-//! photo render does, and the page waits.
+//! file operations still do; image/video renders have their own isolated worker.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};

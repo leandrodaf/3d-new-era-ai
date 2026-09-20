@@ -153,6 +153,20 @@ pub fn render_frames(
     assets: Option<&Path>,
     mut on_frame: impl FnMut(usize, RgbaImage),
 ) {
+    render_frames_until(home, cameras, width, height, assets, |i, image| {
+        on_frame(i, image);
+        true
+    });
+}
+
+fn render_frames_until(
+    home: &Home,
+    cameras: &[Camera],
+    width: u32,
+    height: u32,
+    assets: Option<&Path>,
+    mut on_frame: impl FnMut(usize, RgbaImage) -> bool,
+) {
     let cache = ModelCache::default();
     let models = |piece: &newera_core::Furniture| cache.piece_model(piece, assets);
     let mesh = Mesh::from_home(home, &Selection::new(), &models);
@@ -179,6 +193,9 @@ pub fn render_frames(
             .clone()
     };
     for (i, camera) in cameras.iter().enumerate() {
+        if newera_core::progress::cancelled() {
+            break;
+        }
         let view = View::from_camera(camera, aspect);
         let image = render(
             &mesh,
@@ -194,7 +211,9 @@ pub fn render_frames(
                 cut_color: None,
             },
         );
-        on_frame(i, image);
+        if !on_frame(i, image) {
+            break;
+        }
     }
 }
 
@@ -337,30 +356,136 @@ pub fn render_video(
     file: &Path,
     mut progress: impl FnMut(usize, usize),
 ) -> Result<VideoInfo, String> {
-    if keys.len() < 2 {
-        return Err("the camera path needs at least 2 points".into());
+    let (bytes, info) = render_video_bytes(home, keys, fps, speed, size, assets, &mut progress)?;
+    std::fs::write(file, &bytes).map_err(|e| format!("{}: {e}", file.display()))?;
+    Ok(info)
+}
+
+/// Validates resource limits before allocating the camera path or frame buffers.
+pub fn validate_video(
+    keys: &[Camera],
+    fps: u32,
+    speed: f64,
+    size: (u32, u32),
+) -> Result<(), String> {
+    let seconds: f64 = segment_durations(keys, speed).iter().sum();
+    let max_frames = if cfg!(target_arch = "wasm32") {
+        900.0
+    } else {
+        1800.0
+    };
+    let max_pixels = if cfg!(target_arch = "wasm32") {
+        1_228_800
+    } else {
+        2_073_600
+    };
+    if keys.len() < 2
+        || !speed.is_finite()
+        || speed <= 0.0
+        || fps == 0
+        || fps > 60
+        || !seconds.is_finite()
+        || seconds * f64::from(fps) > max_frames
+        || size.0 < 16
+        || size.1 < 16
+        || u64::from(size.0) * u64::from(size.1) > max_pixels
+    {
+        return Err(
+            "Vídeo excede os limites: reduza a resolução, o percurso ou os quadros por segundo."
+                .into(),
+        );
     }
-    let (width, height) = (size.0.max(16) & !1, size.1.max(16) & !1);
+    Ok(())
+}
+
+/// Renders to bounded in-memory AVI bytes, including in a browser worker.
+#[allow(clippy::too_many_arguments, clippy::cast_precision_loss)]
+pub fn render_video_bytes(
+    home: &Home,
+    keys: &[Camera],
+    fps: u32,
+    speed: f64,
+    size: (u32, u32),
+    assets: Option<&Path>,
+    mut progress: impl FnMut(usize, usize),
+) -> Result<(Vec<u8>, VideoInfo), String> {
+    validate_video(keys, fps, speed, size)?;
+    newera_core::progress::step("Preparando vídeo", 0, 0);
+    let (width, height) = (size.0 & !1, size.1 & !1);
     let cameras = interpolate_path(keys, fps, speed);
     let total = cameras.len();
     let mut frames = Vec::with_capacity(total);
-    render_frames(home, &cameras, width, height, assets, |i, image| {
-        frames.push(jpeg(&image, 88));
+    let mut encoded = 0usize;
+    let mut exceeded = false;
+    render_frames_until(home, &cameras, width, height, assets, |i, image| {
+        let frame = jpeg(&image, 88);
+        encoded += frame.len();
+        // AVI assembly uses several buffers; bound the compressed input too.
+        if encoded > 32 * 1024 * 1024 {
+            exceeded = true;
+            return false;
+        }
+        frames.push(frame);
         progress(i + 1, total);
+        newera_core::progress::step("Renderizando vídeo", (i + 1) as u64, total as u64);
+        true
     });
+    if newera_core::progress::cancelled() {
+        return Err(newera_core::progress::CANCELLED.into());
+    }
+    if exceeded {
+        return Err("Vídeo excede 32 MB. Reduza a duração ou a resolução.".into());
+    }
+    newera_core::progress::step("Finalizando vídeo", 0, 0);
     let mut bytes = Vec::new();
     write_mjpeg_avi(&mut bytes, &frames, width, height, fps).map_err(|e| e.to_string())?;
-    std::fs::write(file, &bytes).map_err(|e| format!("{}: {e}", file.display()))?;
-    #[allow(clippy::cast_precision_loss)]
-    Ok(VideoInfo {
+    let info = VideoInfo {
         frames: total,
-        seconds: total as f64 / f64::from(fps.max(1)),
+        seconds: total as f64 / f64::from(fps),
         bytes: bytes.len(),
-    })
+    };
+    Ok((bytes, info))
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn rejects_unbounded_video_before_allocating_frames() {
+        let keys = vec![
+            Camera::default(),
+            Camera {
+                x: 1000.0,
+                ..Camera::default()
+            },
+        ];
+        assert!(validate_video(&keys, 30, 2.0, (640, 360)).is_ok());
+        assert!(validate_video(&keys, 0, 2.0, (640, 360)).is_err());
+        assert!(validate_video(&keys, 30, f64::NAN, (640, 360)).is_err());
+        assert!(validate_video(&keys, 60, 0.001, (640, 360)).is_err());
+        assert!(validate_video(&keys, 30, 2.0, (u32::MAX, u32::MAX)).is_err());
+    }
+
+    #[test]
+    fn cancellation_stops_before_a_frame_and_writes_no_output() {
+        struct Cancelled;
+        impl newera_core::progress::Watcher for Cancelled {
+            fn step(&self, _: &str, _: u64, _: u64) {}
+            fn cancelled(&self) -> bool {
+                true
+            }
+        }
+        let watcher: std::sync::Arc<dyn newera_core::progress::Watcher> =
+            std::sync::Arc::new(Cancelled);
+        let home = Home::default();
+        let keys = vec![Camera::default(), Camera::default()];
+        newera_core::progress::watched(&watcher, || {
+            let result = render_video_bytes(&home, &keys, 2, 1.0, (32, 32), None, |_, _| {
+                panic!("cancelled render made a frame")
+            });
+            assert_eq!(result.unwrap_err(), newera_core::progress::CANCELLED);
+        });
+    }
+
     use newera_core::{Point2, Wall};
 
     use super::*;

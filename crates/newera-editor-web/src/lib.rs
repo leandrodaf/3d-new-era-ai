@@ -52,3 +52,10 @@ pub async fn start(
     let project = bytes.map(|b| (name.unwrap_or_else(|| "projeto.newera".into()), b));
     newera_app::start_web(canvas, project).await
 }
+
+/// Runs a bounded render in an isolated worker, reporting progress by message.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn render_worker(request: &str, assets: &JsValue) -> Result<Vec<u8>, JsValue> {
+    newera_app::render_web::render(request, assets).map_err(|e| JsValue::from_str(&e))
+}

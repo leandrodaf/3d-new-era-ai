@@ -138,6 +138,7 @@
   const BUILD = STAMP.startsWith("__") ? String(Date.now()) : STAMP;
   const boot = async (again) => {
     const v = again ? `${BUILD}-${Math.random().toString(36).slice(2)}` : BUILD;
+    document.body.setAttribute("data-render-build", v);
     const glue = await import(`./pkg/newera_editor_web.js?v=${v}`);
     await glue.default({ module_or_path: `./pkg/newera_editor_web_bg.wasm?v=${v}` });
     return glue;

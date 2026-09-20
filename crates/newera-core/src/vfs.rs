@@ -44,6 +44,30 @@ fn mounted(path: &Path) -> Option<Arc<[u8]>> {
     guard.as_ref()?.get(&key(path)).cloned()
 }
 
+/// Shared mounted files to copy into an isolated renderer.
+pub type AssetSnapshot = Vec<(String, Arc<[u8]>)>;
+
+/// Bounded snapshot for an isolated browser render worker, sharing source bytes.
+pub fn snapshot(limit: usize) -> Result<AssetSnapshot, String> {
+    let guard = FILES.read().map_err(|_| "assets unavailable")?;
+    let Some(files) = guard.as_ref() else {
+        return Ok(Vec::new());
+    };
+    let size = files
+        .values()
+        .try_fold(0usize, |n, b| n.checked_add(b.len()))
+        .ok_or("assets exceed render budget")?;
+    if size > limit {
+        return Err(
+            "Os modelos e texturas excedem o limite de 32 MB para renderizar no navegador.".into(),
+        );
+    }
+    Ok(files
+        .iter()
+        .map(|(p, b)| (p.to_string_lossy().into_owned(), b.clone()))
+        .collect())
+}
+
 /// Reads a mounted file, or the file on disk.
 ///
 /// # Errors
@@ -63,6 +87,20 @@ pub fn exists(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn worker_snapshot_checks_budget_and_owns_assets_after_unmount() {
+        let dir = Path::new("/virtual/render-snapshot-test");
+        mount(dir, [("a.bin".into(), vec![1, 2, 3, 4])]);
+        assert!(snapshot(0).is_err());
+        let files = snapshot(usize::MAX).unwrap();
+        unmount(dir);
+        let (_, bytes) = files
+            .iter()
+            .find(|(p, _)| p.ends_with("render-snapshot-test/a.bin"))
+            .unwrap();
+        assert_eq!(bytes.as_ref(), &[1, 2, 3, 4]);
+    }
 
     #[test]
     fn mounted_files_shadow_the_disk_until_unmounted() {
