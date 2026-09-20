@@ -79,6 +79,7 @@ pub(crate) struct Render3dParams {
 }
 /// Plan options as the user sees them: backgrounds, and top views for
 /// imported models.
+#[cfg(not(target_arch = "wasm32"))]
 fn scene_options_for(doc: &Document) -> SceneOptions {
     let views = newera_render::TopViews::new(
         newera_core::cache_dir().join("topviews"),
@@ -90,6 +91,17 @@ fn scene_options_for(doc: &Document) -> SceneOptions {
         piece_images: Some(newera_draw::PieceImages(std::sync::Arc::new(
             move |piece| views.image_for(piece),
         ))),
+        ..SceneOptions::default()
+    }
+}
+
+/// Match the browser canvas, which uses symbols instead of disk-backed top
+/// views. Asking for the native cache directory calls `std::env::temp_dir`,
+/// which panics on wasm32 and aborts the whole editor, even for an empty plan.
+#[cfg(target_arch = "wasm32")]
+fn scene_options_for(_doc: &Document) -> SceneOptions {
+    SceneOptions {
+        show_background: true,
         ..SceneOptions::default()
     }
 }

@@ -16,6 +16,7 @@ on:
       - "crates/**"
       - "scripts/site-build.sh"
       - "scripts/web-editor-e2e.mjs"
+      - "scripts/web-mcp-e2e.mjs"
       - ".github/workflows/publish.yml"
   workflow_dispatch:
 
@@ -44,6 +45,12 @@ jobs:
           for _ in $(seq 1 40); do curl -sf http://127.0.0.1:8790/app/ >/dev/null && break; sleep 0.25; done
           mkdir -p target/web-e2e
           node scripts/web-editor-e2e.mjs http://127.0.0.1:8790/app/ target/web-e2e http://127.0.0.1:8790/viewer/
+      - name: Check MCP rendering and editing before publishing
+        run: |
+          cargo build -p newera-relay --release --locked
+          PORT=7979 ./target/release/newera-relay &
+          for _ in $(seq 1 40); do curl -sf http://127.0.0.1:7979/health >/dev/null && break; sleep 0.25; done
+          node scripts/web-mcp-e2e.mjs http://127.0.0.1:8790/app/ http://127.0.0.1:7979
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}

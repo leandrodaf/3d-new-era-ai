@@ -21,7 +21,10 @@ const browser = process.env.CHROME
   ?? "google-chrome";
 const chrome = spawn(browser, [
   "--headless=new", `--user-data-dir=${profile}`,
-  "--enable-unsafe-webgpu", "--enable-features=Vulkan", "--use-angle=swiftshader",
+  ...(process.env.NO_WEBGPU === "1"
+    ? ["--disable-features=WebGPU,WebGPUService"]
+    : ["--enable-unsafe-webgpu", "--enable-features=Vulkan"]),
+  "--use-angle=swiftshader",
   "--window-size=1440,900", "--remote-debugging-port=9555", "about:blank",
 ], { stdio: "ignore" });
 
@@ -41,6 +44,12 @@ let id = 0;
 const pending = new Map();
 ws.addEventListener("message", (e) => {
   const msg = JSON.parse(e.data);
+  // This disposable test project is intentionally edited and then closed.
+  // Once keyboard input has activated the page, its unsaved-work dialog can
+  // hold navigation open (and therefore keep the MCP socket alive).
+  if (msg.method === "Page.javascriptDialogOpening" && msg.params.type === "beforeunload") {
+    void send("Page.handleJavaScriptDialog", { accept: true });
+  }
   if (pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
 });
 const send = (method, params = {}) => new Promise((r) => {
@@ -61,6 +70,7 @@ const frames = async (times) => {
 
 const rpc = async (url, body) => {
   const response = await fetch(url, {
+    signal: AbortSignal.timeout(20000),
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
     body: JSON.stringify(body),
@@ -135,6 +145,32 @@ try {
     if (!grew) bad("the project did not change in the tab");
     else ok("the tab's project holds what the AI drew");
 
+    // Rendering used to call std::env::temp_dir through the native image
+    // cache. On wasm that panics, killing the editor on the first plan PNG.
+    for (const name of ["render_plan", "render_3d", "render_plan"]) {
+      const rendered = await rpc(mcpUrl, {
+        jsonrpc: "2.0", id: 20, method: "tools/call",
+        params: { name, arguments: { w: 320, h: 240 } },
+      });
+      const png = rendered?.result?.content?.find((item) => item.type === "image");
+      if (rendered?.result?.isError || !png ||
+          !Buffer.from(png.data, "base64").subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) {
+        throw new Error(`${name} did not return a PNG`);
+      }
+      await frames(2);
+      const fatal = await evaluate("document.getElementById('failed-why')?.textContent || ''");
+      if (fatal) throw new Error(`rendering killed the editor: ${fatal}`);
+      ok(`${name} returned a PNG and the editor stayed alive`);
+    }
+    const undone = await rpc(mcpUrl, {
+      jsonrpc: "2.0", id: 21, method: "tools/call",
+      params: { name: "undo", arguments: {} },
+    });
+    if (undone?.error || undone?.result?.isError || !undone?.result?.content) {
+      throw new Error("editing stopped working after rendering");
+    }
+    ok("the editor still accepts changes after rendering");
+
     // A refresh must not cost the address: the page is reloaded and the same
     // one has to answer again, because it is already pasted into somebody's
     // AI client.
@@ -205,7 +241,9 @@ try {
 
     // And then the one that has to hold whatever anybody presses: the tab
     // goes, the address dies. Nothing is left running for an AI to reach.
-    await send("Page.navigate", { url: "about:blank" });
+    // Navigation may retain the document and its socket in the browser's
+    // back/forward cache. Close the target to actually exercise tab closure.
+    await send("Target.closeTarget", { targetId: target.id });
     let gone = false;
     for (let i = 0; i < 40 && !gone; i++) {
       const afterGone = await rpc(mcpUrl, {
@@ -220,6 +258,9 @@ try {
   }
 } catch (error) {
   console.error(error.message);
+  if (ws.readyState === WebSocket.OPEN) {
+    console.error(await evaluate("JSON.stringify((window.neweraLog || []).slice(-12))"));
+  }
   failed = true;
 } finally {
   ws.close();
