@@ -198,6 +198,10 @@ impl Scene<'_> {
     }
 
     fn build(&mut self) {
+        if self.tris.is_empty() {
+            self.nodes.clear();
+            return;
+        }
         let mut order: Vec<u32> = (0..u32::try_from(self.tris.len()).unwrap_or(0)).collect();
         let centroids: Vec<Vec3> = self
             .tris
@@ -653,6 +657,9 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
         },
     };
     scene.build();
+    if newera_core::progress::cancelled() {
+        return RgbaImage::new(1, 1);
+    }
 
     let (w, h) = (
         options.width.max(1) as usize,
@@ -681,6 +688,9 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
         let (gw, gh) = (24usize, 18usize);
         let mut log_sum = 0.0f32;
         for gy in 0..gh {
+            if newera_core::progress::cancelled() {
+                return RgbaImage::new(1, 1);
+            }
             for gx in 0..gw {
                 let sx = ((gx as f32 + 0.5) / gw as f32 * 2.0 - 1.0) * tan * aspect;
                 let sy = (1.0 - (gy as f32 + 0.5) / gh as f32 * 2.0) * tan;
@@ -706,13 +716,14 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
     };
     let rows_per = h.div_ceil(threads);
     let watcher = newera_core::progress::listener();
+    newera_core::progress::step("Renderizando imagem", 0, h as u64);
     let completed = std::sync::atomic::AtomicU64::new(0);
     let work = |chunk_index: usize, chunk: &mut [(Vec3, Surface)]| {
         {
             let (scene, lighting) = (&scene, &lighting);
             {
                 for (i, pixel) in chunk.iter_mut().enumerate() {
-                    if i % w == 0 && watcher.as_ref().is_some_and(|p| p.cancelled()) {
+                    if watcher.as_ref().is_some_and(|p| p.cancelled()) {
                         return;
                     }
                     let (x, y) = (i % w, chunk_index * rows_per + i / w);
@@ -721,6 +732,9 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
                     let mut sum = Vec3::ZERO;
                     let mut surface = Surface::default();
                     for _ in 0..samples {
+                        if watcher.as_ref().is_some_and(|p| p.cancelled()) {
+                            return;
+                        }
                         // Tent filter over neighboring pixels: smooth edges.
                         let (jx, jy) = (0.5 + tent(rng.next()), 0.5 + tent(rng.next()));
                         let sx = ((x as f32 + jx) / w as f32 * 2.0 - 1.0) * tan * aspect;
@@ -909,6 +923,84 @@ fn denoise(pixels: &[(Vec3, Surface)], w: usize, h: usize) -> Vec<Vec3> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn empty_mesh_renders_sky_without_an_invalid_bvh_child() {
+        let home = newera_core::Home::default();
+        let image = render_photo(
+            &Mesh::default(),
+            &PhotoOptions {
+                width: 8,
+                height: 6,
+                samples: 1,
+                bounces: 1,
+                view: View::aerial(&home, 30.0, 40.0),
+                sun: None,
+                sky: Vec3::ONE,
+                lights: vec![],
+                exposure: 1.0,
+                load_image: &|_| None,
+            },
+        );
+        assert_eq!(image.dimensions(), (8, 6));
+        assert!(
+            image
+                .pixels()
+                .all(|p| p.0[3] == 255 && p.0[..3].iter().any(|v| *v > 0))
+        );
+    }
+
+    #[test]
+    fn cancellation_is_observed_before_finishing_a_long_row() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, AtomicU64, Ordering},
+        };
+        #[derive(Default)]
+        struct CancelDuringSamples {
+            rendering: AtomicBool,
+            checks: AtomicU64,
+            rows: AtomicU64,
+        }
+        impl newera_core::progress::Watcher for CancelDuringSamples {
+            fn step(&self, phase: &str, done: u64, _: u64) {
+                if phase == "Renderizando imagem" {
+                    self.rendering.store(true, Ordering::SeqCst);
+                    self.rows.store(done, Ordering::SeqCst);
+                }
+            }
+            fn cancelled(&self) -> bool {
+                self.rendering.load(Ordering::SeqCst)
+                    && self.checks.fetch_add(1, Ordering::SeqCst) >= 8
+            }
+        }
+        let state = Arc::new(CancelDuringSamples::default());
+        let watcher: Arc<dyn newera_core::progress::Watcher> = state.clone();
+        let home = newera_core::Home::default();
+        let image = newera_core::progress::watched(&watcher, || {
+            render_photo(
+                &Mesh::default(),
+                &PhotoOptions {
+                    width: 128,
+                    height: 1,
+                    samples: 192,
+                    bounces: 1,
+                    view: View::aerial(&home, 30.0, 40.0),
+                    sun: None,
+                    sky: Vec3::ONE,
+                    lights: vec![],
+                    exposure: 1.0,
+                    load_image: &|_| None,
+                },
+            )
+        });
+        assert_eq!(image.dimensions(), (1, 1));
+        assert_eq!(
+            state.rows.load(Ordering::SeqCst),
+            0,
+            "cancellation must interrupt samples, not wait for the full row"
+        );
+    }
 
     #[test]
     fn panels_emit_and_are_visible_only_on_their_luminous_side() {

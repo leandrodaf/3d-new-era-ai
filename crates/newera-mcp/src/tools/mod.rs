@@ -50,6 +50,8 @@ mod joinery;
 mod levels;
 mod lighting;
 mod measure;
+#[cfg(not(target_arch = "wasm32"))]
+mod native_job;
 mod plumbing;
 mod project;
 mod read;
@@ -139,6 +141,22 @@ impl NewEraMcp {
 #[allow(clippy::unused_async_trait_impl)]
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for NewEraMcp {
+    async fn call_tool(
+        &self,
+        request: rmcp::model::CallToolRequestParams,
+        context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::CallToolResponse, rmcp::ErrorData> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if matches!(
+            request.name.as_ref(),
+            "render_photo" | "render_plan" | "render_3d" | "video"
+        ) {
+            return native_job::run(self.clone(), request, context).await;
+        }
+        let call = rmcp::handler::server::tool::ToolCallContext::new(self, request, context);
+        self.tool_router.call(call).await
+    }
+
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(

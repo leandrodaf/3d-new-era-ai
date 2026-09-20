@@ -29,6 +29,7 @@ regex-lite = "0.1.9"
 
 # The transports that need an operating system stay off the browser build.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio.workspace = true
 rmcp = { workspace = true, features = ["transport-io", "transport-streamable-http-server"] }
 
 # In a browser the randomness comes from the page.
@@ -39,6 +40,11 @@ uuid = { version = "1", features = ["js"] }
 
 [dev-dependencies]
 tokio.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+axum.workspace = true
+futures-util.workspace = true
+tower = { version = "0.5", features = ["util"] }
 
 [lints]
 workspace = true
