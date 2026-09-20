@@ -58,9 +58,9 @@ pub fn snapshot(limit: usize) -> Result<AssetSnapshot, String> {
         .try_fold(0usize, |n, b| n.checked_add(b.len()))
         .ok_or("assets exceed render budget")?;
     if size > limit {
-        return Err(
-            "Os modelos e texturas excedem o limite de 32 MB para renderizar no navegador.".into(),
-        );
+        return Err(format!(
+            "Os modelos e texturas excedem o limite de {limit} bytes para renderizar neste aparelho."
+        ));
     }
     Ok(files
         .iter()

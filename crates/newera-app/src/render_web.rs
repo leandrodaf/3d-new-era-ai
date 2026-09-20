@@ -6,6 +6,55 @@ use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 
 type Outcome = crate::render_job::ByteOutcome;
 
+pub(crate) fn budget() -> crate::render_job::BrowserBudget {
+    let navigator = get(&js_sys::global(), "navigator");
+    crate::render_job::BrowserBudget::for_device(
+        get(&navigator, "deviceMemory").as_f64(),
+        get(&navigator, "hardwareConcurrency").as_f64(),
+    )
+}
+
+fn bound_request(
+    args: &mut serde_json::Value,
+    budget: crate::render_job::BrowserBudget,
+) -> Result<(), String> {
+    let (w, h) = if args["kind"] == "mcp" {
+        let defaults = if args["name"] == "render_plan" {
+            [640, 480]
+        } else {
+            [480, 360]
+        };
+        let params = args
+            .get_mut("args")
+            .and_then(serde_json::Value::as_object_mut)
+            .ok_or("invalid render arguments")?;
+        // Preserve each tool's defaults, which also fit small devices.
+        let w = params
+            .entry("w")
+            .or_insert(serde_json::json!(defaults[0]))
+            .as_u64()
+            .ok_or("invalid width")?;
+        let h = params
+            .entry("h")
+            .or_insert(serde_json::json!(defaults[1]))
+            .as_u64()
+            .ok_or("invalid height")?;
+        (w, h)
+    } else {
+        (
+            args["size"][0].as_u64().ok_or("invalid width")?,
+            args["size"][1].as_u64().ok_or("invalid height")?,
+        )
+    };
+    if w == 0 || h == 0 || w.saturating_mul(h) > budget.pixels {
+        return Err(format!(
+            "Reduza a resolução: limite deste aparelho é {} pixels por imagem.",
+            budget.pixels
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) struct Worker {
     handle: web_sys::Worker,
     _message: Closure<dyn FnMut(web_sys::MessageEvent)>,
@@ -30,22 +79,25 @@ fn get(object: &JsValue, key: &str) -> JsValue {
 
 impl Worker {
     pub(crate) fn start(
-        request: &serde_json::Value,
+        mut request: serde_json::Value,
         report: Arc<Report>,
         result: Outcome,
         ctx: egui::Context,
     ) -> Result<Self, String> {
         let permit = Permit::acquire()?;
+        let budget = budget();
+        bound_request(&mut request, budget)?;
+        request["render_budget"] = serde_json::json!(budget);
         let request = request.to_string();
-        if request.len() > 16 * 1024 * 1024 {
+        if request.len() > budget.scene_bytes {
             return Err("Cena excede o limite de renderização do navegador.".into());
         }
         let assets = js_sys::Array::new();
-        for (path, bytes) in newera_core::vfs::snapshot(32 * 1024 * 1024)? {
-            assets.push(&js_sys::Array::of2(
-                &path.into(),
-                &js_sys::Uint8Array::from(bytes.as_ref()),
-            ));
+        let transfers = js_sys::Array::new();
+        for (path, bytes) in newera_core::vfs::snapshot(budget.asset_bytes)? {
+            let bytes = js_sys::Uint8Array::from(bytes.as_ref());
+            transfers.push(&bytes.buffer());
+            assets.push(&js_sys::Array::of2(&path.into(), &bytes));
         }
         let parts =
             js_sys::Array::of1(&include_str!("../../../web/editor/render-worker.js").into());
@@ -122,7 +174,7 @@ impl Worker {
         set(&data, "assets", &assets)?;
         handle
             .handle
-            .post_message(&data)
+            .post_message_with_transfer(&data, &transfers)
             .map_err(|e| format!("{e:?}"))?;
         Ok(handle)
     }
@@ -148,12 +200,21 @@ pub fn render(request: &str, assets: &JsValue) -> Result<Vec<u8>, String> {
     if web_sys::window().is_some() {
         return Err("Renderização exige um worker.".into());
     }
-    if request.len() > 16 * 1024 * 1024 {
+    let mut budget = budget();
+    if request.len() > budget.scene_bytes {
         return Err("Cena excede o limite de renderização do navegador.".into());
     }
-    let args: serde_json::Value = serde_json::from_str(request).map_err(|e| e.to_string())?;
+    let mut args: serde_json::Value = serde_json::from_str(request).map_err(|e| e.to_string())?;
+    if let Some(requested) = args.get("render_budget") {
+        budget = budget
+            .restricted_by(serde_json::from_value(requested.clone()).map_err(|e| e.to_string())?);
+    }
+    if request.len() > budget.scene_bytes {
+        return Err("Cena excede o limite de renderização deste aparelho.".into());
+    }
+    bound_request(&mut args, budget)?;
     let home: newera_core::Home =
-        serde_json::from_value(args["home"].clone()).map_err(|e| e.to_string())?;
+        serde_json::from_value(args["home"].take()).map_err(|e| e.to_string())?;
     let files = js_sys::Array::from(assets);
     let mut mounted = Vec::new();
     let mut bytes = 0usize;
@@ -163,7 +224,7 @@ pub fn render(request: &str, assets: &JsValue) -> Result<Vec<u8>, String> {
         bytes = bytes
             .checked_add(data.length() as usize)
             .ok_or("Assets exceed render budget")?;
-        if bytes > 32 * 1024 * 1024 {
+        if bytes > budget.asset_bytes {
             return Err("Assets exceed render budget".into());
         }
         mounted.push((
@@ -276,7 +337,7 @@ pub(crate) async fn mcp(
         let doc = document.read();
         serde_json::json!({"kind":"mcp", "home":doc.home(), "assets":doc.asset_dir(), "name":name, "args":args})
     };
-    let _worker = Worker::start(&request, report.clone(), result.clone(), ctx.clone())?;
+    let _worker = Worker::start(request, report.clone(), result.clone(), ctx.clone())?;
     MCP_REPORT.with(|slot| *slot.borrow_mut() = Some(report.clone()));
     ctx.request_repaint();
     let started = web_time::Instant::now();

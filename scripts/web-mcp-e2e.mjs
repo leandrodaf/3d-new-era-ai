@@ -91,6 +91,8 @@ try {
   await send("Page.addScriptToEvaluateOnNewDocument", {source: `
     Object.defineProperty(navigator, 'language', {get: () => 'pt-BR'});
     Object.defineProperty(navigator, 'languages', {get: () => ['pt-BR', 'pt']});
+    Object.defineProperty(navigator, 'deviceMemory', {get: () => 2});
+    Object.defineProperty(navigator, 'hardwareConcurrency', {get: () => 2});
     const NativeSocket=WebSocket;
     window.WebSocket=class extends NativeSocket {
       constructor(...args) {super(...args); window.testRelaySocket=this;}
@@ -218,10 +220,17 @@ try {
       throw new Error(`renders did not use responsive workers: ${audit}`);
     }
     ok("images ran in disposable workers with progress and a responsive page");
+    const oversized = await rpc(mcpUrl, {jsonrpc:'2.0',id:29,method:'tools/call',
+      params:{name:'render_photo',arguments:{w:800,h:600}}});
+    if (!oversized.result?.isError || !JSON.stringify(oversized).includes('307200')
+        || await evaluate('window.renderAudit.workers') !== 4) {
+      throw new Error('small-device budget did not refuse oversized work before starting a worker');
+    }
+    ok('small-device capabilities limit render size before allocating a worker');
     // A busy render must leave both ordinary MCP calls and the page usable.
     // Simulate a worker failure to exercise cleanup and the next render.
     const pendingPhoto = rpc(mcpUrl, {jsonrpc:"2.0",id:30,method:"tools/call",
-      params:{name:"render_photo",arguments:{w:1280,h:960,quality:"best"}}});
+      params:{name:"render_photo",arguments:{w:640,h:480,quality:"best"}}});
     for (let i=0;i<40;i++) {
       if (await evaluate("window.renderAudit.workers > 4")) break;
       await sleep(50);
@@ -245,7 +254,7 @@ try {
     if (!recovered.result?.content?.some(c=>c.type==='image')) throw new Error("worker failure leaked the render budget");
     ok("heavy renders are exclusive; the page/MCP remain responsive and worker failure releases the budget");
     const cancelledPhoto = rpc(mcpUrl, {jsonrpc:"2.0",id:34,method:"tools/call",
-      params:{name:"render_photo",arguments:{w:1280,h:960,quality:"best"}}});
+      params:{name:"render_photo",arguments:{w:640,h:480,quality:"best"}}});
     await frames(4);
     // The render window opens at egui's default (16,16), below its title.
     await send("Input.dispatchMouseEvent", {type:"mouseMoved",x:62,y:113});
@@ -268,7 +277,7 @@ try {
         ground_color:[168,168,152], sky_color:[204,228,252], light_color:[208,208,208], ceiling_light_color:[208,208,208],
         photo:{width:64,height:64}, video:{width:64,frame_rate:2,speed:2}, camera_path:[camera,{...camera,y:100}]
       }};
-      const run = size => new Promise((resolve, reject) => {
+      const run = (size, render_budget) => new Promise((resolve, reject) => {
         const worker = new Worker(url,{type:'module'});
         let progress=0;
         const timer=setTimeout(() => {worker.terminate();reject(new Error('video timeout'));},15000);
@@ -279,16 +288,18 @@ try {
         };
         worker.onerror=error=>{clearTimeout(timer);worker.terminate();reject(error);};
         worker.postMessage({module:new URL('./pkg/newera_editor_web.js',location.href).href,
-          request:JSON.stringify({kind:'video',home,size}),assets:[]});
+          request:JSON.stringify({kind:'video',home,size,render_budget}),assets:[]});
       });
       const video=await run([64,64]);
       const limit=await run([100000,100000]);
+      const restricted=await run([64,64], {pixels:1024,scene_bytes:1048576,asset_bytes:1048576});
       URL.revokeObjectURL(url);
-      return {video,limit};
+      return {video,limit,restricted};
     })()`);
     if (videoAudit?.video?.type !== 'done' || videoAudit.video.progress < 2 ||
         Buffer.from(videoAudit.video.header).subarray(0,4).toString() !== 'RIFF' ||
-        Buffer.from(videoAudit.video.header).subarray(8,12).toString() !== 'AVI ' || videoAudit.limit.type !== 'error') {
+        Buffer.from(videoAudit.video.header).subarray(8,12).toString() !== 'AVI ' || videoAudit.limit.type !== 'error'
+        || videoAudit.restricted.type !== 'error' || !videoAudit.restricted.error.includes('1024')) {
       throw new Error(`video worker failed: ${JSON.stringify(videoAudit)}`);
     }
     ok("video worker produced an AVI with progress and rejected excessive resolution");

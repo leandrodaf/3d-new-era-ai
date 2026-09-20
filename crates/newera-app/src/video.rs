@@ -139,7 +139,7 @@ impl VideoWindow {
         let report = Arc::new(crate::render_job::Report::default());
         let bytes = Arc::new(Mutex::new(None));
         let worker = crate::render_web::Worker::start(
-            &serde_json::json!({
+            serde_json::json!({
                 "kind":"video", "home":home, "assets":doc.asset_dir(), "size":self.size,
             }),
             report.clone(),
@@ -244,11 +244,26 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
             ui.horizontal(|ui| {
                 ui.label(tr("Tamanho"));
                 for size in [[320, 240], [640, 360], [1280, 720], [1920, 1080]] {
-                    ui.selectable_value(&mut window.size, size, format!("{}×{}", size[0], size[1]));
+                    #[cfg(target_arch = "wasm32")]
+                    let enabled = u64::from(size[0]) * u64::from(size[1])
+                        <= crate::render_web::budget().pixels;
+                    #[cfg(not(target_arch = "wasm32"))]
+                    let enabled = true;
+                    ui.add_enabled_ui(enabled, |ui| {
+                        ui.selectable_value(
+                            &mut window.size,
+                            size,
+                            format!("{}×{}", size[0], size[1]),
+                        );
+                    });
                 }
             });
-            if cfg!(target_arch = "wasm32") {
-                ui.weak("Uma tarefa por vez · até 900 quadros · 32 MB · resolução até 1280 × 960");
+            #[cfg(target_arch = "wasm32")]
+            {
+                ui.weak(format!(
+                    "Uma tarefa por vez · até 900 quadros · 32 MB · {} pixels neste aparelho",
+                    crate::render_web::budget().pixels
+                ));
             }
             ui.separator();
             ui.horizontal(|ui| {

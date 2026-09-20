@@ -71,11 +71,10 @@ impl PhotoWindow {
         if self.job.is_some() {
             return Err("Renderização em andamento".into());
         }
-        let max = if cfg!(target_arch = "wasm32") {
-            1_228_800
-        } else {
-            2_073_600
-        };
+        #[cfg(target_arch = "wasm32")]
+        let max = crate::render_web::budget().pixels;
+        #[cfg(not(target_arch = "wasm32"))]
+        let max = 2_073_600;
         if self.size.contains(&0) || u64::from(self.size[0]) * u64::from(self.size[1]) > max {
             return Err("Reduza a resolução para respeitar o limite de memória.".into());
         }
@@ -103,7 +102,7 @@ impl PhotoWindow {
         let slot = Arc::new(Mutex::new(None));
         #[cfg(target_arch = "wasm32")]
         let worker = crate::render_web::Worker::start(
-            &serde_json::json!({
+            serde_json::json!({
                 "kind":"photo", "home":home, "assets":assets, "size":[w,h],
                 "eye":view.eye.to_array(), "target":view.target.to_array(), "fov":view.fov_y,
                 "ortho":view.ortho, "near":view.near, "time":time, "quality":format!("{quality:?}")
@@ -182,7 +181,14 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
         ui.horizontal(|ui| {
             ui.label(crate::i18n::tr("Tamanho"));
             for size in [[640, 480], [800, 600], [1280, 960], [1920, 1080]] {
-                ui.selectable_value(&mut window.size, size, format!("{}×{}", size[0], size[1]));
+                #[cfg(target_arch = "wasm32")]
+                let enabled =
+                    u64::from(size[0]) * u64::from(size[1]) <= crate::render_web::budget().pixels;
+                #[cfg(not(target_arch = "wasm32"))]
+                let enabled = true;
+                ui.add_enabled_ui(enabled, |ui| {
+                    ui.selectable_value(&mut window.size, size, format!("{}×{}", size[0], size[1]));
+                });
             }
         });
         ui.weak(crate::i18n::tr(
@@ -228,8 +234,12 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
         if let Some(error) = &window.error {
             ui.colored_label(ui.visuals().warn_fg_color, error);
         }
-        if cfg!(target_arch = "wasm32") {
-            ui.weak("Uma tarefa por vez · até 1280 × 960 pixels");
+        #[cfg(target_arch = "wasm32")]
+        {
+            ui.weak(format!(
+                "Uma tarefa por vez · até {} pixels neste aparelho",
+                crate::render_web::budget().pixels
+            ));
         }
         if let Some((_, texture, _)) = &window.result {
             let width = ui.available_width();
