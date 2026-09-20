@@ -981,6 +981,7 @@ impl<'g> Importer<'g> {
             kelvin: None,
             beam: None,
             area: None,
+            panel_upward: None,
         });
         let name_style = p
             .obj("nameStyle")

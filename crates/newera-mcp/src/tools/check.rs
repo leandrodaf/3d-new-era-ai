@@ -500,6 +500,7 @@ mod tests {
                     kelvin: None,
                     beam: None,
                     area: None,
+                    panel_upward: None,
                 }),
                 ..newera_core::Furniture::default()
             };

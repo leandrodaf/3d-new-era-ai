@@ -149,6 +149,9 @@ pub struct Light {
     /// Emitting panel facing down, width × depth cm (LED panels and strips).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub area: Option<[f64; 2]>,
+    /// An area emitter faces the ceiling instead of the floor (cove lighting).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub panel_upward: Option<bool>,
 }
 
 /// Override of one material of an imported model.

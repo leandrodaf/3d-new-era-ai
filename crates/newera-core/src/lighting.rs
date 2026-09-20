@@ -81,6 +81,7 @@ impl Light {
             kelvin: Some(kelvin),
             beam: None,
             area: None,
+            panel_upward: None,
         }
     }
 }
@@ -130,8 +131,13 @@ pub enum Distribution {
     Point,
     /// Straight down, halving at `half` degrees off the axis.
     Spot { half: f64 },
-    /// A flat panel facing down, `w` × `d` cm, Lambertian.
-    Area { w: f64, d: f64, angle: f64 },
+    /// A horizontal Lambertian panel, `w` × `d` cm, facing down unless upward.
+    Area {
+        w: f64,
+        d: f64,
+        angle: f64,
+        upward: bool,
+    },
 }
 
 /// One source of light in the home, ready for photometry.
@@ -181,13 +187,23 @@ impl Emitter {
                 let theta = (-dir[2]).clamp(-1.0, 1.0).acos();
                 self.flux / spot_flux_per_candela(half) * spot_profile(theta, half)
             }
-            Distribution::Area { .. } => (self.flux / PI) * (-dir[2]).max(0.0),
+            Distribution::Area { upward, .. } => {
+                (self.flux / PI) * (if upward { dir[2] } else { -dir[2] }).max(0.0)
+            }
         }
     }
 
-    /// Peak intensity, cd (straight down for spots and panels).
+    /// Peak intensity, cd, along the emitting axis.
     pub fn peak(&self) -> f64 {
-        self.intensity([0.0, 0.0, -1.0])
+        self.intensity([
+            0.0,
+            0.0,
+            if matches!(self.distribution, Distribution::Area { upward: true, .. }) {
+                1.0
+            } else {
+                -1.0
+            },
+        ])
     }
 
     /// Luminance of its emitting surface, cd/m², for panels.
@@ -219,7 +235,13 @@ pub fn emitters(home: &Home, preset: &dyn Fn(&Furniture) -> Option<Light>) -> Ve
             let default_source = [crate::LightSource {
                 x: 0.5,
                 y: 0.5,
-                z: if directional { 0.0 } else { 0.5 },
+                z: if light.panel_upward == Some(true) {
+                    1.0
+                } else if directional {
+                    0.0
+                } else {
+                    0.5
+                },
                 color: [255, 255, 255],
                 diameter: None,
             }];
@@ -253,6 +275,7 @@ pub fn emitters(home: &Home, preset: &dyn Fn(&Furniture) -> Option<Light>) -> Ve
                         w,
                         d,
                         angle: piece.angle,
+                        upward: light.panel_upward.unwrap_or(false),
                     },
                     (None, Some(beam)) => Distribution::Spot {
                         half: (beam / 2.0).clamp(1.0, 89.0),
@@ -310,7 +333,7 @@ pub fn illuminance(home: &Home, emitters: &[Emitter], p: [f64; 3], normal: [f64;
     for e in emitters {
         // Panels count as a few points so nearby surfaces see their size.
         let points: Vec<([f64; 3], f64)> = match e.distribution {
-            Distribution::Area { w, d, angle } => {
+            Distribution::Area { w, d, angle, .. } => {
                 let (sin, cos) = angle.to_radians().sin_cos();
                 let n = 3;
                 let mut v = Vec::with_capacity(9);
@@ -697,6 +720,30 @@ mod tests {
         );
         // Facing away: nothing.
         assert!(illuminance(&home, &e, [0.0, 0.0, 100.0], [0.0, 0.0, -1.0]).abs() < 1e-12);
+    }
+
+    #[test]
+    fn upward_panels_light_the_ceiling_and_preserve_flux() {
+        let mut light = Light::led(1000.0, 3000.0, (0.5, 0.5, 1.0));
+        light.area = Some([100.0, 1.0]);
+        light.panel_upward = Some(true);
+        let json = serde_json::to_string(&light).unwrap();
+        let restored: Light = serde_json::from_str(&json).unwrap();
+        let mut home = Home::default();
+        home.furniture.push(piece(1, (0.0, 0.0), 250.0, restored));
+        let lights = emitters(&home, &|_| None);
+        let e = &lights[0];
+        assert!((e.intensity([0.0, 0.0, 1.0]) - 1000.0 / PI).abs() < 1e-6);
+        assert!(e.intensity([0.0, 0.0, -1.0]).abs() < 1e-6);
+        assert!((e.peak() - 1000.0 / PI).abs() < 1e-6);
+        let z = e.position[2];
+        assert!(illuminance(&home, &lights, [0.0, 0.0, z + 50.0], [0.0, 0.0, -1.0]) > 0.0);
+        assert!(illuminance(&home, &lights, [0.0, 0.0, z - 50.0], [0.0, 0.0, 1.0]).abs() < 1e-6);
+        let old = json.replace(",\"panel_upward\":true", "");
+        assert_eq!(
+            serde_json::from_str::<Light>(&old).unwrap().panel_upward,
+            None
+        );
     }
 
     #[test]

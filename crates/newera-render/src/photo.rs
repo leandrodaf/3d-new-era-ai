@@ -10,7 +10,7 @@ use crate::mesh::Mesh;
 use crate::raster::{Images, detail};
 
 /// A light source: a small sphere shining in every direction or as a spot
-/// pointing down, or a flat panel facing down.
+/// pointing down, or an oriented flat panel.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PointLight {
     pub position: Vec3,
@@ -21,7 +21,7 @@ pub struct PointLight {
     /// Spots: angle off straight down where intensity halves, radians; 0
     /// for light in every direction.
     pub half_angle: f32,
-    /// Panels: half extents along the ceiling (normal pointing down).
+    /// Panels: half extents; their cross product is the emitting normal.
     pub panel: Option<(Vec3, Vec3)>,
     /// Geometry this close to the source (its own shade or reflector) doesn't
     /// block it, m.
@@ -31,8 +31,8 @@ pub struct PointLight {
 impl PointLight {
     /// Intensity toward the unit direction `dir` leaving the light.
     fn toward(&self, dir: Vec3) -> Vec3 {
-        if self.panel.is_some() {
-            return self.intensity * (-dir.y).max(0.0);
+        if let Some((u, v)) = self.panel {
+            return self.intensity * u.cross(v).normalize_or_zero().dot(dir).max(0.0);
         }
         if self.half_angle <= 0.0 {
             return self.intensity;
@@ -56,10 +56,12 @@ impl PointLight {
     /// Where a camera ray meets its glowing surface, and the radiance seen.
     fn seen(&self, origin: Vec3, dir: Vec3) -> Option<(f32, Vec3)> {
         if let Some((u, v)) = self.panel {
-            if dir.y >= 0.0 || origin.y <= self.position.y {
+            let normal = u.cross(v).normalize_or_zero();
+            let facing = normal.dot(dir);
+            if facing >= -1e-8 {
                 return None;
             }
-            let t = (self.position.y - origin.y) / dir.y;
+            let t = normal.dot(self.position - origin) / facing;
             let offset = origin + dir * t - self.position;
             let (a, b) = (
                 offset.dot(u) / u.length_squared(),
@@ -907,6 +909,26 @@ fn denoise(pixels: &[(Vec3, Surface)], w: usize, h: usize) -> Vec<Vec3> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn panels_emit_and_are_visible_only_on_their_luminous_side() {
+        for sign in [-1.0, 1.0] {
+            let light = PointLight {
+                position: Vec3::ZERO,
+                intensity: Vec3::ONE,
+                radius: 0.0,
+                half_angle: 0.0,
+                panel: Some((Vec3::X, Vec3::Z * sign)),
+                clearance: 0.01,
+            };
+            let normal = -Vec3::Y * sign;
+            assert!(light.toward(normal).distance(Vec3::ONE) < 1e-6);
+            assert!(light.toward(-normal).length() < 1e-6);
+            assert!(light.seen(normal * 2.0, -normal).is_some());
+            assert!(light.seen(-normal * 2.0, normal).is_none());
+            assert!(light.seen(normal * 2.0 + Vec3::X * 3.0, -normal).is_none());
+        }
+    }
 
     #[test]
     fn white_balance_pulls_an_orange_room_halfway_to_neutral() {

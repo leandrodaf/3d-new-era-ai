@@ -395,7 +395,12 @@ pub fn photo_home(
                 let piece = home.furniture.iter().find(|f| f.id == e.piece);
                 let size = piece.map_or(10.0, |f| f.width.max(f.depth)) as f32 * 0.01;
                 match e.distribution {
-                    newera_core::lighting::Distribution::Area { w, d, angle } => {
+                    newera_core::lighting::Distribution::Area {
+                        w,
+                        d,
+                        angle,
+                        upward,
+                    } => {
                         let (sin, cos) = (angle as f32).to_radians().sin_cos();
                         let (hw, hd) = (w as f32 * 0.005, d as f32 * 0.005);
                         photo::PointLight {
@@ -406,7 +411,7 @@ pub fn photo_home(
                             half_angle: 0.0,
                             panel: Some((
                                 Vec3::new(cos, 0.0, sin) * hw,
-                                Vec3::new(-sin, 0.0, cos) * hd,
+                                Vec3::new(-sin, 0.0, cos) * hd * if upward { -1.0 } else { 1.0 },
                             )),
                             clearance: 0.01,
                         }

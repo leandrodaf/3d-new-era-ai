@@ -234,3 +234,11 @@ Atualização de publicação: o [Publish 35509917158](https://github.com/leandr
 - A causa recebida é acompanhada da última mensagem de panic disponível quando o erro é `unreachable`. Argumentos das ferramentas não são registrados. URLs, tokens identificados, cabeçalhos Bearer e credenciais JSON reconhecíveis são removidos do texto do diagnóstico. O relatório fica na página; não há envio automático para terceiros.
 - Teste JavaScript cobre inicialização, execução, chamadas concorrentes, preservação da primeira falha e remoção de credenciais. Clippy WASM e build release passaram. O E2E passou a verificar o ciclo real das chamadas MCP e a injetar uma falha no Chrome para conferir fase, ferramenta, revisão, build, backend e mensagem de uso.
 - Limite: a leitura estruturada fica disponível à automação da página. Entregar esse diagnóstico pelo relay quando o runtime principal já abortou ainda exige um canal independente do WASM; não considerar essa parte concluída.
+
+## Iluminação da sanca — direção de emissão
+
+- Ao implementar fontes reais nas fitas, foi confirmado que todos os painéis luminosos eram calculados como voltados para baixo. A sanca aberta exige emissão para cima; ligar apenas o fluxo à geometria amarela produziria um resultado incorreto.
+- Implementado `Light.panel_upward`, opcional e compatível com arquivos antigos. Fotometria e renderização usam a mesma direção; painéis existentes continuam voltados para baixo. A fonte padrão de um painel voltado para cima fica na face superior.
+- Defeito adicional corrigido: a interseção da câmera com painéis luminosos testava o lado de visibilidade invertido. Agora usa a normal real da superfície e só mostra sua face luminosa, tanto para cima quanto para baixo.
+- Verificação: 157 testes core e 30 testes de render passaram (um teste opcional core ignorado). Casos novos verificam iluminação do teto sem emissão direta para o piso, intensidade, persistência do parâmetro, leitura de arquivos sem o parâmetro e visibilidade das duas orientações no ray tracer.
+- **Ainda pendente:** gerar automaticamente as fontes nas fitas de sancas/tabicas com comprimento, fluxo e potência coerentes, conectá-las ao levantamento elétrico e atualizar/verificar as sancas da planta. Esta etapa corrige a direção e a visibilidade; não declara a automação das fitas concluída.
