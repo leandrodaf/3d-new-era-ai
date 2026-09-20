@@ -305,10 +305,6 @@ fn heights_overlap(a: &Furniture, b: &Furniture) -> bool {
     a0 < b1 && b0 < a1
 }
 
-fn centroid(polygon: &Polygon<f64>) -> Option<Point2> {
-    geo::Centroid::centroid(polygon).map(|c| Point2::new(c.x(), c.y()))
-}
-
 /// Height of a wall's top above the floor at a plan point.
 fn wall_top_at(wall: &crate::elements::Wall, p: Point2) -> f64 {
     let len = wall.start.distance(wall.end).max(1e-9);
@@ -462,11 +458,9 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
             if area <= MIN_OVERLAP {
                 continue;
             }
-            // Tilted pieces only collide if they are at the same height there.
-            let meet = cross_level
-                || shared.iter().next().and_then(centroid).is_none_or(|at| {
-                    a.underside_at(at) < b.top_at(at) && b.underside_at(at) < a.top_at(at)
-                });
+            // A contact near an edge may be absent at the overlap centroid.
+            let meet =
+                cross_level || (!tilted(a) && !tilted(b)) || crate::solid::boxes_overlap(a, b);
             if !meet {
                 continue;
             }
@@ -516,12 +510,9 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
             if depth <= WALL_TOLERANCE {
                 continue;
             }
-            // Over the shared area, is the piece below the wall top? Tilted
-            // pieces (rafters, roof slopes) are measured right there.
-            let Some(at) = shared.iter().next().and_then(centroid) else {
-                continue;
-            };
-            if piece.underside_at(at) < wall_top_at(wall, at) - 1.0 {
+            if crate::solid::hits_prism(piece, &polygon(outline), 0.0, |at| {
+                wall_top_at(wall, at) - 1.0
+            }) {
                 issues.push(Issue::InWall(piece.id, wall.id));
             }
         }
@@ -813,12 +804,10 @@ fn leaf_hits(
         return false;
     }
     let shared = swing.intersection(footprint);
-    let high_enough = shared
-        .iter()
-        .next()
-        .and_then(centroid)
-        .is_some_and(|at| piece.underside_at(at) >= door.elevation + door.height);
-    shared.unsigned_area() > MIN_OVERLAP && !high_enough
+    shared.unsigned_area() > MIN_OVERLAP
+        && crate::solid::hits_prism(piece, swing, door.elevation + 1.0, |_| {
+            door.elevation + door.height
+        })
 }
 
 /// The pieces of `door`'s storey blocking its leaf or approach, by the rule
@@ -1592,6 +1581,83 @@ mod tilt_tests {
     use crate::elements::Wall;
     use crate::furniture::{Opening, align_to_wall, wall_cuts};
     use crate::ids::WallId;
+
+    fn edge_slope() -> Furniture {
+        Furniture {
+            id: FurnitureId(3),
+            catalog: "box".into(),
+            width: 200.0,
+            depth: 80.0,
+            height: 10.0,
+            elevation: 100.0,
+            roll: 45.0,
+            ..Furniture::default()
+        }
+    }
+
+    #[test]
+    fn tilted_box_collision_at_an_edge_is_not_missed() {
+        let mut home = Home::default();
+        home.furniture = vec![
+            edge_slope(),
+            Furniture {
+                id: FurnitureId(4),
+                catalog: "box".into(),
+                width: 100.0,
+                depth: 80.0,
+                height: 90.0,
+                ..Furniture::default()
+            },
+        ];
+        assert!(
+            check_layout(&home).iter().any(|i| matches!(
+                i,
+                Issue::Overlap {
+                    a: FurnitureId(3),
+                    b: FurnitureId(4),
+                    ..
+                }
+            )),
+            "{:?}",
+            check_layout(&home)
+        );
+    }
+
+    #[test]
+    fn tilted_wall_collision_at_an_edge_is_not_missed() {
+        let mut home = Home::default();
+        let mut wall = Wall::new(WallId(1), Point2::new(-100.0, 0.0), Point2::new(100.0, 0.0));
+        wall.height = 90.0;
+        wall.thickness = 20.0;
+        home.walls.push(wall);
+        home.furniture.push(edge_slope());
+        assert!(
+            check_layout(&home).contains(&Issue::InWall(FurnitureId(3), WallId(1))),
+            "{:?}",
+            check_layout(&home)
+        );
+    }
+
+    #[test]
+    fn tilted_door_collision_at_an_edge_is_not_missed() {
+        let door = Furniture {
+            height: 90.0,
+            ..Furniture::default()
+        };
+        let slope = edge_slope();
+        let region = polygon(&[
+            Point2::new(-50.0, -40.0),
+            Point2::new(50.0, -40.0),
+            Point2::new(50.0, 40.0),
+            Point2::new(-50.0, 40.0),
+        ]);
+        assert!(leaf_hits(
+            &door,
+            &region,
+            &slope,
+            &polygon(&slope.projected_footprint())
+        ));
+    }
 
     #[test]
     fn openings_fit_sloping_walls_and_raised_slopes_do_not_collide() {

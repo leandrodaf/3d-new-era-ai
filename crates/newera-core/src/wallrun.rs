@@ -183,49 +183,9 @@ pub fn wall_run(
                 id: top.id,
                 catalog: piece.catalog.clone(),
             };
-            let Some(whole) = clip(&piece.projected_footprint(), block.clone()) else {
-                continue;
-            };
-            if piece.pitch == 0.0 && piece.roll == 0.0 {
-                obstacles.push(whole);
-                continue;
-            }
-            // A tilted piece (a roof panel, a rafter) only blocks where its
-            // underside comes down into the band, sampled at the band's middle.
-            let mid = f64::midpoint(b0, b1);
-            let lower = |a: f64| {
-                let p = Point2::new(
-                    w.start.x + a * u.0 + mid * n.0,
-                    w.start.y + a * u.1 + mid * n.1,
-                );
-                piece.underside_at(p) < z.1 - 0.5
-            };
-            // Every 2 cm along the run; a stretch is at most a few meters.
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let steps = ((whole.to - whole.from) / 2.0).ceil().max(1.0) as usize;
-            let mut start: Option<f64> = None;
-            for i in 0..=steps {
-                #[allow(clippy::cast_precision_loss)]
-                let a = whole.from + (whole.to - whole.from) * i as f64 / steps as f64;
-                match (lower(a), start) {
-                    (true, None) => start = Some(a),
-                    (false, Some(s)) => {
-                        obstacles.push(RunObstacle {
-                            from: s,
-                            to: a,
-                            block: block.clone(),
-                        });
-                        start = None;
-                    }
-                    _ => {}
-                }
-            }
-            if let Some(s) = start {
-                obstacles.push(RunObstacle {
-                    from: s,
-                    to: whole.to,
-                    block,
-                });
+            let footprint = piece.footprint_in_band(z.0 + 0.5, z.1 - 0.5);
+            if footprint.len() >= 3 {
+                obstacles.extend(clip(&footprint, block));
             }
         }
     }
@@ -261,6 +221,56 @@ mod tests {
         w.thickness = 15.0;
         w.height = 260.0;
         w
+    }
+
+    #[test]
+    fn tilted_run_endpoint_is_not_rounded_to_a_two_centimeter_probe() {
+        let mut home = Home::default();
+        home.walls = vec![wall(1, (0.0, 0.0), (400.0, 0.0))];
+        home.furniture.push(Furniture {
+            id: FurnitureId(10),
+            width: 200.0,
+            depth: 60.0,
+            height: 10.0,
+            elevation: 100.0,
+            roll: 45.0,
+            position: Point2::new(200.0, 40.0),
+            ..Furniture::default()
+        });
+        let run = wall_run(&home, WallId(1), 1.0, 60.0, (0.0, 90.0), &|_| false).unwrap();
+        let expected = 200.0 + 89.5 - 105.0 + 5.0 * 2.0_f64.sqrt();
+        assert_eq!(run.obstacles.len(), 1);
+        // Boolean polygon clipping quantizes coordinates at micrometer scale.
+        assert!((run.obstacles[0].to - expected).abs() < 1e-4, "{run:?}");
+    }
+
+    #[test]
+    fn tilted_obstacles_use_the_full_depth_and_both_height_limits() {
+        let mut home = Home::default();
+        home.walls = vec![wall(1, (0.0, 0.0), (400.0, 0.0))];
+        home.furniture = vec![Furniture {
+            id: FurnitureId(10),
+            catalog: "box".into(),
+            position: Point2::new(200.0, 40.0),
+            width: 100.0,
+            depth: 100.0,
+            height: 10.0,
+            elevation: 110.0,
+            pitch: 45.0,
+            ..Furniture::default()
+        }];
+        // At the band's center the underside is above the cabinet, but the
+        // front edge descends into it. No center-only probe can detect this.
+        let run = wall_run(&home, WallId(1), 1.0, 60.0, (0.0, 90.0), &|_| false).unwrap();
+        assert_eq!(run.obstacles.len(), 1, "edge contact: {run:?}");
+        assert!((run.obstacles[0].from - 150.0).abs() < 1e-6);
+        assert!((run.obstacles[0].to - 250.0).abs() < 1e-6);
+        // The panel reaches the height band elsewhere, but inside this run
+        // it is entirely BELOW the requested upper cabinets.
+        home.furniture[0].elevation = 0.0;
+        home.furniture[0].depth = 400.0;
+        let upper = wall_run(&home, WallId(1), 1.0, 60.0, (90.0, 150.0), &|_| false).unwrap();
+        assert!(upper.obstacles.is_empty(), "below band: {upper:?}");
     }
 
     #[test]

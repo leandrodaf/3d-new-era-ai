@@ -560,3 +560,31 @@ Atualização de publicação: o [Publish 35509917158](https://github.com/leandr
 
 - Build web release e E2E completo no Chrome aprovados com a geometria atualizada: imagens, vídeo de teto inclinado, menu de vídeo, progresso/responsividade, cancelamento, limites, edição posterior, persistência/recuperação, assets, reconexão e trap WASM. Logs `/tmp/newera-solid-web-build.log` e `/tmp/newera-solid-e2e.log`. Nenhuma alteração da planta demonstrativa nesta entrega.
 - A correção de cache `18aeae4` concluiu com sucesso tanto o CI `35535042036` (incluindo Linux/macOS/Windows e web) quanto o Publish `35535042051`. O acesso MCP de documento foi tentado novamente: sem sessões conectadas disponíveis; isso não impede validação pelo relay local, mas não comprova atualização da aba do usuário.
+
+## Colisões nas bordas e faixas completas de marcenaria
+
+- **Reproduzido antes da correção:** três testes retornavam ausência de colisão para uma caixa inclinada que penetrava outro móvel, uma parede e a região de abertura de uma porta somente perto da borda. Um quarto teste não encontrava o obstáculo na frente da faixa de marcenaria porque o centro da profundidade permanecia livre. Logs `/tmp/newera-solid-edges-before.log` e `/tmp/newera-band-before.log`.
+- **Corrigido:** teste entre caixas transformadas por eixos separadores, incluindo normais das faces e produtos cruzados das arestas; contato sem penetração não gera colisão. Paredes e regiões de porta são trianguladas e extrudadas para testar o volume inteiro, preservando contornos côncavos e vazios. Mantidas as tolerâncias e classificações preexistentes.
+- **Corrigido:** a faixa de marcenaria usa a projeção convexa da caixa recortada pelos dois planos de altura. Examina toda a profundidade e elimina amostras a cada 2 cm; não bloqueia uma faixa superior por uma peça que passa inteiramente abaixo dela naquele trecho.
+- **Regressões:** contatos nas bordas, painéis paralelos separados, contato tangente, pequena penetração, giro/espelhamento, concavidade e furo, folga superior/inferior, topo inclinado e extremidade da faixa calculada independentemente. O clipping booleano da biblioteca quantiza coordenadas: a tolerância numérica do teste de extremidade foi ajustada para 0,0001 cm após observar diferença de 0,0000076 cm, mantendo a prova de eliminação da grade de 2 cm.
+- **Limites preservados e a revisar:** os volumes continuam sendo as caixas declaradas, não os triângulos de modelos importados nem recortes internos dos perfis. A exclusão de tapetes/peças finas ainda consulta a espessura original em alguns consumidores; por inspeção, isso pode excluir painéis finos inclinados e requer regressão própria. Perfis de paredes curvas ainda usam a referência longitudinal existente; não declarar uma validação exata da superfície curva.
+
+## Encerramento solicitado e próxima retomada
+
+O usuário pediu concluir a correção em curso, commitar, criar uma nova release e encerrar a execução. A release 1.5.0 consolida as entregas desde 1.4.3; não representa o encerramento de todas as oportunidades desta auditoria. Os commits `2a1d89a` e anteriores já tiveram CI/Publish aprovados (`35535383909` / `35535383896` para o último).
+
+Pendências para a próxima execução, sem iniciar outra frente agora:
+
+- IDs estáveis de regras de ergonomia ainda derivados parcialmente de mensagens; a separação das aceitações agrupadas foi corrigida, mas a migração completa permanece.
+- Relações automáticas entre cama/cabeceira/criados/luminárias/tapete e propostas conjuntas que preservem circulação; propagação de recortes, apoios e folgas de instalação dos eletrodomésticos.
+- Operação real de folhas de janela, ventilação efetiva e parâmetros de fabricantes; caixas versus geometria real, exceções de peças finas inclinadas e perfis de paredes curvas citados acima.
+- Ancoragem automática de forros/luminárias, além das superfícies de teto compartilhadas; geração automática de vistas, cortes, cotas e checklist de apresentação.
+- Orçamento agregado de geometria/GPU, preparação inicial assíncrona de cenas/snapshots, armazenamento de projetos acima do limite atual e estimativa das fases de preparação/PNG.
+- Revisão visual final do projeto demonstrativo, decisões ainda abertas de ventilação/gás, correção física do canto morto da cozinha **por último**, substituição de `web/demo.newera` e confirmação no documento online. A cópia revisada continua em `docs/projects/upper-west-side-revisao.newera`; o demo distribuído ainda é o original.
+- Confirmar versão/comportamento no domínio público e inventário de implantação se ainda necessário. A release dispara o fluxo existente de deploy do relay por tag; não requer CI executando dentro da VPS.
+
+Esta lista orienta a retomada e não substitui a conferência de aceite de todas as linhas históricas do arquivo antes de declarar o objetivo de 100% concluído.
+
+Validação para fechamento da 1.5.0: 187 testes do núcleo, 30 de marcenaria, 121 MCP e 47 do renderizador passaram (385; três opcionais ignorados). Clippy nativo em todos os targets dos quatro pacotes aprovado; Clippy WASM do app/editor e build web release 1.5.0 aprovados. Os 16 pacotes do workspace declaram 1.5.0, e os comandos com `--locked` aceitaram o lockfile. Notas extraídas por `scripts/release-notes.sh v1.5.0`. Logs `/tmp/newera-volumes-release-tests.log`, `/tmp/newera-volumes-clippy.log`, `/tmp/newera-volumes-wasm.log` e `/tmp/newera-volumes-web-build.log`.
+
+E2E completo no Chrome aprovado na versão 1.5.0, incluindo imagens, vídeo pelo worker/menu, progresso, limites, cancelamento, edição posterior, backup/recuperação, assets, reconexão e falha WASM. Log `/tmp/newera-volumes-e2e.log`. A correção em curso está encerrada; a continuidade do objetivo de 100% fica suspensa por solicitação do usuário após a publicação da release.
