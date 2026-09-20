@@ -1,0 +1,2692 @@
+{
+  "annotations": {
+    "description": "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first; one whose anchor died with a deleted piece is tied again to what it touches now, or else released (no anchor) instead of staying stale. q=<text> searches label text on every storey; q=re:<pattern> by a regex (`re:^\\[\\d+\\]$` finds index codes). Set any of dims (engineering dimension chains; auto_dimensions in the project JSON), refs (room reference schedule with tags; references — a tag, once given, stays with its piece: new pieces take the next free number and removed ones leave a gap, so a print and the plan a week later agree; renumber=true numbers them again in reading order), details (brand/model/link in refs; reference_details), legend (symbol legend with counts): a switch answers with the modes, changed, and what it shows — chains [[from,to,cm]] for dims, symbols {discipline:[[name,count]]} for legend — not the schedule; refs=true, or no switch at all, returns {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. bake=true turns the automatic chains into editable dimensions (ids returned). Give pieces brand/model/url via update.",
+    "inputSchema": {
+      "properties": {
+        "anchor": {
+          "description": "Tie every straight dimension to what its ends touch right now, so from here on they follow the drawing. Run it while the numbers are right",
+          "type": "boolean"
+        },
+        "bake": {
+          "description": "Convert the automatic dimension chains into editable dimensions",
+          "type": "boolean"
+        },
+        "details": {
+          "description": "Include brand, model and link in references (`reference_details`)",
+          "type": "boolean"
+        },
+        "dims": {
+          "description": "Show engineering dimension chains (`auto_dimensions` in the project JSON)",
+          "type": "boolean"
+        },
+        "legend": {
+          "description": "Legend of electrical/plumbing symbols with counts",
+          "type": "boolean"
+        },
+        "q": {
+          "description": "Search label text, accent- and case-insensitive, e.g. `porta`; or `re:<pattern>` for a regular expression",
+          "type": "string"
+        },
+        "refs": {
+          "description": "Show the room reference schedule and tags (`references` in the JSON)",
+          "type": "boolean"
+        },
+        "renumber": {
+          "description": "Number the schedule again in reading order, closing the gaps pieces left behind. Numbers are otherwise kept by each piece for good",
+          "type": "boolean"
+        },
+        "stale": {
+          "description": "Dimensions and notes that no longer match the drawing: rows [id, written, measured, against, text]. A plan of joinery is read off its notes, so one that still says 66,5 over a corridor of 86 is worse than no note at all",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "annotations"
+  },
+  "arrange": {
+    "description": "Arrange elements in one undo step. array {ids,n,dx,dy,dz} adds n copies stepping by dx/dy/dz cm (rafters, columns); align {ids,axis,edge:low|middle|high,value} lines pieces up by an edge — backs on one line, fronts on another — instead of by centers you work out yourself; distribute {ids,axis,gap?} sets them side by side in the order given, from where the first one is (a run of joinery); flip {ids} turns a piece back to front, rebuilding what is inside it (mirror only swaps left and right and leaves the front where it was); rotate {ids,angle clockwise,about?,copy?}; mirror {ids,a,b,copy?} across the line a-b; group {ids,name?} joins pieces into one box that moves/hides together, ungroup {ids:[group]}; front/back {ids} draws rooms or pieces on top/underneath (pool over deck, rug under sofa). Returns new ids.",
+    "inputSchema": {
+      "$defs": {
+        "Point2": {
+          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "properties": {
+        "a": {
+          "$ref": "#/$defs/Point2",
+          "description": "mirror: two points of the mirror line"
+        },
+        "about": {
+          "$ref": "#/$defs/Point2",
+          "description": "rotate: pivot `[x,y]` (default the center of the elements)"
+        },
+        "action": {
+          "description": "`array` (copies in a row), `align`, `distribute`, `flip`, `rotate`, `mirror`, `group`, `ungroup`, `front`, `back`",
+          "type": "string"
+        },
+        "angle": {
+          "description": "rotate: clockwise degrees",
+          "type": "number"
+        },
+        "axis": {
+          "description": "align/distribute: `x` or `y`",
+          "type": "string"
+        },
+        "b": {
+          "$ref": "#/$defs/Point2"
+        },
+        "copy": {
+          "default": false,
+          "description": "rotate/mirror: keep the originals and transform a copy",
+          "type": "boolean"
+        },
+        "dx": {
+          "description": "array: step per copy, cm (dz raises furniture/labels)",
+          "type": "number"
+        },
+        "dy": {
+          "type": "number"
+        },
+        "dz": {
+          "type": "number"
+        },
+        "edge": {
+          "description": "align: which edge to line up — `low` (left, or top of the plan), `middle`, `high` — and `value`, the coordinate to put it on",
+          "type": "string"
+        },
+        "gap": {
+          "description": "distribute: centimeters between one piece and the next (default 0)",
+          "type": "number"
+        },
+        "ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "n": {
+          "description": "array: number of copies (default 1)",
+          "type": "integer"
+        },
+        "name": {
+          "description": "group: its name",
+          "type": "string"
+        },
+        "value": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "action",
+        "ids"
+      ],
+      "type": "object"
+    },
+    "name": "arrange"
+  },
+  "cabinet_run": {
+    "description": "Fill a wall with cabinets sized for it: measures the free stretches between corners, doors, windows, fridge and stove, splits each into even modules (30-90 cm, no useless leftovers; 15-30 cm pull-outs, fillers under 15; the defaults target=60 max=90 sink_w=80 cooktop_w=60 are the nominal widths of EN 1116, which is what appliances and hardware are made for — bespoke widths in between are fine for a run that receives none), drawer unit beside the stove, countertop on base rows, cabinet over the fridge and hood gap on wall rows, wardrobes (hanging rails, shelves, drawers) on tall rows facing bedrooms; p.sink/p.cooktop place those cabinets and cutouts. Replaces the cabinets already there (keep ids stay). Reply {modules:[[id,role,from,w]],removed,notes}; dry plans only. Change one module afterwards with joinery id.",
+    "inputSchema": {
+      "properties": {
+        "dry": {
+          "default": false,
+          "description": "Plan and report only",
+          "type": "boolean"
+        },
+        "from": {
+          "description": "Stretch to fill, cm from the wall start (default: all of it)",
+          "type": "number"
+        },
+        "keep": {
+          "description": "Cabinets on that wall that stay as they are",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "near": {
+          "description": "Or a piece against the wall (`f12`, the fridge): its nearest wall, on its side",
+          "type": "string"
+        },
+        "p": {
+          "additionalProperties": true,
+          "description": "Flat choices, all optional: row base|wall|tall, h, d, elev, t (mm), front, color [r,g,b], handle bar|profile|knob|cava|none (bar), `handle_color` [r,g,b] or \"#hex\", drawers (drawer units), max (widest module, 90), target (60), top (base countertop, true), `top_material`, sink / cooktop (center cm along the wall: cabinet under it and the countertop cutout), `sink_w` (80), `cooktop_w` (60), interior shelves|hanging|wardrobe (tall rows; wardrobe by default facing a bedroom)",
+          "type": "object"
+        },
+        "room": {
+          "description": "Room the fronts face (default: the side toward the middle of the house)",
+          "type": "string"
+        },
+        "to": {
+          "type": "number"
+        },
+        "wall": {
+          "description": "Wall whose face gets the cabinets",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "cabinet_run"
+  },
+  "cameras": {
+    "description": "Points of view. list (default): {active, rows [i,name,x,y,z,yaw,pitch,fov]}. view {i} shows stored view i in the 3D window; aerial returns to the orbit view; store {name?,x?,y?,z?,yaw?,pitch?,fov?,look_at?:[x,y,z]} saves one (missing values from the visitor; yaw 0 looks toward +y/plan bottom, 90 toward -x; pitch positive looks down); delete {i}. cm and degrees.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "`list` (default), `view`, `aerial`, `store`, `delete`",
+          "type": "string"
+        },
+        "fov": {
+          "description": "Horizontal field of view, degrees",
+          "type": "number"
+        },
+        "i": {
+          "description": "Stored view index",
+          "type": "integer"
+        },
+        "look_at": {
+          "description": "For `store`: point `[x,y,z]` cm to look at (sets yaw and pitch)",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "pitch": {
+          "description": "Degrees down",
+          "type": "number"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "yaw": {
+          "type": "number"
+        },
+        "z": {
+          "description": "Eye height cm",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "cameras"
+  },
+  "catalog": {
+    "description": "Find catalog items: rows [id,name,w,d,h] in cm. scope=project lists what this plan already uses instead — catalog id or imported model, with how many there are and one id to copy from, narrowed by q over the entry and its pieces' names — which is how a new piece matches the drawing rather than reintroducing a generic one.",
+    "inputSchema": {
+      "properties": {
+        "cat": {
+          "description": "Category id, e.g. `kitchen`",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Max rows (default 40)",
+          "type": "integer"
+        },
+        "q": {
+          "description": "Search words (Portuguese or English), e.g. `cama casal`",
+          "type": "string"
+        },
+        "scope": {
+          "description": "`project` lists what this plan already uses — imported models included — instead of the catalog, so a new piece can match what is there rather than reintroduce a generic one",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "catalog"
+  },
+  "check_layout": {
+    "description": "Layout problems: above_ceiling, overlap, blocked, in_wall, blocks_door, blocks_window, no_door, unrated_light, turned, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose (a fixed point with nothing to be fixed to: loose in a room, on glass, in a door or window span, hanging under the ceiling, with why); {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under), served (a project point inside a piece on purpose: the water point in the basin, the outlet behind the fridge or set into a cabinet) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocks_window reports nearby tall/elevated solids masking the window, with extent [width,height] cm; compact countertop objects are exempt, so this does not certify sash operation or ventilation. blocks_door includes a 60 cm approach on either face, even for sliding doors and passages. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. unrated_light is a light fixture with neither lumens nor watts — only the relative power an import carries — so the lighting tool's lux for its room are a guess: set its output with update(light={lm or w}). no_door is a bedroom or bathroom (by name) with no door — only open passages, listed, or no way in at all — said once the storey has doors somewhere; a living room, kitchen or balcony left open is not. unclear_front is a group whose parts name fronts on more than one face with no clear winner (candidates, strongest first; placed is the angle's guess every \"in front of\" falls back to) — rename the misleading part or set the angle. Handles weigh most. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. above_ceiling reports luminaires above a flat room ceiling, with ceiling/top/over in cm; sloped or hidden ceilings are not inferred. Every row is an object with the `key` it is accepted by (in_wall {key, piece, wall}, blocks_door {key, door, by}). accept=[[key, reason]] marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed under accepted {key, kind, why, extent} with its reason, kept in the project; accept=[[key, \"\"]] takes it back; orphaned [[key, reason]] lists acceptances whose finding is gone on every storey, and prune=true drops them. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing.",
+    "inputSchema": {
+      "properties": {
+        "accept": {
+          "default": [],
+          "description": "Pairs already looked at: `[[key, reason]]`, key as the report names it (`overlap:f817+f830`, or just `f817+f830`). An empty reason takes it back",
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "areas": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Expected room areas in m² by room name or id, e.g. {\"Sala\": 10.91}; adds rows [room, expected, actual, diff %]",
+          "type": "object"
+        },
+        "level": {
+          "description": "Storey to check: an id like `lv3`, or `all` for every storey that is not a reference layer. Default: the storey being shown",
+          "type": "string"
+        },
+        "prune": {
+          "default": false,
+          "description": "Drop the acceptances listed in `orphaned`, in one undoable step",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "check_layout"
+  },
+  "checkpoint": {
+    "description": "Name where the plan is now, and come back to it. checkpoint {label} remembers this point; revert {label} undoes back down to it, keeping every id — which duplicating a version cannot do, since a copy renumbers. list (default) shows what is remembered and how many changes ago it was. A checkpoint lives with the project and survives saving.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "`list` (default), `checkpoint` (remember here), `revert` (go back)",
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "checkpoint"
+  },
+  "create": {
+    "description": "Create walls (polylines; hs = height per point for gables), rooms (pts, or at=[x,y] to detect from walls), dims (a+b or wall id), labels, roofs (rectangle pts, gable|shed, pitch or ridge_h, eave h, overhang, gables=true closes the ends, skylights [{at,w,d}] cut glazed openings) and solids (pts outline raised by h at elev: slabs/mezzanines of any shape; or profile [[u,z]] swept from a to b: gables, ramps) in one atomic step.",
+    "inputSchema": {
+      "$defs": {
+        "ArrowStyle": {
+          "enum": [
+            "none",
+            "delta",
+            "open",
+            "disc"
+          ],
+          "type": "string"
+        },
+        "DashStyle": {
+          "oneOf": [
+            {
+              "enum": [
+                "solid",
+                "dot",
+                "dash",
+                "dash_dot",
+                "dash_dot_dot"
+              ],
+              "type": "string"
+            },
+            {
+              "const": "custom",
+              "description": "Uses [`Polyline::dash_pattern`]",
+              "type": "string"
+            }
+          ]
+        },
+        "DimSpec": {
+          "properties": {
+            "a": {
+              "$ref": "#/$defs/Point2"
+            },
+            "b": {
+              "$ref": "#/$defs/Point2"
+            },
+            "chain": {
+              "default": false,
+              "description": "With `wall`: one dimension per wall piece and opening along the face",
+              "type": "boolean"
+            },
+            "elev": {
+              "type": "number"
+            },
+            "in3d": {
+              "default": false,
+              "description": "Also draw it in 3D, at `elev` cm, tilted `pitch`° around its line (90 = offset upwards)",
+              "type": "boolean"
+            },
+            "off": {
+              "description": "Offset cm from the measured line (default 40 for walls; a/b: left of a→b is positive)",
+              "type": "number"
+            },
+            "pitch": {
+              "type": "number"
+            },
+            "room": {
+              "description": "Clear width and depth of a room, e.g. `r5` (two dimensions)",
+              "type": "string"
+            },
+            "side": {
+              "description": "`out` (outer face, default for chains), `in` (inner face) or `axis` (default)",
+              "type": "string"
+            },
+            "wall": {
+              "description": "Measure a wall: `side` picks the line, `chain` splits at openings",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "LabelSpec": {
+          "properties": {
+            "angle": {
+              "description": "Clockwise degrees",
+              "type": "number"
+            },
+            "at": {
+              "$ref": "#/$defs/Point2"
+            },
+            "elev": {
+              "description": "Height cm in 3D",
+              "type": "number"
+            },
+            "pitch": {
+              "description": "Show in 3D tilted this much: 0 lying on the floor, 90 standing",
+              "type": "number"
+            },
+            "size": {
+              "description": "Text height cm (default 24)",
+              "type": "number"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "at"
+          ],
+          "type": "object"
+        },
+        "Point2": {
+          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "PolylineSpec": {
+          "properties": {
+            "arrows": {
+              "description": "`[start, end]` arrows: `none`, `delta`, `open`, `disc`",
+              "items": {
+                "$ref": "#/$defs/ArrowStyle"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "closed": {
+              "default": false,
+              "type": "boolean"
+            },
+            "color": {
+              "description": "`[r,g,b]` (default black)",
+              "items": {
+                "type": "integer"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "curved": {
+              "default": false,
+              "description": "Smooth curve through the points",
+              "type": "boolean"
+            },
+            "dash": {
+              "$ref": "#/$defs/DashStyle",
+              "description": "`solid`, `dot`, `dash`, `dash_dot`, `dash_dot_dot`"
+            },
+            "divider": {
+              "default": false,
+              "description": "Room divider: splits an open space into rooms without a wall (dashed)",
+              "type": "boolean"
+            },
+            "pts": {
+              "items": {
+                "$ref": "#/$defs/Point2"
+              },
+              "type": "array"
+            },
+            "t": {
+              "description": "Line width cm (default 1)",
+              "type": "number"
+            }
+          },
+          "required": [
+            "pts"
+          ],
+          "type": "object"
+        },
+        "RoofSpec": {
+          "properties": {
+            "color": {
+              "items": {
+                "type": "integer"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "gables": {
+              "default": false,
+              "description": "Also close the gable ends with sloping walls",
+              "type": "boolean"
+            },
+            "h": {
+              "description": "Eave height above the storey floor, cm (default 250)",
+              "type": "number"
+            },
+            "kind": {
+              "description": "`gable` (two slopes, default; steep = A-frame) or `shed` (one slope rising from the pts[0]→pts[1] side)",
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "overhang": {
+              "description": "Eave and gable overhang, cm (default 30)",
+              "type": "number"
+            },
+            "pitch": {
+              "description": "Slope in degrees (default 30), unless `ridge_h` is given",
+              "type": "number"
+            },
+            "pts": {
+              "description": "Rectangle corners in order; the ridge runs along pts[0]→pts[1]",
+              "items": {
+                "$ref": "#/$defs/Point2"
+              },
+              "type": "array"
+            },
+            "ridge_h": {
+              "description": "Height of the ridge (gable) or high side (shed) above the storey floor, cm",
+              "type": "number"
+            },
+            "skylights": {
+              "description": "Glazed openings cut through the roof: center `at:[x,y]` on the plan, `w` along the ridge and `d` across it (plan size), cm",
+              "items": {
+                "$ref": "#/$defs/SkylightSpec"
+              },
+              "type": "array"
+            },
+            "t": {
+              "description": "Panel thickness cm (default 12)",
+              "type": "number"
+            }
+          },
+          "required": [
+            "pts"
+          ],
+          "type": "object"
+        },
+        "RoomSpec": {
+          "properties": {
+            "at": {
+              "$ref": "#/$defs/Point2",
+              "description": "A point inside a space enclosed by walls (auto-detects the polygon)"
+            },
+            "ceil_mat": {
+              "description": "Ceiling finish",
+              "type": "string"
+            },
+            "floor_mat": {
+              "description": "Floor finish, e.g. `wood` or `tiles #ffffff 60`",
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "pts": {
+              "description": "Floor polygon. Omit and give `at` to detect the room enclosed by walls",
+              "items": {
+                "$ref": "#/$defs/Point2"
+              },
+              "type": "array"
+            },
+            "room_use": {
+              "$ref": "#/$defs/RoomUse",
+              "description": "Declared room program, independent of name; auto restores inference"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "type": "object"
+        },
+        "RoomUse": {
+          "description": "Declared room program, independent of its display name. Auto preserves legacy name/equipment inference; other values are explicit intent",
+          "enum": [
+            "auto",
+            "bedroom",
+            "living",
+            "dining",
+            "kitchen",
+            "bathroom",
+            "laundry",
+            "office",
+            "corridor",
+            "closet",
+            "balcony",
+            "garage",
+            "outdoor",
+            "other"
+          ],
+          "type": "string"
+        },
+        "SkylightSpec": {
+          "properties": {
+            "at": {
+              "$ref": "#/$defs/Point2"
+            },
+            "d": {
+              "type": "number"
+            },
+            "w": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "at"
+          ],
+          "type": "object"
+        },
+        "SolidSpec": {
+          "properties": {
+            "a": {
+              "$ref": "#/$defs/Point2"
+            },
+            "b": {
+              "$ref": "#/$defs/Point2"
+            },
+            "color": {
+              "items": {
+                "type": "integer"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "elev": {
+              "description": "Outline bottom above the floor cm (default 0)",
+              "type": "number"
+            },
+            "h": {
+              "description": "Outline thickness cm (default 15)",
+              "type": "number"
+            },
+            "mat": {
+              "description": "Finish (`wood`, `concrete`, `img:…`)",
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "opacity": {
+              "type": "number"
+            },
+            "profile": {
+              "description": "Instead of `pts`: cross-section `[[u,z],…]` cm swept from `a` to `b`; u runs across the path (for a→b going down the plan, +u is +x), z is the height above the storey floor",
+              "items": {
+                "$ref": "#/$defs/Point2"
+              },
+              "type": "array"
+            },
+            "pts": {
+              "description": "Plan outline `[[x,y],…]` cm",
+              "items": {
+                "$ref": "#/$defs/Point2"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        "WallPath": {
+          "properties": {
+            "arc": {
+              "description": "Arc extent in degrees applied to every segment (positive bulges left)",
+              "type": "number"
+            },
+            "closed": {
+              "default": false,
+              "description": "Join the last point back to the first",
+              "type": "boolean"
+            },
+            "h": {
+              "description": "Height cm (default 250)",
+              "type": "number"
+            },
+            "hs": {
+              "description": "Height cm at each point, for sloping walls and gables (overrides `h`)",
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "pts": {
+              "description": "Polyline vertices; N points make N-1 joined walls",
+              "items": {
+                "$ref": "#/$defs/Point2"
+              },
+              "type": "array"
+            },
+            "sides": {
+              "description": "Finish on both sides, e.g. `#f2efe6` or `subway 20x10`",
+              "type": "string"
+            },
+            "t": {
+              "description": "Thickness cm (default 15)",
+              "type": "number"
+            },
+            "type": {
+              "description": "Wall type id, e.g. `drywall-95`; sets the thickness unless `t` is given",
+              "type": "string"
+            }
+          },
+          "required": [
+            "pts"
+          ],
+          "type": "object"
+        }
+      },
+      "properties": {
+        "dims": {
+          "items": {
+            "$ref": "#/$defs/DimSpec"
+          },
+          "type": "array"
+        },
+        "labels": {
+          "items": {
+            "$ref": "#/$defs/LabelSpec"
+          },
+          "type": "array"
+        },
+        "polylines": {
+          "description": "Free lines: annotations, arrows, electrical or plumbing runs",
+          "items": {
+            "$ref": "#/$defs/PolylineSpec"
+          },
+          "type": "array"
+        },
+        "px": {
+          "default": false,
+          "description": "Every point is given in pixels of the background image (converted with its scale and offset); lengths (t, h, off) stay in cm",
+          "type": "boolean"
+        },
+        "roofs": {
+          "description": "Pitched roofs over a rectangle, built as one group of sloping panels",
+          "items": {
+            "$ref": "#/$defs/RoofSpec"
+          },
+          "type": "array"
+        },
+        "rooms": {
+          "items": {
+            "$ref": "#/$defs/RoomSpec"
+          },
+          "type": "array"
+        },
+        "solids": {
+          "description": "Solids from polygons: plan outlines raised by `h` (slabs, mezzanines, decks with any shape) or cross-sections swept from `a` to `b` (gables, ramps)",
+          "items": {
+            "$ref": "#/$defs/SolidSpec"
+          },
+          "type": "array"
+        },
+        "v": {
+          "description": "Plan version (tab) to write to; switches to it first",
+          "type": "integer"
+        },
+        "walls": {
+          "items": {
+            "$ref": "#/$defs/WallPath"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "name": "create"
+  },
+  "cut_list": {
+    "description": "Cut list of joinery builds, and of groups drawn by hand: each part of a drawn group up to 50 mm thick is a board at the size it was drawn (board is its finish and thickness, no edge banding), the groups are named in drawn and the parts that are not boards in skipped [[id,name]]. Rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. path .csv, or .dxf/.svg (boards laid out on sheets), writes a file. sources names the panel standards behind the boards: MDF is a dry-process fibreboard (NBR 15316), MDP a particleboard of 551 to 750 kg/m³ that holds screws better (NBR 14810).",
+    "inputSchema": {
+      "properties": {
+        "ids": {
+          "description": "Build or drawn group ids (default: every build and drawn group on this storey)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "path": {
+          "description": "Write `.csv` (spreadsheet), `.dxf` (sheets for CNC) or `.svg` (sheets to view)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "cut_list"
+  },
+  "delete": {
+    "description": "Delete elements by id, atomically. Labels left pointing at a deleted piece — about it, or standing on it — are named in the reply as labels_left [[id, text]], since an index code over what is now another piece is found by nobody; labels=true deletes them in the same step.",
+    "inputSchema": {
+      "properties": {
+        "ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "labels": {
+          "description": "Also delete the labels left pointing at the deleted pieces",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ids"
+      ],
+      "type": "object"
+    },
+    "name": "delete"
+  },
+  "disciplines": {
+    "description": "Electrical and plumbing projects over the plan. active (default) reports {active, hidden}. select {d: electrical|plumbing|architecture}: new symbols (catalog cat electrical/plumbing) and lines go there and the rest is dimmed. select architecture shows architecture: it hides the electrical and plumbing projects (show brings one back); select a project shows it with the architecture dimmed. The 3D follows the plan — hidden projects and layers leave it too — unless show_all_3d=true, which makes the 3D show everything. show/hide {d}, where d can also be a layer of the plan — lighting (lamps, spots, LED), appliances (fridge, stove, oven, hood, washer…) or joinery (cabinets, wardrobes, countertops): hidden from the plan, its exports and the 3D. Pieces are in a layer by what they are, from the moment they are placed; update(layer=lighting|appliances|joinery|none) overrides it, and an empty layer goes back to the automatic one. active also reports layers {key:{pieces, hidden}}; get_home gives each piece its plan_layer. quantities: {electrical:[[kind,count,names?]], plumbing:[...], lines_cm:{...}} — grouped by catalog kind (every low outlet together), with the names of the points as the detail.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "`active` (default), `select`, `show`, `hide`, `quantities`",
+          "type": "string"
+        },
+        "d": {
+          "description": "`electrical`, `plumbing` or `architecture`; for show/hide also a plan layer: `lighting`, `appliances` or `joinery`",
+          "type": "string"
+        },
+        "show_all_3d": {
+          "description": "Whether the 3D shows everything (true) or hides what the plan hides (false). Applies with any action",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "disciplines"
+  },
+  "electrical": {
+    "description": "Electrical and telecom project, NBR 5410 and NBR 16264 (residential cabling). Points are the electrical pieces (catalog electrical: outlets, switches, lighting points, panel, network-outlet RJ45, tv-outlet, wifi-point, telecom-panel) plus every fixture that lights. check (default): {points:{kind:count}, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — accept=[[key, reason]] with any action marks findings looked at (they stay listed with the reason and stop counting in pending), an empty reason takes one back, orphaned lists acceptances whose finding is gone and prune=true drops them — a ceiling lighting point per room, general-use outlets per room (kitchens and laundries one per 3.5 m of perimeter, bathrooms one by the basin, living rooms and bedrooms one per 5 m), RJ45 and TV outlets per room as NBR 16264 table 1 recommends (2 RJ45 and 1 TV in bedrooms, living rooms, offices, kitchens and laundries; 3 and 2 in a home theater; 1 and 1 elsewhere; a Wi-Fi point is not an RJ45 outlet), a power outlet by the telecom panel, a distribution and a telecom panel, points without a circuit, lighting and outlets sharing a circuit, a dedicated load not alone. circuits: rows [name, kinds, points, VA, V, A, wire mm², breaker A, DR] and main_breaker {a, phases, load_a_per_phase}: the supply to ask for, by Enel SP's categories on 127/220 V (single-phase up to 12 kW with no 220 V circuit, two-phase up to 20 kW, three-phase up to 75 kW) and the smallest of its fixed entry breakers (50, 63, 80, 100… A) — power by NBR 5410 (lighting per room by area: 100 VA up to 6 m² and 60 VA per whole 4 m² beyond, shared by its points; 600 VA for each of the first three outlets of a kitchen, laundry or bathroom, 100 VA after and elsewhere; dedicated points at their rated power, a shower 7500 W and air conditioning 1500 until written) unless set; the section is the smallest from 1.5 mm² (lighting) or 2.5 (with outlets) whose capacity, corrected for the circuits sharing its conduit on the laid-out runs (table 42, or grouping written on the project), admits a breaker between the current and it; DR on every point of a room with a bath or shower, on kitchen, laundry, service and garage points (lighting at 2.50 m or higher excepted) and on outdoor and balcony outlets; a shower over 4.4 kVA runs on 220 V. check also says lighting and outlets sharing a circuit only when NBR 5410 9.5.3.3 forbids it (over 16 A, or all lighting or all outlets on shared circuits), kitchen and laundry outlets sharing with anything else, equipment over 10 A not alone, and a voltage drop over 4 % to the farthest point of a laid-out run. assign {ids, circuit, va?} — or the whole division at once, circuits {\"C1\": [ids], \"C2\": [ids]} — writes the circuits (and power, and volts 127|220 per point — a 220 V outlet makes its circuit 220 V) on points in one undoable step. voltage {volts?, short_ka?, earthing?: TN-S|TN-C-S|TT}. circuits also gives panel {devices: [[device, count, DIN modules]], modules {used, capacity, capacity_written, spare}, dps, earthing, icn_ka, selective}: one-pole breakers for 127 V circuits and two-pole for 220 V between phases, a two-pole DR per circuit that needs one, the main breaker, the surge protector (DPS class II, a module per phase and neutral) and NBR 5410's spare ways (2 up to 6 circuits, 3 up to 12, 4 up to 30, 15 % above); capacity is the panel's modules (assign modules on it) or a guess from its size, and check says when it does not fit, when the main breaker is under twice the largest partial (selectivity) and when the short-circuit level was assumed. cable {kind: power|data|tv, pts} (with ids or circuit instead of pts, it is a route): draws a run of the electrical project, told apart on the plan (power solid, network dashed, TV dash-dot); check then reports cables_m, the length by kind with a tenth for the drops, and network or TV points no run reaches, or a telecom panel none reaches. route {kind: power|data|tv, ids? | circuit?, via?: ceiling|floor|wall|tape, cat?: cat5e|cat6|cat6a, from?}: lays the run the way it is built, along the walls and inside them (or in the slab), from the nearest panel of its kind to the points (all of the kind when none given), sharing the trunk, and draws it replacing the earlier run of the same circuit and the cables drawn by hand to its points (listed in replaced_drawn); replies {via, suggested, length_m {horizontal, vertical, total}, by_premise_m, bends, materials: [[item, qty, unit]]} — conduit, boxes, wire by conductor, cable, connectors. via=tape lays adhesive flat wiring tape (Eletrofitas) on the surface of walls and ceiling for power only: the model by the load and whether any point is a socket (sockets take the earthed EF18.9.18), refused over its rating or in a bathroom or outdoors, bought as Leroy Merlin kits by piece (codes, prices, splices) with tape {model, tracks, rated_a, load_a, earthed, pieces_m, splices, total_brl, notes}. Without via it takes the cheapest premise that can be built; a via that cannot reach a point (wall with a point out of every wall; ceiling with a low point out of every wall, nowhere to drop) is refused naming the points. Automation (catalog smart-relay, smart-switch, dimmer, presence-sensor, smart-lock): each draws its standby on its circuit (assign standby_w; relay, dimmer and sensor 1 W, smart switch 1.2 by default, from manufacturers' sheets), circuits reports standby_w, and check asks a relay or smart switch for a neutral in its box, a dimmer for the room's lighting to fit its max_w (default 1.1 A at the supply voltage, some 140 W at 127 V) and pass 10 W, a ceiling sensor to be between 2.2 and 3 m (manufacturers install at about 2.4) and to see the room's far corner (about 1.45 × its height), a lock to sit on a door. wifi {ids?, standard?: wifi5|wifi6|wifi6e|wifi7, poe?, band?: 2.4|5|6}: writes the standard and PoE on access points (wifi-point) when given, and replies {access_points: [[id, standard, bands, uplink]], coverage: [[room, band, median dBm, worst dBm (9 places in 10), share at -67 dBm or better, grade]], suggested: {standard, band, points: [[x, y, z, room]], short: [rooms still under -67 dBm]}} — signal estimated from free-space loss, distance and each wall crossed by its material and thickness (a door or window where the path goes through one), per band; the suggestion is the fewest ceiling points (up to four) at room centres covering the rooms people use. check also asks each access point for its data cable, power (an outlet within 1.5 m or poe) and a cable category that carries its uplink (uplink up to 2.5 GbE: Cat 5e; 5 GbE: Cat 6; 10 GbE: Cat 6A). Circuit numbers are drawn next to the points on the plan, and with annotations(legend=true) the load schedule under the legend.",
+    "inputSchema": {
+      "$defs": {
+        "Point2": {
+          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "properties": {
+        "accept": {
+          "default": [],
+          "description": "Findings looked at: `[[key, reason]]`; they stay listed with the reason and stop counting as pending. An empty reason takes one back",
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "action": {
+          "description": "`check` (default): points by kind and what the norm finds; `circuits`: the load schedule; `assign`: put `ids` on `circuit` (empty takes them off), with `va` to set their power; `voltage`: the supply, 127 or 220 V",
+          "type": "string"
+        },
+        "band": {
+          "description": "For `wifi`: the band the suggestion aims at, `2.4`, `5` (default) or `6`",
+          "type": "string"
+        },
+        "bands": {
+          "description": "For `wifi`: the bands they radiate when fewer than their generation's, e.g. `2.4,5` for a dual-band Wi-Fi 7",
+          "type": "string"
+        },
+        "cat": {
+          "description": "For `route` of data: `cat5e`, `cat6` (default) or `cat6a`",
+          "type": "string"
+        },
+        "circuit": {
+          "description": "Circuit name, e.g. `C3`",
+          "type": "string"
+        },
+        "circuits": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "For `assign`: the whole division at once, `{\"C1\": [ids], \"C2\": [ids]}`, in one undoable step",
+          "type": "object"
+        },
+        "earthing": {
+          "description": "For `voltage`: the earthing scheme, `TN-S`, `TN-C-S` or `TT`",
+          "type": "string"
+        },
+        "from": {
+          "description": "For `route`: the panel it starts from; default the nearest of its kind",
+          "type": "string"
+        },
+        "ids": {
+          "default": [],
+          "description": "Point ids for `assign`",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "description": "For `cable`: what the run carries, `power`, `data` or `tv`",
+          "type": "string"
+        },
+        "max_w": {
+          "description": "For `assign` on a dimmer: the most lighting it takes, W",
+          "type": "number"
+        },
+        "modules": {
+          "description": "For `assign` on a distribution panel: the DIN modules it holds",
+          "type": "integer"
+        },
+        "poe": {
+          "description": "For `wifi`: whether `ids` are fed by their data cable (`PoE`)",
+          "type": "boolean"
+        },
+        "prune": {
+          "default": false,
+          "description": "Drop the acceptances listed in `orphaned`",
+          "type": "boolean"
+        },
+        "pts": {
+          "default": [],
+          "description": "For `cable`: the run's points `[[x,y], …]`, cm",
+          "items": {
+            "$ref": "#/$defs/Point2"
+          },
+          "type": "array"
+        },
+        "short_ka": {
+          "description": "For `voltage`: the presumed short-circuit current at the delivery point, kA, as the utility informs it",
+          "type": "number"
+        },
+        "standard": {
+          "description": "For `wifi`: the access points' standard, `wifi5`, `wifi6`, `wifi6e` or `wifi7`, written on `ids`",
+          "type": "string"
+        },
+        "standby_w": {
+          "description": "For `assign` on automation points: standby consumption, W",
+          "type": "number"
+        },
+        "uplink": {
+          "description": "For `wifi`: the access points' wired uplink, Gbps (1, 2.5, 5, 10)",
+          "type": "number"
+        },
+        "va": {
+          "description": "Power per point, VA, instead of the norm's default",
+          "type": "number"
+        },
+        "via": {
+          "description": "For `route`: where the run passes, `ceiling` (slab, dropping in the walls), `floor` or `wall`. Omitted: the cheapest that can be built",
+          "type": "string"
+        },
+        "volts": {
+          "description": "Supply voltage, V; with `assign`, the points' own, 127 or 220",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "electrical"
+  },
+  "embed": {
+    "description": "Embed an item into joinery with an exact fit: a sink bowl or cooktop into a countertop (cutout from the item's size, generic fixture not drawn), an oven, microwave or other appliance into a cabinet niche (doors above and below, boards around it), a TV onto a slatted panel at seated eye level (z = screen center). The item becomes part of the host and moves with it. item: id in the plan, or cat (+w/d/h) for a new one. Errors say what to change (e.g. use w = 61 no armário). Reply {host, item, kind, cutout|niche, x|bottom, notes}.",
+    "inputSchema": {
+      "properties": {
+        "at": {
+          "description": "Center along the host's width from its left end, cm (default: where the item is, or the middle)",
+          "type": "number"
+        },
+        "cat": {
+          "description": "…or a new one from the catalog: `cooktop`, `sink-bowl`, `oven`, `microwave`",
+          "type": "string"
+        },
+        "d": {
+          "type": "number"
+        },
+        "dry": {
+          "default": false,
+          "description": "Check and report only",
+          "type": "boolean"
+        },
+        "h": {
+          "type": "number"
+        },
+        "host": {
+          "description": "Joinery countertop (sink, cooktop) or cabinet (oven, microwave: a niche)",
+          "type": "string"
+        },
+        "item": {
+          "description": "Piece already in the plan to embed (id)…",
+          "type": "string"
+        },
+        "w": {
+          "description": "Size of a new item, cm (a real product's measurements)",
+          "type": "number"
+        },
+        "z": {
+          "description": "Niche floor above the room floor, cm (default: oven 80 and microwave 145 in towers)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "host"
+      ],
+      "type": "object"
+    },
+    "name": "embed"
+  },
+  "ergonomics": {
+    "description": "Ergonomics and habitability review for the people living there. It never blocks anything: it reads the drawing and says what it finds, and the drawing stays the user's — somebody sketching to learn or to see an idea is not stopped by a standard. (occupants, children, elderly, wheelchair, stature cm, city; the people given are kept with the project and used when a later call or a dry run gives none, so a dry run's score is the one this review gives): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen (work triangle, counter heights, Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. Reply {score, score_basis, scope, scores:{architecture,electrical,plumbing}, layout, coverage, capacity, findings:[{sev, place, msg, key, weight, discipline, in_scope, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. scope={electrical:false,plumbing:false} scores architecture only; all findings remain visible, excluded ones weigh zero. The scope is saved for later reviews and dry runs. layout includes geometric checks on the active storey; coverage declares limits. Scores are heuristic, not project completion or certification. weight is what the score would gain if that one went away, so a score that moved can be read; key names the finding for accept. src is the source the finding stands on, empty when it is common practice; resolve it in sources instead of asking. tier is the reliability ladder A obliges (Brazilian standard, municipal code) · B references (foreign standard) · C doctrine · D measured · E survey — and it is why a finding is an error or only a tip. fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap). city, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against a standard the more restrictive one wins — set it once with set_home(city=…) so dry runs and check_layout weigh the same rules. accept=[[key, reason]] marks findings already looked at: they stay in the report with their reason and stop costing score, which is what lets a correct plan reach zero pendencies honestly; accept=[[key, empty]] takes it back. orphaned [[key, reason]] lists acceptances no current finding answers to, on any storey, for these people — the problem was fixed, and would come back already silenced; prune=true drops them.",
+    "inputSchema": {
+      "$defs": {
+        "ReviewScope": {
+          "description": "Disciplines included in the habitability score. Architecture is always included; other findings remain visible even when outside the score",
+          "properties": {
+            "electrical": {
+              "default": true,
+              "type": "boolean"
+            },
+            "plumbing": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "accept": {
+          "default": [],
+          "description": "Findings already analysed: `[[key, reason]]`. They keep showing, with the reason, and stop costing score. An empty reason takes it back",
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "children": {
+          "description": "Of them, children (sleep in single beds or cribs)",
+          "type": "integer"
+        },
+        "city": {
+          "description": "City whose building code applies for this call only, e.g. `sao-paulo`; `set_home(city=…)` keeps it with the project",
+          "type": "string"
+        },
+        "elderly": {
+          "description": "Of them, elderly people",
+          "type": "integer"
+        },
+        "occupants": {
+          "description": "People living in the home (default 2)",
+          "type": "integer"
+        },
+        "prune": {
+          "default": false,
+          "description": "Drop the acceptances listed in `orphaned`, in one undoable step",
+          "type": "boolean"
+        },
+        "scope": {
+          "$ref": "#/$defs/ReviewScope",
+          "description": "Disciplines included in the score. Architecture always counts; excluded findings remain visible. Kept for later reviews and dry runs"
+        },
+        "stature": {
+          "description": "Height of the main cook, cm, to size the countertop (default 165)",
+          "type": "number"
+        },
+        "wheelchair": {
+          "description": "Someone uses a wheelchair: NBR 9050 turning space, doors and reach",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "ergonomics"
+  },
+  "export_plan": {
+    "description": "Export to a file by extension: plan .pdf (A3; scale=50/100 or fit), .svg (true scale) or .png; 3D model .glb or .obj.",
+    "inputSchema": {
+      "properties": {
+        "h": {
+          "type": "integer"
+        },
+        "path": {
+          "description": "Output file: `.pdf`, `.svg`, `.png`, `.glb` or `.obj`",
+          "type": "string"
+        },
+        "scale": {
+          "description": "PDF scale denominator (50 → 1:50); omitted fits the sheet",
+          "type": "number"
+        },
+        "w": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "name": "export_plan"
+  },
+  "feedback": {
+    "description": "Report to the developers what a tool could do better, as it happens: a reply that answered less than was asked, a detour, a wrong conclusion reached before the right one, a fix that would distort the plan, something missing. It is a report the fix will be made from, so give the whole case — a vague note gets fixed in a way that breaks what already works. Every part is required: goal (the task and the situation: pieces, rooms, numbers), tried (the exact call with arguments), got (the literal reply), expected (what was true and how you found out), cost (the workaround, extra calls, wrong conclusion), would_help (the concrete change), must_keep (what works today and must not get worse with that change; \"none known\" is an answer). kind friction|bug|idea, tool. Kept on this machine and, while the user's telemetry is on, sent to the project. Reply {kept, sent}; then carry on with the task.",
+    "inputSchema": {
+      "properties": {
+        "cost": {
+          "default": "",
+          "description": "What it cost: the workaround, the extra calls, the wrong conclusion reached before the right one, the distortion made to the plan",
+          "type": "string"
+        },
+        "expected": {
+          "default": "",
+          "description": "What was true instead, and how you found out (another tool, a render, a probe) — the reference the fix will be checked against",
+          "type": "string"
+        },
+        "goal": {
+          "default": "",
+          "description": "What you were trying to do, and the situation in the plan: the pieces, rooms and numbers involved",
+          "type": "string"
+        },
+        "got": {
+          "default": "",
+          "description": "What came back, literally — the part of the reply that is the proof",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`friction` (it worked, at a cost), `bug` (it answered wrong) or `idea` (something missing)",
+          "type": "string"
+        },
+        "must_keep": {
+          "default": "",
+          "description": "What works today and must keep working with that change — the cases where the current behaviour is right. \"none known\" is an answer",
+          "type": "string"
+        },
+        "tool": {
+          "description": "The tool it is about, e.g. `measure`",
+          "type": "string"
+        },
+        "tried": {
+          "default": "",
+          "description": "The exact call, with its arguments",
+          "type": "string"
+        },
+        "would_help": {
+          "default": "",
+          "description": "The change that would have shortened the way, as concretely as you can: a field, a parameter, a rule",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "feedback"
+  },
+  "fit_roof": {
+    "description": "Fit walls, glass and panels to the roof above them: under an A-frame or shed roof a wall gets a sloping top and is split at the ridge, a panel becomes a triangle or trapezoid (a glass gable with no math); a joinery slatted panel gets its slats cut to the roof line. They keep following the roof when it changes, in the same undo step; off stops that. Reply ok with the count.",
+    "inputSchema": {
+      "properties": {
+        "above": {
+          "description": "Lowest sloping surface that counts, cm above the floor (default 5)",
+          "type": "number"
+        },
+        "ids": {
+          "description": "Walls and pieces (glass, panels) to fit",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "off": {
+          "default": false,
+          "description": "Stop following the roof (heights stay as they are)",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ids"
+      ],
+      "type": "object"
+    },
+    "name": "fit_roof"
+  },
+  "get_home": {
+    "description": "Home state. detail=summary is cheapest. Ask for less instead of reading everything: ids=[…] resolves ids (group parts included), room=<id|name> and rect=[[x0,y0],[x1,y1]] read one place, kinds=[walls|rooms|dims|labels|furniture|polylines] and fields=[…] trim each row, parts=true opens groups, ndjson=true prints one element per line so a long answer can be read a slice at a time. Every piece carries bounds (plan box with angle applied) and faces (the side it opens toward). Ids share one counter per version (w1, r2, f3…) and are never reused, so a new version may start at any number.",
+    "inputSchema": {
+      "properties": {
+        "detail": {
+          "description": "`summary` (counts, bounds, room areas) or `full` (default)",
+          "type": "string"
+        },
+        "fields": {
+          "description": "Keep only these fields of each element; `id` is always kept",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ids": {
+          "description": "Only these ids, group parts included, e.g. `[\"f833\",\"w24\"]`",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kinds": {
+          "description": "Only these kinds: `walls`, `rooms`, `dims`, `labels`, `furniture`, `polylines`",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "level": {
+          "description": "Storey to read: an id like `lv3`, or `all`. Default: the one shown",
+          "type": "string"
+        },
+        "ndjson": {
+          "description": "One element per line (NDJSON) instead of one JSON object, each line tagged with its kind. Long answers stay readable a slice at a time",
+          "type": "boolean"
+        },
+        "parts": {
+          "description": "List what is inside groups instead of only counting the parts",
+          "type": "boolean"
+        },
+        "rect": {
+          "description": "Only what meets this rectangle, `[[x0,y0],[x1,y1]]` cm",
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "room": {
+          "description": "Only what stands inside this room, by id or name",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_home"
+  },
+  "joinery": {
+    "description": "Parametric joinery and interiors; the server computes every board, clearance and rule and replies {id,name,size,parts,hardware,notes}. What a workshop would say — a board nobody stocks, a shelf that will sag, a drawer front too short to grip, a niche shallower than the cooktop standard wants — comes back in notes and is built anyway: the rules advise, they never refuse. Only what has no geometry at all fails, and says why. kind + p: cabinet {w,h,d cm; t 15|18|25 mm; back mm; door hinged|sliding|drawers|none; doors; shelves; drawers; dividers; plinth; cooktop; top_cutout [x,y,w,d] cm from cabinet left-back; color; front finish} · slats {w,h cm; slat, thickness, gap mm; orientation vertical|horizontal; backing; finish} · countertop {length,depth,height,thickness cm; material; support none|legs|brackets; cutouts [{kind sink|cooktop|grommet, x, w?, d?}]} · cove {room or pts; type open|closed|inverted; ceiling, width, drop, slot cm; led} · shadow_gap {room or pts; ceiling, gap, depth cm; led} · sofa {length,depth,seat,back cm; arms straight|rounded|none; modules; color}. Place with at|wall(+along), angle, elev. Change a build: id + p with only new values (e.g. {\"shelves\":3}); a new size keeps its back where it was (anchor back|front|left|right|bottom|top|+x|-x|+y|-y|center). dry=true validates only.",
+    "inputSchema": {
+      "$defs": {
+        "Point2": {
+          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "properties": {
+        "along": {
+          "type": "number"
+        },
+        "anchor": {
+          "description": "Only check and report, create nothing. Changing a build's size: the face that stays where it is — `back` (default: joinery stands against a wall), `front`, `left`, `right`, `bottom`, `top` or a plan side `+x` `-x` `+y` `-y`; `center` grows around the middle",
+          "type": "string"
+        },
+        "angle": {
+          "description": "Clockwise degrees; bottom above the floor, cm (wall cabinets)",
+          "type": "number"
+        },
+        "at": {
+          "$ref": "#/$defs/Point2",
+          "description": "Center on the plan (default: 0,0), or `wall` (+`along` cm) to back it onto a wall"
+        },
+        "dry": {
+          "default": false,
+          "type": "boolean"
+        },
+        "elev": {
+          "type": "number"
+        },
+        "id": {
+          "description": "Or an existing build's group id: `p` holds only what changes",
+          "type": "string"
+        },
+        "kind": {
+          "description": "New build: `cabinet`, `slats`, `countertop`, `cove`, `shadow_gap` or `sofa`",
+          "type": "string"
+        },
+        "p": {
+          "additionalProperties": true,
+          "description": "Parameters (flat; everything has a default), see the tool description",
+          "type": "object"
+        },
+        "room": {
+          "description": "`cove`/`shadow_gap`: room id whose outline to follow",
+          "type": "string"
+        },
+        "wall": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "joinery"
+  },
+  "levels": {
+    "description": "Storeys. list (default): rows [id,name,elev,h,selected,layout_index,viewable,reference]. add {name?,h?,elev?} adds one on top (or at elev cm) and selects it; select {id}; delete {id} removes it and its content. update {id, elev?|h?|name?|reference?}: elev raises a storey with its walls, floors and openings (houses on stilts); reference=true marks it a tracing layer (imported plan, older version) that checks and ergonomics skip, which is what you want when two storeys share an elevation. Other tools act on the selected storey.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "`list` (default), `add`, `select`, `update`, `delete`",
+          "type": "string"
+        },
+        "elev": {
+          "description": "Floor elevation cm for `add` and `update` (e.g. a house on stilts)",
+          "type": "number"
+        },
+        "h": {
+          "description": "Storey height cm for `add` and `update`",
+          "type": "number"
+        },
+        "id": {
+          "description": "Level id, e.g. `lv3`",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "reference": {
+          "description": "Mark the storey as a reference layer: a traced plan, a scan, an earlier version. Its content is drawing, not building, so layout checks and ergonomics leave it alone even when it sits at the same elevation as the storey being designed",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "levels"
+  },
+  "lighting": {
+    "description": "Lighting design by photometry: every fixture's flux (lm, or W × lamp efficacy), color temperature and distribution (bulb, spot beam, LED panel/strip) lights the work plane by the inverse-square cosine law, walls casting shadows, plus interreflection (split flux). Reply rooms [[id,name,m²,avg lx,min lx,uniformity,reference lx,fixtures,W/m²,verdict]] against ABNT NBR ISO/CIE 8995-1 residential references. fill=<fixture> with room places a verified grid reaching the reference (or lux). Set a piece's light with place/update light {lm|w,lamp,k,beam,area}.",
+    "inputSchema": {
+      "properties": {
+        "fill": {
+          "description": "Fill `room` with a grid of this fixture until it reaches the lux wanted: `downlight`, `led-panel`, `light-ceiling`, `pendant`",
+          "type": "string"
+        },
+        "lux": {
+          "description": "Lux wanted instead of the room's reference",
+          "type": "number"
+        },
+        "plane": {
+          "description": "Work plane height cm (default 75)",
+          "type": "number"
+        },
+        "room": {
+          "description": "Room id (default: every room of the current storey)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "lighting"
+  },
+  "materials": {
+    "description": "Wall types [id,name,t] (drywall, masonry, concrete…) and finish patterns [key,label,color,tile].",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "materials"
+  },
+  "measure": {
+    "description": "Tape measure over the plan, in cm. from=<id> alone: free floor on all four sides, {clear:{\"+y\":[cm,id,name]}} — dirs picks sides (+x -x +y -y, or front/back/left/right of the piece). from+to (ids or [x,y]): the distance between them, {cm}, or the gap along axis. axis+at: what a straight probe runs into, {spans:[[from,to,id,name]]} with id null for free floor — the answer to \"how wide is the corridor here, and between what\". Add gap=<cm to keep free> and grow=<id> and it also answers how big that piece can be along the axis before the gap is broken, and what stops it there: {fit:{free,max,blocked_by}} — the question a layout decision actually ends in, without trying a size and undoing it. z limits the height band that counts (default 0-200).",
+    "inputSchema": {
+      "$defs": {
+        "Spot": {
+          "anyOf": [
+            {
+              "description": "`[x, y]` in cm",
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            {
+              "description": "An element id, e.g. `f828` or `w24`",
+              "type": "string"
+            }
+          ],
+          "description": "A point in the plan, or the id of something already drawn"
+        }
+      },
+      "properties": {
+        "at": {
+          "description": "Probe line: with `axis`, the other axis' coordinate. Reports every stretch a straight line crosses, free floor and solids alike",
+          "type": "number"
+        },
+        "axis": {
+          "description": "Restrict to one axis, `x` or `y`. Between two boxes this is the gap along that axis (negative when they overlap)",
+          "type": "string"
+        },
+        "dirs": {
+          "description": "Sides to measure free floor on: `+x`, `-x`, `+y`, `-y`, or, relative to the piece, `front`, `back`, `left`, `right`",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "from": {
+          "$ref": "#/$defs/Spot",
+          "description": "What to measure from: an id or `[x,y]`. Alone, reports the free floor on all four sides of that piece. Openings instead report wall-axis spans, distances to wall ends and neighboring openings; no floor clearances"
+        },
+        "gap": {
+          "description": "With a probe: how much free floor has to be left along it, cm",
+          "type": "number"
+        },
+        "grow": {
+          "description": "With a probe and `gap`: the piece that would grow. The answer says how big it can be along the axis and what stops it there",
+          "type": "string"
+        },
+        "range": {
+          "description": "Limits of the probe along `axis`, `[from, to]` cm. Default: the plan",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "to": {
+          "$ref": "#/$defs/Spot",
+          "description": "What to measure to: an id or `[x,y]`"
+        },
+        "z": {
+          "description": "Height band that counts, `[z0, z1]` cm above this storey's floor. Default `[0, 200]`: what a person walking through meets",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "name": "measure"
+  },
+  "merge_walls": {
+    "description": "Join walls that run along the same line into a single wall: the wall a partition interrupted, a stretch imported as many segments, the same wall drawn twice. The longest one keeps its id and its build (thickness, height, type, finishes) and spans them all; the others are deleted, doors and windows stay where they are, and a gap between them is closed. Straight walls on one storey whose centerlines run inside one another; the reply names the id that remains.",
+    "inputSchema": {
+      "properties": {
+        "ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "ids"
+      ],
+      "type": "object"
+    },
+    "name": "merge_walls"
+  },
+  "move": {
+    "description": "Move elements by dx,dy cm, or to=[x,y]: the first id (a piece or a label) goes there and the rest keep their offsets. dry=true answers what it would do without writing anything, dry=\"summary\" answers it short; see `update`.",
+    "inputSchema": {
+      "$defs": {
+        "Dry": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Runs an edit against a copy of the plan and reports what it would do. Trying a size used to mean applying it, reviewing, and undoing — a round trip that showed in the user's window and burned a revision each time. The copy has no history and is thrown away, so nothing of that happens. How much of a dry run to answer with. `true` answers with everything it would change; `\"summary\"` answers with the decision — how many pieces move, which roots, the clearances, the findings and the score — because a group that rebuilds lists ninety-seven parts for a choice that fits in five lines"
+        },
+        "Point2": {
+          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "properties": {
+        "dry": {
+          "$ref": "#/$defs/Dry",
+          "description": "Try it without applying; see `update`"
+        },
+        "dx": {
+          "default": 0.0,
+          "description": "Shift in x, cm (with `dy`)",
+          "type": "number"
+        },
+        "dy": {
+          "default": 0.0,
+          "description": "Shift in y, cm (with `dx`)",
+          "type": "number"
+        },
+        "ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "joined": {
+          "description": "Drag endpoints of walls joined to moved walls (default true)",
+          "type": "boolean"
+        },
+        "to": {
+          "$ref": "#/$defs/Point2",
+          "description": "Instead of dx/dy: where the first id goes, [x,y] as reads give it (a piece's or a label's center); the others keep their offsets"
+        }
+      },
+      "required": [
+        "ids"
+      ],
+      "type": "object"
+    },
+    "name": "move"
+  },
+  "new_home": {
+    "description": "Start a new empty project.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "new_home"
+  },
+  "open_home": {
+    "description": "Open a project (.newera) or import a Sweet Home 3D file (.sh3d), replacing the current one.",
+    "inputSchema": {
+      "properties": {
+        "path": {
+          "description": "Project file (`.newera`). Optional for save when already saved once",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "open_home"
+  },
+  "place": {
+    "description": "Place catalog items, or copy=<id> of a piece already in the project (its model — even one embedded from an old import —, finish and parts, the id catalog(scope=project) gives): at=[x,y] center (doors/windows near a wall snap into it; into=[x,y] picks the swing side), or wall=id (+along cm) to put doors/windows in a wall or furniture against it. Sizes w/d/h override defaults; pitch/roll tilt; angle clockwise degrees (0: front faces +y, down the plan; back/headboard toward -y); mat finish (wood, marble, img:…; 'img:facade.png fit' stretches one image: a reference board to compare with render_3d view=front) and opacity (glass 0.3); defaults {…} fills every item; px=true reads coordinates as background pixels. cat=beam with a,b=[x,y,z] (z above the floor) and w×h section makes rafters, posts and braces; a beam reaching into a roof stops under it. Pools: pool or pool-oval. dry=true answers what it would do — what it would add, the clearances around it, the findings it would settle or create — without writing; dry=\"summary\" answers short.",
+    "inputSchema": {
+      "$defs": {
+        "Dry": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Runs an edit against a copy of the plan and reports what it would do. Trying a size used to mean applying it, reviewing, and undoing — a round trip that showed in the user's window and burned a revision each time. The copy has no history and is thrown away, so nothing of that happens. How much of a dry run to answer with. `true` answers with everything it would change; `\"summary\"` answers with the decision — how many pieces move, which roots, the clearances, the findings and the score — because a group that rebuilds lists ninety-seven parts for a choice that fits in five lines"
+        },
+        "LampType": {
+          "description": "Lamp technology, for flux from electrical power",
+          "enum": [
+            "led",
+            "fluorescent",
+            "halogen",
+            "incandescent"
+          ],
+          "type": "string"
+        },
+        "LightSpec": {
+          "description": "A piece's light, photometric",
+          "properties": {
+            "area": {
+              "description": "Emitting panel facing down, [w, d] cm",
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "beam": {
+              "description": "Spot beam angle degrees, pointing down; 0 = every direction",
+              "type": "number"
+            },
+            "k": {
+              "description": "Color temperature K (2700 warm, 3000, 4000 neutral, 6500 daylight)",
+              "type": "number"
+            },
+            "lamp": {
+              "$ref": "#/$defs/LampType",
+              "description": "led (100 lm/W), fluorescent (65), halogen (16), incandescent (12)"
+            },
+            "lm": {
+              "description": "Luminous flux lm",
+              "type": "number"
+            },
+            "on": {
+              "description": "`false` turns it off",
+              "type": "boolean"
+            },
+            "w": {
+              "description": "Or electrical power W (flux from the lamp's efficacy)",
+              "type": "number"
+            },
+            "z": {
+              "description": "Source height as a fraction of the piece's height (default: its base for spots and panels, the middle otherwise)",
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "PlaceSpec": {
+          "properties": {
+            "a": {
+              "description": "With `cat:\"beam\"`: end points `[x,y,z]` cm (z above the storey floor); `w`×`h` is the section (default 10×20)",
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "along": {
+              "description": "Distance along the wall from its start, cm (default: middle)",
+              "type": "number"
+            },
+            "angle": {
+              "description": "Clockwise degrees",
+              "type": "number"
+            },
+            "at": {
+              "$ref": "#/$defs/Point2",
+              "description": "Center on the plan. Optional when `wall` is given; a door or window placed `at` a point near a wall snaps into it"
+            },
+            "b": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "cat": {
+              "default": "",
+              "description": "Catalog id, e.g. `bed-double` (see the `catalog` tool)",
+              "type": "string"
+            },
+            "color": {
+              "items": {
+                "type": "integer"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "copy": {
+              "description": "Instead of `cat`: id of a piece already in the project to copy — its model (even one embedded from an old import), finish, size and parts — to `at` or `wall`, with any size, angle or name given here on top",
+              "type": "string"
+            },
+            "d": {
+              "type": "number"
+            },
+            "elev": {
+              "type": "number"
+            },
+            "gap": {
+              "description": "Clear gap between a railing's bars, cm",
+              "type": "number"
+            },
+            "glass": {
+              "description": "Glass of a guard or a balcony closure: `laminated`, `tempered`, `tempered-laminated` or `wired`",
+              "type": "string"
+            },
+            "h": {
+              "type": "number"
+            },
+            "hinge_right": {
+              "type": "boolean"
+            },
+            "into": {
+              "$ref": "#/$defs/Point2",
+              "description": "Doors: a point `[x,y]` on the side the leaf swings into (e.g. inside the bathroom)"
+            },
+            "light": {
+              "$ref": "#/$defs/LightSpec",
+              "description": "Light it gives (fixtures come with theirs)"
+            },
+            "mat": {
+              "description": "Finish over the whole piece: `wood`, `marble #222 60`, `img:photo.jpg 100x80`",
+              "type": "string"
+            },
+            "mirror": {
+              "type": "boolean"
+            },
+            "model": {
+              "description": "Instead of `cat`: path of an .obj/.gltf/.glb model to import",
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "opacity": {
+              "description": "0..1; e.g. 0.3 for glass",
+              "type": "number"
+            },
+            "pitch": {
+              "description": "Tilt around the width axis / the depth axis, degrees (rafters, ramps, panels)",
+              "type": "number"
+            },
+            "roll": {
+              "type": "number"
+            },
+            "w": {
+              "description": "Size overrides, cm",
+              "type": "number"
+            },
+            "wall": {
+              "description": "Put it in/against this wall (doors and windows cut it)",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "Point2": {
+          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "properties": {
+        "defaults": {
+          "$ref": "#/$defs/PlaceSpec",
+          "description": "Fields every item takes unless it sets them (cat, w, d, h, color, mat…)"
+        },
+        "dry": {
+          "$ref": "#/$defs/Dry",
+          "description": "Try it without applying; see `update`. `\"summary\"` answers short"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/PlaceSpec"
+          },
+          "type": "array"
+        },
+        "px": {
+          "default": false,
+          "description": "Coordinates (`at`, `into`, `a`, `b`, `along`) are pixels of the background image",
+          "type": "boolean"
+        },
+        "v": {
+          "description": "Plan version (tab) to write to; switches to it first",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    },
+    "name": "place"
+  },
+  "plugins": {
+    "description": "Plugins (external programs editing through the HTTP API). list (default): rows [name,title,description]. run {name,args?}: {ok,code,stdout,stderr,edits,revision}.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "`list` (default) or `run`",
+          "type": "string"
+        },
+        "args": {
+          "description": "Arguments passed to the plugin as JSON"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "plugins"
+  },
+  "plumbing": {
+    "description": "Plumbing project, NBR 5626 (cold and hot water) and NBR 8160 (sewer). Points are the plumbing pieces (catalog plumbing: cold-water, hot-water, sewer, valve, grease-trap, inspection-box, water-meter, gas-point, vent-pipe, and the drains as the models they are: floor-drain caixa sifonada 150x150x50, floor-drain-100, floor-drain-75 (150x185x75, up to 15 UHC), trap-drain-small (seal under 50 mm, no trap), dry-drain, linear-drain (w 50/70/90, no trap), linear-drain-trap, rain-drain for open areas; drains are set flush in the floor of a room, never in a wall, a door span or under a cabinet) and what a point is comes from its catalog, never its name; fixtures are the pieces that use water (toilet, basin, kitchen sink, shower, bathtub, washer, laundry sink, dishwasher). check (default): {points:{kind:count}, pipes_m, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — a cold-water point by every fixture and a sewer point (or a floor drain for basin, shower, tub and machines) within reach, the discharge diameter it needs (toilet 100 mm, kitchen sink and machines 50, others 40); hot water where the project has any; a floor drain in every bathroom, kitchen and laundry, inside the shower area where there is one, at least one real trap (50 mm seal) per room, the UHC its outlet takes (50 mm: 6, 75 mm: 15), rain drains for open terraces; a grease trap for a kitchen sink; the premises — where the water comes from (water-meter or valve) and where the sewer goes (inspection-box or stack); points no drawn pipe of their kind reaches. accept=[[key, reason]] and prune=true as in electrical. route {kind: cold|hot|sewer|vent, ids?, via?: ceiling|floor|wall, from?, depth?}: lays the run from its source to the points along the walls and inside them, or through the ceiling or under the floor, sharing the trunk, draws it (replacing the earlier run of the same points and the lines drawn by hand to them, listed in replaced_drawn) and replies {via, suggested, length_m, by_premise_m, bends, branches, materials: [[item, qty, unit]]} — water: pipe and bars, 90° elbows, tees, threaded elbows at the points, a gate valve per room, adhesive; sewer: the branch at the largest diameter it takes, the drops at each point's own, a 45° Y junction at each branch (never a 90° tee), two 45° elbows per turn, sealing rings, trap boxes. Sewer runs only under the floor, by gravity, with 2 % fall up to 75 mm and 1 % above: the reply says needs_depth_cm, and with depth a run that does not fit is refused saying how much it needs. Without via the cheapest premise that can be built is taken; one that cannot (a point in no wall; from the ceiling a low point in no wall, nowhere to drop; sewer up to the ceiling or lying in a wall) is refused with why.",
+    "inputSchema": {
+      "properties": {
+        "accept": {
+          "default": [],
+          "description": "Findings looked at: `[[key, reason]]`; an empty reason takes one back",
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "action": {
+          "description": "`check` (default) or `route`",
+          "type": "string"
+        },
+        "depth": {
+          "description": "For `route` of sewer: the height free under the finished floor, cm (slab recess, or the ceiling void of the storey below)",
+          "type": "number"
+        },
+        "from": {
+          "description": "For `route`: the piece it starts from (a water meter, a valve, the heater, the inspection box or stack); default the nearest of its kind",
+          "type": "string"
+        },
+        "ids": {
+          "default": [],
+          "description": "For `route`: the points; default every point of the kind",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "description": "For `route`: what the run carries, `cold`, `hot` or `sewer`",
+          "type": "string"
+        },
+        "prune": {
+          "default": false,
+          "description": "Drop the acceptances listed in `orphaned`",
+          "type": "boolean"
+        },
+        "via": {
+          "description": "For `route`: `ceiling`, `floor` or `wall`; omitted, the cheapest that can be built",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "plumbing"
+  },
+  "redo": {
+    "description": "Redo the last undone change.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "redo"
+  },
+  "render_3d": {
+    "description": "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations — front looks from the plan's bottom edge (large y) toward y=0, back from y=0 toward large y, left from x=0, right from large x; cut=cm makes a section keeping only what is beyond that plane from the viewer (front cut=200 keeps y<200, so the wall at y=0 stays as the backdrop; to remove it look from back), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). Keep w/h small.",
+    "inputSchema": {
+      "properties": {
+        "cam": {
+          "description": "Stored point of view index (see cameras)",
+          "type": "integer"
+        },
+        "cut": {
+          "description": "Elevations: section plane in plan cm (y for front/back, x for left/right, height for top); what lies between the viewer and it is cut away — walls and pieces alike. front views from large y, back from y=0",
+          "type": "number"
+        },
+        "h": {
+          "type": "integer"
+        },
+        "pitch": {
+          "description": "Aerial height angle, degrees",
+          "type": "number"
+        },
+        "view": {
+          "description": "`aerial` (default) or `visitor`",
+          "type": "string"
+        },
+        "w": {
+          "type": "integer"
+        },
+        "yaw": {
+          "description": "Aerial turn, degrees",
+          "type": "number"
+        },
+        "zoom": {
+          "description": "Aerial distance factor: 1 frames the building, 2 twice as far",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "render_3d"
+  },
+  "render_photo": {
+    "description": "Realistic photo (path traced: sun from compass location and time, lamps, glass). cam=i stored view, or view=visitor/aerial (yaw,pitch). quality draft (~10 s) | good | best; hour = local solar time (e.g. 9, 15.5, 20); w/h small. Returns PNG.",
+    "inputSchema": {
+      "properties": {
+        "cam": {
+          "description": "Stored point of view index",
+          "type": "integer"
+        },
+        "h": {
+          "type": "integer"
+        },
+        "hour": {
+          "description": "Local solar hour, 0–24",
+          "type": "number"
+        },
+        "pitch": {
+          "type": "number"
+        },
+        "quality": {
+          "description": "`draft` (default), `good`, `best`",
+          "type": "string"
+        },
+        "view": {
+          "description": "`aerial` (default) or `visitor`",
+          "type": "string"
+        },
+        "w": {
+          "type": "integer"
+        },
+        "yaw": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "render_photo"
+  },
+  "render_plan": {
+    "description": "PNG of the floor plan, exactly as the user sees it. region=[[minx,miny],[maxx,maxy]] frames a place — it is fitted to the image's aspect by growing the short side, never by cropping, so everything asked for is in the picture — or room=<id|name> with pad cm (default 30) frames a room without working the rectangle out. bg=0..1 overlays the background image to compare with the reference. Keep w/h small to save tokens.",
+    "inputSchema": {
+      "$defs": {
+        "Point2": {
+          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "properties": {
+        "bg": {
+          "description": "Background image opacity for this render (e.g. 0.5 to compare the drawing with the scanned reference; 0 hides it)",
+          "type": "number"
+        },
+        "grid": {
+          "description": "Draw the grid (default true)",
+          "type": "boolean"
+        },
+        "h": {
+          "description": "Height px (default 480, max 2048)",
+          "type": "integer"
+        },
+        "pad": {
+          "type": "number"
+        },
+        "region": {
+          "description": "Plan region `[[minx,miny],[maxx,maxy]]`; default fits the drawing. The region is fitted to the image's aspect and grown on the short side — never cropped — so everything asked for is in the picture",
+          "items": {
+            "$ref": "#/$defs/Point2"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "room": {
+          "description": "Instead of `region`: a room id or name to frame, with `pad` cm of margin around it (default 30)",
+          "type": "string"
+        },
+        "w": {
+          "description": "Width px (default 640, max 2048)",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "render_plan"
+  },
+  "save_home": {
+    "description": "Save the project (.newera). path optional after the first save.",
+    "inputSchema": {
+      "properties": {
+        "path": {
+          "description": "Project file (`.newera`). Optional for save when already saved once",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "save_home"
+  },
+  "sessions": {
+    "description": "People and agents on this project now: rows [id,name,cursor,selection,edits].",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "sessions"
+  },
+  "set_background": {
+    "description": "Set a scanned plan as background at real scale: path, then cm_per_px (+cm_per_px_y), calibrate {a,b px, cm} or calibrations [{a,b,cm}…] (fits X/Y scales), angle (clockwise °); offset/opacity/visible; clear=true removes.",
+    "inputSchema": {
+      "$defs": {
+        "Calibration": {
+          "properties": {
+            "a": {
+              "$ref": "#/$defs/Point2",
+              "description": "First image pixel"
+            },
+            "b": {
+              "$ref": "#/$defs/Point2",
+              "description": "Second image pixel"
+            },
+            "cm": {
+              "description": "Real distance between them, cm",
+              "type": "number"
+            }
+          },
+          "required": [
+            "a",
+            "b",
+            "cm"
+          ],
+          "type": "object"
+        },
+        "Point2": {
+          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "properties": {
+        "angle": {
+          "description": "Clockwise turn of the image, degrees",
+          "type": "number"
+        },
+        "calibrate": {
+          "$ref": "#/$defs/Calibration",
+          "description": "Or scale by marking two pixels with a known real distance"
+        },
+        "calibrations": {
+          "description": "Several known distances (e.g. one across, one down): fits separate horizontal and vertical scales when they differ, uniform otherwise",
+          "items": {
+            "$ref": "#/$defs/Calibration"
+          },
+          "type": "array"
+        },
+        "clear": {
+          "default": false,
+          "description": "Remove the background",
+          "type": "boolean"
+        },
+        "cm_per_px": {
+          "description": "Scale directly, cm per image pixel",
+          "type": "number"
+        },
+        "cm_per_px_y": {
+          "description": "Vertical scale cm/px when it differs from the horizontal one",
+          "type": "number"
+        },
+        "offset": {
+          "$ref": "#/$defs/Point2",
+          "description": "Plan position cm of the image's top-left corner"
+        },
+        "opacity": {
+          "type": "number"
+        },
+        "path": {
+          "description": "Image file (png/jpg/webp/bmp). Required when there is no background yet",
+          "type": "string"
+        },
+        "visible": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "set_background"
+  },
+  "set_home": {
+    "description": "Rename the project, set or remove project properties (properties {key: value|null}, or a storey's with level), set the compass (north), and set the city whose building code applies (city=sao-paulo). The city belongs to the project: ergonomics, check_layout and every dry run then weigh the same municipal rules, so a change can be tested against the score it moves.",
+    "inputSchema": {
+      "$defs": {
+        "Point2": {
+          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "properties": {
+        "city": {
+          "description": "City whose building code applies, e.g. `sao-paulo`; `\"\"` clears it. Kept with the project, so `ergonomics`, `check_layout` and every dry run weigh the same municipal rules",
+          "type": "string"
+        },
+        "compass_at": {
+          "$ref": "#/$defs/Point2"
+        },
+        "compass_d": {
+          "description": "Compass diameter cm",
+          "type": "number"
+        },
+        "compass_visible": {
+          "type": "boolean"
+        },
+        "level": {
+          "description": "Storey whose properties `properties` changes, e.g. `lv2`",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "north": {
+          "description": "Clockwise degrees from plan up to north",
+          "type": "number"
+        },
+        "properties": {
+          "additionalProperties": true,
+          "description": "Project properties to set, `{key: \"value\"}`, or remove, `{key: null}` — what an import leaves behind (window sizes, panel dividers, ids of the program it came from). With `level`, that storey's instead",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "name": "set_home"
+  },
+  "split_wall": {
+    "description": "Split a wall into two joined walls at t (0..1).",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "t": {
+          "description": "Split position along the wall, 0..1 (default 0.5)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "name": "split_wall"
+  },
+  "trace_background": {
+    "description": "Trace walls from the background image (set_background first): thick dark or gray bands across or down the image become walls (colored areas — lawn, plants, furniture — are ignored; collinear pieces split by doors/windows up to max_gap join; region limits the search). Returns rows [[x1,y1],[x2,y2],t] in plan cm; create=true adds them as walls. Check with render_plan bg=0.5.",
+    "inputSchema": {
+      "properties": {
+        "create": {
+          "default": false,
+          "description": "Create the walls (one undo step) instead of only listing them",
+          "type": "boolean"
+        },
+        "h": {
+          "description": "Wall height cm when creating (default 250)",
+          "type": "number"
+        },
+        "max_gap": {
+          "description": "Doors and windows up to this wide don't split a wall, cm (default 130)",
+          "type": "number"
+        },
+        "min_len": {
+          "description": "Shortest wall kept, cm (default 60)",
+          "type": "number"
+        },
+        "region": {
+          "description": "Only this part of the plan `[x0, y0, x1, y1]` cm",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+        },
+        "t_max": {
+          "type": "number"
+        },
+        "t_min": {
+          "description": "Wall thickness range, cm (default 5..45)",
+          "type": "number"
+        },
+        "threshold": {
+          "description": "Luminance 0..255 below which a gray pixel is ink (default 128; raise it for light gray walls)",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "trace_background"
+  },
+  "undo": {
+    "description": "Undo the last change, whoever made it.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "undo"
+  },
+  "update": {
+    "description": "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto, polyline divider); a part of a group takes name, brand, model_name and url on its own — its size and place belong to the group. anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. stretch=[part ids] on a group resize says what takes the change: the listed parts grow or shrink, every other part keeps its size and moves along (uprights stay 5.8 cm while the opening between them grows); without it all parts scale together. dry=true answers what it would do — changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), findings resolved and created as issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the same kind check_layout gives (only real defects: a piece resting or built in is never listed), and issues_changed for a clash that stays but grows or shrinks (extent_was) — without writing anything, so a size can be tried before it is applied; dry=\"summary\" answers the same decision without listing the parts a group rebuilds. Otherwise the reply names what changed. rename {pattern, to, what: names|labels} renames in bulk by a regex (Rust syntax, `(?i)` for any case, `$1` in to): every piece name — parts of groups included — or label text that matches, in one step; with dry it lists them first.",
+    "inputSchema": {
+      "$defs": {
+        "Dry": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Runs an edit against a copy of the plan and reports what it would do. Trying a size used to mean applying it, reviewing, and undoing — a round trip that showed in the user's window and burned a revision each time. The copy has no history and is thrown away, so nothing of that happens. How much of a dry run to answer with. `true` answers with everything it would change; `\"summary\"` answers with the decision — how many pieces move, which roots, the clearances, the findings and the score — because a group that rebuilds lists ninety-seven parts for a choice that fits in five lines"
+        },
+        "Fixed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A piece declared fixed or free-standing, or `\"\"` to clear it"
+        },
+        "LampType": {
+          "description": "Lamp technology, for flux from electrical power",
+          "enum": [
+            "led",
+            "fluorescent",
+            "halogen",
+            "incandescent"
+          ],
+          "type": "string"
+        },
+        "LightSpec": {
+          "description": "A piece's light, photometric",
+          "properties": {
+            "area": {
+              "description": "Emitting panel facing down, [w, d] cm",
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "beam": {
+              "description": "Spot beam angle degrees, pointing down; 0 = every direction",
+              "type": "number"
+            },
+            "k": {
+              "description": "Color temperature K (2700 warm, 3000, 4000 neutral, 6500 daylight)",
+              "type": "number"
+            },
+            "lamp": {
+              "$ref": "#/$defs/LampType",
+              "description": "led (100 lm/W), fluorescent (65), halogen (16), incandescent (12)"
+            },
+            "lm": {
+              "description": "Luminous flux lm",
+              "type": "number"
+            },
+            "on": {
+              "description": "`false` turns it off",
+              "type": "boolean"
+            },
+            "w": {
+              "description": "Or electrical power W (flux from the lamp's efficacy)",
+              "type": "number"
+            },
+            "z": {
+              "description": "Source height as a fraction of the piece's height (default: its base for spots and panels, the middle otherwise)",
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "Point2": {
+          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "RenameSpec": {
+          "description": "A rename by rule: `pattern` replaced by `to` wherever it matches",
+          "properties": {
+            "pattern": {
+              "description": "Regular expression, e.g. `^\\\\d+ — ` for a numbered prefix",
+              "type": "string"
+            },
+            "to": {
+              "default": "",
+              "description": "Replacement; `$1` refers to a group, empty removes the match",
+              "type": "string"
+            },
+            "what": {
+              "description": "`names` (default: pieces and the parts of groups) or `labels`",
+              "type": "string"
+            }
+          },
+          "required": [
+            "pattern"
+          ],
+          "type": "object"
+        },
+        "RoomUse": {
+          "description": "Declared room program, independent of its display name. Auto preserves legacy name/equipment inference; other values are explicit intent",
+          "enum": [
+            "auto",
+            "bedroom",
+            "living",
+            "dining",
+            "kitchen",
+            "bathroom",
+            "laundry",
+            "office",
+            "corridor",
+            "closet",
+            "balcony",
+            "garage",
+            "outdoor",
+            "other"
+          ],
+          "type": "string"
+        },
+        "TextAlign": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ],
+          "type": "string"
+        },
+        "UpdateSpec": {
+          "additionalProperties": false,
+          "description": "Fields that can be changed on an element. Each applies only to the kinds that have it; anything else — a field that does not exist included — is rejected so mistakes are loud",
+          "properties": {
+            "a": {
+              "$ref": "#/$defs/Point2",
+              "description": "Start point (wall, dimension)"
+            },
+            "about": {
+              "description": "The piece a note is about, e.g. `f1185`; its numbers are then checked against that piece by `annotations(stale=true)`. `\"\"` unties it",
+              "type": "string"
+            },
+            "align": {
+              "$ref": "#/$defs/TextAlign",
+              "description": "Label alignment: `left`, `center`, `right`"
+            },
+            "anchor": {
+              "description": "Which face of the piece stays put when `w`, `d` or `h` change: `back`, `front`, `left`, `right` (relative to the way it faces), `bottom`, `top`, or a plan side `+x`, `-x`, `+y`, `-y`. Without it a resize grows around the center and both faces move, which is almost never what a run of joinery wants",
+              "type": "string"
+            },
+            "angle": {
+              "description": "Clockwise degrees (label, furniture)",
+              "type": "number"
+            },
+            "arc": {
+              "description": "Wall arc degrees (0 = straight)",
+              "type": "number"
+            },
+            "at": {
+              "$ref": "#/$defs/Point2",
+              "description": "Position (label, furniture center)"
+            },
+            "auto": {
+              "description": "Room follows its walls (re-detected when they change); `pts` turns it off",
+              "type": "boolean"
+            },
+            "b": {
+              "$ref": "#/$defs/Point2",
+              "description": "End point (wall, dimension)"
+            },
+            "bold": {
+              "description": "Label bold text",
+              "type": "boolean"
+            },
+            "brand": {
+              "description": "Furniture brand (references)",
+              "type": "string"
+            },
+            "ceil_mat": {
+              "description": "Room ceiling finish",
+              "type": "string"
+            },
+            "ceiling": {
+              "description": "Room ceiling visible",
+              "type": "boolean"
+            },
+            "color": {
+              "description": "Furniture color `[r,g,b]`",
+              "items": {
+                "type": "integer"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "d": {
+              "description": "Furniture depth cm",
+              "type": "number"
+            },
+            "divider": {
+              "description": "Polyline is a room divider",
+              "type": "boolean"
+            },
+            "elev": {
+              "description": "Elevation cm (furniture, level, 3D label/dimension)",
+              "type": "number"
+            },
+            "fixed": {
+              "$ref": "#/$defs/Fixed",
+              "description": "Furniture: `true` fixed joinery (a top that can host a built-in outlet), `false` free-standing, when its name does not say; `\"\"` takes the declaration back and lets the name decide again"
+            },
+            "floor": {
+              "description": "Room floor visible",
+              "type": "boolean"
+            },
+            "floor_mat": {
+              "description": "Room floor finish",
+              "type": "string"
+            },
+            "gap": {
+              "description": "Clear gap between a railing's bars, cm",
+              "type": "number"
+            },
+            "glass": {
+              "description": "Glass of a guard or a closure: `laminated`, `tempered`, `tempered-laminated` or `wired`",
+              "type": "string"
+            },
+            "h": {
+              "description": "Height cm (wall, furniture)",
+              "type": "number"
+            },
+            "h_end": {
+              "description": "Wall height at its end cm (sloping wall)",
+              "type": "number"
+            },
+            "hinge_right": {
+              "description": "Door hinge on the right",
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "in3d": {
+              "description": "Label/dimension shown in 3D",
+              "type": "boolean"
+            },
+            "italic": {
+              "type": "boolean"
+            },
+            "layer": {
+              "description": "Plan layer of a piece: `lighting`, `appliances`, `joinery`, `none` (in no layer), or empty to go back to the layer it is in by itself",
+              "type": "string"
+            },
+            "left": {
+              "description": "Wall finish on the left of a→b; `none` clears",
+              "type": "string"
+            },
+            "level": {
+              "description": "Move the element to this level id (e.g. `lv2`)",
+              "type": "string"
+            },
+            "light": {
+              "$ref": "#/$defs/LightSpec",
+              "description": "Furniture light {lm|w, lamp, k, beam, area, z, on}"
+            },
+            "mat": {
+              "description": "Furniture finish (`wood`, `img:…`, `none` clears)",
+              "type": "string"
+            },
+            "mirror": {
+              "type": "boolean"
+            },
+            "model_name": {
+              "description": "Furniture commercial model",
+              "type": "string"
+            },
+            "name": {
+              "description": "Name (room, furniture)",
+              "type": "string"
+            },
+            "off": {
+              "description": "Dimension offset cm",
+              "type": "number"
+            },
+            "opacity": {
+              "description": "Furniture opacity 0..1",
+              "type": "number"
+            },
+            "pitch": {
+              "description": "3D tilt degrees: label 0 flat, 90 standing; dimension around its line; furniture around its width axis",
+              "type": "number"
+            },
+            "pts": {
+              "description": "Room polygon",
+              "items": {
+                "$ref": "#/$defs/Point2"
+              },
+              "type": "array"
+            },
+            "right": {
+              "description": "Wall finish on the right of a→b",
+              "type": "string"
+            },
+            "role": {
+              "description": "Functional role independent of name: `trim`, `backsplash`, `counter`; empty restores automatic classification. Does not disable collisions",
+              "type": "string"
+            },
+            "roll": {
+              "description": "Furniture tilt around its depth axis, degrees",
+              "type": "number"
+            },
+            "room_use": {
+              "$ref": "#/$defs/RoomUse",
+              "description": "Declared room program, independent of name; auto restores inference"
+            },
+            "sides": {
+              "description": "Wall finish on both sides",
+              "type": "string"
+            },
+            "size": {
+              "description": "Label size cm",
+              "type": "number"
+            },
+            "slab": {
+              "description": "Level slab thickness cm",
+              "type": "number"
+            },
+            "stretch": {
+              "description": "On a group resize, the parts that take the change (ids); every other part keeps its size and moves along. Without it the group scales all its parts by the same factor",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "t": {
+              "description": "Wall thickness cm",
+              "type": "number"
+            },
+            "text": {
+              "description": "Label text",
+              "type": "string"
+            },
+            "type": {
+              "description": "Wall type id (sets thickness unless `t` is given); `none` clears",
+              "type": "string"
+            },
+            "url": {
+              "description": "Furniture product link",
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            },
+            "w": {
+              "description": "Furniture width cm",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        }
+      },
+      "properties": {
+        "dry": {
+          "$ref": "#/$defs/Dry",
+          "description": "Try it without applying: reports what would change, the clearances around every piece it touches, and which layout and ergonomics findings it would resolve or create. Nothing is written and the user's window does not move"
+        },
+        "items": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/UpdateSpec"
+          },
+          "type": "array"
+        },
+        "rename": {
+          "$ref": "#/$defs/RenameSpec",
+          "description": "Rename in bulk by a rule instead of listing items: every name (pieces and the parts of groups) or label text matching `pattern` has it replaced by `to`, in one undoable step"
+        },
+        "v": {
+          "description": "Plan version (tab) to write to; switches to it first",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "update"
+  },
+  "variants": {
+    "description": "Plan versions (tabs). list: rows [i,name,active,walls,rooms,m2,furniture,issues]. duplicate/new switch to the new one; edits apply to the active version.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "`list` (default), `duplicate` (copy active), `new` (empty), `switch`, `rename`, `delete`",
+          "type": "string"
+        },
+        "i": {
+          "description": "Variant index for switch/rename/delete",
+          "type": "integer"
+        },
+        "name": {
+          "description": "Name for duplicate/new/rename",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "variants"
+  },
+  "video": {
+    "description": "Video camera path. list (default): {fps,speed,secs,rows [i,x,y,z,yaw,pitch,fov]}. add {cam? | x?,y?,z?,yaw?,pitch?,fov?, i?} appends a keyframe (missing values from the visitor); delete {i}; clear; orbit {z?,n?} replaces the path with an aerial tour; set {fps?,speed?}; render {path .avi, w?,h?} writes a Motion-JPEG video. cm, degrees, m/s.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "`list` (default), `add`, `delete`, `clear`, `orbit`, `set`, `render`",
+          "type": "string"
+        },
+        "cam": {
+          "description": "Stored view index to add as keyframe",
+          "type": "integer"
+        },
+        "fov": {
+          "type": "number"
+        },
+        "fps": {
+          "type": "integer"
+        },
+        "h": {
+          "type": "integer"
+        },
+        "i": {
+          "description": "Keyframe index (`delete`, or insert position for `add`)",
+          "type": "integer"
+        },
+        "n": {
+          "description": "Keyframes for `orbit`",
+          "type": "integer"
+        },
+        "path": {
+          "description": "Output `.avi` for `render`",
+          "type": "string"
+        },
+        "pitch": {
+          "type": "number"
+        },
+        "speed": {
+          "description": "Camera speed m/s",
+          "type": "number"
+        },
+        "w": {
+          "type": "integer"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "yaw": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "video"
+  }
+}

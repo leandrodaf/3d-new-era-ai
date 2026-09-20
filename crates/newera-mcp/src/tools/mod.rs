@@ -209,31 +209,43 @@ fn server() -> NewEraMcp {
 mod tests {
     use super::*;
 
-    /// The whole tool surface, frozen: the names an agent can call and the
-    /// exact bytes of what it reads to learn them.
-    ///
-    /// `list_all` sorts by name, so this is stable across runs. It is the
-    /// guard for moving tools between modules: a dropped router, two modules
-    /// claiming one name (the merge overwrites in silence), a description
-    /// left behind or a schema that missed compaction all change it.
-    #[test]
-    fn tool_surface_is_unchanged() {
-        const NAMES: &str = "annotations,arrange,cabinet_run,cameras,catalog,check_layout,\
-checkpoint,create,cut_list,delete,disciplines,electrical,embed,ergonomics,export_plan,feedback,fit_roof,get_home,\
-joinery,levels,lighting,materials,measure,merge_walls,move,new_home,open_home,place,plugins,plumbing,\
-redo,render_3d,render_photo,render_plan,save_home,sessions,set_background,set_home,split_wall,\
-trace_background,undo,update,variants,video";
+    fn tool_surface() -> std::collections::BTreeMap<String, serde_json::Value> {
+        server()
+            .tool_router
+            .list_all()
+            .into_iter()
+            .map(|tool| (tool.name.to_string(), serde_json::to_value(tool).unwrap()))
+            .collect()
+    }
 
-        let tools = server().tool_router.list_all();
-        let names: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
-        assert_eq!(names.join(","), NAMES, "the set of tools changed");
-        let bytes = serde_json::to_string(&tools).unwrap().len();
+    /// Compare complete schemas and descriptions, including equal-length
+    /// changes. Separate assertions identify the tool whose contract changed.
+    #[test]
+    fn tool_surface_matches_snapshot() {
+        let expected: std::collections::BTreeMap<String, serde_json::Value> =
+            serde_json::from_str(include_str!("../../tests/fixtures/tool-surface.json")).unwrap();
+        let actual = tool_surface();
         assert_eq!(
-            // Includes explicit furniture roles, cabinet cutouts and opening checks.
-            bytes,
-            88512,
-            "a description or schema changed; this test guards a pure move"
+            actual.keys().collect::<Vec<_>>(),
+            expected.keys().collect::<Vec<_>>(),
+            "the set of tools changed; review tests/fixtures/tool-surface.json"
         );
+        for (name, tool) in actual {
+            assert_eq!(
+                tool, expected[&name],
+                "MCP contract changed for {name}; review tests/fixtures/tool-surface.json"
+            );
+        }
+    }
+
+    /// Explicit maintenance command, never run by normal tests or CI.
+    #[test]
+    #[ignore = "rewrites the tool contract snapshot; review the resulting git diff"]
+    fn update_tool_surface_snapshot() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/tool-surface.json");
+        let json = serde_json::to_string_pretty(&tool_surface()).unwrap();
+        std::fs::write(path, format!("{json}\n")).unwrap();
     }
 
     #[test]
