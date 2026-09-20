@@ -169,7 +169,7 @@ impl TopViews {
         let load = |file: &str| {
             newera_core::vfs::read(&newera_core::resolve_asset(assets.as_deref(), file))
                 .ok()
-                .and_then(|b| image::load_from_memory(&b).ok())
+                .and_then(|b| newera_core::images::decode(&b).ok())
                 .map(|i| {
                     image::imageops::resize(
                         &i.to_rgba8(),
@@ -246,7 +246,7 @@ pub fn export_home(
         if matches!(ext.as_str(), "png" | "jpg" | "jpeg") {
             Some((bytes, ext))
         } else {
-            let image = image::load_from_memory(&bytes).ok()?;
+            let image = newera_core::images::decode(&bytes).ok()?;
             let mut png = Vec::new();
             image
                 .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
@@ -439,7 +439,7 @@ pub fn photo_home(
     let load = |file: &str| {
         newera_core::vfs::read(&newera_core::resolve_asset(assets, file))
             .ok()
-            .and_then(|b| image::load_from_memory(&b).ok())
+            .and_then(|b| newera_core::images::decode(&b).ok())
             .map(|i| {
                 image::imageops::resize(
                     &i.to_rgba8(),
@@ -490,7 +490,7 @@ pub fn render_home(
     let load = |file: &str| {
         newera_core::vfs::read(&newera_core::resolve_asset(assets, file))
             .ok()
-            .and_then(|b| image::load_from_memory(&b).ok())
+            .and_then(|b| newera_core::images::decode(&b).ok())
             .map(|i| {
                 image::imageops::resize(
                     &i.to_rgba8(),

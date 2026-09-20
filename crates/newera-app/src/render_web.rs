@@ -99,7 +99,14 @@ impl Worker {
         }
         let assets = js_sys::Array::new();
         let transfers = js_sys::Array::new();
-        for (path, bytes) in newera_core::vfs::snapshot_paths(paths, budget.asset_bytes)? {
+        let files = newera_core::vfs::snapshot_paths(paths, budget.asset_bytes)?;
+        newera_core::images::validate_assets(
+            files
+                .iter()
+                .map(|(path, bytes)| (path.as_str(), bytes.as_ref())),
+            (budget.asset_bytes as u64).saturating_mul(8),
+        )?;
+        for (path, bytes) in files {
             let bytes = js_sys::Uint8Array::from(bytes.as_ref());
             transfers.push(&bytes.buffer());
             assets.push(&js_sys::Array::of2(&path.into(), &bytes));
@@ -237,6 +244,12 @@ pub fn render(request: &str, assets: &JsValue) -> Result<Vec<u8>, String> {
             data.to_vec(),
         ));
     }
+    newera_core::images::validate_assets(
+        mounted
+            .iter()
+            .map(|(path, bytes)| (path.as_str(), bytes.as_slice())),
+        (budget.asset_bytes as u64).saturating_mul(8),
+    )?;
     newera_core::vfs::mount(std::path::Path::new(""), mounted);
     let dir = args["assets"].as_str().map(std::path::Path::new);
     if args["kind"] == "mcp" {

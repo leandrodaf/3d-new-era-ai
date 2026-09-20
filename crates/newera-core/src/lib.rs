@@ -22,6 +22,7 @@ mod geometry;
 pub mod guard;
 mod home;
 mod ids;
+pub mod images;
 mod joins;
 mod layers;
 mod levels;

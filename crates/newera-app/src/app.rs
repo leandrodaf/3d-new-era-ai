@@ -857,7 +857,7 @@ impl NewEraApp {
                 let load = |p: &str| {
                     newera_core::vfs::read(&newera_core::resolve_asset(assets.as_deref(), p))
                         .ok()
-                        .and_then(|b| image::load_from_memory(&b).ok())
+                        .and_then(|b| newera_core::images::decode(&b).ok())
                         .map(|i| i.to_rgba8())
                 };
                 let options = RenderOptions {
@@ -998,7 +998,7 @@ impl NewEraApp {
     /// own and the background points there.
     #[cfg(target_arch = "wasm32")]
     fn place_background(&mut self, name: &str, bytes: &[u8]) {
-        let size = match image::load_from_memory(bytes) {
+        let size = match newera_core::images::decode(bytes) {
             Ok(image) => [image.width(), image.height()],
             Err(err) => {
                 return self.set_status(crate::i18n::fill("⚠ Imagem inválida: {}", &[&err]));

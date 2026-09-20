@@ -688,7 +688,7 @@ impl Gpu {
                 let path = newera_core::resolve_asset(project, file);
                 match newera_core::vfs::read(&path)
                     .map_err(|e| e.to_string())
-                    .and_then(|b| image::load_from_memory(&b).map_err(|e| e.to_string()))
+                    .and_then(|b| newera_core::images::decode(&b).map_err(|e| e.to_string()))
                 {
                     Ok(img) => image::imageops::resize(
                         &img.to_rgba8(),

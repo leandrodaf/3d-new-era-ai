@@ -9,7 +9,8 @@ import zipfile
 with zipfile.ZipFile(sys.argv[1]) as source:
     project = json.loads(source.read("project.json"))
 home = project["variants"][project["active"]]["home"]
-home["name"] = "Asset snapshot fixture"
+large = "--large-texture" in sys.argv[2:]
+home["name"] = "Large texture fixture" if large else "Asset snapshot fixture"
 piece = next(f for f in home["furniture"] if f["catalog"] == "sofa-3")
 piece["model"] = "models/sample.obj"
 
@@ -18,9 +19,13 @@ def chunk(kind, data):
     return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
 
 
+side = 2400 if large else 1
+compressor = zlib.compressobj()
+row = b"\x00" + b"\xff\x00\x00\xff" * side
+compressed = b"".join(compressor.compress(row) for _ in range(side)) + compressor.flush()
 png = b"\x89PNG\r\n\x1a\n"
-png += chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
-png += chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00\xff"))
+png += chunk(b"IHDR", struct.pack(">IIBBBBB", side, side, 8, 6, 0, 0, 0))
+png += chunk(b"IDAT", compressed)
 png += chunk(b"IEND", b"")
 out = io.BytesIO()
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as bundle:

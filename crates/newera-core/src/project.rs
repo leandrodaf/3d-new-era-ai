@@ -313,7 +313,7 @@ fn packed_asset(name: &str, bytes: Vec<u8>) -> Vec<u8> {
     if bytes.len() < RECOMPRESS_FROM || !has_extension(name, &["jpg", "jpeg"]) {
         return bytes;
     }
-    let Ok(image) = image::load_from_memory_with_format(&bytes, image::ImageFormat::Jpeg) else {
+    let Ok(image) = crate::images::decode(&bytes) else {
         return bytes;
     };
     let image = if image.width().max(image.height()) > MAX_IMAGE_SIDE {

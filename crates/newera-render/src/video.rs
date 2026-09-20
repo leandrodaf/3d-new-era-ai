@@ -180,7 +180,7 @@ fn render_frames_until(
             .or_insert_with(|| {
                 newera_core::vfs::read(&newera_core::resolve_asset(assets, file))
                     .ok()
-                    .and_then(|b| image::load_from_memory(&b).ok())
+                    .and_then(|b| newera_core::images::decode(&b).ok())
                     .map(|i| {
                         image::imageops::resize(
                             &i.to_rgba8(),

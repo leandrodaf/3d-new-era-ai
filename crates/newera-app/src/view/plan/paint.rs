@@ -74,7 +74,7 @@ impl Textures {
         self.loaded
             .entry(key.clone())
             .or_insert_with(|| {
-                let image = image::load_from_memory(&newera_core::vfs::read(&resolved).ok()?)
+                let image = newera_core::images::decode(&newera_core::vfs::read(&resolved).ok()?)
                     .ok()?
                     .to_rgba8();
                 let size = [image.width() as usize, image.height() as usize];

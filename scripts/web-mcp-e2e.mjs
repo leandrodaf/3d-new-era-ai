@@ -449,26 +449,29 @@ try {
 
     // A mounted but unused 16 MiB import must not exhaust the 8 MiB worker
     // budget. Open a real bundle via the same recovery path just verified.
-    const assetBundle = execFileSync('python3', [
+    const assetBundleFor = (...options) => execFileSync('python3', [
       fileURLToPath(new URL('./fixtures/render-assets.py', import.meta.url)),
-      fileURLToPath(new URL('../web/demo.newera', import.meta.url)),
+      fileURLToPath(new URL('../web/demo.newera', import.meta.url)), ...options,
     ]).toString('base64');
-    await evaluate(`(() => {
-      localStorage.setItem('newera-autosave', JSON.stringify({version:1,name:'assets.newera',revision:1,saved_at:Date.now(),data:${JSON.stringify(assetBundle)}}));
-      const setItem=Storage.prototype.setItem;
-      Storage.prototype.setItem=function(key,value) {
-        if(this===localStorage && key==='newera-autosave') throw new DOMException('Fixture pending reload','QuotaExceededError');
-        return setItem.call(this,key,value);
-      };
-    })()`);
-    await send('Page.navigate', {url:`${page}?relay=${encodeURIComponent(relay)}`});
-    let assetHome;
-    for(let i=0;i<60;i++) {
-      await frames(3);
-      try {assetHome=await readHome();} catch {continue;}
-      if(assetHome.name==='Asset snapshot fixture') break;
-    }
-    if(assetHome?.name!=='Asset snapshot fixture') throw new Error('asset bundle did not load');
+    const loadAssetBundle = async (bundle, name) => {
+      await evaluate(`(() => {
+        localStorage.setItem('newera-autosave', JSON.stringify({version:1,name:'assets.newera',revision:1,saved_at:Date.now(),data:${JSON.stringify(bundle)}}));
+        const setItem=Storage.prototype.setItem;
+        Storage.prototype.setItem=function(key,value) {
+          if(this===localStorage && key==='newera-autosave') throw new DOMException('Fixture pending reload','QuotaExceededError');
+          return setItem.call(this,key,value);
+        };
+      })()`);
+      await send('Page.navigate', {url:`${page}?relay=${encodeURIComponent(relay)}`});
+      for(let i=0;i<60;i++) {
+        await frames(3);
+        let home;
+        try {home=await readHome();} catch {continue;}
+        if(home.name===name) return home;
+      }
+      throw new Error('asset bundle did not load: '+name);
+    };
+    await loadAssetBundle(assetBundleFor(), 'Asset snapshot fixture');
     await evaluate(`(() => {
       const Original=window.Worker;
       window.Worker=class extends Original {
@@ -489,6 +492,29 @@ try {
       throw new Error(`referenced assets were not selected/transferred: ${JSON.stringify(assetTransfer)}`);
     }
     ok('real bundle renders with OBJ/MTL/PNG dependencies; unused imports stay out and buffers are transferred');
+
+    const largeHome=await loadAssetBundle(assetBundleFor('--large-texture'), 'Large texture fixture');
+    await evaluate(`(() => {
+      window.largeTextureWorkers=0;
+      const Original=window.Worker;
+      window.Worker=class extends Original {constructor(...args){super(...args);window.largeTextureWorkers++;}};
+    })()`);
+    const largeRender=await rpc(mcpUrl,{jsonrpc:'2.0',id:47,method:'tools/call',
+      params:{name:'render_3d',arguments:{w:320,h:240}}});
+    if(!largeRender.result?.isError || !JSON.stringify(largeRender).includes('memória')
+        || await evaluate('window.largeTextureWorkers') !== 0) {
+      throw new Error('decoded texture budget was not checked before worker creation');
+    }
+    const largePiece=largeHome.furniture.find(f=>f.model?.endsWith('sample.obj'));
+    if(!largePiece) throw new Error('large texture fixture has no model');
+    const removed=await rpc(mcpUrl,{jsonrpc:'2.0',id:48,method:'tools/call',
+      params:{name:'delete',arguments:{ids:[largePiece.id]}}});
+    const retry=await rpc(mcpUrl,{jsonrpc:'2.0',id:49,method:'tools/call',
+      params:{name:'render_3d',arguments:{w:320,h:240}}});
+    if(removed.result?.isError || retry.result?.isError || !retry.result?.content?.some(c=>c.type==='image')) {
+      throw new Error('editor could not recover after refusing excessive decoded texture memory');
+    }
+    ok('highly compressed texture is refused before pixel allocation/worker creation; editing and retry still work');
 
 
 
