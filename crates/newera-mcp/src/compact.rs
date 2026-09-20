@@ -518,6 +518,9 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
             if let Issue::Overlap { extent, .. } = &issue {
                 row["extent"] = json!(extent.map(num));
             }
+            if let Issue::BlocksWindow { extent, .. } = &issue {
+                row["extent"] = json!(extent.map(num));
+            }
             push("accepted", row);
             continue;
         }
@@ -559,6 +562,15 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
                     ("key", json!(key)),
                     ("door", issue_ref(home, door.into())),
                     ("by", issue_ref(home, by.into())),
+                ]),
+            ),
+            Issue::BlocksWindow { window, by, extent } => push(
+                "blocks_window",
+                obj([
+                    ("key", json!(key)),
+                    ("window", issue_ref(home, window.into())),
+                    ("by", issue_ref(home, by.into())),
+                    ("extent", json!(extent.map(num))),
                 ]),
             ),
             Issue::OutsideRooms(f) => push("outside_rooms", keyed(issue_ref(home, f.into()), &key)),

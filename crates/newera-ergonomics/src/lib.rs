@@ -3637,7 +3637,8 @@ mod tests {
     fn a_hinge_flip_is_offered_only_when_it_clears_the_leaf_for_check_layout_too() {
         // A bathroom door: its leaf, from the left jamb, sweeps over a small
         // cabinet; from the right jamb it would sweep over a wall-hung basin
-        // this review reads as built in, and check_layout does not.
+        // this review reads as built in, and check_layout does not. Both also
+        // occupy the approach, which must remain clear regardless of hinge.
         let mut home = Home::default();
         square(&mut home, "Banheiro", 300.0, 240.0);
         let mut door = piece(20, "door", (150.0, 0.0), (70.0, 15.0, 210.0), 0.0);
@@ -3658,13 +3659,13 @@ mod tests {
         let door = home.furniture[0].clone();
         assert_eq!(
             newera_core::door_blocked_by(&home, &door),
-            vec![FurnitureId(21)]
+            vec![FurnitureId(21), FurnitureId(22)]
         );
         let mut flipped = door.clone();
         flipped.opening.as_mut().unwrap().hinge_right = true;
         assert_eq!(
             newera_core::door_blocked_by(&home, &flipped),
-            vec![FurnitureId(22)]
+            vec![FurnitureId(21), FurnitureId(22)]
         );
 
         let report = review(&home, &Profile::default());

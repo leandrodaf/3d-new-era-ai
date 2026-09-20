@@ -82,8 +82,15 @@ pub enum Issue {
     },
     /// A piece that is not a door or window goes through a wall.
     InWall(FurnitureId, WallId),
-    /// A piece sits where a door leaf swings.
+    /// A piece blocks a door leaf or the approach to a door/passage.
     BlocksDoor { door: FurnitureId, by: FurnitureId },
+    /// A tall or elevated solid masks a window. Extent is width and height
+    /// of the obstruction in the window's local frame, in centimeters.
+    BlocksWindow {
+        window: FurnitureId,
+        by: FurnitureId,
+        extent: [f64; 2],
+    },
     /// A piece is outside every room (only reported when rooms exist).
     OutsideRooms(FurnitureId),
     /// A fixed point with nothing to be fixed to: loose in a room, on glass,
@@ -146,6 +153,7 @@ impl Issue {
             Self::Blocked { piece, against, .. } => vec![(*piece).into(), *against],
             Self::InWall(f, w) => vec![(*f).into(), (*w).into()],
             Self::BlocksDoor { door, by } => vec![(*door).into(), (*by).into()],
+            Self::BlocksWindow { window, by, .. } => vec![(*window).into(), (*by).into()],
             Self::OutsideRooms(f) | Self::LooseOpening(f) | Self::UnratedLight(f) => {
                 vec![(*f).into()]
             }
@@ -175,6 +183,7 @@ impl Issue {
             Self::Blocked { .. } => "blocked",
             Self::InWall(..) => "in_wall",
             Self::BlocksDoor { .. } => "blocks_door",
+            Self::BlocksWindow { .. } => "blocks_window",
             Self::OutsideRooms(_) => "outside_rooms",
             Self::Loose { .. } => "loose",
             Self::OutgrewNiche { .. } => "outgrew_niche",
@@ -213,7 +222,7 @@ impl Issue {
     /// Whether an accepted key names a layout finding (and not an
     /// ergonomics one, which shares the project's list of acceptances).
     pub fn is_layout_key(key: &str) -> bool {
-        const FAMILIES: [&str; 12] = [
+        const FAMILIES: [&str; 13] = [
             "loose",
             "unrated_light",
             "no_door",
@@ -222,6 +231,7 @@ impl Issue {
             "blocked",
             "in_wall",
             "blocks_door",
+            "blocks_window",
             "outside_rooms",
             "outgrew_niche",
             "loose_opening",
@@ -465,18 +475,46 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
         }
     }
 
-    for (d, door) in pieces.iter().enumerate() {
-        if !door.is_opening() {
-            continue;
-        }
-        let Some(swing) = door_swing(door) else {
+    // Embedded appliances are allowed to touch their host, but must still
+    // respect windows and access to doors outside that host.
+    let opening_solids: Vec<_> = home
+        .furniture
+        .iter()
+        .filter(|top| wanted(top.level))
+        .flat_map(|top| {
+            top.visible_leaves().into_iter().map(move |leaf| {
+                (
+                    home.resolve_level(top.level),
+                    leaf,
+                    polygon(&leaf.projected_footprint()),
+                )
+            })
+        })
+        .collect();
+    for (d, opening) in pieces.iter().enumerate() {
+        let Some(spec) = &opening.opening else {
             continue;
         };
-        let swing = polygon(&swing);
-        for (i, piece) in pieces.iter().enumerate() {
-            if levels[i] == levels[d] && leaf_hits(door, &swing, piece, &footprints[i]) {
+        let swing = door_swing(opening).map(|pts| polygon(&pts));
+        for (level, piece, footprint) in &opening_solids {
+            if *level != levels[d] || piece.is_opening() {
+                continue;
+            }
+            if spec.kind == crate::furniture::OpeningKind::Window {
+                if let Some(extent) = window_obstruction(opening, piece) {
+                    issues.push(Issue::BlocksWindow {
+                        window: opening.id,
+                        by: piece.id,
+                        extent,
+                    });
+                }
+            } else if passage_hits(opening, piece, footprint)
+                || swing
+                    .as_ref()
+                    .is_some_and(|s| leaf_hits(opening, s, piece, footprint))
+            {
                 issues.push(Issue::BlocksDoor {
-                    door: door.id,
+                    door: opening.id,
                     by: piece.id,
                 });
             }
@@ -656,6 +694,60 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
     issues
 }
 
+/// A conservative approach zone on both faces also covers sliding doors and
+/// passages, which have no swing. It is not a full circulation certification.
+fn passage_hits(door: &Furniture, piece: &Furniture, footprint: &Polygon<f64>) -> bool {
+    let x = door.width / 2.0;
+    let y = door.depth / 2.0 + 60.0;
+    let zone = polygon(&[(-x, -y), (x, -y), (x, y), (-x, y)].map(|p| door.to_plan(p)));
+    leaf_hits(door, &zone, piece, footprint)
+}
+
+/// Nearby solids projected onto the actual opening, not just a plan overlap.
+/// Small countertop objects may sit against a window: this check reserves
+/// bulk obstruction for tall/elevated pieces, not every kettle or air fryer.
+/// Sash operation and appliance ventilation require separate use checks.
+fn window_obstruction(window: &Furniture, piece: &Furniture) -> Option<[f64; 2]> {
+    // Their bounding boxes are mostly air or transparent glass. Treating
+    // them as opaque cupboards would reject ordinary window-side decor.
+    if piece.light.is_some()
+        || matches!(piece.catalog.as_str(), "plant" | "shower-glass")
+        || piece.opacity.is_some_and(|opacity| opacity < 0.5)
+    {
+        return None;
+    }
+    let (low, high) = piece.height_range();
+    let (sill, head) = window.height_range();
+    let height = high.min(head) - low.max(sill);
+    if height <= WALL_TOLERANCE || piece.height <= FLAT {
+        return None;
+    }
+    if piece.height <= 50.0
+        && piece.width <= 60.0
+        && piece.depth <= 60.0
+        && low <= 110.0
+        && high <= sill + 40.0
+    {
+        return None;
+    }
+    let x = window.width / 2.0;
+    let y = window.depth / 2.0 + 60.0;
+    let zone = polygon(&[(-x, -y), (x, -y), (x, y), (-x, y)].map(|p| window.to_plan(p)));
+    let shared = zone.intersection(&polygon(&piece.projected_footprint()));
+    if shared.unsigned_area() <= MIN_OVERLAP {
+        return None;
+    }
+    let mut min = f64::INFINITY;
+    let mut max = f64::NEG_INFINITY;
+    for c in shared.iter().flat_map(|p| p.exterior().coords()) {
+        let along = window.to_local(Point2::new(c.x, c.y)).0;
+        min = min.min(along);
+        max = max.max(along);
+    }
+    let width = max - min;
+    (width > WALL_TOLERANCE + 1e-6).then_some([width, height])
+}
+
 /// Whether a door's leaf, sweeping `swing`, runs into `piece`.
 fn leaf_hits(
     door: &Furniture,
@@ -677,21 +769,31 @@ fn leaf_hits(
     shared.unsigned_area() > MIN_OVERLAP && !high_enough
 }
 
-/// The pieces of `door`'s storey its leaf runs into, by the rule
+/// The pieces of `door`'s storey blocking its leaf or approach, by the rule
 /// [`check_layout`] reports `blocks_door` with — so a suggested fix, a hinge
 /// on the other jamb say, is checked against the same test it has to pass.
 pub fn door_blocked_by(home: &Home, door: &Furniture) -> Vec<FurnitureId> {
-    let Some(swing) = door_swing(door) else {
+    if door
+        .opening
+        .as_ref()
+        .is_none_or(|o| o.kind == crate::furniture::OpeningKind::Window)
+    {
         return Vec::new();
-    };
-    let swing = polygon(&swing);
+    }
+    let swing = door_swing(door).map(|pts| polygon(&pts));
     let level = home.resolve_level(door.level);
     home.furniture
         .iter()
         .filter(|top| top.id != door.id && home.resolve_level(top.level) == level)
         .flat_map(Furniture::visible_leaves)
-        .filter(|leaf| leaf.id != door.id && !leaf.properties.contains_key("joinery:embedded"))
-        .filter(|leaf| leaf_hits(door, &swing, leaf, &polygon(&leaf.projected_footprint())))
+        .filter(|leaf| leaf.id != door.id)
+        .filter(|leaf| {
+            let footprint = polygon(&leaf.projected_footprint());
+            passage_hits(door, leaf, &footprint)
+                || swing
+                    .as_ref()
+                    .is_some_and(|s| leaf_hits(door, s, leaf, &footprint))
+        })
         .map(|leaf| leaf.id)
         .collect()
 }
@@ -1172,6 +1274,113 @@ mod tests {
         layered.levels[0].set_reference(true);
         assert!(check_layout_in(&layered, Storeys::All).is_empty());
         assert_eq!(layered.stacked_levels(), Vec::new());
+    }
+
+    #[test]
+    fn windows_reject_hoods_and_tall_furniture_but_allow_countertop_appliances() {
+        use crate::furniture::OpeningKind;
+        for angle in [0.0, 90.0, 37.0] {
+            let mut window = piece(1, (200.0, 200.0), (180.0, 20.0, 140.0));
+            window.angle = angle;
+            window.elevation = 110.0;
+            window.opening = Some(Opening {
+                kind: OpeningKind::Window,
+                ..Opening::default()
+            });
+            let mut hood = piece(2, (0.0, 0.0), (60.0, 50.0, 60.0));
+            hood.position = window.to_plan((70.0, 40.0));
+            hood.angle = angle;
+            hood.elevation = 180.0;
+            let mut home = Home::default();
+            home.furniture = vec![window.clone(), hood.clone()];
+            let issues = check_layout(&home);
+            let extent = issues
+                .iter()
+                .find_map(|i| match i {
+                    Issue::BlocksWindow {
+                        window: FurnitureId(1),
+                        by: FurnitureId(2),
+                        extent,
+                    } => Some(*extent),
+                    _ => None,
+                })
+                .expect("partial hood obstruction must be reported at any angle");
+            assert!((extent[0] - 50.0).abs() < 0.001, "{extent:?}");
+            assert!((extent[1] - 60.0).abs() < 0.001, "{extent:?}");
+            let mut airfryer = hood.clone();
+            airfryer.name = "Airfryer sobre bancada".into();
+            airfryer.width = 35.0;
+            airfryer.depth = 40.0;
+            airfryer.height = 35.0;
+            airfryer.elevation = 90.0;
+            assert!(window_obstruction(&window, &airfryer).is_none());
+            let mut glass = hood.clone();
+            glass.opacity = Some(0.2);
+            assert!(window_obstruction(&window, &glass).is_none());
+            glass.opacity = None;
+            glass.catalog = "plant".into();
+            assert!(window_obstruction(&window, &glass).is_none());
+            let mut fridge = hood.clone();
+            fridge.elevation = 0.0;
+            fridge.height = 180.0;
+            assert!(window_obstruction(&window, &fridge).is_some());
+            hood.position = window.to_plan((130.0, 40.0));
+            assert!(
+                window_obstruction(&window, &hood).is_none(),
+                "beside window"
+            );
+            hood.position = window.to_plan((0.0, 150.0));
+            assert!(
+                window_obstruction(&window, &hood).is_none(),
+                "away from window"
+            );
+            hood.position = window.to_plan((0.0, 40.0));
+            hood.elevation = 260.0;
+            assert!(window_obstruction(&window, &hood).is_none(), "above window");
+            home.furniture[1]
+                .properties
+                .insert("joinery:embedded".into(), "hood".into());
+            assert!(
+                check_layout(&home)
+                    .iter()
+                    .any(|i| matches!(i, Issue::BlocksWindow { .. })),
+                "embedded appliances still block windows"
+            );
+            home.furniture[1].visible = false;
+            assert!(
+                !check_layout(&home)
+                    .iter()
+                    .any(|i| matches!(i, Issue::BlocksWindow { .. }))
+            );
+        }
+    }
+
+    #[test]
+    fn sliding_doors_and_passages_require_an_unobstructed_approach_on_both_sides() {
+        use crate::furniture::OpeningKind;
+        for kind in [OpeningKind::Door, OpeningKind::Passage] {
+            for side in [-1.0, 1.0] {
+                let mut door = piece(1, (200.0, 200.0), (90.0, 20.0, 210.0));
+                door.opening = Some(Opening {
+                    kind,
+                    sliding: true,
+                    ..Opening::default()
+                });
+                let blocker = piece(2, (200.0, 200.0 + side * 40.0), (60.0, 40.0, 90.0));
+                let mut home = Home::default();
+                home.furniture = vec![door.clone(), blocker];
+                assert!(check_layout(&home).contains(&Issue::BlocksDoor {
+                    door: door.id,
+                    by: FurnitureId(2)
+                }));
+                assert_eq!(door_blocked_by(&home, &door), vec![FurnitureId(2)]);
+                home.furniture[1].elevation = 220.0;
+                assert!(door_blocked_by(&home, &door).is_empty(), "above door");
+                home.furniture[1].elevation = 0.0;
+                home.furniture[1].height = 1.0;
+                assert!(door_blocked_by(&home, &door).is_empty(), "rug");
+            }
+        }
     }
 
     #[test]
