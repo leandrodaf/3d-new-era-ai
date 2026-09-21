@@ -32,7 +32,7 @@
 //! surface is frozen by `tool_surface_is_unchanged`.
 
 use rmcp::handler::server::router::tool::ToolRouter;
-use rmcp::model::{Implementation, ServerCapabilities, ServerInfo};
+use rmcp::model::{Implementation, ServerCapabilities, ServerConfig};
 use rmcp::{ServerHandler, tool_handler};
 
 use newera_core::SharedDocument;
@@ -157,8 +157,8 @@ impl ServerHandler for NewEraMcp {
         self.tool_router.call(call).await
     }
 
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(
                 Implementation::new("3d-new-era-ai", env!("CARGO_PKG_VERSION"))
                     .with_title("3D New Era AI"),
