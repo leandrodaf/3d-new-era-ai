@@ -68,10 +68,10 @@
 <script>
   // The window itself speaks four languages; so do the lines around it.
   const WORDS = {
-    pt: { webgl: "Sem WebGPU: o editor está rodando em WebGL. Funciona, mas o suporte oficial é no Chrome e no Edge — no Firefox não garantimos." },
-    en: { wait: "Loading the editor…", failed: "This browser could not start the 3D editor. Chrome, Edge and Safari 26 run it; an old browser or a blocked GPU cannot.", download: "Download the app for your computer", webgl: "No WebGPU here: the editor is running on WebGL. It works, but Chrome and Edge are the supported browsers — Firefox is not guaranteed." },
-    es: { wait: "Cargando el editor…", failed: "Este navegador no pudo iniciar el editor 3D. Chrome, Edge y Safari 26 lo ejecutan; un navegador antiguo o una GPU bloqueada no.", download: "Descargue la aplicación para su ordenador", webgl: "Sin WebGPU: el editor está funcionando en WebGL. Funciona, pero el soporte oficial es Chrome y Edge — en Firefox no lo garantizamos." },
-    fr: { wait: "Chargement de l'éditeur…", failed: "Ce navigateur n'a pas pu démarrer l'éditeur 3D. Chrome, Edge et Safari 26 le font tourner ; un navigateur ancien ou un GPU bloqué, non.", download: "Téléchargez l'application pour votre ordinateur", webgl: "Pas de WebGPU : l'éditeur tourne en WebGL. Cela fonctionne, mais les navigateurs pris en charge sont Chrome et Edge — Firefox n'est pas garanti." },
+    pt: { webgl: "Sem WebGPU: o editor está rodando em WebGL. Funciona, mas o suporte oficial é no Chrome e no Edge — no Firefox não garantimos.", linux: "O Chrome no Linux vem com a placa de vídeo desativada para o WebGPU, então o editor está rodando em WebGL (mais lento). Para ativar: 1) copie chrome://flags/#enable-unsafe-webgpu e cole na barra de endereço; 2) mude para Enabled; 3) faça o mesmo com chrome://flags/#enable-vulkan; 4) clique em Relaunch para reiniciar o Chrome.", blocked: "O navegador tem WebGPU, mas recusou a placa de vídeo (driver bloqueado ou aceleração desligada), então o editor está rodando em WebGL. Funciona; veja o motivo em chrome://gpu." },
+    en: { wait: "Loading the editor…", failed: "This browser could not start the 3D editor. Chrome, Edge and Safari 26 run it; an old browser or a blocked GPU cannot.", download: "Download the app for your computer", webgl: "No WebGPU here: the editor is running on WebGL. It works, but Chrome and Edge are the supported browsers — Firefox is not guaranteed.", linux: "Chrome on Linux ships with the graphics card turned off for WebGPU, so the editor is running on WebGL (slower). To turn it on: 1) copy chrome://flags/#enable-unsafe-webgpu into the address bar; 2) set it to Enabled; 3) do the same with chrome://flags/#enable-vulkan; 4) click Relaunch to restart Chrome.", blocked: "This browser has WebGPU but refused the graphics card (a blocked driver or hardware acceleration turned off), so the editor is running on WebGL. It works; chrome://gpu shows why." },
+    es: { wait: "Cargando el editor…", failed: "Este navegador no pudo iniciar el editor 3D. Chrome, Edge y Safari 26 lo ejecutan; un navegador antiguo o una GPU bloqueada no.", download: "Descargue la aplicación para su ordenador", webgl: "Sin WebGPU: el editor está funcionando en WebGL. Funciona, pero el soporte oficial es Chrome y Edge — en Firefox no lo garantizamos.", linux: "Chrome en Linux trae la tarjeta gráfica desactivada para WebGPU, así que el editor está funcionando en WebGL (más lento). Para activarla: 1) copie chrome://flags/#enable-unsafe-webgpu en la barra de direcciones; 2) cámbielo a Enabled; 3) haga lo mismo con chrome://flags/#enable-vulkan; 4) pulse Relaunch para reiniciar Chrome.", blocked: "El navegador tiene WebGPU, pero rechazó la tarjeta gráfica (controlador bloqueado o aceleración desactivada), así que el editor está funcionando en WebGL. Funciona; el motivo aparece en chrome://gpu." },
+    fr: { wait: "Chargement de l'éditeur…", failed: "Ce navigateur n'a pas pu démarrer l'éditeur 3D. Chrome, Edge et Safari 26 le font tourner ; un navigateur ancien ou un GPU bloqué, non.", download: "Téléchargez l'application pour votre ordinateur", webgl: "Pas de WebGPU : l'éditeur tourne en WebGL. Cela fonctionne, mais les navigateurs pris en charge sont Chrome et Edge — Firefox n'est pas garanti.", linux: "Chrome sous Linux est livré avec la carte graphique désactivée pour WebGPU, donc l'éditeur tourne en WebGL (plus lent). Pour l'activer : 1) copiez chrome://flags/#enable-unsafe-webgpu dans la barre d'adresse ; 2) passez-le sur Enabled ; 3) faites de même avec chrome://flags/#enable-vulkan ; 4) cliquez sur Relaunch pour redémarrer Chrome.", blocked: "Le navigateur a WebGPU mais a refusé la carte graphique (pilote bloqué ou accélération désactivée), donc l'éditeur tourne en WebGL. Cela fonctionne ; chrome://gpu indique pourquoi." },
   };
   const tag = (navigator.languages ?? [navigator.language ?? ""])
     .map((name) => String(name).slice(0, 2).toLowerCase())
@@ -91,18 +91,30 @@
     try {
       webgpu = Boolean(navigator.gpu && (await navigator.gpu.requestAdapter()));
     } catch (_) { /* the API is there but refuses: same as not having it */ }
-    if (webgpu || localStorage.getItem("newera-webgl-notice") === "seen") return;
+    if (webgpu) return;
+    // "Use Chrome" is no advice to someone already in Chrome: name the cause.
+    // Chrome on Linux ships WebGPU off, and a present API with no adapter is
+    // a GPU the browser turned down — neither is fixed by switching browsers.
+    const chromium = (navigator.userAgentData?.brands ?? []).some((b) => b.brand === "Chromium")
+      || /Chrome\//.test(navigator.userAgent);
+    const linux = /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+    const reason = navigator.gpu ? (chromium ? "blocked" : "webgl")
+      : chromium && linux ? "linux" : "webgl";
+    // Remembered per reason: dismissing the old generic line must not hide the how-to.
+    const seen = reason === "webgl" ? "seen" : "seen-" + reason;
+    try { if (localStorage.getItem("newera-webgl-notice") === seen) return; } catch (_) { /* private mode */ }
     const notice = document.getElementById("notice");
-    document.getElementById("notice-text").textContent = words.webgl;
+    document.getElementById("notice-text").textContent = words[reason];
     notice.style.display = "flex";
     // It sits over the editor's own top bar — which on a phone is most of the
-    // screen — so it says its piece and goes, and stays gone once read.
+    // screen — so it says its piece and goes, and stays gone once read. Steps to
+    // follow stay until closed: nobody copies a flag in twelve seconds.
     const hide = (remember) => {
       notice.style.display = "none";
       if (!remember) return;
-      try { localStorage.setItem("newera-webgl-notice", "seen"); } catch (_) { /* private mode */ }
+      try { localStorage.setItem("newera-webgl-notice", seen); } catch (_) { /* private mode */ }
     };
-    setTimeout(() => hide(false), 12000);
+    if (reason === "webgl") setTimeout(() => hide(false), 12000);
     document.getElementById("notice-close").addEventListener("click", () => hide(true));
   })();
 
