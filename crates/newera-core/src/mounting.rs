@@ -135,6 +135,127 @@ pub fn mount_of(catalog: &str) -> Option<Mount> {
     }
 }
 
+/// Hangs from the ceiling on a cord: its top is the canopy, its bottom the
+/// shade. Every other ceiling piece sits flush.
+fn hangs(catalog: &str) -> bool {
+    catalog == "pendant"
+}
+
+/// Whether a piece is fixed to the ceiling: flush (spots, panels, points)
+/// or hung (pendants). Its top belongs on the ceiling, always.
+pub fn on_ceiling(piece: &Furniture) -> bool {
+    !piece.is_group()
+        && piece.opening.is_none()
+        && (hangs(&piece.catalog) || mount_of(&piece.catalog) == Some(Mount::Ceiling))
+}
+
+/// How far a flush piece may be set into the ceiling slab, cm: a recessed
+/// spot's flange sits 0.6 cm into it by design, and is not "above" it.
+pub const RECESS: f64 = 1.0;
+
+/// Shortest cord and shade a pendant is drawn with, cm.
+const MIN_DROP: f64 = 15.0;
+
+/// The ceiling over a piece, cm above its storey's floor: the same surface
+/// the 3D draws and `above_ceiling` checks — flat, sloping under a gable
+/// or cut by a roof — taken at its lowest over the piece's footprint, so a
+/// panel on a slope does not poke through at its high corner. Falls back to
+/// the nearest wall's top when its room draws no ceiling.
+pub fn ceiling_over(home: &Home, piece: &Furniture) -> Option<f64> {
+    ceiling_over_cached(home, piece, &mut Surfaces::new())
+}
+
+/// Ceiling surfaces already worked out, per room: one room's is the same
+/// for every spot in it.
+type Surfaces = std::collections::HashMap<crate::ids::RoomId, Vec<crate::CeilingTriangle>>;
+
+fn ceiling_over_cached(home: &Home, piece: &Furniture, surfaces: &mut Surfaces) -> Option<f64> {
+    let level = home.resolve_level(piece.level);
+    let at = piece.position;
+    let mut probes = vec![at];
+    probes.extend(piece.footprint());
+    let room = home.rooms.iter().find(|r| {
+        home.resolve_level(r.level) == level
+            && r.points.len() >= 3
+            && crate::electrical::inside(&r.points, at)
+    });
+    let lowest = room.and_then(|room| {
+        let surface = surfaces
+            .entry(room.id)
+            .or_insert_with(|| crate::room_ceiling(home, room));
+        probes
+            .iter()
+            .filter_map(|p| {
+                surface
+                    .iter()
+                    .filter(|t| crate::electrical::inside_room(&t.points, *p, 0.5))
+                    .map(|t| t.height_at(*p))
+                    .reduce(f64::min)
+            })
+            .reduce(f64::min)
+    });
+    lowest.or_else(|| ceiling_at(&home.level_view(level), at))
+}
+
+/// Ceiling pieces whose top has left the ceiling, set back onto it: after
+/// a move into a room with another ceiling, a new storey height, a wall
+/// raised, or a size typed by hand. `before` is each one's `(elevation,
+/// height)` before the edit, to keep what the edit meant.
+///
+/// A flush piece moves up or down to it. A pendant keeps its canopy on
+/// the ceiling and its shade where it was — the height that matters over a
+/// table — so the cord takes the difference; only when the edit changed its
+/// height alone does it keep that drop and move instead.
+pub fn ceilings_following(
+    home: &Home,
+    before: &[(crate::ids::FurnitureId, (f64, f64))],
+) -> Vec<Furniture> {
+    let mut surfaces = Surfaces::new();
+    home.furniture
+        .iter()
+        .filter(|f| on_ceiling(f))
+        .filter_map(|f| {
+            let ceiling = ceiling_over_cached(home, f, &mut surfaces)?;
+            // On it, or recessed into the slab by a flange's depth (a spot's
+            // top sits 0.6 cm into it by design).
+            let top = f.elevation + f.height - ceiling;
+            if ceiling <= 0.0 || (-0.5..=RECESS).contains(&top) {
+                return None;
+            }
+            let mut fixed = f.clone();
+            if hangs(&f.catalog) {
+                let was = before
+                    .iter()
+                    .find(|(id, _)| *id == f.id)
+                    .map(|(_, was)| was);
+                let resized = was.is_some_and(|(elev, h)| {
+                    (elev - f.elevation).abs() < 1e-9 && (h - f.height).abs() > 1e-9
+                });
+                let drop = if resized {
+                    f.height
+                } else {
+                    ceiling - f.elevation
+                };
+                fixed.height = drop.max(MIN_DROP).min(ceiling);
+            } else {
+                fixed.height = f.height.min(ceiling);
+            }
+            fixed.elevation = ceiling - fixed.height;
+            Some(fixed)
+        })
+        .collect()
+}
+
+/// `(elevation, height)` of every ceiling piece, to hand back to
+/// [`ceilings_following`] after an edit.
+pub fn ceiling_pieces(home: &Home) -> Vec<(crate::ids::FurnitureId, (f64, f64))> {
+    home.furniture
+        .iter()
+        .filter(|f| on_ceiling(f))
+        .map(|f| (f.id, (f.elevation, f.height)))
+        .collect()
+}
+
 /// The ceiling over a plan point, cm above the floor: the top of the nearest
 /// wall, which is the slab it holds.
 fn ceiling_at(view: &Home, at: Point2) -> Option<f64> {
@@ -263,8 +384,9 @@ pub fn seat(home: &Home, piece: &mut Furniture) -> Result<(), String> {
                     [piece.position.x.round(), piece.position.y.round()]
                 ));
             }
-            if let Some(ceiling) = ceiling_at(&view, piece.position) {
-                piece.elevation = (ceiling - piece.height).max(0.0);
+            if let Some(ceiling) = ceiling_over(home, piece) {
+                piece.height = piece.height.min(ceiling);
+                piece.elevation = ceiling - piece.height;
             }
             Ok(())
         }
@@ -363,7 +485,7 @@ pub fn blocked(home: &Home, piece: &Furniture) -> Option<String> {
             ));
         }
         let top = piece.elevation + piece.height;
-        return ceiling_at(&view, piece.position)
+        return ceiling_over(home, piece)
             .filter(|c| top < c - UNDER_CEILING || top > c + 5.0)
             .map(|c| {
                 format!(
@@ -1131,7 +1253,14 @@ mod tests {
         ap.height = 4.0;
         assert!(blocked(&home, &ap).unwrap().contains("solto no ar"));
         seat(&home, &mut ap).unwrap();
-        assert!((ap.elevation - 266.0).abs() < 1e-6 && blocked(&home, &ap).is_none());
+        // Onto the ceiling the 3D draws — the room's flat one, at the storey
+        // height — not the top of walls built taller than it.
+        assert!((ap.elevation - 246.0).abs() < 1e-6 && blocked(&home, &ap).is_none());
+        let mut taller = home.clone();
+        taller.wall_height = 270.0;
+        let mut up = ap.clone();
+        seat(&taller, &mut up).unwrap();
+        assert!((up.elevation - 266.0).abs() < 1e-6, "{}", up.elevation);
         let mut outside = ap.clone();
         outside.position = Point2::new(600.0, 150.0);
         assert!(seat(&home, &mut outside).is_err());

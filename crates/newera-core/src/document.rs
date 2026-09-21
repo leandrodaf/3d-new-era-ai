@@ -267,6 +267,7 @@ impl Document {
             )
         };
         let before = shape(&variant.home);
+        let hung = crate::mounting::ceiling_pieces(&variant.home);
         let mut inverse = command.apply(&mut variant.home)?;
         // Rooms detected from walls follow them, in the same undo step.
         if variant.home.rooms.iter().any(|r| r.auto) && shape(&variant.home) != before {
@@ -352,6 +353,25 @@ impl Document {
                 }
             }
         }
+        // Spots, panels and pendants stay on the ceiling, in the same undo
+        // step: moved into another room, under a storey made taller, or
+        // resized, none is left floating under it or poking through it.
+        let reseat = crate::mounting::ceilings_following(&variant.home, &hung);
+        if !reseat.is_empty() {
+            let mut undo_hung = Vec::new();
+            for piece in reseat {
+                if let Ok(previous) = Command::update(piece).apply(&mut variant.home) {
+                    undo_hung.push(previous);
+                }
+            }
+            if !undo_hung.is_empty() {
+                undo_hung.reverse();
+                undo_hung.push(inverse);
+                inverse = Command::Batch {
+                    commands: undo_hung,
+                };
+            }
+        }
         variant.undo_stack.push(inverse);
         variant.redo_stack.clear();
         self.revision += 1;
@@ -385,7 +405,16 @@ impl Document {
     pub fn load_variants(&mut self, variants: Vec<(String, Home)>, active: usize) {
         self.variants = variants
             .into_iter()
-            .map(|(name, home)| Variant::new(name, home))
+            .map(|(name, mut home)| {
+                // A project saved with a lamp through its ceiling opens with
+                // it hung right: the fit is what every edit keeps anyway.
+                for piece in crate::mounting::ceilings_following(&home, &[]) {
+                    if let Some(slot) = home.furniture.iter_mut().find(|f| f.id == piece.id) {
+                        *slot = piece;
+                    }
+                }
+                Variant::new(name, home)
+            })
             .collect();
         if self.variants.is_empty() {
             self.variants
@@ -631,5 +660,128 @@ mod tests {
         doc.mark_saved("/tmp/x.newera");
         doc.add_variant(None, true);
         assert!(doc.is_modified());
+    }
+
+    /// A room 400 × 400 with walls 280 tall and its ceiling at the storey
+    /// height, and a pendant and a spot put in it at the catalog's heights.
+    fn lit_room() -> (Document, crate::FurnitureId, crate::FurnitureId) {
+        use crate::{Furniture, FurnitureId, Point2, Room, RoomId, Wall, WallId};
+        let mut doc = Document::default();
+        let corners = [(0.0, 0.0), (400.0, 0.0), (400.0, 400.0), (0.0, 400.0)];
+        let mut commands: Vec<Command> = (0..4)
+            .map(|k| {
+                let (a, b) = (corners[k], corners[(k + 1) % 4]);
+                let mut w = Wall::new(
+                    WallId(k as u64 + 1),
+                    Point2::new(a.0, a.1),
+                    Point2::new(b.0, b.1),
+                );
+                w.height = 280.0;
+                Command::insert(w)
+            })
+            .collect();
+        commands.push(Command::insert(Room::new(
+            RoomId(9),
+            "Jantar",
+            corners.iter().map(|c| Point2::new(c.0, c.1)).collect(),
+        )));
+        doc.execute(Command::Batch { commands }).unwrap();
+        // As the catalog makes them: 170 + 90 = 260, a spot at 259.4 + 3.
+        let (pendant, spot) = (FurnitureId(20), FurnitureId(21));
+        doc.execute(Command::Batch {
+            commands: vec![
+                Command::insert(Furniture {
+                    id: pendant,
+                    catalog: "pendant".into(),
+                    position: Point2::new(200.0, 200.0),
+                    width: 35.0,
+                    depth: 35.0,
+                    height: 90.0,
+                    elevation: 170.0,
+                    ..Furniture::default()
+                }),
+                Command::insert(Furniture {
+                    id: spot,
+                    catalog: "downlight".into(),
+                    position: Point2::new(100.0, 100.0),
+                    width: 10.0,
+                    depth: 10.0,
+                    height: 3.0,
+                    elevation: 259.4,
+                    ..Furniture::default()
+                }),
+            ],
+        })
+        .unwrap();
+        (doc, pendant, spot)
+    }
+
+    /// Bottom and top of a piece, to the tenth of a millimetre.
+    fn top(doc: &Document, id: crate::FurnitureId) -> (f64, f64) {
+        let f = doc.home().find_piece(id).unwrap();
+        let round = |v: f64| (v * 100.0).round() / 100.0;
+        (round(f.elevation), round(f.elevation + f.height))
+    }
+
+    #[test]
+    fn ceiling_pieces_hang_from_the_ceiling_whatever_changes_under_them() {
+        let (mut doc, pendant, spot) = lit_room();
+        // The ceiling drawn is the storey's, 250: the pendant's 260 went
+        // through it. Its shade stays at 170 and its cord is 80.
+        assert!((doc.home().wall_height - 250.0).abs() < 1e-9);
+        assert_eq!(top(&doc, pendant), (170.0, 250.0));
+        assert_eq!(top(&doc, spot), (247.0, 250.0));
+        // A taller storey: both go up with it, the shade still at 170.
+        let mut home = doc.home().clone();
+        home.wall_height = 280.0;
+        doc.load(home);
+        doc.execute(Command::update(doc.home().rooms[0].clone()))
+            .unwrap();
+        assert_eq!(top(&doc, pendant), (170.0, 280.0));
+        assert_eq!(top(&doc, spot), (277.0, 280.0));
+    }
+
+    #[test]
+    fn an_edit_to_a_pendant_keeps_what_it_meant_and_undo_puts_it_back() {
+        let (mut doc, pendant, _) = lit_room();
+        let edit = |doc: &mut Document, f: &dyn Fn(&mut crate::Furniture)| {
+            let mut piece = doc.home().find_piece(pendant).unwrap().clone();
+            f(&mut piece);
+            doc.execute(Command::update(piece)).unwrap();
+        };
+        // Lowered over a table: the shade goes to 150, the cord grows.
+        edit(&mut doc, &|p| p.elevation = 150.0);
+        assert_eq!(top(&doc, pendant), (150.0, 250.0));
+        // A shorter drop typed alone: 40 cm of pendant, hung from the ceiling.
+        edit(&mut doc, &|p| p.height = 40.0);
+        assert_eq!(top(&doc, pendant), (210.0, 250.0));
+        // Moved: it is still on the ceiling, nothing else changes.
+        edit(&mut doc, &|p| p.position = crate::Point2::new(300.0, 300.0));
+        assert_eq!(top(&doc, pendant), (210.0, 250.0));
+        // One undo is the whole edit, the ceiling fit included.
+        doc.undo().unwrap();
+        doc.undo().unwrap();
+        assert_eq!(top(&doc, pendant), (150.0, 250.0));
+    }
+
+    #[test]
+    fn a_sloping_ceiling_is_met_under_every_corner_of_a_panel() {
+        let (mut doc, _, spot) = lit_room();
+        // The room follows the walls, 200 at x=0 up to 400 at x=400.
+        let mut home = doc.home().clone();
+        for w in &mut home.walls {
+            let h = |x: f64| 200.0 + x / 2.0;
+            w.height = h(w.start.x);
+            w.height_at_end = Some(h(w.end.x));
+        }
+        home.rooms[0].ceiling_flat = false;
+        doc.load(home);
+        let mut panel = doc.home().find_piece(spot).unwrap().clone();
+        panel.catalog = "led-panel".into();
+        (panel.width, panel.depth, panel.height) = (62.0, 62.0, 2.0);
+        doc.execute(Command::update(panel)).unwrap();
+        // Centered at x=100 (ceiling 250), its low edge at x=69 is 234.5.
+        let (_, t) = top(&doc, spot);
+        assert!((t - 234.5).abs() < 0.01, "{t}");
     }
 }
