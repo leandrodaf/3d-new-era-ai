@@ -1850,6 +1850,13 @@ pub fn fold(text: &str) -> String {
 }
 
 impl CatalogItem {
+    /// Which side is its front, what that front and its back are, and
+    /// whether the back belongs on a wall. Every model is built facing its
+    /// local `+y`: at `angle` 0 the front looks down the plan.
+    pub fn front(&self) -> newera_core::front::Front {
+        newera_core::front::of(self.id)
+    }
+
     /// A new piece of this item, at its default size, centered at `position`.
     pub fn instantiate(
         &self,
@@ -1947,6 +1954,128 @@ mod tests {
                 original,
                 "{} default appearance changed",
                 item.id
+            );
+        }
+    }
+
+    /// Every item says which way it faces: either `newera_core::front` names
+    /// its front, or it is listed here as having none. A new item that is in
+    /// neither fails, so nobody adds a sofa an agent will turn to the wall.
+    #[test]
+    fn every_item_is_marked_with_its_front_or_as_having_none() {
+        const NO_FRONT: &[&str] = &[
+            "coffee-table",
+            "side-table",
+            "rug",
+            "floor-lamp",
+            "table-lamp",
+            "downlight",
+            "pendant",
+            "led-panel",
+            "led-strip",
+            "dining-table-4",
+            "dining-table-6",
+            "dining-set-4",
+            "dining-set-6",
+            "round-table",
+            "cooktop",
+            "sink-bowl",
+            "stool",
+            "crib",
+            "shower-glass",
+            "bathtub",
+            "door",
+            "door-double",
+            "door-sliding",
+            "garage-door",
+            "passage",
+            "window",
+            "window-small",
+            "french-window",
+            "column",
+            "column-round",
+            "footing",
+            "beam",
+            "panel",
+            "roof-sheet",
+            "railing",
+            "glass-railing",
+            "balcony-glazing",
+            "box",
+            "plant",
+            "planter",
+            "fence",
+            "pool",
+            "pool-oval",
+            "bench",
+            "tree",
+            "car",
+            "outlet-low",
+            "outlet-mid",
+            "outlet-high",
+            "switch",
+            "switch-double",
+            "switch-3way",
+            "light-ceiling",
+            "light-wall",
+            "electrical-panel",
+            "ac-point",
+            "shower-point",
+            "data-outlet",
+            "network-outlet",
+            "tv-outlet",
+            "wifi-point",
+            "telecom-panel",
+            "doorbell",
+            "outlet-tower",
+            "outlet-tower-auto",
+            "outlet-tower-4",
+            "desk-outlet-box",
+            "furniture-outlet",
+            "smart-relay",
+            "smart-switch",
+            "dimmer",
+            "presence-sensor",
+            "smart-lock",
+            "cold-water",
+            "hot-water",
+            "sewer",
+            "floor-drain",
+            "floor-drain-100",
+            "floor-drain-75",
+            "trap-drain-small",
+            "dry-drain",
+            "linear-drain",
+            "linear-drain-trap",
+            "rain-drain",
+            "valve",
+            "grease-trap",
+            "vent-grille",
+            "vent-pipe",
+            "inspection-box",
+            "water-meter",
+            "gas-point",
+        ];
+        for item in CATALOG {
+            let front = item.front();
+            let none = NO_FRONT.contains(&item.id);
+            assert!(
+                front.stance.has_front() != none,
+                "{}: mark its front in newera_core::front, or list it in NO_FRONT",
+                item.id
+            );
+            if front.stance.has_front() {
+                assert!(
+                    !front.front.is_empty() && !front.back.is_empty(),
+                    "{}",
+                    item.id
+                );
+            }
+        }
+        for id in newera_core::front::listed() {
+            assert!(
+                find(id).is_some(),
+                "newera_core::front names `{id}`, not in the catalog"
             );
         }
     }

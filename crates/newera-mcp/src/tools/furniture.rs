@@ -56,10 +56,38 @@ pub(crate) struct ArrangeParams {
     /// distribute: centimeters between one piece and the next (default 0).
     gap: Option<f64>,
 }
+/// Where each placed piece that has a front ended up looking, and which
+/// ones were turned to put their back on a wall: ` faces=f3:+y(seat)
+/// turned=f3:back to w2`. The angle alone never said it; this does.
+fn faces_note(doc: &newera_core::Document, ids: &[String], turned: &[String]) -> String {
+    let home = doc.home();
+    let faces: Vec<String> = ids
+        .iter()
+        .filter_map(|raw| {
+            let piece = home.find_piece(raw.parse().ok()?)?;
+            let front = newera_core::front::of(&piece.catalog);
+            front
+                .stance
+                .has_front()
+                .then(|| format!("{raw}:{}({})", newera_core::facing(piece), front.front))
+        })
+        .collect();
+    let mut note = String::new();
+    if !faces.is_empty() {
+        note.push_str(" faces=");
+        note.push_str(&faces.join(","));
+    }
+    if !turned.is_empty() {
+        note.push_str(" turned=");
+        note.push_str(&turned.join(","));
+    }
+    note
+}
+
 #[tool_router(router = furniture_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Place catalog items, or copy=<id> of a piece already in the project (its model — even one embedded from an old import —, finish and parts, the id catalog(scope=project) gives): at=[x,y] center (doors/windows near a wall snap into it; into=[x,y] picks the swing side), or wall=id (+along cm) to put doors/windows in a wall or furniture against it. Sizes w/d/h override defaults; pitch/roll tilt; angle clockwise degrees (0: front faces +y, down the plan; back/headboard toward -y); mat finish (wood, marble, img:…; 'img:facade.png fit' stretches one image: a reference board to compare with render_3d view=front) and opacity (glass 0.3); defaults {…} fills every item; px=true reads coordinates as background pixels. cat=beam with a,b=[x,y,z] (z above the floor) and w×h section makes rafters, posts and braces; a beam reaching into a roof stops under it. Pools: pool or pool-oval. dry=true answers what it would do — what it would add, the clearances around it, the findings it would settle or create — without writing; dry=\"summary\" answers short."
+        description = "Place catalog items, or copy=<id> of a piece already in the project (its model — even one embedded from an old import —, finish and parts, the id catalog(scope=project) gives): at=[x,y] center (doors/windows near a wall snap into it; into=[x,y] picks the swing side), or wall=id (+along cm) to put doors/windows in a wall or furniture against it, back to the wall and front to the room. Sizes w/d/h override defaults; pitch/roll tilt. Which way it looks: facing=+x|-x|+y|-y, [x,y] or an element id to turn its front toward (armchair facing the TV) — prefer it to angle, clockwise degrees on a plan whose y grows down: 0 front to +y, 90 to -x, 180 to -y, 270 to +x (the catalog tool names each front: seat, doors, foot of the bed). A piece whose back belongs on a wall, put at=[x,y] within 30 cm of one with neither angle nor facing, is turned back to that wall on its own. The reply says where each front ended up: faces=f3:+y(seat), turned=f3:back to w2 — read it before building on the piece; mat finish (wood, marble, img:…; 'img:facade.png fit' stretches one image: a reference board to compare with render_3d view=front) and opacity (glass 0.3); defaults {…} fills every item; px=true reads coordinates as background pixels. cat=beam with a,b=[x,y,z] (z above the floor) and w×h section makes rafters, posts and braces; a beam reaching into a roof stops under it. Pools: pool or pool-oval. dry=true answers what it would do — what it would add, the clearances around it, the findings it would settle or create — without writing; dry=\"summary\" answers short."
     )]
     pub(crate) fn place(
         &self,
@@ -76,6 +104,9 @@ impl NewEraMcp {
             for item in &mut items {
                 item.at = item.at.map(|q| bg.point(q));
                 item.into = item.into.map(|q| bg.point(q));
+                if let Some(edit::Facing::At(q)) = &mut item.facing {
+                    *q = bg.point(*q);
+                }
                 item.along = item.along.map(|v| v * bg.scale);
                 for end in [&mut item.a, &mut item.b] {
                     *end = end.map(|[x, y, z]| {
@@ -95,8 +126,10 @@ impl NewEraMcp {
         }
         let mut doc = self.document.write();
         on_variant(&mut doc, p.v)?;
-        let ids = edit::place(&mut doc, items).map_err(invalid)?;
-        Ok(ok(&doc, &ids))
+        let (ids, turned) = edit::place_noting(&mut doc, items).map_err(invalid)?;
+        // `ids=` stays last: it is what callers split the reply on.
+        let note = faces_note(&doc, &ids, &turned);
+        Ok(format!("{}{note} ids={}", ok(&doc, &[]), ids.join(",")))
     }
 
     #[tool(
@@ -247,6 +280,119 @@ mod tests {
 
     use crate::edit::CreateParams;
     use crate::tools::server;
+
+    /// A 500 × 400 room, and a way to place into it that returns the reply
+    /// and the pieces it made.
+    fn room() -> crate::NewEraMcp {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[500,0],[500,400],[0,400]],"closed":true}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s
+    }
+
+    fn placed(s: &crate::NewEraMcp, json: &str) -> (String, Vec<newera_core::Furniture>) {
+        let reply = s
+            .place(Parameters(serde_json::from_str(json).unwrap()))
+            .unwrap();
+        let home = s.document.read().home().clone();
+        let pieces = reply
+            .rsplit("ids=")
+            .next()
+            .unwrap()
+            .split(',')
+            .map(|id| home.find_piece(id.trim().parse().unwrap()).unwrap().clone())
+            .collect();
+        (reply, pieces)
+    }
+
+    #[test]
+    fn a_piece_that_belongs_on_a_wall_turns_its_back_to_the_one_beside_it() {
+        let s = room();
+        let t = s.document.read().home().walls[0].thickness / 2.0;
+        // A sofa dropped by the bottom wall with no angle: at 0 it would
+        // look into that wall. Its back goes there, the gap it was given kept.
+        let (reply, pieces) = placed(&s, r#"{"items":[{"cat":"sofa-3","at":[250,340]}]}"#);
+        let sofa = &pieces[0];
+        assert!((sofa.angle - 180.0).abs() < 1e-9, "{reply}");
+        assert!(
+            (sofa.position.y - 340.0).abs() < 1e-9,
+            "{:?}",
+            sofa.position
+        );
+        assert!(
+            reply.contains(&format!("faces={}:-y(seat)", sofa.id)),
+            "{reply}"
+        );
+        assert!(reply.contains("turned="), "{reply}");
+        // A bed whose center is closer to the left wall than half its length:
+        // turned, headboard on that wall, and taken out of it.
+        let (_, pieces) = placed(&s, r#"{"items":[{"cat":"bed-double","at":[60,200]}]}"#);
+        let bed = &pieces[0];
+        assert!((bed.angle - 270.0).abs() < 1e-9, "{bed:?}");
+        assert!(
+            (bed.position.x - (t + bed.depth / 2.0)).abs() < 1e-9,
+            "{bed:?}"
+        );
+        assert_eq!(newera_core::facing(bed), "+x");
+        // In the middle of the room nothing is guessed, and an explicit
+        // angle is always kept.
+        let (reply, pieces) = placed(
+            &s,
+            r#"{"items":[{"cat":"sofa-2","at":[250,200]},{"cat":"sofa-2","at":[250,340],"angle":0}]}"#,
+        );
+        assert!(pieces.iter().all(|p| p.angle.abs() < 1e-9), "{reply}");
+        assert!(!reply.contains("turned="), "{reply}");
+        // So a sofa told to face the wall is reported, with the angle that fixes it.
+        let layout = s
+            .check_layout(Parameters(crate::tools::check::CheckParams::default()))
+            .unwrap();
+        assert!(
+            layout.contains("backwards") && layout.contains(&pieces[1].id.to_string()),
+            "{layout}"
+        );
+    }
+
+    #[test]
+    fn facing_turns_the_front_toward_a_side_a_point_or_an_element() {
+        let s = room();
+        let (_, tv) = placed(&s, r#"{"items":[{"cat":"tv","at":[250,30]}]}"#);
+        let tv = tv[0].id.to_string();
+        let (reply, pieces) = placed(
+            &s,
+            &format!(
+                r#"{{"items":[
+                    {{"cat":"armchair","at":[250,250],"facing":"{tv}"}},
+                    {{"cat":"chair","at":[100,200],"facing":"+x"}},
+                    {{"cat":"chair","at":[400,200],"facing":[100,200]}},
+                    {{"cat":"office-chair","at":[250,150],"facing":"-x"}}
+                ]}}"#
+            ),
+        );
+        let sides: Vec<&str> = pieces.iter().map(newera_core::facing).collect();
+        assert_eq!(sides, ["-y", "+x", "-x", "-x"], "{reply}");
+        assert!((pieces[1].angle - 270.0).abs() < 1e-9);
+        // With a wall, facing picks which side of it: into the room.
+        let wall = s.document.read().home().walls[0].id.to_string();
+        let (_, pieces) = placed(
+            &s,
+            &format!(r#"{{"items":[{{"cat":"wardrobe","wall":"{wall}","facing":[250,200]}}]}}"#),
+        );
+        assert_eq!(newera_core::facing(&pieces[0]), "+y");
+        assert!(pieces[0].position.y > 0.0, "{:?}", pieces[0].position);
+        // Both at once is a contradiction waiting to happen.
+        let both = s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"chair","at":[100,100],"angle":0,"facing":"+x"}]}"#,
+            )
+            .unwrap(),
+        ));
+        assert!(both.is_err());
+    }
 
     #[test]
     fn a_piece_in_the_project_is_copied_with_its_model_finish_and_parts() {

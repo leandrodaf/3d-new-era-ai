@@ -425,7 +425,27 @@ pub(crate) fn catalog(query: Option<&str>, category: Option<&str>, limit: usize)
     let rows: Vec<Value> = items
         .iter()
         .take(limit)
-        .map(|i| json!([i.id, i.name, num(i.size[0]), num(i.size[1]), num(i.size[2])]))
+        .map(|i| {
+            let mut row = vec![
+                json!(i.id),
+                json!(i.name),
+                num(i.size[0]),
+                num(i.size[1]),
+                num(i.size[2]),
+            ];
+            // Which side is the front, so nobody places a sofa facing the
+            // wall: `wall seat/backrest` — back on a wall, seat to the room.
+            let front = i.front();
+            if front.stance.has_front() {
+                row.push(json!(format!(
+                    "{} {}/{}",
+                    front.stance.name(),
+                    front.front,
+                    front.back
+                )));
+            }
+            Value::Array(row)
+        })
         .collect();
     let mut out = json!({ "items": rows });
     if items.len() > limit {
@@ -560,6 +580,24 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
                     ("piece", issue_ref(home, piece.into())),
                     ("against", issue_ref(home, against)),
                     ("cm", num(cm)),
+                ]),
+            ),
+            Issue::Backwards {
+                piece,
+                wall,
+                cm,
+                angle,
+            } => push(
+                "backwards",
+                obj([
+                    ("key", json!(key)),
+                    ("piece", issue_ref(home, piece.into())),
+                    ("wall", issue_ref(home, wall.into())),
+                    ("cm", num(cm)),
+                    (
+                        "fix",
+                        json!({"angle": num(angle), "or": "place again with wall=<wall id>"}),
+                    ),
                 ]),
             ),
             Issue::InWall(f, w) => push(

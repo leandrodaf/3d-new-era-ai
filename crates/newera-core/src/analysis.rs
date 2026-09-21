@@ -80,6 +80,19 @@ pub enum Issue {
         /// Free centimeters in front of it.
         cm: f64,
     },
+    /// A piece whose back belongs on a wall with its front on one instead:
+    /// a sofa facing the wall, a bed with its foot where the headboard
+    /// goes, a toilet with its seat to the tiles. Turned half around from
+    /// what was meant — the angle's sums gone the wrong way.
+    Backwards {
+        piece: FurnitureId,
+        /// The wall its front is against.
+        wall: WallId,
+        /// Free centimeters in front of it.
+        cm: f64,
+        /// The angle that puts its back on that wall instead.
+        angle: f64,
+    },
     /// A piece that is not a door or window goes through a wall.
     InWall(FurnitureId, WallId),
     /// A piece blocks a door leaf or the approach to a door/passage.
@@ -158,6 +171,7 @@ impl Issue {
         match self {
             Self::Overlap { a, b, .. } => vec![(*a).into(), (*b).into()],
             Self::Blocked { piece, against, .. } => vec![(*piece).into(), *against],
+            Self::Backwards { piece, wall, .. } => vec![(*piece).into(), (*wall).into()],
             Self::InWall(f, w) => vec![(*f).into(), (*w).into()],
             Self::BlocksDoor { door, by } => vec![(*door).into(), (*by).into()],
             Self::BlocksWindow { window, by, .. } => vec![(*window).into(), (*by).into()],
@@ -189,6 +203,7 @@ impl Issue {
         match self {
             Self::Overlap { .. } => "overlap",
             Self::Blocked { .. } => "blocked",
+            Self::Backwards { .. } => "backwards",
             Self::InWall(..) => "in_wall",
             Self::BlocksDoor { .. } => "blocks_door",
             Self::BlocksWindow { .. } => "blocks_window",
@@ -231,7 +246,8 @@ impl Issue {
     /// Whether an accepted key names a layout finding (and not an
     /// ergonomics one, which shares the project's list of acceptances).
     pub fn is_layout_key(key: &str) -> bool {
-        const FAMILIES: [&str; 14] = [
+        const FAMILIES: [&str; 15] = [
+            "backwards",
             "loose",
             "unrated_light",
             "above_ceiling",
@@ -599,6 +615,67 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
         }
     }
 
+    // A sofa, a bed, a toilet turned to face the wall its back belongs on.
+    // Nothing overlaps and nothing is in a wall, so no other check sees it;
+    // cabinets that open at the front are `Blocked` above instead.
+    let mut walls_only: Vec<(Option<LevelId>, Vec<crate::measure::Obstacle>)> = Vec::new();
+    for (i, piece) in pieces.iter().enumerate() {
+        if crate::front::of(&piece.catalog).stance != crate::front::Stance::Wall
+            || opens_at_the_front(piece)
+            || piece.is_opening()
+        {
+            continue;
+        }
+        let (Some(front), Some(back)) = (
+            crate::measure::Dir::parse("front", Some(piece)),
+            crate::measure::Dir::parse("back", Some(piece)),
+        ) else {
+            continue;
+        };
+        if !walls_only.iter().any(|(level, _)| *level == levels[i]) {
+            let view = home.level_view(levels[i]);
+            let walls = crate::measure::obstacles(&view, &|_| false)
+                .into_iter()
+                .filter(|o| matches!(o.what, crate::measure::Solid::Wall(_)))
+                .collect();
+            walls_only.push((levels[i], walls));
+        }
+        // Only a wall as tall as the piece is one its back could be meant
+        // for: a sofa's seat by an 18 cm curb is not facing a wall.
+        let top = piece.height_range().1;
+        let here: Vec<crate::measure::Obstacle> = walls_only
+            .iter()
+            .find(|(level, _)| *level == levels[i])
+            .map(|(_, list)| list.as_slice())
+            .unwrap_or_default()
+            .iter()
+            .filter(|o| o.z.1 >= top - 1.0)
+            .cloned()
+            .collect();
+        let here = here.as_slice();
+        let ahead = crate::measure::clearance_against(here, piece, front, BACKWARDS_REACH);
+        let Some(crate::measure::Solid::Wall(wall)) = ahead.against else {
+            continue;
+        };
+        if ahead.cm >= BACKWARDS_REACH {
+            continue;
+        }
+        // Its back has to be clearly freer than its front: between two walls
+        // (a niche) or one step from both, the angle is as good as its
+        // opposite, and nothing says which was meant.
+        let behind =
+            crate::measure::clearance_against(here, piece, back, ahead.cm + BACKWARDS_MARGIN);
+        if behind.against.is_some() && behind.cm < ahead.cm + BACKWARDS_MARGIN {
+            continue;
+        }
+        issues.push(Issue::Backwards {
+            piece: piece.id,
+            wall,
+            cm: (ahead.cm * 10.0).round() / 10.0,
+            angle: (piece.angle + 180.0).rem_euclid(360.0),
+        });
+    }
+
     // An appliance whose niche was resized under it. Built-in pieces are
     // left out of the overlap check on purpose — an oven in its niche is
     // meant to touch it — and that is exactly why nothing noticed when the
@@ -917,6 +994,11 @@ fn distance_to_outline(points: &[Point2], p: Point2) -> f64 {
 
 /// Room a door or a drawer needs in front of it before it is unusable, cm.
 const OPENING_ROOM: f64 = 5.0;
+/// A front this close to a wall, on a piece whose back belongs on one, is
+/// a piece turned around: nobody sits with their knees 30 cm from a wall.
+const BACKWARDS_REACH: f64 = 30.0;
+/// How much freer its back must be than its front to say which was meant, cm.
+const BACKWARDS_MARGIN: f64 = 20.0;
 
 /// Whether this piece is opened from the front — a cabinet, a fridge, a
 /// wardrobe, an oven — so that a solid against its face makes it useless.
@@ -1277,6 +1359,80 @@ mod tests {
             })
             .collect();
         assert_eq!(blocked, vec![FurnitureId(61)], "{blocked:?}");
+    }
+
+    #[test]
+    fn a_sofa_or_a_bed_turned_to_face_its_wall_is_backwards() {
+        let mut home = room_home();
+        let t = home.walls[0].thickness / 2.0;
+        let sofa = |id, y: f64, angle| {
+            let mut f = piece(id, (150.0, y), (210.0, 90.0, 85.0));
+            f.catalog = "sofa-3".into();
+            f.angle = angle;
+            f
+        };
+        // Back on the top wall, seat to the room: right.
+        let right = sofa(70, t + 45.0, 0.0);
+        // Back to the room at the bottom wall, seat on the wall: the angle
+        // 0 meant for the top wall, used at the bottom one.
+        let wrong = sofa(71, 400.0 - t - 45.0, 0.0);
+        // A bed with its foot on the right wall, headboard to the room.
+        let mut bed = piece(72, (500.0 - t - 100.0, 250.0), (160.0, 200.0, 50.0));
+        bed.catalog = "bed-double".into();
+        bed.angle = 270.0;
+        // A rug on the wall means nothing: it has no front.
+        let mut rug = piece(73, (300.0, t + 30.0), (200.0, 60.0, 1.0));
+        rug.catalog = "rug".into();
+        rug.angle = 180.0;
+        home.furniture.extend([right, wrong, bed, rug]);
+
+        let backwards: Vec<(FurnitureId, f64)> = check_layout(&home)
+            .into_iter()
+            .filter_map(|i| match i {
+                Issue::Backwards { piece, angle, .. } => Some((piece, angle)),
+                _ => None,
+            })
+            .collect();
+        // The sofa at the bottom wall looks down the plan into that wall;
+        // the bed at 270 looks +x into the right wall. Both turn half around.
+        assert_eq!(
+            backwards,
+            vec![(FurnitureId(71), 180.0), (FurnitureId(72), 90.0)],
+            "{backwards:?}"
+        );
+    }
+
+    #[test]
+    fn a_curb_lower_than_the_piece_is_not_a_wall_it_faces() {
+        let mut home = room_home();
+        let t = home.walls[2].thickness / 2.0;
+        // The bottom wall is a kick board, lower than the sofa's seat.
+        home.walls[2].height = 18.0;
+        let mut sofa = piece(81, (250.0, 400.0 - t - 50.0), (210.0, 90.0, 85.0));
+        sofa.catalog = "sofa-3".into();
+        home.furniture.push(sofa);
+        assert!(
+            !check_layout(&home)
+                .iter()
+                .any(|i| matches!(i, Issue::Backwards { .. })),
+            "an 18 cm curb is not the wall its back was meant for"
+        );
+    }
+
+    #[test]
+    fn a_piece_between_two_walls_is_not_called_backwards() {
+        let mut home = room_home();
+        let t = home.walls[0].thickness / 2.0;
+        // A 400 cm room minus two half walls, filled front to back.
+        let mut sofa = piece(80, (250.0, 200.0), (210.0, 400.0 - 2.0 * t, 85.0));
+        sofa.catalog = "sofa-3".into();
+        home.furniture.push(sofa);
+        assert!(
+            !check_layout(&home)
+                .iter()
+                .any(|i| matches!(i, Issue::Backwards { .. })),
+            "a niche says nothing about which way was meant"
+        );
     }
 
     #[test]
