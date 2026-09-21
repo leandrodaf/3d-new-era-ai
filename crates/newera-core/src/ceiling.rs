@@ -50,7 +50,7 @@ impl CeilingTriangle {
                             .collect::<Vec<_>>()
                     })
             })
-            .filter(|(ceiling, top)| *top > *ceiling + 0.5)
+            .filter(|(ceiling, top)| *top > *ceiling + crate::mounting::RECESS)
             .max_by(|(ca, ta), (cb, tb)| (ta - ca).total_cmp(&(tb - cb)))
     }
 }

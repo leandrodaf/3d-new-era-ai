@@ -2468,6 +2468,16 @@ pub(crate) fn place_noting(
             staged = home;
             &staged
         };
+        // A pendant given a drop and no height hangs that drop from the
+        // ceiling; otherwise its shade stays where it is and the cord
+        // reaches up (Document keeps every ceiling piece on the ceiling).
+        if spec.h.is_some()
+            && spec.elev.is_none()
+            && newera_core::mounting::on_ceiling(&piece)
+            && let Some(ceiling) = newera_core::mounting::ceiling_over(context, &piece)
+        {
+            piece.elevation = ceiling - piece.height.min(ceiling);
+        }
         if spec.wall.is_none() && source.is_none() {
             newera_core::mounting::seat(context, &mut piece)?;
             // Behind a counter, an outlet or a network point goes above its top.

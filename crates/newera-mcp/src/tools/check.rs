@@ -622,9 +622,12 @@ mod tests {
                 ],
             )))
             .unwrap();
+            // An imported lamp: catalog ceiling pieces are kept on the
+            // ceiling by the document, so only a model can poke through.
             doc.execute(Command::insert(newera_core::Furniture {
                 id: newera_core::FurnitureId(2),
-                catalog: "pendant".into(),
+                catalog: "imported".into(),
+                light: Some(newera_core::Light::led(800.0, 2700.0, (0.5, 0.5, 0.5))),
                 position: newera_core::Point2::new(200.0, 200.0),
                 elevation: ceiling - 50.0,
                 height: 90.0,
@@ -1024,9 +1027,11 @@ mod tests {
             room_id = room.id.to_string();
             fixture_id = doc.new_furniture_id();
             let elevation = doc.home().wall_height - 10.0;
+            // An imported lamp: a catalog one would follow the ceiling down.
             doc.execute(newera_core::Command::insert(newera_core::Furniture {
                 id: fixture_id,
-                catalog: "pendant".into(),
+                catalog: "imported".into(),
+                light: Some(newera_core::Light::led(800.0, 2700.0, (0.5, 0.5, 0.5))),
                 position: newera_core::Point2::new(200.0, 200.0),
                 width: 20.0,
                 depth: 20.0,
