@@ -1715,6 +1715,41 @@ mod tests {
     }
 }
 
+/// Where a placed piece's front looks.
+#[derive(Debug, Clone, Deserialize, serde::Serialize, JsonSchema)]
+#[serde(untagged)]
+pub(crate) enum Facing {
+    /// A point `[x, y]` to turn toward.
+    At(Point2),
+    /// A side (`+x`, `-x`, `+y`, `-y`) or the id of an element to turn toward.
+    Toward(String),
+}
+
+impl Facing {
+    /// The clockwise angle that turns a piece at `from` toward this.
+    fn angle(&self, doc: &Document, from: Point2) -> EditResult<f64> {
+        let target = match self {
+            Self::At(p) => *p,
+            Self::Toward(raw) => {
+                if let Some(dir) = newera_core::front::side_vector(raw) {
+                    return Ok(newera_core::front::angle_facing(dir));
+                }
+                let id: newera_core::ElementId = raw.trim().parse().map_err(|_| {
+                    format!("facing `{raw}`: a side (+x -x +y -y), [x,y] or an element id")
+                })?;
+                let (min, max) = newera_core::measure::element_bounds(doc.home(), id)
+                    .ok_or_else(|| format!("facing: {raw} not found"))?;
+                Point2::new(min.x.midpoint(max.x), min.y.midpoint(max.y))
+            }
+        };
+        let dir = Point2::new(target.x - from.x, target.y - from.y);
+        if dir.x.hypot(dir.y) < 1e-6 {
+            return Err("facing: the point is where the piece is".into());
+        }
+        Ok(newera_core::front::angle_facing(dir))
+    }
+}
+
 #[derive(Debug, Default, Clone, Deserialize, serde::Serialize, JsonSchema)]
 pub(crate) struct PlaceSpec {
     /// Catalog id, e.g. `bed-double` (see the `catalog` tool).
@@ -1734,8 +1769,13 @@ pub(crate) struct PlaceSpec {
     pub wall: Option<String>,
     /// Distance along the wall from its start, cm (default: middle).
     pub along: Option<f64>,
-    /// Clockwise degrees.
+    /// Clockwise degrees: 0 turns the front to +y (down the plan), 90 to
+    /// −x, 180 to −y, 270 to +x. `facing` says the same without the sums.
     pub angle: Option<f64>,
+    /// Which way its front looks, instead of `angle`: a side (`+x`, `-x`,
+    /// `+y`, `-y`), or a point `[x,y]` or an element id to turn toward (an
+    /// armchair toward the TV). With `wall` it also picks the wall's side.
+    pub facing: Option<Facing>,
     /// Size overrides, cm.
     pub w: Option<f64>,
     pub d: Option<f64>,
@@ -2187,6 +2227,17 @@ pub(crate) fn with_defaults(
 
 /// Places catalog pieces in one undoable step; returns their ids.
 pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec<String>> {
+    place_noting(doc, items).map(|(ids, _)| ids)
+}
+
+/// [`place`], also naming the pieces it turned on its own: a piece whose
+/// back belongs on a wall, put `at` a point beside one with no `angle` or
+/// `facing`, goes back to that wall — `f3:back to w2`.
+pub(crate) fn place_noting(
+    doc: &mut Document,
+    items: Vec<PlaceSpec>,
+) -> EditResult<(Vec<String>, Vec<String>)> {
+    let mut turned = Vec::new();
     if items.is_empty() {
         return Err("nothing to place".into());
     }
@@ -2335,6 +2386,10 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
                 .properties
                 .insert(newera_core::guard::GAP_KEY.into(), gap.to_string());
         }
+        if spec.angle.is_some() && spec.facing.is_some() {
+            return Err("give `angle` or `facing`, not both".into());
+        }
+        let mut angle = spec.angle;
         match (&spec.wall, spec.at) {
             (Some(wall), _) => {
                 let wall_id = wall.parse().map_err(|e| format!("{e}"))?;
@@ -2350,8 +2405,13 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
                 if let Some(depth) = spec.d {
                     piece.depth = depth;
                 }
+                if angle.is_none()
+                    && let Some(facing) = &spec.facing
+                {
+                    angle = Some(facing.angle(doc, piece.position)?);
+                }
                 if !piece.is_opening() {
-                    back_to_wall(doc, &mut piece, &wall, spec.angle);
+                    back_to_wall(doc, &mut piece, &wall, angle);
                 }
             }
             (None, Some(at)) => {
@@ -2362,6 +2422,17 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
                     if let Some(depth) = spec.d {
                         piece.depth = depth;
                     }
+                } else if angle.is_none()
+                    && let Some(facing) = &spec.facing
+                {
+                    angle = Some(facing.angle(doc, at)?);
+                } else if angle.is_none()
+                    && source.is_none()
+                    && newera_core::front::of(&piece.catalog).stance
+                        == newera_core::front::Stance::Wall
+                    && let Some(wall) = back_against_nearest_wall(doc, &mut piece)
+                {
+                    turned.push(format!("{}:back to {wall}", piece.id));
                 }
             }
             (None, None) => {
@@ -2374,7 +2445,7 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
         if let Some(into) = spec.into {
             swing_into(&mut piece, into);
         }
-        if let Some(angle) = spec.angle {
+        if let Some(angle) = angle {
             piece.angle = angle;
         }
         // A copied group's parts follow its box to the new place and size.
@@ -2421,7 +2492,60 @@ pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec
         commands.push(Command::insert(piece));
     }
     doc.execute(Command::Batch { commands }).map_err(core)?;
-    Ok(ids)
+    Ok((ids, turned))
+}
+
+/// How far behind a piece's back a wall may be and still be the wall it
+/// was meant to stand against, cm.
+const BACK_REACH: f64 = 30.0;
+
+/// Turns a piece that belongs on a wall so its back is on the wall right
+/// behind it, front to the room, keeping the gap it was given (and taking
+/// it out of the wall if it was in it). `None` when no wall is that close.
+fn back_against_nearest_wall(
+    doc: &Document,
+    piece: &mut newera_core::Furniture,
+) -> Option<newera_core::WallId> {
+    let home = doc.home();
+    let level = home.current_level();
+    let at = piece.position;
+    let (wall, foot, normal, gap) = home
+        .walls
+        .iter()
+        .filter(|w| home.on_level(w.level, level))
+        .filter_map(|w| {
+            let (a, b) = (w.start, w.end);
+            let (dx, dy) = (b.x - a.x, b.y - a.y);
+            let len = dx.hypot(dy);
+            if len < 1.0 {
+                return None;
+            }
+            let t = ((at.x - a.x) * dx + (at.y - a.y) * dy) / (len * len);
+            // Behind the piece, not past the end of the wall.
+            if !(0.0..=1.0).contains(&t) {
+                return None;
+            }
+            // A curb or a parapet lower than the piece is not what its back
+            // was meant for; a gable is, where it stands tall enough.
+            let tall = w.height + (w.height_at_end.unwrap_or(w.height) - w.height) * t;
+            if tall < piece.elevation + piece.height {
+                return None;
+            }
+            let foot = Point2::new(a.x + dx * t, a.y + dy * t);
+            let distance = foot.distance(at);
+            if distance < 1e-6 {
+                return None;
+            }
+            let normal = Point2::new((at.x - foot.x) / distance, (at.y - foot.y) / distance);
+            // What is left between its back and the wall face once turned.
+            let gap = distance - w.thickness / 2.0 - piece.depth / 2.0;
+            (gap <= BACK_REACH).then_some((w, foot, normal, gap))
+        })
+        .min_by(|a, b| a.3.abs().total_cmp(&b.3.abs()))?;
+    piece.angle = newera_core::front::angle_facing(normal);
+    let keep = wall.thickness / 2.0 + piece.depth / 2.0 + gap.max(0.0);
+    piece.position = Point2::new(foot.x + normal.x * keep, foot.y + normal.y * keep);
+    Some(wall.id)
 }
 
 #[cfg(test)]

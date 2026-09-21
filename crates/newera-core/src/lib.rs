@@ -18,6 +18,7 @@ mod document;
 pub mod electrical;
 mod elements;
 mod error;
+pub mod front;
 mod furniture;
 mod geometry;
 pub mod guard;

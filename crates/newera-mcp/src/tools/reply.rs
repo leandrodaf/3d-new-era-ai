@@ -190,7 +190,8 @@ pub(super) fn preview_with(
                         newera_core::Issue::BlocksWindow { extent, .. } => {
                             row["extent"] = serde_json::json!(extent.map(compact::num));
                         }
-                        newera_core::Issue::Blocked { cm, .. } => {
+                        newera_core::Issue::Blocked { cm, .. }
+                        | newera_core::Issue::Backwards { cm, .. } => {
                             row["cm"] = compact::num(*cm);
                         }
                         newera_core::Issue::AboveCeiling { top, ceiling, .. } => {

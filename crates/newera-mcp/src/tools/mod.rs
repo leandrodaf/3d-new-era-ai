@@ -65,7 +65,10 @@ Points are [x,y]. Id prefixes: w wall, r room, d dimension, t label, f furniture
 All kinds share one id counter, and composite pieces (roofs, joinery, cabinet runs) also number their \
 parts, so ids have gaps: use the ids a reply returns, never guess the next one. \
 Reads omit defaults (wall t=15 h=250). Writes reply `ok rev=N [ids=...]`; don't re-read \
-unless needed. Every change is one undoable step. Use render_plan to check visually. \
+unless needed. Furniture has a front (seat, doors, foot of the bed; the catalog tool names it): say which \
+way it looks with place facing=+x|-x|+y|-y|[x,y]|<id> instead of working out angle (clockwise on a y-down \
+plan: 0 front to +y, 90 to -x, 180 to -y, 270 to +x), or wall=<id> to put its back on a wall; place replies \
+faces=<id>:<side>, and check_layout lists pieces turned to face a wall as backwards. Every change is one undoable step. Use render_plan to check visually. \
 A project can hold several plan versions (variants tool); tools act on the active one. \
 Finishes are short strings: `#rrggbb` paint, a pattern like `tiles #ffffff 60x60 r45` \
 (tint, tile cm, rotation) or `img:path 90x90`; `none` clears. Wall types and patterns: materials tool. \

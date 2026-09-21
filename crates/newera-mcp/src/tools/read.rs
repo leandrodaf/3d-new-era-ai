@@ -275,7 +275,7 @@ impl NewEraMcp {
         compact::materials().to_string()
     }
     #[tool(
-        description = "Find catalog items: rows [id,name,w,d,h] in cm. scope=project lists what this plan already uses instead — catalog id or imported model, with how many there are and one id to copy from, narrowed by q over the entry and its pieces' names — which is how a new piece matches the drawing rather than reintroducing a generic one."
+        description = "Find catalog items: rows [id,name,w,d,h,front?] in cm. front, when the item has one, is `wall|free <front>/<back>`: every model is built with that front on its local +y (at angle 0 it looks down the plan), `wall` means its back belongs on a wall (bed headboard, wardrobe back, toilet cistern) and `free` that it stands anywhere (armchair, chair); no front means any angle is right. scope=project lists what this plan already uses instead — catalog id or imported model, with how many there are and one id to copy from, narrowed by q over the entry and its pieces' names — which is how a new piece matches the drawing rather than reintroducing a generic one."
     )]
     pub(crate) fn catalog(&self, Parameters(p): Parameters<CatalogParams>) -> String {
         if p.scope.as_deref().map(str::trim) == Some("project") {

@@ -227,7 +227,7 @@
     "name": "cameras"
   },
   "catalog": {
-    "description": "Find catalog items: rows [id,name,w,d,h] in cm. scope=project lists what this plan already uses instead — catalog id or imported model, with how many there are and one id to copy from, narrowed by q over the entry and its pieces' names — which is how a new piece matches the drawing rather than reintroducing a generic one.",
+    "description": "Find catalog items: rows [id,name,w,d,h,front?] in cm. front, when the item has one, is `wall|free <front>/<back>`: every model is built with that front on its local +y (at angle 0 it looks down the plan), `wall` means its back belongs on a wall (bed headboard, wardrobe back, toilet cistern) and `free` that it stands anywhere (armchair, chair); no front means any angle is right. scope=project lists what this plan already uses instead — catalog id or imported model, with how many there are and one id to copy from, narrowed by q over the entry and its pieces' names — which is how a new piece matches the drawing rather than reintroducing a generic one.",
     "inputSchema": {
       "properties": {
         "cat": {
@@ -252,7 +252,7 @@
     "name": "catalog"
   },
   "check_layout": {
-    "description": "Layout problems: above_ceiling, overlap, blocked, in_wall, blocks_door, blocks_window, no_door, unrated_light, turned, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose (a fixed point with nothing to be fixed to: loose in a room, on glass, in a door or window span, hanging under the ceiling, with why); {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under), served (a project point inside a piece on purpose: the water point in the basin, the outlet behind the fridge or set into a cabinet) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocks_window reports nearby tall/elevated solids masking the window, with extent [width,height] cm; compact countertop objects are exempt, so this does not certify sash operation or ventilation. blocks_door includes a 60 cm approach on either face, even for sliding doors and passages. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. unrated_light is a light fixture with neither lumens nor watts — only the relative power an import carries — so the lighting tool's lux for its room are a guess: set its output with update(light={lm or w}). no_door is a bedroom or bathroom (by name) with no door — only open passages, listed, or no way in at all — said once the storey has doors somewhere; a living room, kitchen or balcony left open is not. unclear_front is a group whose parts name fronts on more than one face with no clear winner (candidates, strongest first; placed is the angle's guess every \"in front of\" falls back to) — rename the misleading part or set the angle. Handles weigh most. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. above_ceiling compares the full luminaire footprint with the same room ceiling surface used in 3D, with ceiling/top/over in cm: declared storey height, sloping wall profiles and lower roof panels. Hidden ceilings and unknown uncovered slopes are not inferred. Every row is an object with the `key` it is accepted by (in_wall {key, piece, wall}, blocks_door {key, door, by}). accept=[[key, reason]] marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed under accepted {key, kind, why, extent} with its reason, kept in the project; accept=[[key, \"\"]] takes it back; orphaned [[key, reason]] lists acceptances whose finding is gone on every storey, and prune=true drops them. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing.",
+    "description": "Layout problems: above_ceiling, overlap, blocked, in_wall, blocks_door, blocks_window, no_door, unrated_light, turned, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose (a fixed point with nothing to be fixed to: loose in a room, on glass, in a door or window span, hanging under the ceiling, with why); {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under), served (a project point inside a piece on purpose: the water point in the basin, the outlet behind the fridge or set into a cabinet) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocks_window reports nearby tall/elevated solids masking the window, with extent [width,height] cm; compact countertop objects are exempt, so this does not certify sash operation or ventilation. blocks_door includes a 60 cm approach on either face, even for sliding doors and passages. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. backwards is a piece whose back belongs on a wall (sofa, bed, toilet, TV, desk — the catalog tool marks them `wall`) with its front against a wall instead: it is turned half around; fix.angle turns it the right way, and the piece's back then touches that wall only if it was flush — placing again with wall=<id> seats it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. unrated_light is a light fixture with neither lumens nor watts — only the relative power an import carries — so the lighting tool's lux for its room are a guess: set its output with update(light={lm or w}). no_door is a bedroom or bathroom (by name) with no door — only open passages, listed, or no way in at all — said once the storey has doors somewhere; a living room, kitchen or balcony left open is not. unclear_front is a group whose parts name fronts on more than one face with no clear winner (candidates, strongest first; placed is the angle's guess every \"in front of\" falls back to) — rename the misleading part or set the angle. Handles weigh most. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. above_ceiling compares the full luminaire footprint with the same room ceiling surface used in 3D, with ceiling/top/over in cm: declared storey height, sloping wall profiles and lower roof panels. Hidden ceilings and unknown uncovered slopes are not inferred. Every row is an object with the `key` it is accepted by (in_wall {key, piece, wall}, blocks_door {key, door, by}). accept=[[key, reason]] marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed under accepted {key, kind, why, extent} with its reason, kept in the project; accept=[[key, \"\"]] takes it back; orphaned [[key, reason]] lists acceptances whose finding is gone on every storey, and prune=true drops them. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing.",
     "inputSchema": {
       "properties": {
         "accept": {
@@ -1558,7 +1558,7 @@
     "name": "open_home"
   },
   "place": {
-    "description": "Place catalog items, or copy=<id> of a piece already in the project (its model — even one embedded from an old import —, finish and parts, the id catalog(scope=project) gives): at=[x,y] center (doors/windows near a wall snap into it; into=[x,y] picks the swing side), or wall=id (+along cm) to put doors/windows in a wall or furniture against it. Sizes w/d/h override defaults; pitch/roll tilt; angle clockwise degrees (0: front faces +y, down the plan; back/headboard toward -y); mat finish (wood, marble, img:…; 'img:facade.png fit' stretches one image: a reference board to compare with render_3d view=front) and opacity (glass 0.3); defaults {…} fills every item; px=true reads coordinates as background pixels. cat=beam with a,b=[x,y,z] (z above the floor) and w×h section makes rafters, posts and braces; a beam reaching into a roof stops under it. Pools: pool or pool-oval. dry=true answers what it would do — what it would add, the clearances around it, the findings it would settle or create — without writing; dry=\"summary\" answers short.",
+    "description": "Place catalog items, or copy=<id> of a piece already in the project (its model — even one embedded from an old import —, finish and parts, the id catalog(scope=project) gives): at=[x,y] center (doors/windows near a wall snap into it; into=[x,y] picks the swing side), or wall=id (+along cm) to put doors/windows in a wall or furniture against it, back to the wall and front to the room. Sizes w/d/h override defaults; pitch/roll tilt. Which way it looks: facing=+x|-x|+y|-y, [x,y] or an element id to turn its front toward (armchair facing the TV) — prefer it to angle, clockwise degrees on a plan whose y grows down: 0 front to +y, 90 to -x, 180 to -y, 270 to +x (the catalog tool names each front: seat, doors, foot of the bed). A piece whose back belongs on a wall, put at=[x,y] within 30 cm of one with neither angle nor facing, is turned back to that wall on its own. The reply says where each front ended up: faces=f3:+y(seat), turned=f3:back to w2 — read it before building on the piece; mat finish (wood, marble, img:…; 'img:facade.png fit' stretches one image: a reference board to compare with render_3d view=front) and opacity (glass 0.3); defaults {…} fills every item; px=true reads coordinates as background pixels. cat=beam with a,b=[x,y,z] (z above the floor) and w×h section makes rafters, posts and braces; a beam reaching into a roof stops under it. Pools: pool or pool-oval. dry=true answers what it would do — what it would add, the clearances around it, the findings it would settle or create — without writing; dry=\"summary\" answers short.",
     "inputSchema": {
       "$defs": {
         "Dry": {
@@ -1571,6 +1571,19 @@
             }
           ],
           "description": "Runs an edit against a copy of the plan and reports what it would do. Trying a size used to mean applying it, reviewing, and undoing — a round trip that showed in the user's window and burned a revision each time. The copy has no history and is thrown away, so nothing of that happens. How much of a dry run to answer with. `true` answers with everything it would change; `\"summary\"` answers with the decision — how many pieces move, which roots, the clearances, the findings and the score — because a group that rebuilds lists ninety-seven parts for a choice that fits in five lines"
+        },
+        "Facing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Point2",
+              "description": "A point `[x, y]` to turn toward"
+            },
+            {
+              "description": "A side (`+x`, `-x`, `+y`, `-y`) or the id of an element to turn toward",
+              "type": "string"
+            }
+          ],
+          "description": "Where a placed piece's front looks"
         },
         "LampType": {
           "description": "Lamp technology, for flux from electrical power",
@@ -1641,7 +1654,7 @@
               "type": "number"
             },
             "angle": {
-              "description": "Clockwise degrees",
+              "description": "Clockwise degrees: 0 turns the front to +y (down the plan), 90 to −x, 180 to −y, 270 to +x. `facing` says the same without the sums",
               "type": "number"
             },
             "at": {
@@ -1678,6 +1691,10 @@
             },
             "elev": {
               "type": "number"
+            },
+            "facing": {
+              "$ref": "#/$defs/Facing",
+              "description": "Which way its front looks, instead of `angle`: a side (`+x`, `-x`, `+y`, `-y`), or a point `[x,y]` or an element id to turn toward (an armchair toward the TV). With `wall` it also picks the wall's side"
             },
             "gap": {
               "description": "Clear gap between a railing's bars, cm",
