@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-21
+
+### Added
+
+- Every catalog item is marked with its front and back, and with whether its back belongs
+  on a wall (bed, sofa, wardrobe, toilet, TV), stands free (armchair, chair) or has no
+  front at all. The catalog tool lists it, and a test keeps new items from going unmarked.
+- `place` takes `facing` (`+x`, `-x`, `+y`, `-y`, a point or an element id) instead of an
+  angle, and its reply says where each front ended up. A piece whose back belongs on a
+  wall, placed beside one with no angle, turns its back to that wall.
+- `check_layout` reports `backwards`: a sofa, bed or toilet facing the wall its back
+  belongs on, with the angle that turns it around.
+- `catalog_faces` example renders every catalog item from the front and from the back.
+
+### Fixed
+
+- Pendants, spots, LED panels and ceiling points stay on the ceiling the 3D draws — flat,
+  sloping or under a roof — through every edit, storey height change and project load.
+  A pendant keeps its shade height and its cord takes the difference.
+- Recessed spots set into the slab are no longer reported as above the ceiling.
+- The editor's WebGL notice names the real cause on Chrome for Linux, where WebGPU ships
+  turned off, and says how to turn it on.
+
+### Changed
+
+- rmcp 3.4.0 (`ServerConfig`), clap 4.6.7, and current GitHub Pages and Wrangler actions.
+
 ## [1.5.0] - 2026-09-20
 
 ### Added
@@ -477,7 +504,8 @@ MCP server, with everything below.
 - `scripts/mcp.sh` / `make mcp` to call MCP tools from the shell.
 - CI for formatting, clippy, tests on Linux/macOS/Windows, MCP smoke test, MSRV and cargo-deny; release builds.
 
-[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.3...v1.5.0
 [1.4.3]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.1...v1.4.2
