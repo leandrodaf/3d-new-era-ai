@@ -1924,12 +1924,11 @@ impl NewEraApp {
             keys(ui, |ui| {
                 for (tool, glyph, label, key) in TOOLS {
                     let chosen = self.tool == tool;
-                    let mut button = egui::Button::selectable(chosen, big(glyph));
+                    let response = ui.add(egui::Button::selectable(chosen, big(glyph)));
                     if chosen {
-                        button = button.stroke(Stroke::new(1.0, t.accent));
+                        ring(ui, &response, t.accent);
                     }
-                    if ui
-                        .add(button)
+                    if response
                         .on_hover_text(format!("{} ({key})", crate::i18n::tr(label)))
                         .clicked()
                     {
@@ -2235,6 +2234,20 @@ fn tool_hint(tool: Tool) -> &'static str {
 
 /// A cluster of keys: buttons that belong together, sunk into the chrome as
 /// one block, the way a keyboard groups its rows.
+/// Rings the button in use with the accent. Drawn over it rather than set as
+/// its stroke: egui sizes a button for the theme's stroke, which is none at
+/// rest, so an extra one made the chosen button grow whenever the pointer
+/// left it and nudged the whole row.
+fn ring(ui: &egui::Ui, response: &egui::Response, color: egui::Color32) {
+    let radius = ui.style().interact_selectable(response, true).corner_radius;
+    ui.painter().rect_stroke(
+        response.rect,
+        radius,
+        Stroke::new(1.0, color),
+        egui::StrokeKind::Inside,
+    );
+}
+
 fn keys<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     let t = crate::theme::of(ui.visuals());
     egui::Frame::new()
@@ -3666,6 +3679,37 @@ mod variant_tests {
         h.run_steps(3);
         let visitor = h.state().scene.visitor.clone().expect("visitor view");
         assert!((visitor.camera.x - 123.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn toolbar_buttons_keep_their_size_under_the_pointer() {
+        let mut h = app();
+        h.run_steps(3);
+        // The tools show twice, in the toolbar and in the side panel: the
+        // toolbar's is the top one.
+        let toolbar = |h: &Harness<'static, NewEraApp>, label: &str| {
+            h.get_all_by_label(label)
+                .map(|n| n.rect())
+                .min_by(|a, b| a.top().total_cmp(&b.top()))
+                .unwrap()
+        };
+        let sizes = |h: &Harness<'static, NewEraApp>| {
+            let mut sizes: Vec<egui::Vec2> = TOOLS.iter().map(|t| toolbar(h, t.1).size()).collect();
+            sizes.push(h.get_by_label_contains("IA").rect().size());
+            sizes
+        };
+        let at_rest = sizes(&h);
+        let tools = &at_rest[..TOOLS.len()];
+        assert!(tools.iter().all(|s| *s == tools[0]), "{at_rest:?}");
+
+        // The pointer on the tool in use, then on the AI button: nothing
+        // grows or shrinks.
+        h.hover_at(toolbar(&h, TOOLS[0].1).center());
+        h.run_steps(2);
+        assert_eq!(sizes(&h), at_rest);
+        h.hover_at(h.get_by_label_contains("IA").rect().center());
+        h.run_steps(2);
+        assert_eq!(sizes(&h), at_rest);
     }
 
     #[test]
