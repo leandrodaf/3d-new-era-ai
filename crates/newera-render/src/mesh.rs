@@ -822,11 +822,37 @@ impl Mesh {
                 }
             }
         }
-        if rise.abs() < 1e-9 {
-            self.add_cap(&points, top, &plain);
-        } else {
-            let heights: Vec<f64> = points.iter().map(|p| top_at(*p)).collect();
-            self.add_cap_heights(&points, &heights, &plain);
+        // An opening that reaches the top (a door in a wall brought down)
+        // leaves no wall over it to put a lid on: the top is capped in the
+        // solid stretches between such openings.
+        let lowest_top = wall.height.min(wall.height_at_end.unwrap_or(wall.height));
+        let mut through: Vec<&WallCut> = cuts
+            .iter()
+            .filter(|cut| !wall.is_arc() && cut.top >= lowest_top - 1e-6)
+            .collect();
+        through.sort_by(|a, b| a.from.total_cmp(&b.from));
+        let mut spans = Vec::new();
+        let mut from = f64::NEG_INFINITY;
+        for cut in through {
+            spans.push((from, cut.from));
+            from = from.max(cut.to);
+        }
+        spans.push((from, f64::INFINITY));
+        for (lo, hi) in spans {
+            let lid = if lo.is_infinite() && hi.is_infinite() {
+                points.clone()
+            } else {
+                clip_along(&points, along, lo, hi)
+            };
+            if lid.len() < 3 {
+                continue;
+            }
+            if rise.abs() < 1e-9 {
+                self.add_cap(&lid, top, &plain);
+            } else {
+                let heights: Vec<f64> = lid.iter().map(|p| top_at(*p)).collect();
+                self.add_cap_heights(&lid, &heights, &plain);
+            }
         }
         if !wall.is_arc() {
             for cut in cuts {
@@ -1287,6 +1313,39 @@ impl Mesh {
 /// How one model material is painted: `(color, image layer, alpha, planar
 /// tile size)`.
 type Look = (Option<[f32; 3]>, Option<u32>, f32, Option<[f64; 2]>);
+
+/// The part of the polygon `points` lying between `lo` and `hi` along a wall,
+/// as `along` measures it.
+fn clip_along(points: &[Point2], along: impl Fn(Point2) -> f64, lo: f64, hi: f64) -> Vec<Point2> {
+    let mut out = points.to_vec();
+    for (limit, above) in [(lo, true), (hi, false)] {
+        if limit.is_infinite() {
+            continue;
+        }
+        let inside = |p: Point2| {
+            if above {
+                along(p) >= limit
+            } else {
+                along(p) <= limit
+            }
+        };
+        let input = std::mem::take(&mut out);
+        for (i, &p) in input.iter().enumerate() {
+            let q = input[(i + 1) % input.len()];
+            if inside(p) {
+                out.push(p);
+            }
+            if inside(p) != inside(q) {
+                let t = (limit - along(p)) / (along(q) - along(p));
+                out.push(Point2::new(p.x + (q.x - p.x) * t, p.y + (q.y - p.y) * t));
+            }
+        }
+        if out.len() < 3 {
+            return Vec::new();
+        }
+    }
+    out
+}
 
 /// Plan `(x, y)` maps to world `(x, z)`, which mirrors winding: polygons with
 /// a negative shoelace area are counter-clockwise when seen from above.
@@ -2116,6 +2175,41 @@ mod cutaway_tests {
         // From the right: the right wall.
         assert_eq!(cut(-1.0, 0.0), [ids[1]]);
         assert_eq!(Cutaway::all(&home).walls.len(), 4);
+    }
+
+    #[test]
+    fn a_door_in_a_lowered_wall_leaves_no_lid_over_the_gap() {
+        let mut home = box_home();
+        let top = home.walls[0].clone();
+        let id = home.new_furniture_id();
+        let mut door = newera_catalog::find("door")
+            .unwrap()
+            .instantiate(id, Point2::new(0.0, 0.0));
+        align_to_wall(&mut door, &top, 200.0);
+        home.furniture.push(door);
+        let mesh = Mesh::from_home_cut(
+            &home,
+            &Selection::new(),
+            &no_models,
+            Some(&Cutaway::all(&home)),
+        );
+        // The middle of the doorway, at the height the wall was cut to.
+        let gap = Vec3::new(2.0, 0.4, 0.0);
+        let lid = mesh.indices.chunks(3).any(|tri| {
+            let [a, b, c] = [0, 1, 2].map(|k| Vec3::from(mesh.vertices[tri[k] as usize].position));
+            let flat = [a, b, c].iter().all(|p| (p.y - gap.y).abs() < 1e-3);
+            let side = |p: Vec3, q: Vec3| (q.x - p.x) * (gap.z - p.z) - (q.z - p.z) * (gap.x - p.x);
+            let (d1, d2, d3) = (side(a, b), side(b, c), side(c, a));
+            let has_neg = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
+            let has_pos = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
+            flat && !(has_neg && has_pos)
+        });
+        assert!(!lid, "a lid spans the doorway");
+        // The stretches either side still have theirs.
+        let beside = Vec3::new(0.5, 0.4, 0.0);
+        assert!(mesh.vertices.iter().any(|v| {
+            (v.position[1] - beside.y).abs() < 1e-3 && v.normal[1] > 0.9 && v.position[0] < 1.0
+        }));
     }
 
     #[test]
