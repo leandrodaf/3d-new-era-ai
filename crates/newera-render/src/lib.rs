@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 pub use camera::{Side, View};
-pub use mesh::{IMAGE_BASE, Mesh, ModelSource, Selection, Vertex};
+pub use mesh::{CUTAWAY_HEIGHT, Cutaway, IMAGE_BASE, Mesh, ModelSource, Selection, Vertex};
 pub use raster::{RenderOptions, render};
 
 /// Top-view images of pieces for the plan, rendered once and cached as PNG

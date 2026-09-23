@@ -6,7 +6,9 @@
 
 use bytemuck::{Pod, Zeroable};
 use glam::{Vec3, Vec4};
-use newera_core::{ElementId, Furniture, Home, LevelId, Material, Point2, Wall, WallCut};
+use newera_core::{
+    ElementId, Furniture, FurnitureId, Home, LevelId, Material, Point2, Wall, WallCut, WallId,
+};
 
 /// The storeys whose geometry and lights are included in the 3D scene.
 pub(crate) fn shown_levels(home: &Home) -> Vec<Option<LevelId>> {
@@ -163,6 +165,123 @@ impl Surface {
     }
 }
 
+/// Height of a wall brought down to show the rooms, cm.
+pub const CUTAWAY_HEIGHT: f64 = 40.0;
+
+/// Walls drawn low so the rooms show. Ceilings and roofs go too, and so does
+/// whatever stood in or hung on the walls brought down.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Cutaway {
+    /// Walls drawn [`CUTAWAY_HEIGHT`] tall.
+    pub walls: std::collections::BTreeSet<WallId>,
+}
+
+impl Cutaway {
+    /// Every wall of the storeys on show.
+    pub fn all(home: &Home) -> Self {
+        let walls = shown_levels(home)
+            .into_iter()
+            .flat_map(|level| home.level_view(level).walls)
+            .map(|wall| wall.id)
+            .collect();
+        Self { walls }
+    }
+
+    /// The walls hiding a room from a camera looking along `toward` (plan
+    /// axes, any length): those that face it with a room right behind.
+    /// Walls running along the view and walls with only the outside behind
+    /// them stay up.
+    pub fn facing(home: &Home, toward: Point2) -> Self {
+        let len = toward.x.hypot(toward.y);
+        if len < 1e-9 {
+            return Self::default();
+        }
+        let toward = Point2::new(toward.x / len, toward.y / len);
+        let mut walls = std::collections::BTreeSet::new();
+        for level in shown_levels(home) {
+            let view = home.level_view(level);
+            let center = view
+                .building_bounds()
+                .map(|(a, b)| Point2::new(a.x.midpoint(b.x), a.y.midpoint(b.y)));
+            for wall in &view.walls {
+                let len = wall.start.distance(wall.end);
+                if len < 1e-6 {
+                    continue;
+                }
+                let normal = Point2::new(
+                    -(wall.end.y - wall.start.y) / len,
+                    (wall.end.x - wall.start.x) / len,
+                );
+                let facing = normal.x * toward.x + normal.y * toward.y;
+                // Within about 15° of the view the wall hides little.
+                if facing.abs() < 0.25 {
+                    continue;
+                }
+                // The side away from the camera.
+                let away = if facing > 0.0 {
+                    normal
+                } else {
+                    Point2::new(-normal.x, -normal.y)
+                };
+                let mid = Point2::new(
+                    wall.start.x.midpoint(wall.end.x),
+                    wall.start.y.midpoint(wall.end.y),
+                );
+                let reach = wall.thickness / 2.0 + 20.0;
+                let behind = Point2::new(mid.x + away.x * reach, mid.y + away.y * reach);
+                let room_behind = if view.rooms.is_empty() {
+                    // No rooms drawn: the building's middle stands for them.
+                    center.is_some_and(|c| (c.x - mid.x) * away.x + (c.y - mid.y) * away.y > 0.0)
+                } else {
+                    view.rooms
+                        .iter()
+                        .any(|room| newera_core::electrical::inside_room(&room.points, behind, 0.0))
+                };
+                if room_behind {
+                    walls.insert(wall.id);
+                }
+            }
+        }
+        Self { walls }
+    }
+
+    /// The wall as drawn: no taller than [`CUTAWAY_HEIGHT`] when it is
+    /// brought down, with its openings clipped to match.
+    fn lower(&self, wall: &Wall, cuts: &[WallCut]) -> Option<(Wall, Vec<WallCut>)> {
+        if !self.walls.contains(&wall.id) {
+            return None;
+        }
+        let mut low = wall.clone();
+        low.height = wall.height.min(CUTAWAY_HEIGHT);
+        low.height_at_end = wall.height_at_end.map(|h| h.min(CUTAWAY_HEIGHT));
+        let cuts = cuts
+            .iter()
+            .filter(|cut| cut.bottom < low.height)
+            .map(|cut| WallCut {
+                top: cut.top.min(low.height),
+                ..*cut
+            })
+            .collect();
+        Some((low, cuts))
+    }
+
+    /// Whether `piece` goes with the walls brought down: a roof, a door or
+    /// window in one of them, or anything hanging on one above the cut.
+    fn hides(piece: &Furniture, top: &Furniture, openings: &[FurnitureId], low: &[&Wall]) -> bool {
+        if top.catalog.starts_with("roof") || piece.catalog.starts_with("roof") {
+            return true;
+        }
+        if openings.contains(&piece.id) {
+            return true;
+        }
+        piece.elevation >= CUTAWAY_HEIGHT
+            && low.iter().any(|wall| {
+                piece.position.distance_to_segment(wall.start, wall.end)
+                    <= wall.thickness / 2.0 + piece.depth.min(piece.width) / 2.0 + 5.0
+            })
+    }
+}
+
 /// Supplies meshes for pieces with imported models; `None` falls back to the
 /// catalog generator.
 pub type ModelSource<'a> = &'a dyn Fn(&Furniture) -> Option<newera_catalog::Mesh>;
@@ -173,6 +292,16 @@ const ALONG_WALL: f64 = 0.05;
 
 impl Mesh {
     pub fn from_home(home: &Home, selection: &Selection, models: ModelSource<'_>) -> Self {
+        Self::from_home_cut(home, selection, models, None)
+    }
+
+    /// [`Mesh::from_home`] with some walls brought down to show the rooms.
+    pub fn from_home_cut(
+        home: &Home,
+        selection: &Selection,
+        models: ModelSource<'_>,
+        cutaway: Option<&Cutaway>,
+    ) -> Self {
         let mut mesh = Self::default();
         mesh.add_ground(home);
         let levels = shown_levels(home);
@@ -201,7 +330,8 @@ impl Mesh {
                     material.as_ref(),
                 );
             }
-            for room in &view.rooms {
+            // With walls down a ceiling would hang over nothing.
+            for room in view.rooms.iter().filter(|_| cutaway.is_none()) {
                 for surface in newera_core::room_ceiling(&view, room)
                     .iter()
                     .filter(|s| s.draw)
@@ -210,11 +340,20 @@ impl Mesh {
                 }
             }
             let cuts = view.wall_cuts();
+            let mut low: Vec<&Wall> = Vec::new();
+            let mut openings: Vec<FurnitureId> = Vec::new();
             for ((wall, outline), wall_cuts) in
                 view.walls.iter().zip(view.wall_outlines()).zip(&cuts)
             {
                 let selected = selection.contains(&ElementId::Wall(wall.id));
-                mesh.add_wall(&outline, wall, wall_cuts, base, selected);
+                match cutaway.and_then(|c| c.lower(wall, wall_cuts)) {
+                    Some((lowered, lowered_cuts)) => {
+                        mesh.add_wall(&outline, &lowered, &lowered_cuts, base, selected);
+                        low.push(wall);
+                        openings.extend(wall_cuts.iter().map(|cut| cut.furniture));
+                    }
+                    None => mesh.add_wall(&outline, wall, wall_cuts, base, selected),
+                }
             }
             // The 3D shows what the plan shows — the view chosen, the layers
             // left on — unless it is set to show everything.
@@ -232,6 +371,7 @@ impl Mesh {
                 }
                 for piece in top.visible_leaves().into_iter().filter(|leaf| {
                     home.shown_in_3d(leaf.discipline, newera_core::layer_in_group(top, leaf))
+                        && !(cutaway.is_some() && Cutaway::hides(leaf, top, &openings, &low))
                 }) {
                     let local = models(piece).unwrap_or_else(|| newera_catalog::piece_mesh(piece));
                     mesh.add_piece(piece, &local, base, highlight);
@@ -1905,5 +2045,112 @@ mod material_tests {
         assert!((span - 4.0).abs() < 1e-3, "{us:?}");
         assert!(mesh.vertices.iter().all(|v| v.kind == IMAGE_BASE));
         assert_eq!(mesh.images, ["marble.png"]);
+    }
+}
+
+#[cfg(test)]
+mod cutaway_tests {
+    use newera_core::{Room, align_to_wall};
+
+    use super::*;
+
+    fn no_models(_: &Furniture) -> Option<newera_catalog::Mesh> {
+        None
+    }
+
+    fn build(home: &Home) -> Mesh {
+        Mesh::from_home(home, &Selection::new(), &no_models)
+    }
+
+    fn assert_outward(mesh: &Mesh) {
+        for tri in mesh.indices.chunks(3) {
+            let [a, b, c] = [0, 1, 2].map(|k| Vec3::from(mesh.vertices[tri[k] as usize].position));
+            let declared = Vec3::from(mesh.vertices[tri[0] as usize].normal);
+            assert!(
+                (b - a).cross(c - a).dot(declared) >= -1e-9,
+                "triangle faces inward"
+            );
+        }
+    }
+
+    /// A 400 cm square room closed by four walls: top, right, bottom, left.
+    fn box_home() -> Home {
+        let mut home = Home::default();
+        let points = [
+            Point2::new(0.0, 0.0),
+            Point2::new(400.0, 0.0),
+            Point2::new(400.0, 400.0),
+            Point2::new(0.0, 400.0),
+        ];
+        home.rooms
+            .push(Room::new(newera_core::RoomId(1), "Room", points.to_vec()));
+        for i in 0..4 {
+            let id = home.new_wall_id();
+            home.walls
+                .push(Wall::new(id, points[i], points[(i + 1) % 4]));
+        }
+        home
+    }
+
+    fn highest(mesh: &Mesh) -> f32 {
+        mesh.vertices
+            .iter()
+            .map(|v| v.position[1])
+            .fold(f32::MIN, f32::max)
+    }
+
+    #[test]
+    fn cutaway_brings_down_the_walls_in_front_of_the_room() {
+        let home = box_home();
+        let ids: Vec<WallId> = home.walls.iter().map(|w| w.id).collect();
+        let cut = |x, y| {
+            Cutaway::facing(&home, Point2::new(x, y))
+                .walls
+                .into_iter()
+                .collect::<Vec<_>>()
+        };
+        // Looking down the plan: only the top wall stands between.
+        assert_eq!(cut(0.0, 1.0), [ids[0]]);
+        // From the top left corner: the top and the left walls.
+        assert_eq!(cut(1.0, 1.0), [ids[0], ids[3]]);
+        // From the right: the right wall.
+        assert_eq!(cut(-1.0, 0.0), [ids[1]]);
+        assert_eq!(Cutaway::all(&home).walls.len(), 4);
+    }
+
+    #[test]
+    fn cutaway_walls_come_down_with_what_is_in_and_over_them() {
+        let mut home = box_home();
+        let top = home.walls[0].clone();
+        let add = |home: &mut Home, catalog: &str, at: Point2| {
+            let id = home.new_furniture_id();
+            let piece = newera_catalog::find(catalog).unwrap().instantiate(id, at);
+            home.furniture.push(piece);
+            home.furniture.len() - 1
+        };
+        let sofa = add(&mut home, "sofa-3", Point2::new(200.0, 200.0));
+        let window = add(&mut home, "window", Point2::new(0.0, 0.0));
+        align_to_wall(&mut home.furniture[window], &top, 200.0);
+        add(&mut home, "roof-sheet", Point2::new(200.0, 200.0));
+
+        let all = Cutaway::all(&home);
+        let cut =
+            |home: &Home| Mesh::from_home_cut(home, &Selection::new(), &no_models, Some(&all));
+        let mut sofa_only = home.clone();
+        sofa_only.furniture = vec![home.furniture[sofa].clone()];
+        // The window and the roof went; the sofa on the floor stayed.
+        assert_eq!(cut(&home).indices.len(), cut(&sofa_only).indices.len());
+        assert!(cut(&sofa_only).indices.len() > cut(&box_home()).indices.len());
+        assert_outward(&cut(&home));
+
+        let walls = box_home();
+        assert!((highest(&build(&walls)) - 2.5).abs() < 1e-3);
+        let low = Mesh::from_home_cut(
+            &walls,
+            &Selection::new(),
+            &no_models,
+            Some(&Cutaway::all(&walls)),
+        );
+        assert!((highest(&low) - 0.4).abs() < 1e-3, "{}", highest(&low));
     }
 }

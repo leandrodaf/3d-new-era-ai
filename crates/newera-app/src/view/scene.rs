@@ -14,7 +14,7 @@ use std::f32::consts::{FRAC_PI_2, PI, TAU};
 use super::axes::Basis;
 use super::plan::Selection;
 
-use newera_render::{Mesh, Side, Vertex};
+use newera_render::{Cutaway, Mesh, Side, Vertex};
 
 const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -140,6 +140,11 @@ impl OrbitCamera {
         self.target += (right * -delta.x + forward * -delta.y) * speed;
     }
 
+    /// The way the camera looks, flat on the plan.
+    fn toward(&self) -> newera_core::Point2 {
+        newera_core::Point2::new(-f64::from(self.yaw.cos()), -f64::from(self.yaw.sin()))
+    }
+
     fn look_at_home(&mut self, home: &Home) {
         if let Some((min, max)) = home.building_bounds() {
             #[allow(clippy::cast_possible_truncation)]
@@ -153,6 +158,80 @@ impl OrbitCamera {
             self.target = center;
             self.distance = (size * 1.4).clamp(4.0, 150.0);
         }
+    }
+}
+
+/// How tall the walls stand in the aerial view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum Walls {
+    #[default]
+    Up,
+    /// The walls between the camera and the rooms come down.
+    Cutaway,
+    Down,
+}
+
+impl Walls {
+    pub(crate) const ALL: [Self; 3] = [Self::Up, Self::Cutaway, Self::Down];
+
+    pub(crate) fn label(self) -> &'static str {
+        crate::i18n::tr(match self {
+            Self::Up => "Inteiras",
+            Self::Cutaway => "Recortadas",
+            Self::Down => "Baixas",
+        })
+    }
+
+    /// A room seen from above at an angle, its walls as tall as this mode
+    /// leaves them: the back pair and the front pair, drawn inside `rect` in
+    /// `color` over `behind`, so the near walls hide the far ones.
+    pub(crate) fn paint_icon(
+        self,
+        painter: &egui::Painter,
+        rect: egui::Rect,
+        color: egui::Color32,
+        behind: egui::Color32,
+    ) {
+        let (back, front) = match self {
+            Self::Up => (9.0, 9.0),
+            Self::Cutaway => (9.0, 2.5),
+            Self::Down => (2.5, 2.5),
+        };
+        let c = rect.center() + egui::vec2(0.0, 4.5);
+        let (w, h) = (8.5, 4.5);
+        let (top, right, bottom, left) = (
+            c + egui::vec2(0.0, -h),
+            c + egui::vec2(w, 0.0),
+            c + egui::vec2(0.0, h),
+            c + egui::vec2(-w, 0.0),
+        );
+        let stroke = egui::Stroke::new(1.2, color);
+        let shade = |t: f32| behind.lerp_to_gamma(color, t);
+        let wall = |a: egui::Pos2, b: egui::Pos2, tall: f32, fill: egui::Color32| {
+            let up = egui::vec2(0.0, -tall);
+            painter.add(egui::Shape::convex_polygon(
+                vec![a, b, b + up, a + up],
+                fill,
+                stroke,
+            ));
+        };
+        wall(left, top, back, shade(0.35));
+        wall(top, right, back, shade(0.2));
+        painter.add(egui::Shape::convex_polygon(
+            vec![top, right, bottom, left],
+            shade(0.1),
+            stroke,
+        ));
+        wall(left, bottom, front, shade(0.5));
+        wall(bottom, right, front, shade(0.3));
+    }
+
+    pub(crate) fn hint(self) -> &'static str {
+        crate::i18n::tr(match self {
+            Self::Up => "Todas as paredes em pé",
+            Self::Cutaway => "As paredes da frente descem para mostrar os cômodos",
+            Self::Down => "Todas as paredes descem",
+        })
     }
 }
 
@@ -268,9 +347,12 @@ pub(crate) struct SceneView {
     pub(crate) visitor: Option<Visitor>,
     /// Local solar hour of the live sun; `None` keeps the soft studio light.
     pub(crate) sun_hour: Option<f64>,
+    /// Walls up, cut away or down; a visitor always sees them up.
+    pub(crate) walls: Walls,
     gpu: Option<Gpu>,
-    /// `(document revision, selection)` the GPU mesh was built from.
-    built_for: Option<(u64, Vec<ElementId>)>,
+    /// `(document revision, selection, walls brought down)` the GPU mesh was
+    /// built from.
+    built_for: Option<(u64, Vec<ElementId>, Option<Cutaway>)>,
     framed_once: bool,
     /// Imported models by resolved path; `None` when a file failed to load.
     models: std::cell::RefCell<
@@ -294,6 +376,7 @@ impl SceneView {
             visitor: None,
             gpu: None,
             sun_hour: None,
+            walls: Walls::Up,
             built_for: None,
             framed_once: false,
             models: std::cell::RefCell::default(),
@@ -376,7 +459,17 @@ impl SceneView {
 
         let light = self.light(home);
         let gpu = self.gpu.get_or_insert_with(|| Gpu::new(&rs.device));
-        let key = (revision, selection.iter().copied().collect::<Vec<_>>());
+        let cutaway = match self.walls {
+            _ if self.visitor.is_some() => None,
+            Walls::Up => None,
+            Walls::Cutaway => Some(Cutaway::facing(home, self.camera.toward())),
+            Walls::Down => Some(Cutaway::all(home)),
+        };
+        let key = (
+            revision,
+            selection.iter().copied().collect::<Vec<_>>(),
+            cutaway,
+        );
         if self.built_for.as_ref() != Some(&key) {
             let models = |piece: &newera_core::Furniture| {
                 let path = newera_core::resolve_asset(project, piece.model.as_deref()?);
@@ -395,7 +488,7 @@ impl SceneView {
                 mesh.fit_to(piece.width, piece.depth, piece.height);
                 Some(mesh)
             };
-            let mesh = Mesh::from_home(home, selection, &models);
+            let mesh = Mesh::from_home_cut(home, selection, &models, key.2.as_ref());
             gpu.upload_images(rs, &mesh.images, project);
             gpu.upload_mesh(rs, &mesh);
             self.built_for = Some(key);
