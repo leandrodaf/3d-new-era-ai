@@ -1106,6 +1106,9 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
             "La vue 3D nécessite le backend wgpu.",
         ],
         "Visão aérea" => ["Aerial view", "Vista aérea", "Vue aérienne"],
+        "Frente" => ["Front", "Frente", "Face"],
+        "Trás" => ["Back", "Detrás", "Arrière"],
+        "Topo" => ["Top", "Superior", "Dessus"],
         "Visível" => ["Visible", "Visible", "Visible"],
         "Visível no 3D" => ["Visible in 3D", "Visible en 3D", "Visible en 3D"],
         "Zoom · mover vista · enquadrar" => [

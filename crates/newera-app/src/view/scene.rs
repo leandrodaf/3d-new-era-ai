@@ -9,9 +9,12 @@ use eframe::wgpu;
 use glam::{Mat4, Vec3};
 use newera_core::{ElementId, Home};
 
+use std::f32::consts::{FRAC_PI_2, PI, TAU};
+
+use super::axes::Basis;
 use super::plan::Selection;
 
-use newera_render::{Mesh, Vertex};
+use newera_render::{Mesh, Side, Vertex};
 
 const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -30,6 +33,9 @@ pub(crate) struct OrbitCamera {
     yaw: f32,
     pitch: f32,
     distance: f32,
+    /// `(yaw, pitch)` the camera is easing towards, after a side was picked
+    /// on the axes.
+    goal: Option<(f32, f32)>,
 }
 
 impl Default for OrbitCamera {
@@ -39,6 +45,7 @@ impl Default for OrbitCamera {
             yaw: -0.8,
             pitch: 0.6,
             distance: 18.0,
+            goal: None,
         }
     }
 }
@@ -53,8 +60,20 @@ impl OrbitCamera {
         self.target + dir * self.distance
     }
 
+    /// Right, up and back towards the eye. Right comes from the yaw alone, so
+    /// up stays defined when the camera looks straight down.
+    pub(crate) fn basis(&self) -> Basis {
+        let back = (self.eye() - self.target).normalize();
+        let right = Vec3::new(self.yaw.sin(), 0.0, -self.yaw.cos());
+        Basis {
+            right,
+            up: right.cross(-back),
+            back,
+        }
+    }
+
     fn view_proj(&self, aspect: f32) -> Mat4 {
-        let view = glam::camera::rh::view::look_at_mat4(self.eye(), self.target, Vec3::Y);
+        let view = glam::camera::rh::view::look_at_mat4(self.eye(), self.target, self.basis().up);
         // wgpu uses a 0..1 depth range, same as DirectX.
         let proj =
             glam::camera::rh::proj::directx::perspective(45f32.to_radians(), aspect, 0.05, 500.0);
@@ -62,8 +81,39 @@ impl OrbitCamera {
     }
 
     fn orbit(&mut self, delta: egui::Vec2) {
+        self.goal = None;
         self.yaw += delta.x * 0.008;
-        self.pitch = (self.pitch + delta.y * 0.008).clamp(0.05, 1.5);
+        self.pitch = (self.pitch + delta.y * 0.008).clamp(0.0, FRAC_PI_2);
+    }
+
+    /// Starts turning to look at the target from `side`, the short way
+    /// round. The top keeps the plan's own reading: x right, y down.
+    fn look_from(&mut self, side: Side) {
+        let (yaw, pitch) = match side {
+            Side::Right => (0.0, 0.0),
+            Side::Left => (PI, 0.0),
+            Side::Front => (FRAC_PI_2, 0.0),
+            Side::Back => (-FRAC_PI_2, 0.0),
+            Side::Top => (FRAC_PI_2, FRAC_PI_2),
+        };
+        let turn = (yaw - self.yaw + PI).rem_euclid(TAU) - PI;
+        self.goal = Some((self.yaw + turn, pitch));
+    }
+
+    /// Moves towards the picked side for `seconds`; true while still on the
+    /// way.
+    fn settle(&mut self, seconds: f32) -> bool {
+        let Some((yaw, pitch)) = self.goal else {
+            return false;
+        };
+        let step = 1.0 - (-seconds * 12.0).exp();
+        self.yaw += (yaw - self.yaw) * step;
+        self.pitch += (pitch - self.pitch) * step;
+        if (yaw - self.yaw).abs() < 1e-3 && (pitch - self.pitch).abs() < 1e-3 {
+            (self.yaw, self.pitch) = (yaw, pitch);
+            self.goal = None;
+        }
+        true
     }
 
     fn zoom(&mut self, scroll: f32) {
@@ -78,6 +128,7 @@ impl OrbitCamera {
 
     /// Turns around the house without changing the height of the eye.
     fn turn(&mut self, radians: f32) {
+        self.goal = None;
         self.yaw += radians;
     }
 
@@ -295,7 +346,21 @@ impl SceneView {
 
         let rect = ui.available_rect_before_wrap();
         let response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
+        // The axes only make sense from above; a visitor walks at eye level.
+        let axes = self.visitor.is_none().then(|| {
+            let outcome = super::axes::interact(ui, rect, self.camera.basis());
+            if let Some(side) = outcome.look_from {
+                self.camera.look_from(side);
+            }
+            if outcome.drag != egui::Vec2::ZERO {
+                self.camera.orbit(outcome.drag);
+            }
+            outcome
+        });
         self.handle_input(ui, &response, home);
+        if self.camera.settle(ui.input(|i| i.stable_dt).min(0.1)) {
+            ui.ctx().request_repaint();
+        }
 
         let ppp = ui.ctx().pixels_per_point();
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -362,6 +427,9 @@ impl SceneView {
             egui::FontId::proportional(11.0),
             egui::Color32::from_black_alpha(160),
         );
+        if let Some(outcome) = axes {
+            super::axes::paint(ui, rect, self.camera.basis(), outcome);
+        }
     }
 
     fn handle_input(&mut self, ui: &egui::Ui, response: &egui::Response, home: &Home) {
@@ -894,6 +962,57 @@ impl Gpu {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Eases the camera all the way to the side it was sent to.
+    fn arrive(camera: &mut OrbitCamera) {
+        for _ in 0..200 {
+            camera.settle(1.0 / 60.0);
+        }
+        assert!(camera.goal.is_none(), "{camera:?}");
+    }
+
+    #[test]
+    fn axes_look_at_the_house_from_each_side() {
+        let mut camera = OrbitCamera::default();
+        for (side, eye) in [
+            (Side::Front, Vec3::Z),
+            (Side::Back, Vec3::NEG_Z),
+            (Side::Left, Vec3::NEG_X),
+            (Side::Right, Vec3::X),
+            (Side::Top, Vec3::Y),
+        ] {
+            camera.look_from(side);
+            arrive(&mut camera);
+            let from = (camera.eye() - camera.target).normalize();
+            assert!(from.distance(eye) < 1e-3, "{side:?}: {from}");
+        }
+    }
+
+    #[test]
+    fn the_top_view_reads_like_the_plan() {
+        let mut camera = OrbitCamera::default();
+        camera.look_from(Side::Top);
+        arrive(&mut camera);
+        let basis = camera.basis();
+        // Plan x to the right of the screen, plan y (world z) down it.
+        assert!(basis.right.distance(Vec3::X) < 1e-3, "{}", basis.right);
+        assert!(basis.up.distance(Vec3::NEG_Z) < 1e-3, "{}", basis.up);
+        assert!(camera.view_proj(1.5).is_finite());
+    }
+
+    #[test]
+    fn axes_turn_the_short_way_and_a_drag_takes_over() {
+        let mut camera = OrbitCamera {
+            yaw: 3.0 * TAU + 0.1,
+            ..OrbitCamera::default()
+        };
+        camera.look_from(Side::Right);
+        assert!((camera.goal.unwrap().0 - 3.0 * TAU).abs() < 1e-4);
+        camera.settle(1.0 / 60.0);
+        camera.orbit(egui::vec2(10.0, 0.0));
+        assert!(camera.goal.is_none());
+        assert!(!camera.settle(1.0 / 60.0));
+    }
 
     #[test]
     fn live_sun_follows_the_compass_and_the_hour() {
