@@ -123,7 +123,11 @@ pub(crate) fn review(scene: &Scene<'_>) -> Vec<Finding> {
                 findings.push(Finding {
                     severity: Severity::Dica,
                     place: space.label(),
-                    key: format!("unused_corner:{}:{}+{}", space.room.id, ids[0], ids[1]),
+                    key: crate::rule::key_at(
+                        crate::rule::Rule::UnusedCorner,
+                        &space.label(),
+                        &format!("{}+{}", ids[0], ids[1]),
+                    ),
                     message: format!(
                         "Possível canto ocioso junto a ({:.1}, {:.1}) cm: {:.1} × {:.1} cm ({:.2} m²), entre {} e {}. Há uma sobra delimitada pelos móveis e pelas paredes, com acesso estreito. Feedback de aproveitamento, não defeito confirmado: confira se é folga de ventilação, manutenção ou abertura antes de decidir usá-la. Nenhuma alteração automática.",
                         corner.x, corner.y, width, depth, area / 10_000.0, a.label(), b.label()

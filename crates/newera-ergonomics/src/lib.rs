@@ -32,8 +32,10 @@
 )]
 
 mod corners;
+mod rule;
 mod scene;
 
+use crate::rule::Rule;
 use newera_core::standards::{self, Confidence, Standard, Tier};
 use newera_core::{Home, OpeningKind, Point2};
 use schemars::JsonSchema;
@@ -302,7 +304,7 @@ impl Review<'_, '_> {
                     severity: Severity::Alerta,
                     place: space.label(),
                     message: format!("Uso do ambiente como {} conflita com equipamentos sanitários ({}). Confirme o programa e declare room_use; o nome e as peças foram preservados.", space.what.name(), sanitary.join(", ")),
-                    key: format!("room_use:{}", space.room.id),
+                    key: rule::key(Rule::RoomUseConflict, &space.label()),
                     ..Finding::default()
                 });
             }
@@ -314,7 +316,11 @@ impl Review<'_, '_> {
                             severity: Severity::Dica,
                             place: space.label(),
                             message: format!("Pia de cozinha {} usada como lavatório: renomear não altera o equipamento. Confirme se este catálogo corresponde à peça pretendida para o banheiro.", piece.id),
-                            key: format!("bathroom_fixture:{}:{}", space.room.id, piece.id),
+                            key: rule::key_at(
+                                Rule::BathroomFixture,
+                                &space.label(),
+                                &piece.id.to_string(),
+                            ),
                             ..Finding::default()
                         });
                     }
@@ -323,10 +329,20 @@ impl Review<'_, '_> {
         }
     }
 
-    fn push(&mut self, severity: Severity, place: impl Into<String>, message: impl Into<String>) {
+    /// A finding of `rule` about `place`. The rule names it; the sentence is
+    /// free to be rewritten without dropping anybody's acceptance.
+    fn push(
+        &mut self,
+        rule: Rule,
+        severity: Severity,
+        place: impl Into<String>,
+        message: impl Into<String>,
+    ) {
+        let place = place.into();
         self.findings.push(Finding {
             severity,
-            place: place.into(),
+            key: rule::key(rule, &place),
+            place,
             message: message.into(),
             reference: None,
             fix: None,
@@ -339,6 +355,7 @@ impl Review<'_, '_> {
     /// marked to confirm at the source may warn, never accuse.
     fn push_ref(
         &mut self,
+        rule: Rule,
         severity: Severity,
         place: impl Into<String>,
         message: impl Into<String>,
@@ -346,7 +363,7 @@ impl Review<'_, '_> {
     ) {
         let Some(source) = standards::standard(code) else {
             debug_assert!(false, "unknown standard `{code}`");
-            self.push(severity, place, message);
+            self.push(rule, severity, place, message);
             return;
         };
         if source.tier == Tier::E {
@@ -358,14 +375,38 @@ impl Review<'_, '_> {
         if source.confidence == Confidence::ConfirmBeforeUse {
             severity = severity.max(Severity::Alerta);
         }
+        let place = place.into();
         self.findings.push(Finding {
             severity,
-            place: place.into(),
+            key: rule::key(rule, &place),
+            place,
             message: message.into(),
             reference: Some(source.code),
             fix: None,
             ..Finding::default()
         });
+    }
+
+    /// A rule that speaks more than once about one place says which pair or
+    /// piece each finding is about, so the two are accepted apart.
+    fn push_ref_at(
+        &mut self,
+        rule: Rule,
+        about: &str,
+        severity: Severity,
+        place: impl Into<String>,
+        message: impl Into<String>,
+        code: &'static str,
+    ) {
+        let place = place.into();
+        let key = rule::key_at(rule, &place, about);
+        let before = self.findings.len();
+        self.push_ref(rule, severity, place, message, code);
+        // A source that raises nothing pushes nothing: only a finding that
+        // was actually made is renamed, never the one before it.
+        for f in &mut self.findings[before..] {
+            f.key.clone_from(&key);
+        }
     }
 
     /// The room a unit stands in.
@@ -413,6 +454,7 @@ impl Review<'_, '_> {
         let home = "Casa";
         if c.beds < people {
             self.push(
+                Rule::SleepingPlaces,
                 Severity::Erro,
                 home,
                 format!(
@@ -429,6 +471,7 @@ impl Review<'_, '_> {
             let per = f64::from(people) / f64::from(c.bedrooms);
             if per > 3.0 {
                 self.push_ref(
+                    Rule::BedroomCrowding,
                     Severity::Alerta,
                     home,
                     format!(
@@ -440,6 +483,7 @@ impl Review<'_, '_> {
                 );
             } else if per > 2.0 {
                 self.push(
+                    Rule::BedroomSharing,
                     Severity::Dica,
                     home,
                     format!(
@@ -451,15 +495,22 @@ impl Review<'_, '_> {
             }
         } else if people > 1 {
             self.push(
+                Rule::NoBedroom,
                 Severity::Alerta,
                 home,
                 "Nenhum dormitório identificado: nomeie os cômodos (Quarto, Suíte) ou coloque camas.",
             );
         }
         if c.bathrooms == 0 {
-            self.push(Severity::Erro, home, "Nenhum banheiro com vaso sanitário.");
+            self.push(
+                Rule::NoToilet,
+                Severity::Erro,
+                home,
+                "Nenhum banheiro com vaso sanitário.",
+            );
         } else if people > 5 * c.bathrooms {
             self.push(
+                Rule::BathroomCount,
                 Severity::Alerta,
                 home,
                 format!(
@@ -470,6 +521,7 @@ impl Review<'_, '_> {
         }
         if c.dining_seats < people {
             self.push(
+                Rule::DiningSeats,
                 Severity::Alerta,
                 home,
                 format!(
@@ -481,6 +533,7 @@ impl Review<'_, '_> {
         }
         if c.living_seats < people {
             self.push(
+                Rule::LivingSeats,
                 Severity::Dica,
                 home,
                 format!(
@@ -495,6 +548,7 @@ impl Review<'_, '_> {
             + WARDROBE_PER_ADULT / 2.0 * f64::from(p.children.min(people));
         if c.wardrobe_cm + 1.0 < needed {
             self.push(
+                Rule::WardrobeCapacity,
                 Severity::Dica,
                 home,
                 format!(
@@ -676,6 +730,18 @@ impl Review<'_, '_> {
                     };
                     Some(Finding {
                         severity,
+                        // A piece is short of room on one side at a time: the
+                        // side belongs in the key, or the front accepted for a
+                        // wardrobe would silence its left as well.
+                        key: rule::key_at(
+                            Rule::Clearance,
+                            &label,
+                            match side {
+                                Side::Front => "front",
+                                Side::Left => "left",
+                                Side::Right => "right",
+                            },
+                        ),
                         place: label.clone(),
                         message: format!(
                             "{} cm livres {where_}{stretch} ({reason}: mínimo {} cm); {advice}.",
@@ -924,6 +990,7 @@ impl Review<'_, '_> {
             let clear = door.width - 4.0;
             if clear < 60.0 {
                 self.push(
+                    Rule::DoorClearWidth,
                     Severity::Alerta,
                     label,
                     format!(
@@ -933,6 +1000,7 @@ impl Review<'_, '_> {
                 );
             } else if wheel && clear < 80.0 {
                 self.push_ref(
+                    Rule::DoorWidthWheelchair,
                     Severity::Alerta,
                     label,
                     format!(
@@ -990,6 +1058,7 @@ impl Review<'_, '_> {
                 });
                 if has_openings {
                     self.push(
+                        Rule::RoomWithoutAccess,
                         Severity::Erro,
                         space.label(),
                         format!(
@@ -1030,12 +1099,25 @@ impl Review<'_, '_> {
                     leaf.name, leaf.id
                 );
             }
-            self.push(Severity::Alerta, space.label(), message);
+            self.push(
+                Rule::RoomWithoutDoor,
+                Severity::Alerta,
+                space.label(),
+                message,
+            );
         }
         let scene = self.scene;
         for (door, unit) in scene.door_hits() {
             let door_name = format!("{} {}", door.name, door.id);
             let by = scene.units[unit].label();
+            // One door can be blocked by more than one piece, and the leaf
+            // freed of one still meets the other: each is its own finding,
+            // however the advice reads — flipping the hinge or moving it.
+            let blocked = rule::key_at(
+                Rule::DoorLeafBlocked,
+                &door_name,
+                &scene.units[unit].piece.id.to_string(),
+            );
             // Would the leaf clear it swinging from the other jamb?
             let flip = door
                 .opening
@@ -1056,6 +1138,7 @@ impl Review<'_, '_> {
             if let Some(right) = flip {
                 self.findings.push(Finding {
                     severity: Severity::Erro,
+                    key: blocked,
                     place: door_name,
                     message: format!(
                         "A folha da porta bate em {by}: com a dobradiça do outro lado ela abre livre (hinge_right hoje {}, use {right}).",
@@ -1073,6 +1156,7 @@ impl Review<'_, '_> {
             let moved = nudge(scene, unit);
             self.findings.push(Finding {
                 severity: Severity::Erro,
+                key: blocked,
                 place: door_name,
                 message: match &moved {
                     Some(m) => format!(
@@ -1092,6 +1176,13 @@ impl Review<'_, '_> {
             let fix = nudge(scene, b).or_else(|| nudge(scene, a));
             self.findings.push(Finding {
                 severity: Severity::Erro,
+                // The pair, not the piece: a wardrobe accepted over the rug
+                // has not been accepted over the bed.
+                key: rule::key_at(
+                    Rule::SamePlace,
+                    &scene.units[a].label(),
+                    &scene.units[b].piece.id.to_string(),
+                ),
                 place: scene.units[a].label(),
                 message: match &fix {
                     Some(f) => format!(
@@ -1186,6 +1277,7 @@ impl Review<'_, '_> {
             if let Some((min_area, min_side, side_source)) = minimum {
                 if area + 1.0 < min_area {
                     self.push_ref(
+                        Rule::RoomArea,
                         Severity::Dica,
                         &label,
                         format!(
@@ -1204,6 +1296,7 @@ impl Review<'_, '_> {
                         Severity::Dica
                     };
                     self.push_ref(
+                        Rule::RoomNarrowSide,
                         severity,
                         &label,
                         format!(
@@ -1225,6 +1318,7 @@ impl Review<'_, '_> {
             };
             if what != RoomUse::Other && ceiling + 0.5 < min_ceiling {
                 self.push_ref(
+                    Rule::CeilingHeight,
                     Severity::Alerta,
                     &label,
                     format!(
@@ -1256,9 +1350,15 @@ impl Review<'_, '_> {
                     } else {
                         "precisa de janela para luz e ventilação"
                     };
-                    self.push(severity, &label, format!("Sem janela: {what_to_do}."));
+                    self.push(
+                        Rule::RoomWithoutWindow,
+                        severity,
+                        &label,
+                        format!("Sem janela: {what_to_do}."),
+                    );
                 } else if glass * ratio + 1.0 < area {
                     self.push_ref(
+                        Rule::WindowArea,
                         Severity::Dica,
                         &label,
                         format!(
@@ -1309,6 +1409,7 @@ impl Review<'_, '_> {
             };
             if !missing.is_empty() {
                 self.push_ref(
+                    Rule::MissingFixtures,
                     Severity::Dica,
                     &label,
                     format!(
@@ -1324,6 +1425,7 @@ impl Review<'_, '_> {
                 let turn = scene.turning_diameter(space);
                 if turn + 1.0 < 150.0 {
                     self.push_ref(
+                        Rule::WheelchairTurn,
                         Severity::Alerta,
                         &label,
                         format!(
@@ -1336,6 +1438,7 @@ impl Review<'_, '_> {
             }
             if self.profile.elderly > 0 && what == RoomUse::Bathroom {
                 self.push_ref(
+                    Rule::ElderlyBathroom,
                     Severity::Dica,
                     &label,
                     "Morador idoso: barras de apoio junto ao vaso e no box, piso antiderrapante e box sem degrau.",
@@ -1409,6 +1512,7 @@ impl Review<'_, '_> {
                 let long_leg = legs.iter().copied().fold(0.0, f64::max);
                 if total > 792.0 || long_leg > 274.0 {
                     self.push_ref(
+                        Rule::WorkTriangleLong,
                         Severity::Dica,
                         &label,
                         format!(
@@ -1420,6 +1524,7 @@ impl Review<'_, '_> {
                     );
                 } else if short_leg < 122.0 {
                     self.push_ref(
+                        Rule::WorkTriangleShort,
                         Severity::Dica,
                         &label,
                         format!(
@@ -1431,6 +1536,7 @@ impl Review<'_, '_> {
                 }
                 if sink.distance(stove) < 60.0 {
                     self.push(
+                        Rule::SinkNextToStove,
                         Severity::Alerta,
                         &label,
                         "Pia e fogão colados: deixe bancada entre eles para preparo e segurança (a NKBA soma 90 cm de apoio entre os dois).",
@@ -1460,6 +1566,7 @@ impl Review<'_, '_> {
                 && (top - ideal).abs() > 6.0
             {
                 self.push_ref(
+                    Rule::CounterHeight,
                     Severity::Dica,
                     scene.units[which].label(),
                     format!(
@@ -1485,6 +1592,7 @@ impl Review<'_, '_> {
                 let (lo, hi) = u.piece.height_range();
                 if lo < 135.0 {
                     self.push(
+                        Rule::WallCabinetLow,
                         Severity::Alerta,
                         u.label(),
                         format!(
@@ -1495,6 +1603,7 @@ impl Review<'_, '_> {
                 }
                 if hi > reach + 30.0 {
                     self.push_ref(
+                        Rule::WallCabinetHigh,
                         Severity::Dica,
                         u.label(),
                         format!(
@@ -1517,6 +1626,7 @@ impl Review<'_, '_> {
             if !runs.is_empty() {
                 if total + 1.0 < ALEXANDER_TOTAL {
                     self.push_ref(
+                        Rule::CounterTotal,
                         Severity::Dica,
                         &label,
                         format!(
@@ -1535,6 +1645,7 @@ impl Review<'_, '_> {
                     && runs.len() > 1
                 {
                     self.push_ref(
+                        Rule::CounterRunShort,
                         Severity::Dica,
                         &label,
                         format!(
@@ -1569,6 +1680,7 @@ impl Review<'_, '_> {
                 && far > ALEXANDER_PAIR
             {
                 self.push_ref(
+                    Rule::KitchenSpread,
                     Severity::Dica,
                     &label,
                     format!(
@@ -1597,6 +1709,7 @@ impl Review<'_, '_> {
                 .collect();
             if !missing.is_empty() && missing.len() < zones.len() {
                 self.push_ref(
+                    Rule::MissingWorkZone,
                     Severity::Dica,
                     &label,
                     format!(
@@ -1617,6 +1730,7 @@ impl Review<'_, '_> {
                 let needed = (perimeter / 350.0).ceil().max(1.0) as usize;
                 if sockets < needed {
                     self.push_ref(
+                        Rule::KitchenSockets,
                         Severity::Erro,
                         &label,
                         format!(
@@ -1646,6 +1760,7 @@ impl Review<'_, '_> {
                     .sum();
                 if above < 2 {
                     self.push_ref(
+                        Rule::CounterSockets,
                         Severity::Erro,
                         &label,
                         format!(
@@ -1679,6 +1794,7 @@ impl Review<'_, '_> {
                     if grilles > 0 {
                         if grilles < 2 {
                             self.push_ref(
+                                Rule::GasVentPartial,
                                 Severity::Dica,
                                 &label,
                                 "Uma grelha de ventilação permanente: a ventilação de aparelho a gás pede abertura inferior e superior; confira a área útil na edição vigente da norma.",
@@ -1687,6 +1803,7 @@ impl Review<'_, '_> {
                         }
                     } else if glass <= 0.0 {
                         self.push_ref(
+                            Rule::GasWithoutVent,
                             Severity::Erro,
                             &label,
                             "Aparelho a gás em ambiente sem janela nem abertura permanente: a ventilação permanente para o exterior é obrigatória (em São Paulo, Decreto 57.776, 3.M), e aqui é segurança, não conforto.",
@@ -1694,6 +1811,7 @@ impl Review<'_, '_> {
                         );
                     } else {
                         self.push_ref(
+                            Rule::GasWindowNotVent,
                             Severity::Alerta,
                             &label,
                             "Aparelho a gás: janela que fecha não é ventilação permanente. Preveja abertura permanente direta para o exterior (veneziana ou grelha, inferior e superior), como pedem a norma de aparelhos a gás e, em São Paulo, o Decreto 57.776 (3.M).",
@@ -1704,12 +1822,14 @@ impl Review<'_, '_> {
                 // --- LBNL: pulling the pollutants out before they spread ---
                 match find(|u| matches!(u, Use::Hood)) {
                     None => self.push_ref(
+                        Rule::StoveWithoutHood,
                         Severity::Alerta,
                         &label,
                         "Cocção sem coifa: o cozimento gera material particulado e NO₂ dentro de casa, e sem captura eles ficam no ar da sala junto.",
                         "lbnl-coifa",
                     ),
                     Some(hood) if hood.piece.width + 1.0 < stove.piece.width => self.push_ref(
+                        Rule::HoodNarrowerThanStove,
                         Severity::Dica,
                         &label,
                         format!(
@@ -1727,6 +1847,7 @@ impl Review<'_, '_> {
                 let short = short_side(&space.room.points);
                 if short + 0.5 < MCMV_KITCHEN_WIDTH {
                     self.push_ref(
+                        Rule::KitchenWidth,
                         Severity::Dica,
                         &label,
                         format!(
@@ -1743,6 +1864,7 @@ impl Review<'_, '_> {
                         let turn = scene.turning_diameter(space);
                         if turn + 1.0 < diameter {
                             self.push_ref(
+                                Rule::FreeCircle,
                                 Severity::Erro,
                                 &label,
                                 format!(
@@ -1757,6 +1879,7 @@ impl Review<'_, '_> {
                         }
                     }
                     None => self.push_ref(
+                        Rule::CityNotDeclared,
                         Severity::Dica,
                         &label,
                         "Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.",
@@ -1796,6 +1919,7 @@ impl Review<'_, '_> {
                 let inches = (diagonal / 2.54).round();
                 if distance < near || distance > far {
                     self.push(
+                        Rule::TvDistance,
                         Severity::Dica,
                         scene.units[tv].label(),
                         format!(
@@ -1831,7 +1955,11 @@ impl Review<'_, '_> {
                     let across = f64::midpoint(a.piece.depth, b.piece.depth);
                     let gap = x.abs() - f64::midpoint(a.piece.width, b.piece.width);
                     if y.abs() < across * 0.5 && (0.0..60.0).contains(&gap) {
-                        self.push_ref(
+                        self.push_ref_at(
+                            Rule::BetweenBeds,
+                            // One finding per pair: accepting the gap between
+                            // two beds never accepts it between two others.
+                            &format!("{}+{}", a.piece.id, b.piece.id),
                             Severity::Alerta,
                             &label,
                             format!(
@@ -1850,12 +1978,14 @@ impl Review<'_, '_> {
                     let (_, top) = u.piece.height_range();
                     match u.what {
                         Use::Basin | Use::Sink if top > 85.5 => self.push_ref(
+                            Rule::BasinHeightWheelchair,
                             Severity::Alerta,
                             u.label(),
                             format!("Tampo a {} cm: para cadeira de rodas, até 85 cm, com vão livre embaixo.", cm(top)),
                             "nbr9050",
                         ),
                         Use::Bed(_) if (top - 46.0).abs() > 4.0 => self.push_ref(
+                            Rule::BedHeightWheelchair,
                             Severity::Dica,
                             u.label(),
                             format!("Cama a {} cm do chão: a transferência da cadeira pede uns 46 cm.", cm(top)),
@@ -1872,6 +2002,7 @@ impl Review<'_, '_> {
             if space.what == RoomUse::Bathroom {
                 for u in units.iter().filter(|u| gas_named(u)) {
                     self.push_ref(
+                        Rule::GasHeaterInBathroom,
                         Severity::Erro,
                         u.label(),
                         "Aquecedor a gás no banheiro: ali só é admitido aparelho tipo C (câmara de combustão estanque); do contrário, leve-o para fora, para a área de serviço ventilada.",
@@ -1885,6 +2016,7 @@ impl Review<'_, '_> {
                 .any(|u| u.what == Use::Stove && !electric(&u.piece.name));
             if sleeps && gas_cooking {
                 self.push_ref(
+                    Rule::GasCookingInBedroom,
                     Severity::Dica,
                     &label,
                     "Cocção a gás no mesmo ambiente em que se dorme: a norma limita a 8,14 kW, com válvula de segurança em todos os queimadores e coifa com saída para o exterior.",
@@ -1916,6 +2048,7 @@ impl Review<'_, '_> {
         }
         if wrong > 0 {
             self.push_ref(
+                Rule::SwitchOutletReach,
                 Severity::Alerta,
                 "Casa",
                 format!(
@@ -2250,15 +2383,16 @@ fn short_side(points: &[Point2]) -> f64 {
 /// what `measure` leaves out of the band a walking person meets.
 const HEADROOM: f64 = 190.0;
 
-/// Reviews the current storey of `home` for the people in `profile`.
-/// The name a finding is accepted by: its rule and its place, so the same
-/// finding keeps the same name from one run to the next, and a different one
-/// about the same room does not inherit an acceptance it never had.
-fn key_of(finding: &Finding) -> String {
+/// The name a finding used to be accepted by, before rules were named:
+/// the standard it cited, its place, and the first words of its sentence.
+///
+/// Projects saved then carry these keys, so an acceptance written under one
+/// is still honoured — [`Finding::accepted_as`] says so — and is still found
+/// by [`orphaned`]. Nothing is written under this shape any more: a rewording
+/// moved it, which is the whole reason rules are named now. Kept for the
+/// projects that already have them, and read-only.
+fn legacy_key_of(finding: &Finding) -> String {
     let rule = finding.reference.unwrap_or("-");
-    // The words of the message, not its numbers: the numbers move with every
-    // edit, and an acceptance that lapses whenever a centimetre changes is an
-    // acceptance nobody can rely on.
     let words: String = newera_core::fold(&finding.message)
         .split(|c: char| !c.is_alphabetic())
         .filter(|w| w.len() > 3)
@@ -2400,10 +2534,8 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
     // Establish identity before presentation grouping: accepting a warning
     // for one room or piece must never accept the same text elsewhere.
     let mut findings: Vec<Finding> = Vec::new();
-    for mut f in review.findings {
-        if f.key.is_empty() {
-            f.key = key_of(&f);
-        }
+    for f in review.findings {
+        debug_assert!(!f.key.is_empty(), "a finding names its rule: {f:?}");
         match findings.iter_mut().find(|g| {
             g.severity == f.severity
                 // All findings, including architecture, keep independent keys.
@@ -2425,16 +2557,15 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
     // looked at carry the reason instead of the cost.
     for finding in &mut findings {
         finding.accepted = home.accepted.get(&finding.key).cloned();
-        // The same rule on the same place under an older prefix — a rule that
-        // came to cite its source: the acceptance follows it.
-        if finding.accepted.is_none()
-            && let Some((_, suffix)) = finding.key.split_once(':')
-            && let Some((old, why)) = home.accepted.iter().find(|(k, _)| {
-                k.split_once(':').is_some_and(|(_, s)| s == suffix) && **k != finding.key
-            })
-        {
-            finding.accepted = Some(why.clone());
-            finding.accepted_as = Some(old.clone());
+        // Accepted before rules were named, in a project saved back then: the
+        // acceptance follows this very finding, by the name it had — and only
+        // this one, since the old name is rebuilt from the finding itself.
+        if finding.accepted.is_none() {
+            let old = legacy_key_of(finding);
+            if let Some(why) = home.accepted.get(&old) {
+                finding.accepted = Some(why.clone());
+                finding.accepted_as = Some(old);
+            }
         }
     }
     // A fix that would open another finding as heavy is no fix: the two do
@@ -3209,8 +3340,11 @@ mod tests {
         assert!(counter.message.contains("Isso deixa"), "{counter:#?}");
     }
 
+    /// A project saved before rules were named carries keys built from the
+    /// standard, the place and the first words of the sentence. They still
+    /// answer for the finding they were written about.
     #[test]
-    fn an_acceptance_follows_its_finding_when_the_rule_changes_prefix() {
+    fn an_acceptance_written_under_the_old_prose_key_still_follows_its_finding() {
         let mut home = Home::default();
         square(&mut home, "Cozinha", 300.0, 300.0);
         for w in &mut home.walls {
@@ -3220,11 +3354,14 @@ mod tests {
         let finding = report
             .findings
             .iter()
-            .find(|f| f.key.starts_with("nbr15575:"))
+            .find(|f| f.key.starts_with("ceiling_height:"))
             .unwrap_or_else(|| panic!("{report:#?}"))
             .clone();
-        // Accepted back when the rule cited nothing: `-:` instead of `nbr15575:`.
-        let old = format!("-:{}", finding.key.split_once(':').unwrap().1);
+        let old = legacy_key_of(&finding);
+        assert!(
+            old.starts_with("nbr15575:") && old.split(':').count() == 3,
+            "the shape projects were saved with: {old}"
+        );
         home.accepted
             .insert(old.clone(), "laje existente, não há como subir".into());
         let again = review(&home, &Profile::default());
@@ -3241,7 +3378,80 @@ mod tests {
         assert!(again.score > report.score);
         assert!(
             orphaned(&home, &Profile::default()).is_empty(),
-            "not an orphan: it moved"
+            "not an orphan: it is this finding's own old name"
+        );
+    }
+
+    /// The old shape was matched by its tail, ignoring which rule wrote it,
+    /// so an acceptance could land on a rule it was never given to. A key
+    /// names one rule now, and nothing else answers to it.
+    #[test]
+    fn an_acceptance_never_crosses_to_another_rule_about_the_same_place() {
+        let mut home = Home::default();
+        square(&mut home, "Cozinha", 300.0, 300.0);
+        for w in &mut home.walls {
+            w.height = 240.0;
+        }
+        let report = review(&home, &Profile::default());
+        let low = report
+            .findings
+            .iter()
+            .find(|f| f.key.starts_with("ceiling_height:"))
+            .unwrap_or_else(|| panic!("{report:#?}"))
+            .clone();
+        let others: Vec<String> = report
+            .findings
+            .iter()
+            .filter(|f| f.place == low.place && f.key != low.key)
+            .map(|f| f.key.clone())
+            .collect();
+        assert!(!others.is_empty(), "{report:#?}");
+        home.accepted
+            .insert(low.key.clone(), "laje existente".into());
+        let again = review(&home, &Profile::default());
+        for key in others {
+            assert!(
+                again
+                    .findings
+                    .iter()
+                    .find(|f| f.key == key)
+                    .is_some_and(|f| f.accepted.is_none()),
+                "{key} was not the one accepted"
+            );
+        }
+    }
+
+    /// Wording is not identity: the same rule about the same place keeps its
+    /// acceptance when the sentence is rewritten — or translated.
+    #[test]
+    fn rewording_a_finding_does_not_drop_the_acceptance_written_for_it() {
+        let mut home = Home::default();
+        square(&mut home, "Quarto", 300.0, 300.0);
+        let reworded = |f: &Finding| {
+            let mut f = f.clone();
+            f.message = "Ceiling at 240 cm, below the 250 cm this room needs.".into();
+            f
+        };
+        let report = review(&home, &Profile::default());
+        let finding = report
+            .findings
+            .iter()
+            .find(|f| f.key.starts_with("room_without_window:"))
+            .unwrap_or_else(|| panic!("{report:#?}"));
+        assert_eq!(
+            rule::key(Rule::RoomWithoutWindow, &finding.place),
+            finding.key,
+            "the key is the rule and the place, nothing of the sentence"
+        );
+        assert_eq!(
+            reworded(finding).key,
+            finding.key,
+            "a rewritten sentence answers to the same key"
+        );
+        assert_ne!(
+            legacy_key_of(&reworded(finding)),
+            legacy_key_of(finding),
+            "which is exactly what the old prose key could not do"
         );
     }
 
@@ -3657,13 +3867,37 @@ mod tests {
             glass: std::collections::BTreeMap::new(),
         };
         // Tier A, checked at the source: an error stays an error.
-        review.push_ref(Severity::Erro, "Casa", "gás sem abertura", "nbr13103");
+        review.push_ref(
+            Rule::GasWithoutVent,
+            Severity::Erro,
+            "Casa",
+            "gás sem abertura",
+            "nbr13103",
+        );
         // Tier A, figure not confirmed at the source: it may warn, never accuse.
-        review.push_ref(Severity::Erro, "Casa", "cozinha estreita", "caixa-mcmv");
+        review.push_ref(
+            Rule::KitchenWidth,
+            Severity::Erro,
+            "Casa",
+            "cozinha estreita",
+            "caixa-mcmv",
+        );
         // Tier C doctrine cannot raise an alert, however the rule asked.
-        review.push_ref(Severity::Erro, "Casa", "bancada curta", "alexander184");
+        review.push_ref(
+            Rule::CounterTotal,
+            Severity::Erro,
+            "Casa",
+            "bancada curta",
+            "alexander184",
+        );
         // Tier E describes what people do: it raises nothing at all.
-        review.push_ref(Severity::Erro, "Casa", "tendência", "houzz2026");
+        review.push_ref(
+            Rule::CounterHeight,
+            Severity::Erro,
+            "Casa",
+            "tendência",
+            "houzz2026",
+        );
         let got: Vec<(Severity, Option<&str>)> = review
             .findings
             .iter()
