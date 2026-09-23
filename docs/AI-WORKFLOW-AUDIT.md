@@ -575,7 +575,7 @@ O usuário pediu concluir a correção em curso, commitar, criar uma nova releas
 
 Pendências para a próxima execução, sem iniciar outra frente agora:
 
-- IDs estáveis de regras de ergonomia ainda derivados parcialmente de mensagens; a separação das aceitações agrupadas foi corrigida, mas a migração completa permanece.
+- ~~IDs estáveis de regras de ergonomia ainda derivados parcialmente de mensagens; a separação das aceitações agrupadas foi corrigida, mas a migração completa permanece.~~ **Concluído em 22/09/2026, commit `923b125` (PR #14): ver “Identidade das regras de ergonomia — o nome deixa de vir da frase”. CI e Publish do `main` aprovados (`35808678098` / `35808678140`).**
 - Relações automáticas entre cama/cabeceira/criados/luminárias/tapete e propostas conjuntas que preservem circulação; propagação de recortes, apoios e folgas de instalação dos eletrodomésticos.
 - Operação real de folhas de janela, ventilação efetiva e parâmetros de fabricantes; caixas versus geometria real, exceções de peças finas inclinadas e perfis de paredes curvas citados acima.
 - Ancoragem automática de forros/luminárias, além das superfícies de teto compartilhadas; geração automática de vistas, cortes, cotas e checklist de apresentação.
