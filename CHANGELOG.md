@@ -15,6 +15,8 @@ All notable changes to this project are documented here. The format follows
   the camera and a room drop to 40 cm and follow the camera as it turns) or down.
   Ceilings, roofs and the doors, windows and pieces hanging on lowered walls hide with
   them. Three buttons in the toolbar and the View menu switch it.
+- `render_3d` takes `walls=cutaway|down` to draw the same way, so an agent can see the
+  furniture of a room from the side.
 
 ### Fixed
 
