@@ -546,7 +546,9 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
 **4. Diretórios de conector (depois de 1 e 2)**
 - [x] Plugin com o MCP remoto (`https://mcp.3dneweraai.com/mcp`) e o plugin do app
       (`3d-new-era-ai-desktop`) no mesmo marketplace — eu
-- [ ] Claude Connectors Directory — exige plano Claude Team (**você** assina)
+- [ ] ~~Claude Connectors Directory~~ — fora por decisão (24/09/2026): exige o plano Claude
+      Team (mínimo 2 assentos, R$ 276/mês). O conector segue usável no Claude como conector
+      personalizado, pelo endereço, e o plugin segue na revisão do Console
 - [ ] OpenAI Plugins Directory — exige identidade verificada na OpenAI (**você**)
 - [ ] Conta de teste com plano pago para os revisores — eu
 
