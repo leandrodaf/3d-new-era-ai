@@ -1,0 +1,38 @@
+[package]
+name = "newera-cloud"
+description = "The hosted 3D New Era AI: one fixed MCP address with accounts and OAuth, reaching the person's browser tab or a project in the cloud"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+axum = { workspace = true, features = ["macros", "form", "query"] }
+base64.workspace = true
+getrandom = "0.4"
+newera-mcp.workspace = true
+newera-relay = { path = "../newera-relay" }
+reqwest = { version = "0.13", default-features = false, features = ["json", "form", "rustls"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.11"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "postgres", "migrate", "macros", "json"] }
+tokio = { workspace = true, features = ["time", "net", "signal", "rt-multi-thread", "macros"] }
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+url = "2"
+
+[dev-dependencies]
+futures-util.workspace = true
+base64.workspace = true
+sha2 = "0.11"
+tokio-tungstenite = "0.30"
+
+[lints]
+workspace = true

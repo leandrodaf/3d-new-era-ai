@@ -1,0 +1,155 @@
+//! The hosted 3D New Era AI.
+//!
+//! One service behind `https://mcp.3dneweraai.com`:
+//!
+//! - **the relay**, unchanged: a browser tab opens a room and anybody holding
+//!   the room's secret URL reaches it — no account, as before;
+//! - **accounts**, signed into with an emailed link (or Google), each on a
+//!   plan whose limits the tools respect;
+//! - **OAuth 2.1** for AI clients (Claude, `ChatGPT`, Codex…): dynamic
+//!   registration and client metadata documents, PKCE, rotating refresh
+//!   tokens;
+//! - **one fixed MCP address**, `/mcp`, that reaches the account's own tab
+//!   when one is open and signed in.
+//!
+//! Secrets are stored only as hashes, and nothing of a drawing passes
+//! through the database: the tab still holds the project.
+
+pub mod account;
+pub mod accounts;
+pub mod config;
+pub mod limits;
+pub mod login;
+pub mod mail;
+pub mod mcp;
+pub mod oauth;
+pub mod pages;
+pub mod secret;
+
+use std::sync::Arc;
+
+use axum::Router;
+use axum::routing::get;
+use sqlx::PgPool;
+
+pub use config::Config;
+
+/// What every handler shares.
+#[derive(Debug, Clone)]
+pub struct AppState {
+    pub config: Arc<Config>,
+    pub db: PgPool,
+    pub rooms: newera_relay::Rooms,
+    pub http: reqwest::Client,
+    pub limits: limits::Limiter,
+}
+
+impl AppState {
+    /// The state for a configuration and a database already migrated.
+    ///
+    /// # Panics
+    ///
+    /// If the HTTP client cannot be built (no TLS backend), which is a build
+    /// problem, not a runtime one.
+    pub fn new(config: Config, db: PgPool) -> Self {
+        let http = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent(concat!("3d-new-era-ai/", env!("CARGO_PKG_VERSION")))
+            .build()
+            .expect("an HTTP client");
+        Self {
+            config: Arc::new(config),
+            db,
+            rooms: newera_relay::Rooms::default(),
+            http,
+            limits: limits::Limiter::default(),
+        }
+    }
+}
+
+/// Connects to the database and brings its schema up to date.
+///
+/// # Errors
+///
+/// When the database cannot be reached or a migration fails.
+pub async fn database(url: &str) -> anyhow::Result<PgPool> {
+    let db = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(10)
+        .connect(url)
+        .await?;
+    sqlx::migrate!("./migrations").run(&db).await?;
+    Ok(db)
+}
+
+/// Every route of the service.
+pub fn router(state: &AppState) -> Router {
+    use axum::http::{HeaderValue, Method, header};
+    use axum::routing::post;
+    use tower_http::cors::CorsLayer;
+
+    // The editor at 3dneweraai.com asks who is signed in and claims its room,
+    // with the person's cookie: only the site's own origins may.
+    let origins: Vec<HeaderValue> = state
+        .config
+        .site_origins
+        .iter()
+        .filter_map(|o| o.parse().ok())
+        .collect();
+    let site = Router::new()
+        .route("/account/me", get(account::me))
+        .route("/account/claim", post(account::claim))
+        .layer(
+            CorsLayer::new()
+                .allow_origin(origins)
+                .allow_credentials(true)
+                .allow_methods([Method::GET, Method::POST])
+                .allow_headers([header::CONTENT_TYPE]),
+        );
+    let cloud = Router::new()
+        .route("/cloud/health", get(health))
+        .route(
+            "/.well-known/oauth-protected-resource",
+            get(oauth::resource_metadata),
+        )
+        .route(
+            "/.well-known/oauth-protected-resource/mcp",
+            get(oauth::resource_metadata),
+        )
+        .route(
+            "/.well-known/oauth-authorization-server",
+            get(oauth::server_metadata),
+        )
+        .route(
+            "/.well-known/openid-configuration",
+            get(oauth::server_metadata),
+        )
+        .route("/oauth/register", post(oauth::register))
+        .route(
+            "/oauth/authorize",
+            get(oauth::authorize).post(oauth::decide),
+        )
+        .route("/oauth/token", post(oauth::token))
+        .route("/oauth/revoke", post(oauth::revoke))
+        .route("/login", get(login::form).post(login::send))
+        .route("/login/link", get(login::confirm).post(login::redeem))
+        .route("/login/google", get(login::google))
+        .route("/login/google/callback", get(login::google_callback))
+        .route("/logout", get(login::logout))
+        .route("/account", get(account::show))
+        .route("/account/close", post(account::close))
+        .route("/mcp", post(mcp::post).get(mcp::get))
+        .merge(site)
+        .with_state(state.clone());
+    newera_relay::router_with(state.rooms.clone()).merge(cloud)
+}
+
+async fn health(
+    axum::extract::State(state): axum::extract::State<AppState>,
+) -> axum::Json<serde_json::Value> {
+    let db = sqlx::query_scalar::<_, i32>("select 1")
+        .fetch_one(&state.db)
+        .await
+        .is_ok();
+    axum::Json(serde_json::json!({ "ok": db, "database": db }))
+}
