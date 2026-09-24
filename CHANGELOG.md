@@ -6,6 +6,44 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-09-24
+
+### Added
+
+- The plan shows up inside the chat: `show_plan` opens an interactive viewer (pan, zoom,
+  a 3D view on a click, "open in the editor") in clients that speak MCP Apps — Claude,
+  ChatGPT, VS Code and others.
+- Every tool says whether it only reads or changes the plan, with a title, so an AI
+  client runs reads without asking and asks before each change. Reads and changes are
+  separate tools now: `cameras`/`edit_cameras`, `levels`/`edit_levels`, `video`/
+  `edit_video`, `variants`/`edit_variants`, `checkpoints`/`checkpoint`, `plugins`/
+  `run_plugin`, `disciplines`/`edit_disciplines`, `electrical`/`edit_electrical`,
+  `plumbing`/`edit_plumbing`, `lighting`/`fill_lighting`, `annotations`/
+  `edit_annotations`, `trace_background`/`trace_walls`, `cut_list`/`export_cut_list`;
+  findings of every review are accepted with `accept`, and who lives there is kept with
+  `set_home(people=…)`.
+- `newera mcp` (stdio) edits the plan in the open window when the editor is running;
+  `--standalone` keeps a project of its own.
+- One-click installs: `newera-mcp.mcpb` for Claude Desktop in every release, a plugin
+  with skills for Claude Code, Codex, Cursor and Gemini CLI, and buttons for Cursor, VS
+  Code and LM Studio.
+- Accounts at mcp.3dneweraai.com: sign in with an emailed link, and Claude, ChatGPT and
+  other AIs reach your editor tab at one fixed address, with no secret to paste. With no
+  tab open they work on projects kept in your account, and exports come back as links.
+- Privacy policy and terms of use on the site.
+
+### Changed
+
+- The editor's AI link comes back by itself, at the same address, when the service
+  restarts.
+- A project opened by link (`?project=`) opens even when the tab had work of its own to
+  restore.
+
+### Fixed
+
+- The AI link no longer stays on "connecting" forever when the relay refuses a tab.
+- `show_plan` said "-0 m²" for an empty plan.
+
 ## [1.7.0] - 2026-09-24
 
 ### Added
