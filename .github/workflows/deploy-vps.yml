@@ -45,12 +45,23 @@ jobs:
   # and Go steps are replaced by what actually guards this service.
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: newera
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:5432/newera
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy -p newera-relay --all-targets --locked -- -D warnings
-      - run: cargo test -p newera-relay --locked
+      - run: cargo clippy -p newera-relay -p newera-cloud --all-targets --locked -- -D warnings
+      - run: cargo test -p newera-relay -p newera-cloud --locked
 
   build:
     needs: test

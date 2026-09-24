@@ -1,0 +1,8 @@
+target
+web
+_site
+.git
+docs
+site
+assets/*.icns
+*.newera

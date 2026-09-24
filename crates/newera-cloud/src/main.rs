@@ -5,11 +5,28 @@
 //! See `newera_cloud::Config` for the rest of the environment.
 
 use anyhow::Context as _;
+use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::util::SubscriberInitExt as _;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // `--health` is how the container checks itself: same binary, no shell.
+    if std::env::args().any(|arg| arg == "--health") {
+        let port = std::env::var("PORT")
+            .ok()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(7979);
+        let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port)).await?;
+        stream
+            .write_all(b"GET /cloud/health HTTP/1.0\r\nHost: localhost\r\n\r\n")
+            .await?;
+        let mut answer = String::new();
+        stream.read_to_string(&mut answer).await?;
+        anyhow::ensure!(answer.contains("\"ok\":true"), "unhealthy: {answer}");
+        println!("ok");
+        return Ok(());
+    }
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
         .with(

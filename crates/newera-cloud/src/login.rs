@@ -99,6 +99,17 @@ pub async fn form(
             label = lang.pick("Entrar com Google", "Continue with Google"),
         )
     });
+    if matches!(state.config.mail, crate::config::Mail::Off) {
+        let body = format!(
+            "<h1>{}</h1><p class=\"muted\">{}</p>{google}",
+            lang.pick("Entrar", "Sign in"),
+            lang.pick(
+                "O acesso por e-mail ainda não está disponível.",
+                "Signing in by email is not available yet."
+            ),
+        );
+        return page(lang, lang.pick("Entrar", "Sign in"), &body).into_response();
+    }
     let body = format!(
         r#"<h1>{title}</h1>
 <p class="muted">{lead}</p>

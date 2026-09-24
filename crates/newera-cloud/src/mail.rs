@@ -34,6 +34,7 @@ pub async fn send_login_link(
         href = escape(link),
     );
     match mail {
+        Mail::Off => anyhow::bail!("sign-in by email is not set up"),
         Mail::Log => {
             tracing::warn!("sign-in link for {to} (NEWERA_MAIL=log): {link}");
             Ok(())

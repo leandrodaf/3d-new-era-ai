@@ -10,6 +10,9 @@ pub enum Mail {
     /// Into the log — for a machine that is only being tried out. Never in
     /// production: whoever reads the log could sign in as anyone.
     Log,
+    /// Not set up yet: sign-in by email is off, and everything else — the
+    /// relay above all — keeps working.
+    Off,
 }
 
 /// Google as a way to sign in, when configured.
@@ -27,6 +30,7 @@ impl std::fmt::Debug for Mail {
                 write!(f, "Resend {{ from: {from:?}, api_key: <hidden> }}")
             }
             Self::Log => f.write_str("Log"),
+            Self::Off => f.write_str("Off"),
         }
     }
 }
@@ -97,9 +101,12 @@ impl Config {
                     .unwrap_or_else(|| "3D New Era AI <entrar@3dneweraai.com>".to_owned()),
             },
             (None, Some(mode)) if mode == "log" => Mail::Log,
-            _ => anyhow::bail!(
-                "RESEND_API_KEY is required to send sign-in links (NEWERA_MAIL=log prints them instead, for trying it out)"
-            ),
+            _ => {
+                tracing::warn!(
+                    "no RESEND_API_KEY: sign-in by email is off (NEWERA_MAIL=log prints links, for trying it out)"
+                );
+                Mail::Off
+            }
         };
         let google = match (var("GOOGLE_CLIENT_ID"), var("GOOGLE_CLIENT_SECRET")) {
             (Some(client_id), Some(client_secret)) => Some(Google {
