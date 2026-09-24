@@ -451,8 +451,9 @@ cliente.
       editor web (com o cookie)
 - [x] Exportações viram links de 24 h (`/files/…`), nunca gravadas no caminho pedido
 - [x] `remotes` no `server.json` (o script só publica a URL remota quando ela estiver no ar)
-- [ ] Plugin com o MCP remoto: fica para quando a produção existir (senão o Claude Code
-      de quem instalar mostra um servidor quebrado)
+- [x] Plugin com o MCP remoto: `plugin/` (`3d-new-era-ai`) aponta para
+      `https://mcp.3dneweraai.com/mcp` com OAuth; `plugin-desktop/` (`3d-new-era-ai-desktop`)
+      fica com o app local, as mesmas skills por link simbólico (a instalação copia)
 - [ ] Submissões ao Claude Connectors Directory e ao OpenAI Plugins Directory: dependem
       da produção no ar, do plano Claude Team e da identidade verificada na OpenAI
 
@@ -543,7 +544,8 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
       também no 1Password: as próximas versões atualizam o cask sozinhas
 
 **4. Diretórios de conector (depois de 1 e 2)**
-- [ ] Plugin com o MCP remoto (`https://mcp.3dneweraai.com/mcp`) — eu
+- [x] Plugin com o MCP remoto (`https://mcp.3dneweraai.com/mcp`) e o plugin do app
+      (`3d-new-era-ai-desktop`) no mesmo marketplace — eu
 - [ ] Claude Connectors Directory — exige plano Claude Team (**você** assina)
 - [ ] OpenAI Plugins Directory — exige identidade verificada na OpenAI (**você**)
 - [ ] Conta de teste com plano pago para os revisores — eu
