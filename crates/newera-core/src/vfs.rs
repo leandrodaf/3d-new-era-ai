@@ -198,9 +198,10 @@ pub fn jail(root: &Path) {
 /// Whether a disk read of `path` is allowed: always, unless jailed; then
 /// only a path inside the jail with no `..` in it.
 pub fn allowed(path: &Path) -> bool {
-    let Some(root) = JAIL.get() else {
-        return true;
-    };
+    JAIL.get().is_none_or(|root| inside(root, path))
+}
+
+fn inside(root: &Path, path: &Path) -> bool {
     let path = key(path);
     path.is_absolute()
         && path.starts_with(root)
@@ -216,21 +217,18 @@ mod tests {
     /// Outside the jail nothing is read; inside, only without `..`.
     #[test]
     fn a_jail_confines_reads() {
-        // The jail is process-wide and set once, so the check is on the rule
-        // itself with a root of its own.
+        // The jail is process-wide and set once, so the rule is checked with
+        // a root of its own, and the unjailed process allows everything.
         let root = key(Path::new("/srv/newera/projects"));
-        let inside = |p: &str| {
-            let path = key(Path::new(p));
-            path.is_absolute()
-                && path.starts_with(&root)
-                && !path
-                    .components()
-                    .any(|c| matches!(c, std::path::Component::ParentDir))
-        };
+        let inside = |p: &str| super::inside(&root, Path::new(p));
         assert!(inside("/srv/newera/projects/p1/wood.jpg"));
         assert!(!inside("/proc/self/environ"));
         assert!(!inside("/srv/newera/projects/../../etc/passwd"));
         assert!(!inside("relative/texture.png"));
+        assert!(
+            allowed(Path::new("/anything")),
+            "the desktop is never jailed"
+        );
     }
 
     #[test]
