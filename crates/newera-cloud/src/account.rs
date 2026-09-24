@@ -28,6 +28,7 @@ pub async fn show(State(app): State<AppState>, headers: HeaderMap) -> Response {
         r#"<h1>{title}</h1>
 <p>{email}</p>
 <p class="muted">{plan_label}: <b>{plan}</b></p>
+{projects}
 <a class="button" href="https://3dneweraai.com/app/">{editor}</a>
 <a class="button ghost" href="/logout">{out}</a>
 <details><summary class="muted">{close}</summary>
@@ -41,6 +42,7 @@ pub async fn show(State(app): State<AppState>, headers: HeaderMap) -> Response {
         email = escape(&account.email),
         plan_label = lang.pick("Plano", "Plan"),
         plan = escape(&plan.map_or_else(|| "Free".to_owned(), |p| p.name)),
+        projects = project_list(&app, &account.id, lang).await,
         editor = lang.pick("Abrir o editor", "Open the editor"),
         out = lang.pick("Sair", "Sign out"),
         close = lang.pick("Apagar a conta", "Close the account"),
@@ -52,6 +54,63 @@ pub async fn show(State(app): State<AppState>, headers: HeaderMap) -> Response {
         close_button = lang.pick("Apagar minha conta", "Close my account"),
     );
     page(lang, lang.pick("Sua conta", "Your account"), &body).into_response()
+}
+
+/// The account's cloud projects, each with its download.
+async fn project_list(app: &AppState, account: &str, lang: Lang) -> String {
+    let rows: Vec<(String, String, i32)> = sqlx::query_as(
+        "select id, name, size from projects where account_id = $1 order by updated_at desc",
+    )
+    .bind(account)
+    .fetch_all(&app.db)
+    .await
+    .unwrap_or_default();
+    if rows.is_empty() {
+        return String::new();
+    }
+    let items = rows.iter().fold(String::new(), |mut out, (id, name, size)| {
+        use std::fmt::Write as _;
+        let _ = write!(
+            out,
+            r#"<li><a href="/account/projects/{id}">{name}.newera</a> <span class="muted">{kb} KB</span></li>"#,
+            id = escape(id),
+            name = escape(name),
+            kb = size / 1024,
+        );
+        out
+    });
+    format!(
+        r#"<p class="muted">{title}</p><ul>{items}</ul>"#,
+        title = lang.pick(
+            "Projetos na nuvem (baixe e abra no editor ou no app):",
+            "Projects in the cloud (download, and open in the editor or the app):"
+        ),
+    )
+}
+
+/// A cloud project as a `.newera` file, for its owner.
+pub async fn download(
+    State(app): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Response {
+    let Some(account) = login::signed_in(&app, &headers).await else {
+        return Redirect::to("/login?return_to=/account").into_response();
+    };
+    let found: Option<(String, Vec<u8>)> =
+        sqlx::query_as("select name, data from projects where id = $1 and account_id = $2")
+            .bind(&id)
+            .bind(&account.id)
+            .fetch_optional(&app.db)
+            .await
+            .ok()
+            .flatten();
+    match found {
+        Some((name, data)) => {
+            crate::files::download(&format!("{name}.newera"), "application/zip", data)
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 #[derive(Debug, Deserialize)]

@@ -18,6 +18,8 @@
 pub mod account;
 pub mod accounts;
 pub mod config;
+pub mod engine;
+pub mod files;
 pub mod limits;
 pub mod login;
 pub mod mail;
@@ -42,6 +44,7 @@ pub struct AppState {
     pub rooms: newera_relay::Rooms,
     pub http: reqwest::Client,
     pub limits: limits::Limiter,
+    pub engine: Arc<engine::Engine>,
 }
 
 impl AppState {
@@ -50,8 +53,9 @@ impl AppState {
     /// # Panics
     ///
     /// If the HTTP client cannot be built (no TLS backend), which is a build
-    /// problem, not a runtime one.
+    /// problem, or the engine's directory cannot be made.
     pub fn new(config: Config, db: PgPool) -> Self {
+        let engine = Arc::new(engine::Engine::new().expect("the engine's directory"));
         let http = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .redirect(reqwest::redirect::Policy::none())
@@ -64,6 +68,7 @@ impl AppState {
             rooms: newera_relay::Rooms::default(),
             http,
             limits: limits::Limiter::default(),
+            engine,
         }
     }
 }
@@ -140,6 +145,8 @@ pub fn router(state: &AppState) -> Router {
         .route("/account/close", post(account::close))
         .route("/account/done", get(account::done))
         .route("/mcp", post(mcp::post).get(mcp::get))
+        .route("/files/{token}", get(files::get))
+        .route("/account/projects/{id}", get(account::download))
         .merge(site)
         .with_state(state.clone());
     newera_relay::router_with(state.rooms.clone()).merge(cloud)

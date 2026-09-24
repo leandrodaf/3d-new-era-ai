@@ -425,19 +425,95 @@ async fn an_ai_client_is_allowed_in_and_reaches_the_tab() {
         page["result"]["contents"][0]["mimeType"],
         "text/html;profile=mcp-app"
     );
-    let (_, no_tab) = mcp(
-        &base,
-        &access,
-        json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "get_home", "arguments": {}}}),
+    // With no tab open, the calls work on a project in the cloud.
+    let call = |id: u64, name: &str, arguments: Value| {
+        let (base, access) = (base.clone(), access.clone());
+        let name = name.to_owned();
+        async move {
+            let (_, answer) = mcp(
+                &base,
+                &access,
+                json!({"jsonrpc": "2.0", "id": id, "method": "tools/call", "params": {"name": name, "arguments": arguments}}),
+            )
+            .await;
+            answer["result"].clone()
+        }
+    };
+    let drawn = call(
+        4,
+        "create",
+        json!({"walls": [{"pts": [[0, 0], [400, 0], [400, 300], [0, 300]], "closed": true}]}),
     )
     .await;
-    assert_eq!(no_tab["result"]["isError"], true);
+    assert_eq!(drawn["isError"], false, "{drawn}");
+    let home = call(40, "get_home", json!({"detail": "summary"})).await;
     assert!(
-        no_tab["result"]["content"][0]["text"]
+        home["content"][0]["text"]
             .as_str()
             .unwrap()
-            .contains("3dneweraai.com/app")
+            .contains("walls"),
+        "{home}"
     );
+    let listed = call(41, "projects", json!({})).await;
+    let listed: Value =
+        serde_json::from_str(listed["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(listed["rows"][0][0], "Projeto 1");
+    let size: i32 = sqlx::query_scalar("select size from projects")
+        .fetch_one(&state.db)
+        .await
+        .unwrap();
+    assert!(size > 100, "the change was kept");
+
+    // A draft photo counts; a good one is not in the free plan.
+    let photo = call(42, "render_photo", json!({"w": 64, "h": 48})).await;
+    assert_eq!(photo["isError"], false, "{photo}");
+    let used: i32 = sqlx::query_scalar("select count from usage where kind = 'draft_render'")
+        .fetch_one(&state.db)
+        .await
+        .unwrap();
+    assert_eq!(used, 1);
+    let good = call(
+        43,
+        "render_photo",
+        json!({"w": 64, "h": 48, "quality": "good"}),
+    )
+    .await;
+    assert_eq!(good["isError"], true);
+    assert!(
+        good["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("Free plan")
+    );
+
+    // An export comes back as a link, and the link is the file.
+    let exported = call(44, "export_plan", json!({"path": "/etc/casa.pdf"})).await;
+    let text = exported["content"][0]["text"].as_str().unwrap().to_owned();
+    let link = text.split_whitespace().nth(1).expect("a link").to_owned();
+    assert!(link.starts_with(&format!("{base}/files/")), "{text}");
+    let file = http.get(&link).send().await.unwrap();
+    assert_eq!(file.status(), 200);
+    assert!(
+        file.headers()["content-disposition"]
+            .to_str()
+            .unwrap()
+            .contains("casa.pdf")
+    );
+    assert!(file.bytes().await.unwrap().starts_with(b"%PDF"));
+    assert!(
+        !std::path::Path::new("/etc/casa.pdf").exists(),
+        "never where the path said"
+    );
+
+    // Projects by name: a new one, back to the first, renamed on save.
+    let made = call(45, "new_home", json!({"name": "Casa da praia"})).await;
+    assert_eq!(made["isError"], false, "{made}");
+    let back = call(47, "open_home", json!({"path": "Projeto 1"})).await;
+    assert_eq!(back["isError"], false, "{back}");
+    let renamed = call(48, "save_home", json!({"path": "Apartamento.newera"})).await;
+    assert_eq!(renamed["content"][0]["text"], "ok saved Apartamento");
+    let refused = call(49, "set_background", json!({"path": "/etc/passwd"})).await;
+    assert_eq!(refused["isError"], true);
 
     // A tab opens a room on the relay, signs in, and claims it.
     let opened: Value = http

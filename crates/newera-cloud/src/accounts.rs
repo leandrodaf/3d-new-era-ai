@@ -193,5 +193,8 @@ pub async fn purge_closed(db: &PgPool) -> sqlx::Result<u64> {
     sqlx::query("delete from oauth_tokens where expires_at < now() - interval '1 day'")
         .execute(db)
         .await?;
+    sqlx::query("delete from files where expires_at < now()")
+        .execute(db)
+        .await?;
     Ok(gone)
 }

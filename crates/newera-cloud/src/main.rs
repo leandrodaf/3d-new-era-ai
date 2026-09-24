@@ -40,6 +40,16 @@ async fn main() -> anyhow::Result<()> {
     let port = config.port;
     let state = newera_cloud::AppState::new(config, db.clone());
 
+    // Projects nobody touched for half an hour leave memory; they are kept.
+    let engine = state.engine.clone();
+    tokio::spawn(async move {
+        let mut every = tokio::time::interval(std::time::Duration::from_mins(5));
+        loop {
+            every.tick().await;
+            engine.sweep(std::time::Duration::from_mins(30));
+        }
+    });
+
     // Closed accounts and expired secrets go, once an hour.
     tokio::spawn(async move {
         let mut every = tokio::time::interval(std::time::Duration::from_secs(3600));

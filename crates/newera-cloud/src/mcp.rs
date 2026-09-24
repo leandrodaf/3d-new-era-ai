@@ -20,9 +20,11 @@ const VERSIONS: [&str; 3] = ["2025-11-25", "2025-06-18", "2025-03-26"];
 
 const INSTRUCTIONS: &str = "\
 Home design editor (3D New Era AI), acting for the signed-in account. Units: cm. \
-Plan axes: x right, y down. Calls reach the person's editor at 3dneweraai.com/app, \
-where every change appears as it is made and can be undone with Ctrl+Z. \
-Reads never change the plan; what changes it is a tool of its own.";
+Plan axes: x right, y down. When the person has the editor open at \
+3dneweraai.com/app and signed in, calls reach it and every change appears there; \
+otherwise they work on the account's active project in the cloud, kept after every \
+change (projects lists them). Reads never change the plan; what changes it is a tool \
+of its own. show_plan shows the plan to the person.";
 
 /// Tools that only make sense on the person's own machine, never here
 /// (the directories' rules, and a server's filesystem): see D16.
@@ -103,13 +105,52 @@ fn failure(id: &Value, code: i32, message: &str) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}})
 }
 
-/// The tools a client sees: the editor's, minus what is only for a desktop.
+/// What the tools that deal in files mean here, where the files are the
+/// account's projects and exports come back as links.
+const CLOUD_MEANING: [(&str, &str); 5] = [
+    (
+        "open_home",
+        "Open one of the account's projects by name (projects lists them); it becomes the active one.",
+    ),
+    (
+        "save_home",
+        "Keep the active project now — it is also kept after every change. path renames it.",
+    ),
+    (
+        "new_home",
+        "Start a new, empty project in the account and make it the active one; name is optional.",
+    ),
+    (
+        "export_plan",
+        "Export the active project by the extension of path: plan .pdf (A3; scale=50/100 or fit), .svg or .png; 3D model .glb or .obj. Reply: a link to the file, good for a day.",
+    ),
+    (
+        "export_cut_list",
+        "Write the cut list of joinery builds as .csv, or .dxf/.svg sheets (path gives the name and the format). Reply: a link to the file, good for a day.",
+    ),
+];
+
+/// The tools a client sees: the editor's, minus what is only for a desktop,
+/// with the file tools saying what they do here, and the projects list.
 fn hosted_tools() -> Vec<Value> {
-    newera_mcp::tools()
+    let mut tools: Vec<Value> = newera_mcp::tools()
         .into_iter()
         .filter(|t| !LOCAL_ONLY.contains(&t.name.as_ref()))
         .filter_map(|t| serde_json::to_value(t).ok())
-        .collect()
+        .collect();
+    for tool in &mut tools {
+        if let Some((_, meaning)) = CLOUD_MEANING.iter().find(|(n, _)| tool["name"] == *n) {
+            tool["description"] = json!(meaning);
+        }
+    }
+    tools.push(json!({
+        "name": "projects",
+        "title": "List your projects",
+        "description": "The projects kept in the account: rows [name, id, kb, updated, active], the space used and the plan's limits. open_home switches the active one; new_home starts one.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false},
+        "annotations": {"title": "List your projects", "readOnlyHint": true, "openWorldHint": false},
+    }));
+    tools
 }
 
 async fn answer(
@@ -170,18 +211,45 @@ async fn answer(
                     json!({"content": [{"type": "text", "text": format!("{name} runs only in the desktop app")}], "isError": true}),
                 ));
             }
-            match app.rooms.owned_by(&account.id) {
-                Some(room) => newera_relay::answer_in(&app.rooms, &room, message).await,
-                None => Some(result(
-                    &id,
-                    json!({
-                        "content": [{"type": "text", "text": format!(
-                            "No 3D New Era AI editor is open for {}. Ask the person to open https://3dneweraai.com/app, sign in from the AI panel with this address, and try again.",
-                            account.email
-                        )}],
-                        "isError": true,
-                    }),
-                )),
+            // The person's own editor, when it is open and signed in; the
+            // cloud project otherwise. `projects` is always the cloud's.
+            if name != "projects"
+                && let Some(room) = app.rooms.owned_by(&account.id)
+            {
+                return newera_relay::answer_in(&app.rooms, &room, message).await;
+            }
+            let args = params.get("arguments").cloned().unwrap_or(Value::Null);
+            let plan = match crate::accounts::plan_of(&app.db, &account.id).await {
+                Ok(plan) => plan,
+                Err(err) => {
+                    tracing::error!("plan: {err}");
+                    return Some(failure(
+                        &id,
+                        -32603,
+                        "the service could not read the account's plan",
+                    ));
+                }
+            };
+            match app
+                .engine
+                .call(
+                    &app.db,
+                    &app.config.public_url,
+                    &account.id,
+                    &plan,
+                    name,
+                    args,
+                )
+                .await
+            {
+                Ok(answer) => Some(result(&id, answer)),
+                Err(err) => {
+                    tracing::error!("engine {name}: {err:#}");
+                    Some(result(
+                        &id,
+                        json!({"content": [{"type": "text", "text": format!("{name} failed on the server: {err}")}], "isError": true}),
+                    ))
+                }
             }
         }
         other => Some(failure(
