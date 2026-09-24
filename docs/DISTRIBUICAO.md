@@ -489,8 +489,11 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
 - [x] Conferir o deploy da 1.8.0 (`/cloud/health` 200 na VPS) — eu
 - [x] Primeiro backup do banco no R2: `backup-agora --app newera-relay` (verificado,
       `daily/newera_relay-2026-09-24T17-56-40Z.sql.gz`) — eu
-- [ ] Chave do Resend no `app.env` da VPS (entrar por e-mail) — **você** cria a conta e
-      verifica o domínio no Resend; eu ponho a chave
+- [x] Resend: domínio `3dneweraai.com` (São Paulo) com DKIM e os CNAME `rsend`/`send` no
+      Cloudflare; chave "Sending access" no 1Password ("3D New Era AI - Resend") e no
+      `app.env` da VPS (24/09/2026)
+- [ ] Resend marcar o domínio como *Verified* (o DNS público já responde) e testar a
+      entrada por e-mail em https://mcp.3dneweraai.com/login
 - [ ] Google (opcional): cliente OAuth "Web application" com redirect
       `https://mcp.3dneweraai.com/login/google/callback` — **você**
 - [x] E-mails `privacidade@` e `contato@3dneweraai.com` (Cloudflare Email Routing ligado,
