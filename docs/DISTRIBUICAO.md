@@ -517,9 +517,8 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
 **3. Registries e diretórios (Etapa 2)**
 - [x] `scripts/registry-key.sh` e commit do `site/.well-known/mcp-registry-auth`;
       `com.3dneweraai/newera` 1.8.0 publicado no MCP Registry oficial — eu
-- [ ] Formulário do Claude Desktop com o `.mcpb` (https://clau.de/desktop-extention-submission):
-      textos preenchidos; falta anexar o `.mcpb` (68 MB, pelo seletor do Drive), marcar as
-      opções e enviar — **você**
+- [x] Formulário do Claude Desktop com o `.mcpb` 1.8.0 enviado em 24/09/2026
+      (https://clau.de/desktop-extention-submission); a Anthropic só responde se selecionar
 - [ ] Plugin no Console da Anthropic (https://platform.claude.com/plugins/submit) e no
       Cursor Marketplace (https://cursor.com/marketplace/publish) — eu
 - [x] Tópicos do repositório: `mcp`, `mcp-server`, `gemini-cli-extension` (no lugar de
