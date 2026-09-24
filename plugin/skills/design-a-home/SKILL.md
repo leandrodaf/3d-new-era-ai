@@ -5,9 +5,10 @@ description: Design or furnish a room or a whole home in 3D New Era AI — walls
 
 # Design a home in 3D New Era AI
 
-The `newera` MCP server edits the plan in the 3D New Era AI window when it is open
-(the user sees every change and can undo it with Ctrl+Z), or a project of its own when
-it is not. Units are centimeters; the plan's x grows right and y grows down.
+The `newera` MCP server edits the user's plan. With the desktop app open, it is the plan
+in that window (the user sees every change and can undo it with Ctrl+Z); through the
+hosted server, it is a project in the user's account, which they can open in the browser
+editor. Units are centimeters; the plan's x grows right and y grows down.
 
 1. **Read first.** `get_home` with `detail=summary` gives counts, bounds and room areas.
    Read more only where you work: `room=`, `rect=` or `ids=`.

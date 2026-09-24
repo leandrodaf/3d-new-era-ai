@@ -2,8 +2,9 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
   "mcpServers": {
     "newera": {
-      "type": "streamable-http",
-      "url": "https://mcp.3dneweraai.com/mcp"
+      "type": "stdio",
+      "command": "newera",
+      "args": ["mcp"]
     }
   }
 }

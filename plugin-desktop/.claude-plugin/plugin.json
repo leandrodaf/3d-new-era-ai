@@ -1,7 +1,7 @@
 {
-  "name": "3d-new-era-ai",
+  "name": "3d-new-era-ai-desktop",
   "version": "1.8.0",
-  "description": "Design your home by talking to your AI, with nothing to install: floor plans, furniture, kitchens and wardrobes, and photos of the result.",
+  "description": "Design your home with your AI in the 3D New Era AI app on your computer: every change shows up on your screen as it happens.",
   "author": {
     "name": "Leandro Ferreira",
     "url": "https://3dneweraai.com"
@@ -15,6 +15,5 @@
     "architecture",
     "home design",
     "mcp"
-  ],
-  "logo": "logo.png"
+  ]
 }

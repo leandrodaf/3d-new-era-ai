@@ -1,11 +1,31 @@
 {
   "name": "3d-new-era-ai",
-  "interface": { "displayName": "3D New Era AI" },
+  "interface": {
+    "displayName": "3D New Era AI"
+  },
   "plugins": [
     {
       "name": "3d-new-era-ai",
-      "source": { "source": "local", "path": "./plugin" },
-      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "source": {
+        "source": "local",
+        "path": "./plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Design"
+    },
+    {
+      "name": "3d-new-era-ai-desktop",
+      "source": {
+        "source": "local",
+        "path": "./plugin-desktop"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
       "category": "Design"
     }
   ]

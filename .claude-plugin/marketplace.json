@@ -11,7 +11,13 @@
     {
       "name": "3d-new-era-ai",
       "source": "./plugin",
-      "description": "Design homes with your AI in 3D New Era AI: floor plans, furniture, joinery, lighting and photos, live in the editor.",
+      "description": "Design your home by talking to your AI, with nothing to install: floor plans, furniture, kitchens and wardrobes, and photos of the result.",
+      "category": "design"
+    },
+    {
+      "name": "3d-new-era-ai-desktop",
+      "source": "./plugin-desktop",
+      "description": "Design your home with your AI in the 3D New Era AI app on your computer: every change shows up on your screen as it happens.",
       "category": "design"
     }
   ]

@@ -8,6 +8,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
 files=(plugin/plugin.json plugin/.claude-plugin/plugin.json plugin/.cursor-plugin/plugin.json
+       plugin-desktop/plugin.json plugin-desktop/.claude-plugin/plugin.json
        gemini-extension.json server.json)
 
 MODE="${1:-write}" VERSION="$version" python3 - "${files[@]}" <<'PY'

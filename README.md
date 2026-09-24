@@ -180,7 +180,9 @@ project of its own.
 [![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_newera-24bfa5?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=newera&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22newera%22%2C%22args%22%3A%5B%22mcp%22%5D%7D&quality=insiders)
 
 **Plugin with skills** — Claude Code: `/plugin marketplace add leandrodaf/3d-new-era-ai`,
-then `/plugin install 3d-new-era-ai@3d-new-era-ai`. Codex:
+then `/plugin install 3d-new-era-ai-desktop@3d-new-era-ai` to work in this app, live on
+your screen, or `/plugin install 3d-new-era-ai@3d-new-era-ai` for the hosted version
+(nothing to install; you sign in to your account). Codex:
 `codex plugin marketplace add leandrodaf/3d-new-era-ai`. Gemini CLI:
 `gemini extensions install https://github.com/leandrodaf/3d-new-era-ai`.
 

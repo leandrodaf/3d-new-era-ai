@@ -1,12 +1,13 @@
 # 3D New Era AI plugin
 
-Skills and the MCP server of [3D New Era AI](https://3dneweraai.com) for Claude Code,
-Codex and Cursor. It needs the app installed (the `newera` command on your PATH — the
-installers put it there): see [Download](https://github.com/leandrodaf/3d-new-era-ai#download).
+Design your home by talking to your AI in Claude Code, Codex or Cursor, with nothing to
+install: your AI draws the floor plan, furnishes the rooms, plans kitchens and wardrobes
+and shows you the result as a plan, a 3D view or a photo. The first time, it asks you to
+sign in to [3D New Era AI](https://3dneweraai.com); your projects stay in your account.
 
 - **Claude Code:** `/plugin marketplace add leandrodaf/3d-new-era-ai`, then
   `/plugin install 3d-new-era-ai@3d-new-era-ai`
 - **Codex:** `codex plugin marketplace add leandrodaf/3d-new-era-ai`
 
-With the editor open, the AI edits the plan on your screen; without it, a project of its
-own.
+Have the app on your computer and want to see every change on your screen as it happens?
+Install `3d-new-era-ai-desktop` from the same marketplace instead.
