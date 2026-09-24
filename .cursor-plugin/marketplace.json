@@ -1,0 +1,17 @@
+{
+  "name": "3d-new-era-ai",
+  "owner": {
+    "name": "Leandro Ferreira",
+    "email": "contato@3dneweraai.com"
+  },
+  "metadata": {
+    "description": "The 3D New Era AI plugin for Cursor: design homes with your AI."
+  },
+  "plugins": [
+    {
+      "name": "3d-new-era-ai",
+      "source": "./plugin",
+      "description": "Floor plans, furniture, joinery, lighting and photos, live in the 3D New Era AI editor."
+    }
+  ]
+}
