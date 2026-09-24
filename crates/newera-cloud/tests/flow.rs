@@ -13,12 +13,52 @@ use serde_json::{Value, json};
 use sha2::Digest as _;
 
 const SITE: &str = "http://127.0.0.1:8790";
-/// A Polar-shaped webhook secret made up for the tests: "whsec_" and the
-/// base64 of "test key, not a secret". Nothing real is written in the code.
-const POLAR_SECRET: &str = concat!("whsec_", "dGVzdCBrZXksIG5vdCBhIHNlY3JldA==");
+/// A Paddle-shaped notification secret made up for the tests. Nothing real
+/// is written in the code.
+const PADDLE_SECRET: &str = concat!("pdl_ntfset_", "test-key-not-a-secret");
+
+/// What the stand-in for Paddle's API was asked: `"METHOD /path"`.
+type Calls = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
+
+/// A stand-in for Paddle's API: a customer's email, a portal session and a
+/// cancellation, each call written down.
+async fn paddle_api() -> (String, Calls) {
+    use axum::routing::{get, post};
+    let calls = Calls::default();
+    let log = |calls: &Calls, what: String| calls.lock().unwrap().push(what);
+    let (c1, c2, c3) = (calls.clone(), calls.clone(), calls.clone());
+    let app = axum::Router::new()
+        .route(
+            "/customers/{id}",
+            get(move |axum::extract::Path(id): axum::extract::Path<String>| async move {
+                log(&c1, format!("GET /customers/{id}"));
+                axum::Json(json!({"data": {"id": id, "email": "bia@example.com"}}))
+            }),
+        )
+        .route(
+            "/customers/{id}/portal-sessions",
+            post(move |axum::extract::Path(id): axum::extract::Path<String>| async move {
+                log(&c2, format!("POST /customers/{id}/portal-sessions"));
+                axum::Json(json!({"data": {"urls": {"general": {
+                    "overview": "https://customer-portal.paddle.com/cpl_test"
+                }}}}))
+            }),
+        )
+        .route(
+            "/subscriptions/{id}/cancel",
+            post(move |axum::extract::Path(id): axum::extract::Path<String>, body: String| async move {
+                log(&c3, format!("POST /subscriptions/{id}/cancel {body}"));
+                axum::Json(json!({"data": {"id": id}}))
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (base, calls)
+}
 
 /// A fresh database for one test, migrated, and the service on a free port.
-async fn service() -> Option<(String, AppState)> {
+async fn service() -> Option<(String, AppState, Calls)> {
     let Ok(admin) = std::env::var("TEST_DATABASE_URL") else {
         eprintln!("TEST_DATABASE_URL not set: skipping");
         return None;
@@ -38,6 +78,7 @@ async fn service() -> Option<(String, AppState)> {
     };
     let db = newera_cloud::database(&url).await.expect("migrations run");
 
+    let (paddle_url, calls) = paddle_api().await;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let config = Config {
@@ -47,15 +88,21 @@ async fn service() -> Option<(String, AppState)> {
         mail: Mail::Log,
         google: None,
         editor_url: format!("{SITE}/editor/"),
-        polar_webhook_secret: Some(POLAR_SECRET.to_owned()),
-        polar_checkout_url: Some("https://buy.polar.sh/polar_cl_test".to_owned()),
-        polar_plans: vec![("prod_cafe".to_owned(), "supporter".to_owned())],
+        paddle: Some(newera_cloud::config::Paddle {
+            sandbox: true,
+            client_token: "test_client_token".to_owned(),
+            webhook_secret: PADDLE_SECRET.to_owned(),
+            monthly_price: "pri_monthly".to_owned(),
+            yearly_price: "pri_yearly".to_owned(),
+            api_key: Some("test_api_key".to_owned()),
+            api_url: paddle_url,
+        }),
         port: 0,
     };
     let state = AppState::new(config, db);
     let app = newera_cloud::router(&state);
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    Some((base, state))
+    Some((base, state, calls))
 }
 
 fn client() -> reqwest::Client {
@@ -156,7 +203,7 @@ async fn mcp(base: &str, token: &str, body: Value) -> (u16, Value) {
 
 #[tokio::test]
 async fn an_ai_client_is_allowed_in_and_reaches_the_tab() {
-    let Some((base, state)) = service().await else {
+    let Some((base, state, _)) = service().await else {
         return;
     };
     let http = client();
@@ -720,7 +767,7 @@ async fn an_ai_client_is_allowed_in_and_reaches_the_tab() {
 
 #[tokio::test]
 async fn sign_in_never_redirects_elsewhere() {
-    let Some((base, state)) = service().await else {
+    let Some((base, state, _)) = service().await else {
         return;
     };
     for (asked, expected) in [
@@ -740,9 +787,16 @@ async fn sign_in_never_redirects_elsewhere() {
     }
 }
 
-/// A Polar delivery for `data`, signed as Polar signs.
-async fn polar(base: &str, kind: &str, data: Value, sign: bool) -> u16 {
-    let body = json!({"type": kind, "data": data}).to_string();
+/// A Paddle delivery of `kind` for `data`, signed as Paddle signs.
+async fn paddle(base: &str, kind: &str, data: Value, sign: bool) -> u16 {
+    let body = json!({
+        "event_id": format!("evt_{}", secret::id()),
+        "event_type": kind,
+        "occurred_at": "2026-09-24T12:00:00Z",
+        "notification_id": format!("ntf_{}", secret::id()),
+        "data": data,
+    })
+    .to_string();
     let now = i64::try_from(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -750,22 +804,30 @@ async fn polar(base: &str, kind: &str, data: Value, sign: bool) -> u16 {
             .as_secs(),
     )
     .unwrap();
-    let mut request = client()
-        .post(format!("{base}/billing/polar"))
-        .header("webhook-id", "msg_test")
-        .header("webhook-timestamp", now.to_string());
+    let mut request = client().post(format!("{base}/billing/paddle"));
     if sign {
         request = request.header(
-            "webhook-signature",
-            newera_cloud::billing::signature(POLAR_SECRET, "msg_test", now, body.as_bytes()),
+            "paddle-signature",
+            newera_cloud::billing::signature(PADDLE_SECRET, now, body.as_bytes()),
         );
     }
     request.body(body).send().await.unwrap().status().as_u16()
 }
 
+/// A subscription as Paddle sends it.
+fn subscription(id: &str, status: &str, customer: &str, account: Option<&str>) -> Value {
+    json!({
+        "id": id, "status": status, "customer_id": customer,
+        "items": [{"price": {"id": "pri_monthly"}, "quantity": 1}],
+        "current_billing_period": {"starts_at": "2026-09-24T00:00:00Z", "ends_at": "2099-01-01T00:00:00Z"},
+        "custom_data": account.map(|a| json!({"account_id": a})),
+        "scheduled_change": null,
+    })
+}
+
 #[tokio::test]
 async fn a_subscription_raises_the_plan_and_its_end_lowers_it() {
-    let Some((base, state)) = service().await else {
+    let Some((base, state, calls)) = service().await else {
         return;
     };
     let ana = newera_cloud::accounts::find_or_create(&state.db, "ana@example.com")
@@ -782,45 +844,178 @@ async fn a_subscription_raises_the_plan_and_its_end_lowers_it() {
     };
     assert_eq!(plan(ana.id.clone()).await, "free");
 
-    let subscription = |status: &str| {
-        json!({
-            "id": "sub_1", "status": status, "product_id": "prod_cafe",
-            "current_period_end": "2099-01-01T00:00:00Z",
-            "customer": {"id": "cus_1", "email": "ana@example.com", "external_id": ana.id},
-        })
-    };
+    let active = subscription("sub_1", "active", "ctm_1", Some(&ana.id));
     assert_eq!(
-        polar(&base, "subscription.active", subscription("active"), false).await,
+        paddle(&base, "subscription.activated", active.clone(), false).await,
         401,
         "unsigned"
     );
     assert_eq!(
-        polar(&base, "subscription.active", subscription("active"), true).await,
+        paddle(&base, "subscription.activated", active, true).await,
         200
     );
     assert_eq!(plan(ana.id.clone()).await, "supporter");
+    // A later event without the account id still finds it, by the customer.
     assert_eq!(
-        polar(&base, "subscription.revoked", subscription("revoked"), true).await,
+        paddle(
+            &base,
+            "subscription.past_due",
+            subscription("sub_1", "past_due", "ctm_1", None),
+            true
+        )
+        .await,
         200
     );
     assert_eq!(
         plan(ana.id.clone()).await,
         "free",
-        "a revoked plan is the free one"
+        "a failed payment pauses it"
+    );
+    assert_eq!(
+        paddle(
+            &base,
+            "subscription.updated",
+            subscription("sub_1", "active", "ctm_1", None),
+            true
+        )
+        .await,
+        200
+    );
+    assert_eq!(plan(ana.id.clone()).await, "supporter", "paid again");
+    assert_eq!(
+        paddle(
+            &base,
+            "subscription.canceled",
+            subscription("sub_1", "canceled", "ctm_1", Some(&ana.id)),
+            true
+        )
+        .await,
+        200
+    );
+    assert_eq!(
+        plan(ana.id.clone()).await,
+        "free",
+        "a cancelled plan is the free one"
     );
 
-    // Paid before ever signing in: the account is there, by the address.
-    let early = json!({
-        "id": "sub_2", "status": "active", "product_id": "prod_cafe",
-        "current_period_end": "2099-01-01T00:00:00Z",
-        "customer": {"id": "cus_2", "email": "bia@example.com"},
-    });
-    assert_eq!(polar(&base, "subscription.created", early, true).await, 200);
+    // A checkout opened elsewhere: the customer's email, from Paddle's API.
+    assert_eq!(
+        paddle(
+            &base,
+            "subscription.created",
+            subscription("sub_2", "active", "ctm_2", None),
+            true
+        )
+        .await,
+        200
+    );
+    assert!(
+        calls
+            .lock()
+            .unwrap()
+            .contains(&"GET /customers/ctm_2".to_owned())
+    );
     let bia = newera_cloud::accounts::find_or_create(&state.db, "BIA@example.com")
         .await
         .unwrap();
     assert_eq!(plan(bia.id).await, "supporter");
 
     // Other events are acknowledged and change nothing.
-    assert_eq!(polar(&base, "order.created", json!({}), true).await, 202);
+    assert_eq!(
+        paddle(&base, "transaction.completed", json!({}), true).await,
+        202
+    );
+}
+
+#[tokio::test]
+async fn the_account_page_sells_manages_and_cancels_through_paddle() {
+    let Some((base, state, calls)) = service().await else {
+        return;
+    };
+    let http = client();
+    // Signed out, the checkout asks for the account first.
+    let away = http
+        .get(format!("{base}/billing/checkout"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(away.status(), 303);
+    assert_eq!(location(&away), "/login?return_to=/billing/checkout");
+
+    let (cookie, _) = sign_in(&base, &state, "cid@example.com", "/account").await;
+    let account = |path: &'static str| {
+        let (http, cookie, base) = (http.clone(), cookie.clone(), base.clone());
+        async move {
+            http.get(format!("{base}{path}"))
+                .header("cookie", &cookie)
+                .send()
+                .await
+                .unwrap()
+        }
+    };
+    let page = account("/account").await.text().await.unwrap();
+    assert!(
+        page.contains(r#"href="/billing/checkout""#),
+        "free: offers the plan"
+    );
+
+    let checkout = account("/billing/checkout").await.text().await.unwrap();
+    assert!(checkout.contains("https://cdn.paddle.com/paddle/v2/paddle.js"));
+    assert!(checkout.contains(r#""pri_monthly""#) && checkout.contains(r#""pri_yearly""#));
+    assert!(
+        checkout.contains(r#""cid@example.com""#),
+        "the buyer's email"
+    );
+    assert!(checkout.contains(r#"Paddle.Environment.set("sandbox")"#));
+    let cid = newera_cloud::accounts::find_or_create(&state.db, "cid@example.com")
+        .await
+        .unwrap();
+    assert!(
+        checkout.contains(&format!(r#""{}""#, cid.id)),
+        "the account id rides along"
+    );
+
+    assert_eq!(
+        paddle(
+            &base,
+            "subscription.activated",
+            subscription("sub_c", "active", "ctm_c", Some(&cid.id)),
+            true
+        )
+        .await,
+        200
+    );
+    let page = account("/account?paid=1").await.text().await.unwrap();
+    assert!(
+        page.contains(r#"href="/billing/manage""#),
+        "paying: manages it"
+    );
+    assert!(page.contains("Thank you") || page.contains("Obrigado"));
+
+    let portal = account("/billing/manage").await;
+    assert_eq!(portal.status(), 303);
+    assert_eq!(
+        location(&portal),
+        "https://customer-portal.paddle.com/cpl_test"
+    );
+    assert!(
+        calls
+            .lock()
+            .unwrap()
+            .contains(&"POST /customers/ctm_c/portal-sessions".to_owned())
+    );
+
+    // Closing the account stops the charges at the end of the paid period.
+    let csrf = field(&page, "csrf");
+    let closed = http
+        .post(format!("{base}/account/close"))
+        .header("cookie", &cookie)
+        .form(&[("csrf", csrf.as_str())])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(closed.status(), 200);
+    assert!(calls.lock().unwrap().iter().any(
+        |c| c == r#"POST /subscriptions/sub_c/cancel {"effective_from":"next_billing_period"}"#
+    ));
 }

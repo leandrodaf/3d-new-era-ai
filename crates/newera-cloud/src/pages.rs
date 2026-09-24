@@ -69,12 +69,13 @@ pub fn page(lang: Lang, title: &str, body: &str) -> Html<String> {
 <p class="brand">3D New Era <em>AI</em></p>
 {body}
 </main>
-<p class="foot"><a href="https://3dneweraai.com/privacy/">{privacy}</a> · <a href="https://3dneweraai.com/terms/">{terms}</a></p>
+<p class="foot"><a href="https://3dneweraai.com/privacy/">{privacy}</a> · <a href="https://3dneweraai.com/terms/">{terms}</a> · <a href="https://3dneweraai.com/refund/">{refund}</a></p>
 </body>
 </html>"#,
         title = escape(title),
         privacy = lang.pick("Privacidade", "Privacy"),
         terms = lang.pick("Termos", "Terms"),
+        refund = lang.pick("Reembolso", "Refunds"),
     ))
 }
 

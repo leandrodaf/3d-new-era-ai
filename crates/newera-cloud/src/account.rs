@@ -2,7 +2,7 @@
 //! browser tab asks of it — who is signed in, and "this tab is mine".
 
 use axum::Json;
-use axum::extract::{Form, State};
+use axum::extract::{Form, Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Redirect, Response};
 use serde::Deserialize;
@@ -17,7 +17,11 @@ fn close_token(session: &str) -> String {
 }
 
 /// The account page.
-pub async fn show(State(app): State<AppState>, headers: HeaderMap) -> Response {
+pub async fn show(
+    State(app): State<AppState>,
+    headers: HeaderMap,
+    paid: Query<crate::billing::Paid>,
+) -> Response {
     let lang = Lang::of(&headers);
     let Some(account) = login::signed_in(&app, &headers).await else {
         return Redirect::to("/login?return_to=/account").into_response();
@@ -28,6 +32,7 @@ pub async fn show(State(app): State<AppState>, headers: HeaderMap) -> Response {
         r#"<h1>{title}</h1>
 <p>{email}</p>
 <p class="muted">{plan_label}: <b>{plan}</b></p>
+{thanks}
 {projects}
 {support}
 <a class="button" href="https://3dneweraai.com/app/">{editor}</a>
@@ -43,20 +48,15 @@ pub async fn show(State(app): State<AppState>, headers: HeaderMap) -> Response {
         email = escape(&account.email),
         plan_label = lang.pick("Plano", "Plan"),
         plan = escape(&plan.map_or_else(|| "Free".to_owned(), |p| p.name)),
+        thanks = crate::billing::thanks(lang, &paid),
         projects = project_list(&app, &account.id, lang).await,
-        support = crate::billing::checkout_link(&app, &account).map_or_else(String::new, |link| {
-            format!(
-                r#"<a class="button ghost" href="{}">{}</a>"#,
-                escape(&link),
-                lang.pick("Apoiar com um cafezinho (plano pago)", "Support with a coffee (paid plan)")
-            )
-        }),
+        support = crate::billing::account_links(&app, &account, lang).await,
         editor = lang.pick("Abrir o editor", "Open the editor"),
         out = lang.pick("Sair", "Sign out"),
         close = lang.pick("Apagar a conta", "Close the account"),
         close_text = lang.pick(
-            "Encerra o acesso na hora, desconecta as IAs ligadas a ela e apaga tudo em até 30 dias. Uma assinatura se cancela no Polar.",
-            "Ends access at once, disconnects the AIs linked to it and deletes everything within 30 days. A subscription is cancelled in Polar."
+            "Encerra o acesso na hora, desconecta as IAs ligadas a ela e apaga tudo em até 30 dias. Uma assinatura ativa deixa de ser cobrada no fim do período pago.",
+            "Ends access at once, disconnects the AIs linked to it and deletes everything within 30 days. An active subscription stops being charged at the end of the paid period."
         ),
         csrf = close_token(&session),
         close_button = lang.pick("Apagar minha conta", "Close my account"),
@@ -160,6 +160,7 @@ pub async fn close(
     if !secret::same(&f.csrf, &close_token(&session)) {
         return (StatusCode::BAD_REQUEST, "the form expired").into_response();
     }
+    crate::billing::cancel_for_closed(&app, &account.id).await;
     if let Err(err) = accounts::close(&app.db, &account.id).await {
         tracing::error!("closing an account: {err}");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();

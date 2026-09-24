@@ -150,7 +150,9 @@ pub fn router(state: &AppState) -> Router {
         .route("/account/done", get(account::done))
         .route("/mcp", post(mcp::post).get(mcp::get))
         .route("/files/{token}", get(files::get))
-        .route("/billing/polar", post(billing::webhook))
+        .route("/billing/paddle", post(billing::webhook))
+        .route("/billing/checkout", get(billing::checkout))
+        .route("/billing/manage", get(billing::manage))
         .merge(site)
         .with_state(state.clone());
     newera_relay::router_with(state.rooms.clone()).merge(cloud)
