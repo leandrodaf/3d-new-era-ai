@@ -396,8 +396,9 @@ property; the project itself never leaves your machine either way.
 ## Support the project
 
 Everything above is free and stays free. If it saves you time, you can buy the
-project a coffee with the [supporter plan](https://buy.polar.sh/polar_cl_fXCqiyLmYzA1cWpJbo6wRKH6hZtqwmshPeNAD2TfpP1) (US$ 5/month or US$ 48/year,
-through Polar): it raises the cloud quotas for your account and pays for the server.
+project a coffee with the [supporter plan](https://3dneweraai.com/pricing/) (US$ 5/month or
+US$ 48/year, sold through Paddle): it raises the cloud quotas for your account and pays for
+the server.
 
 ## Contributing
 
