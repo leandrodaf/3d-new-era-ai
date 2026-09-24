@@ -58,11 +58,11 @@ services:
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
-    mem_limit: 1g
+    mem_limit: 2g
     # Teto de CPU, em núcleos. 0 é sem teto (o padrão). Quem faz trabalho
     # pesado de CPU (render, relatório) põe um teto pra não roubar os
     # núcleos das outras apps da mesma máquina.
-    cpus: 1
+    cpus: 1.5
     pids_limit: 256
 
     logging:
