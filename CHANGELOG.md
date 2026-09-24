@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-09-24
+
 ### Added
 
 - Axes in the top right corner of the 3D view, as in Blender. Click a ball to look at the
@@ -521,7 +523,8 @@ MCP server, with everything below.
 - `scripts/mcp.sh` / `make mcp` to call MCP tools from the shell.
 - CI for formatting, clippy, tests on Linux/macOS/Windows, MCP smoke test, MSRV and cargo-deny; release builds.
 
-[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.3...v1.5.0
 [1.4.3]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.2...v1.4.3
