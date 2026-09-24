@@ -456,10 +456,38 @@ cliente.
       da produção no ar, do plano Claude Team e da identidade verificada na OpenAI
 
 ### Etapa 5
-- [ ] Assinaturas no Polar + webhook + planos
+- [x] Webhook do Polar (`/billing/polar`, `crates/newera-cloud/src/billing.rs`): assinatura
+      Standard Webhooks verificada (segredos `whsec_` e os antigos), plano da conta segue a
+      assinatura (ativa → `supporter`, revogada → `free`), conta criada pelo e-mail se a
+      pessoa pagou antes de entrar
+- [x] Botão "Apoiar com um cafezinho (plano pago)" só na página da conta, com e-mail e id
+      da conta no link de checkout — nada é vendido dentro do chat
+- [x] Nenhuma tool mudou: elas leem as cotas do plano (D9)
+- [ ] No Polar (depende de você): criar a organização, o produto de assinatura (mensal e
+      anual), o link de checkout e o webhook para `https://mcp.3dneweraai.com/billing/polar`;
+      depois `POLAR_WEBHOOK_SECRET`, `NEWERA_POLAR_CHECKOUT_URL` e `NEWERA_POLAR_PLANS`
+      no ambiente do serviço
 
 ### Etapa 6
-- [ ] Microsoft Store/ODR, Docker, Copilot Studio, Gemini Enterprise, Flathub
+- [ ] Microsoft Store/MSIX, Windows ODR, Docker MCP Catalog, Copilot Studio, Gemini
+      Enterprise, Flathub: opcionais; todos são cadastros ou lojas em nome do projeto
+      (e alguns exigem a produção no ar). Ficam para depois das etapas 2 a 5 publicadas.
+
+### O que falta, e é seu
+
+O código das etapas 0 a 5 está pronto e testado na branch. Falta o que só você pode fazer:
+
+1. **Revisar e mesclar** `feat/distribution-endgame` e lançar uma versão (o `.mcpb`, o
+   registry, o winget e o Homebrew saem do job de release).
+2. **Publicações e cadastros da Etapa 2** (lista acima: registry, Claude Desktop, Console,
+   Cursor, Smithery, Glama, awesome-mcp-servers, mcp.so, winget, tap do Homebrew, tópicos).
+3. **Produção do `newera-cloud` na VPS**, juntos: hoje ele roda só local
+   (`crates/newera-cloud/local`). Na hora: banco, secrets (Resend, Google, Polar) e a
+   correção do `rust:1.95-slim-bookworm` no `Dockerfile` do relay.
+4. **Polar** (Etapa 5) e **e-mails** `privacidade@`/`contato@3dneweraai.com`.
+5. **Diretórios de conector** (Claude e OpenAI) depois da produção: plano Claude Team,
+   identidade verificada na OpenAI, conta de teste para os revisores, e o MCP remoto no
+   plugin.
 
 ---
 
