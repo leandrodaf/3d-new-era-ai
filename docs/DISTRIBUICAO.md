@@ -525,9 +525,9 @@ e testado; falta a conta.
 - [x] Smithery: `leandro-daf4/new-era-3d` publicado (https://smithery.ai/servers/leandro-daf4/new-era-3d),
       apontando para `https://mcp.3dneweraai.com/mcp`; o OAuth com CIMD passou de ponta a
       ponta e o Smithery leu 57 tools e 1 resource — eu
-- [x] Glama: enviados para revisão em 24/09/2026 o servidor pelo código-fonte (GitHub) e o
-      conector hospedado (`https://mcp.3dneweraai.com/mcp`); o Glama manda por e-mail as
-      instruções dos checks (Dockerfile e health check) quando aprovar
+- [x] Glama: servidor publicado em https://glama.ai/mcp/servers/leandrodaf/3d-new-era-ai;
+      o conector hospedado (`https://mcp.3dneweraai.com/mcp`) segue em revisão; o Glama
+      manda por e-mail as instruções dos checks (Dockerfile e health check)
 - [x] Secret `WINGET_TOKEN` (classic, `public_repo`, vence em 24/09/2027), também no
       1Password
 - [x] winget: primeiro PR aberto em 24/09/2026, https://github.com/microsoft/winget-pkgs/pull/440827;
