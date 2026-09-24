@@ -1953,11 +1953,6 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
             "Impossible de l'activer : {}",
         ],
         "Tentar de novo" => ["Try again", "Intentar de nuevo", "Réessayer"],
-        "a ligação com o relay caiu" => [
-            "the link to the relay dropped",
-            "la conexión con el relay se cayó",
-            "la liaison avec le relais est tombée",
-        ],
         "{} só no aplicativo do computador: aqui ele renderiza na CPU e travaria a aba" => [
             "{} only in the desktop app: here it renders on the CPU and would freeze the tab",
             "{} solo en la aplicación de escritorio: aquí renderiza en la CPU y congelaría la pestaña",
@@ -1969,6 +1964,33 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
             "MCP éteint · activer",
         ],
         "Desligar" => ["Switch off", "Apagar", "Éteindre"],
+        "o relay recusou esta aba — ligue de novo" => [
+            "the relay refused this tab — switch it on again",
+            "el relay rechazó esta pestaña — actívelo de nuevo",
+            "le relais a refusé cet onglet — rallumez-le",
+        ],
+        "Conectado como {}" => [
+            "Signed in as {}",
+            "Conectado como {}",
+            "Connecté en tant que {}",
+        ],
+        "Com este endereço, o Claude, o ChatGPT e outras IAs chegam nesta aba entrando com a sua conta." => {
+            [
+                "With this address, Claude, ChatGPT and other AIs reach this tab by signing in with your account.",
+                "Con esta dirección, Claude, ChatGPT y otras IA llegan a esta pestaña iniciando sesión con su cuenta.",
+                "Avec cette adresse, Claude, ChatGPT et d'autres IA atteignent cet onglet en se connectant avec votre compte.",
+            ]
+        }
+        "Entrar para usar no Claude e no ChatGPT" => [
+            "Sign in to use it in Claude and ChatGPT",
+            "Iniciar sesión para usarlo en Claude y ChatGPT",
+            "Se connecter pour l'utiliser dans Claude et ChatGPT",
+        ],
+        "Com uma conta, a sua IA chega nesta aba por um endereço fixo, sem colar nada." => [
+            "With an account, your AI reaches this tab at one fixed address, with nothing to paste.",
+            "Con una cuenta, su IA llega a esta pestaña por una dirección fija, sin pegar nada.",
+            "Avec un compte, votre IA atteint cet onglet à une adresse fixe, sans rien coller.",
+        ],
         "Fecha o endereço. A sua IA perde o acesso na hora; o projeto continua aqui." => [
             "Closes the address. Your AI loses access at once; the project stays here.",
             "Cierra la dirección. Su IA pierde el acceso al instante; el proyecto sigue aquí.",

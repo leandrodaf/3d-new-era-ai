@@ -480,6 +480,11 @@ pub(crate) fn panel(app: &mut NewEraApp, ctx: &egui::Context, chosen: &mut usize
                     .color(t.ink_faint)
                     .small(),
                 );
+                #[cfg(target_arch = "wasm32")]
+                {
+                    ui.add_space(6.0);
+                    web_account(app, ui);
+                }
             } else if !cfg!(target_arch = "wasm32") {
                 ui.label(
                     RichText::new(crate::i18n::tr(
@@ -728,6 +733,59 @@ fn web_switch(app: &mut NewEraApp, ui: &mut egui::Ui, serving: bool) {
                 .color(t.warn)
                 .small(),
         );
+    }
+}
+
+/// In a browser: the account this tab belongs to, or the way to sign in, so
+/// Claude, `ChatGPT` and the rest reach it at one fixed address.
+#[cfg(target_arch = "wasm32")]
+fn web_account(app: &mut NewEraApp, ui: &mut egui::Ui) {
+    let t = crate::theme::of(ui.visuals());
+    let account = app.ai_link.borrow().account.clone();
+    if matches!(app.ai_link.borrow().link, crate::ai_web::Link::On { .. }) {
+        match account {
+            crate::ai_web::Account::In { email, mcp_url } => {
+                ui.label(
+                    RichText::new(crate::i18n::fill("Conectado como {}", &[&email]))
+                        .color(t.ink_dim)
+                        .small(),
+                );
+                well(
+                    ui,
+                    t,
+                    RichText::new(&mcp_url)
+                        .monospace()
+                        .size(11.5)
+                        .color(t.ink_dim),
+                    |ui| {
+                        if copy_button(ui, t).clicked() {
+                            ui.ctx().copy_text(mcp_url.clone());
+                            app.set_status(crate::i18n::tr("Endereço copiado"));
+                        }
+                    },
+                );
+                ui.label(
+                    RichText::new(crate::i18n::tr(
+                        "Com este endereço, o Claude, o ChatGPT e outras IAs chegam nesta aba entrando com a sua conta.",
+                    ))
+                    .color(t.ink_dim)
+                    .small(),
+                );
+            }
+            crate::ai_web::Account::Out => {
+                crate::ai_web::recheck_account(&app.ai_link, ui.ctx());
+                if ui
+                    .button(crate::i18n::tr("Entrar para usar no Claude e no ChatGPT"))
+                    .on_hover_text(crate::i18n::tr(
+                        "Com uma conta, a sua IA chega nesta aba por um endereço fixo, sem colar nada.",
+                    ))
+                    .clicked()
+                {
+                    crate::ai_web::sign_in(&app.ai_link);
+                }
+            }
+            crate::ai_web::Account::Unknown => {}
+        }
     }
 }
 

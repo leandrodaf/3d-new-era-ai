@@ -41,7 +41,7 @@ wasm-bindgen-futures = "0.4.78"
 web-sys = { version = "0.3", features = [
     "Blob", "BlobPropertyBag", "console", "Document", "Element", "ErrorEvent", "Headers", "HtmlAnchorElement",
     "HtmlCanvasElement", "Location", "MessageEvent", "Navigator", "Request",
-    "RequestInit", "RequestMode", "Response", "Url", "UrlSearchParams",
+    "RequestCredentials", "RequestInit", "RequestMode", "Response", "Url", "UrlSearchParams",
     "Storage", "WebSocket", "Window", "Worker", "WorkerOptions", "WorkerType", "DedicatedWorkerGlobalScope",
 ] }
 # In a browser the tools are called straight, with no session and no socket of

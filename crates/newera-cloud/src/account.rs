@@ -59,6 +59,26 @@ pub struct CloseForm {
     csrf: String,
 }
 
+/// Where signing in from the editor ends: the editor's own tab picks the
+/// account up by itself, so this one only says so.
+pub async fn done(State(app): State<AppState>, headers: HeaderMap) -> Response {
+    let lang = Lang::of(&headers);
+    let Some(account) = login::signed_in(&app, &headers).await else {
+        return Redirect::to("/login?return_to=/account/done").into_response();
+    };
+    let body = format!(
+        "<h1>{}</h1><p>{} <b>{}</b>.</p><p class=\"muted\">{}</p>",
+        lang.pick("Pronto", "All set"),
+        lang.pick("Você entrou como", "You are signed in as"),
+        escape(&account.email),
+        lang.pick(
+            "Pode fechar esta aba e voltar para o editor: ele se conecta à sua conta sozinho.",
+            "You can close this tab and go back to the editor: it links to your account by itself."
+        ),
+    );
+    page(lang, lang.pick("Pronto", "All set"), &body).into_response()
+}
+
 /// Closes the account.
 pub async fn close(
     State(app): State<AppState>,

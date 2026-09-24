@@ -138,6 +138,7 @@ pub fn router(state: &AppState) -> Router {
         .route("/logout", get(login::logout))
         .route("/account", get(account::show))
         .route("/account/close", post(account::close))
+        .route("/account/done", get(account::done))
         .route("/mcp", post(mcp::post).get(mcp::get))
         .merge(site)
         .with_state(state.clone());
