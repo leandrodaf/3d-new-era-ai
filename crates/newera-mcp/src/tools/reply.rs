@@ -289,7 +289,7 @@ pub(super) fn preview_with(
     }
     if !after.accepted.is_empty() {
         let mut cleanup = Vec::new();
-        for (tool, orphaned) in [
+        for (review, orphaned) in [
             ("check_layout", newera_core::Issue::orphaned(&after)),
             ("ergonomics", newera_ergonomics::orphaned(&after, &profile)),
             ("electrical", newera_core::electrical::orphaned(&after)),
@@ -300,7 +300,7 @@ pub(super) fn preview_with(
             }
             let accept: Vec<_> = orphaned.iter().map(|(key, _)| [key.as_str(), ""]).collect();
             cleanup.push(serde_json::json!({
-                "tool":tool,"arguments":{"accept":accept},"orphaned":orphaned
+                "tool":"accept","review":review,"arguments":{"accept":accept},"orphaned":orphaned
             }));
         }
         if !cleanup.is_empty() {

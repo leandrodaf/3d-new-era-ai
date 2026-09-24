@@ -23,11 +23,59 @@ pub(crate) struct LightingParams {
     /// Lux wanted instead of the room's reference.
     lux: Option<f64>,
 }
+/// What the lighting tool rates.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct LightingReadParams {
+    /// Room id (default: every room of the current storey).
+    room: Option<String>,
+    /// Work plane height cm (default 75).
+    plane: Option<f64>,
+}
+/// A room to fill with light.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct FillLightingParams {
+    /// Room id.
+    room: String,
+    /// The fixture to place in a grid: `downlight`, `led-panel`,
+    /// `light-ceiling`, `pendant`.
+    fixture: String,
+    /// Lux wanted instead of the room's reference.
+    lux: Option<f64>,
+    /// Work plane height cm (default 75).
+    plane: Option<f64>,
+}
 #[tool_router(router = lighting_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Lighting design by photometry: every fixture's flux (lm, or W × lamp efficacy), color temperature and distribution (bulb, spot beam, LED panel/strip) lights the work plane by the inverse-square cosine law, walls casting shadows, plus interreflection (split flux). Reply rooms [[id,name,m²,avg lx,min lx,uniformity,reference lx,fixtures,W/m²,verdict]] against ABNT NBR ISO/CIE 8995-1 residential references. fill=<fixture> with room places a verified grid reaching the reference (or lux). Set a piece's light with place/update light {lm|w,lamp,k,beam,area}."
+        name = "lighting",
+        description = "Lighting design by photometry: every fixture's flux (lm, or W × lamp efficacy), color temperature and distribution (bulb, spot beam, LED panel/strip) lights the work plane by the inverse-square cosine law, walls casting shadows, plus interreflection (split flux). Reply rooms [[id,name,m²,avg lx,min lx,uniformity,reference lx,fixtures,W/m²,verdict]] against ABNT NBR ISO/CIE 8995-1 residential references. fill_lighting places the fixtures a room needs. Set a piece's light with place/update light {lm|w,lamp,k,beam,area}."
     )]
+    pub(crate) fn read_lighting(
+        &self,
+        Parameters(p): Parameters<LightingReadParams>,
+    ) -> Result<String, ErrorData> {
+        self.lighting(Parameters(LightingParams {
+            room: p.room,
+            plane: p.plane,
+            ..LightingParams::default()
+        }))
+    }
+    #[tool(
+        description = "Fill a room with a grid of one fixture (downlight, led-panel, light-ceiling, pendant) until the work plane reaches the room's ABNT NBR ISO/CIE 8995-1 reference, or lux; the grid is checked by the same photometry as the lighting tool. Reply placed ids, and the room's rating before and after."
+    )]
+    pub(crate) fn fill_lighting(
+        &self,
+        Parameters(p): Parameters<FillLightingParams>,
+    ) -> Result<String, ErrorData> {
+        self.lighting(Parameters(LightingParams {
+            room: Some(p.room),
+            plane: p.plane,
+            fill: Some(p.fixture),
+            lux: p.lux,
+        }))
+    }
+    /// Lighting: the rating, and filling a room.
     pub(crate) fn lighting(
         &self,
         Parameters(p): Parameters<LightingParams>,

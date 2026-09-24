@@ -7,14 +7,14 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use super::NewEraMcp;
-use super::reply::{core, invalid};
+use super::reply::{core, invalid, write_action};
 use crate::compact;
 use newera_core::plumbing::{self, Pipe, PointKind};
 use newera_core::routing::{self, Terminal, Via};
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct PlumbingParams {
-    /// `check` (default) or `route`.
+    /// `route`.
     action: Option<String>,
     /// For `route`: what the run carries, `cold`, `hot` or `sewer`.
     kind: Option<String>,
@@ -30,19 +30,39 @@ pub(crate) struct PlumbingParams {
     /// For `route` of sewer: the height free under the finished floor, cm
     /// (slab recess, or the ceiling void of the storey below).
     depth: Option<f64>,
-    /// Findings looked at: `[[key, reason]]`; an empty reason takes one back.
+    /// Findings looked at (the accept tool, for clients).
     #[serde(default)]
+    #[schemars(skip)]
     accept: Vec<Vec<String>>,
-    /// Drop the acceptances listed in `orphaned`.
+    /// Drop orphaned acceptances (the accept tool, for clients).
     #[serde(default)]
+    #[schemars(skip)]
     prune: bool,
 }
 
 #[tool_router(router = plumbing_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Plumbing project, NBR 5626 (cold and hot water) and NBR 8160 (sewer). Points are the plumbing pieces (catalog plumbing: cold-water, hot-water, sewer, valve, grease-trap, inspection-box, water-meter, gas-point, vent-pipe, and the drains as the models they are: floor-drain caixa sifonada 150x150x50, floor-drain-100, floor-drain-75 (150x185x75, up to 15 UHC), trap-drain-small (seal under 50 mm, no trap), dry-drain, linear-drain (w 50/70/90, no trap), linear-drain-trap, rain-drain for open areas; drains are set flush in the floor of a room, never in a wall, a door span or under a cabinet) and what a point is comes from its catalog, never its name; fixtures are the pieces that use water (toilet, basin, kitchen sink, shower, bathtub, washer, laundry sink, dishwasher). check (default): {points:{kind:count}, pipes_m, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — a cold-water point by every fixture and a sewer point (or a floor drain for basin, shower, tub and machines) within reach, the discharge diameter it needs (toilet 100 mm, kitchen sink and machines 50, others 40); hot water where the project has any; a floor drain in every bathroom, kitchen and laundry, inside the shower area where there is one, at least one real trap (50 mm seal) per room, the UHC its outlet takes (50 mm: 6, 75 mm: 15), rain drains for open terraces; a grease trap for a kitchen sink; the premises — where the water comes from (water-meter or valve) and where the sewer goes (inspection-box or stack); points no drawn pipe of their kind reaches. accept=[[key, reason]] and prune=true as in electrical. route {kind: cold|hot|sewer|vent, ids?, via?: ceiling|floor|wall, from?, depth?}: lays the run from its source to the points along the walls and inside them, or through the ceiling or under the floor, sharing the trunk, draws it (replacing the earlier run of the same points and the lines drawn by hand to them, listed in replaced_drawn) and replies {via, suggested, length_m, by_premise_m, bends, branches, materials: [[item, qty, unit]]} — water: pipe and bars, 90° elbows, tees, threaded elbows at the points, a gate valve per room, adhesive; sewer: the branch at the largest diameter it takes, the drops at each point's own, a 45° Y junction at each branch (never a 90° tee), two 45° elbows per turn, sealing rings, trap boxes. Sewer runs only under the floor, by gravity, with 2 % fall up to 75 mm and 1 % above: the reply says needs_depth_cm, and with depth a run that does not fit is refused saying how much it needs. Without via the cheapest premise that can be built is taken; one that cannot (a point in no wall; from the ceiling a low point in no wall, nowhere to drop; sewer up to the ceiling or lying in a wall) is refused with why."
+        name = "plumbing",
+        description = "Plumbing project, NBR 5626 (cold and hot water) and NBR 8160 (sewer). Points are the plumbing pieces (catalog plumbing: cold-water, hot-water, sewer, valve, grease-trap, inspection-box, water-meter, gas-point, vent-pipe, and the drains as the models they are: floor-drain caixa sifonada 150x150x50, floor-drain-100, floor-drain-75 (150x185x75, up to 15 UHC), trap-drain-small (seal under 50 mm, no trap), dry-drain, linear-drain (w 50/70/90, no trap), linear-drain-trap, rain-drain for open areas; drains are set flush in the floor of a room, never in a wall, a door span or under a cabinet) and what a point is comes from its catalog, never its name; fixtures are the pieces that use water (toilet, basin, kitchen sink, shower, bathtub, washer, laundry sink, dishwasher). check (default): {points:{kind:count}, pipes_m, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — a cold-water point by every fixture and a sewer point (or a floor drain for basin, shower, tub and machines) within reach, the discharge diameter it needs (toilet 100 mm, kitchen sink and machines 50, others 40); hot water where the project has any; a floor drain in every bathroom, kitchen and laundry, inside the shower area where there is one, at least one real trap (50 mm seal) per room, the UHC its outlet takes (50 mm: 6, 75 mm: 15), rain drains for open terraces; a grease trap for a kitchen sink; the premises — where the water comes from (water-meter or valve) and where the sewer goes (inspection-box or stack); points no drawn pipe of their kind reaches. orphaned lists acceptances whose finding is gone (the accept tool marks findings looked at, and its prune drops those). Pipe runs are laid with edit_plumbing."
     )]
+    pub(crate) fn read_plumbing(
+        &self,
+        Parameters(_): Parameters<super::Nothing>,
+    ) -> Result<String, ErrorData> {
+        self.plumbing(Parameters(PlumbingParams::default()))
+    }
+    #[tool(
+        description = "Lay a pipe run of the plumbing project (the plumbing tool reads it). route {kind: cold|hot|sewer|vent, ids?, via?: ceiling|floor|wall, from?, depth?}: lays the run from its source to the points along the walls and inside them, or through the ceiling or under the floor, sharing the trunk, draws it (replacing the earlier run of the same points and the lines drawn by hand to them, listed in replaced_drawn) and replies {via, suggested, length_m, by_premise_m, bends, branches, materials: [[item, qty, unit]]} — water: pipe and bars, 90° elbows, tees, threaded elbows at the points, a gate valve per room, adhesive; sewer: the branch at the largest diameter it takes, the drops at each point's own, a 45° Y junction at each branch (never a 90° tee), two 45° elbows per turn, sealing rings, trap boxes. Sewer runs only under the floor, by gravity, with 2 % fall up to 75 mm and 1 % above: the reply says needs_depth_cm, and with depth a run that does not fit is refused saying how much it needs. Without via the cheapest premise that can be built is taken; one that cannot (a point in no wall; from the ceiling a low point in no wall, nowhere to drop; sewer up to the ceiling or lying in a wall) is refused with why."
+    )]
+    pub(crate) fn edit_plumbing(
+        &self,
+        Parameters(p): Parameters<PlumbingParams>,
+    ) -> Result<String, ErrorData> {
+        write_action(p.action.as_deref(), &["route"], "plumbing")?;
+        self.plumbing(Parameters(p))
+    }
+    /// The plumbing project: every read and change, as one call.
     pub(crate) fn plumbing(
         &self,
         Parameters(p): Parameters<PlumbingParams>,

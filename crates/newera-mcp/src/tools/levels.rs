@@ -36,7 +36,10 @@ impl NewEraMcp {
         name = "levels",
         description = "Storeys: rows [id,name,elev,h,selected,layout_index,viewable,reference]. Other tools act on the selected storey; change them with edit_levels."
     )]
-    pub(crate) fn list_levels(&self) -> Result<String, ErrorData> {
+    pub(crate) fn list_levels(
+        &self,
+        Parameters(_): Parameters<super::Nothing>,
+    ) -> Result<String, ErrorData> {
         self.levels(Parameters(LevelsParams::default()))
     }
     #[tool(

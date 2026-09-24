@@ -44,6 +44,41 @@ pub(crate) struct AnnotationParams {
     /// Legend of electrical/plumbing symbols with counts.
     legend: Option<bool>,
 }
+/// What the annotations tool reads.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AnnotationReadParams {
+    /// Dimensions and notes that no longer match the drawing: rows
+    /// [id, written, measured, against, text].
+    stale: Option<bool>,
+    /// Search label text, accent- and case-insensitive, e.g. `porta`; or
+    /// `re:<pattern>` for a regular expression.
+    q: Option<String>,
+}
+/// What `edit_annotations` changes.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AnnotationEditParams {
+    /// Tie every straight dimension to what its ends touch right now, so from
+    /// here on they follow the drawing. Run it while the numbers are right.
+    anchor: Option<bool>,
+    /// Show engineering dimension chains (`auto_dimensions` in the project JSON).
+    #[serde(alias = "auto_dimensions")]
+    dims: Option<bool>,
+    /// Show the room reference schedule and tags (`references` in the JSON).
+    #[serde(alias = "references")]
+    refs: Option<bool>,
+    /// Include brand, model and link in references (`reference_details`).
+    #[serde(alias = "reference_details")]
+    details: Option<bool>,
+    /// Convert the automatic dimension chains into editable dimensions.
+    bake: Option<bool>,
+    /// Number the schedule again in reading order, closing the gaps pieces
+    /// left behind. Numbers are otherwise kept by each piece for good.
+    renumber: Option<bool>,
+    /// Legend of electrical/plumbing symbols with counts.
+    legend: Option<bool>,
+}
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct DisciplineParams {
     /// `select`, `show` or `hide`.
@@ -56,6 +91,7 @@ pub(crate) struct DisciplineParams {
     d: Option<String>,
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct DisciplineReadParams {
     /// `active` (default) or `quantities`.
     action: Option<String>,
@@ -223,8 +259,47 @@ impl NewEraMcp {
         .to_string())
     }
     #[tool(
-        description = "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first; one whose anchor died with a deleted piece is tied again to what it touches now, or else released (no anchor) instead of staying stale. q=<text> searches label text on every storey; q=re:<pattern> by a regex (`re:^\\[\\d+\\]$` finds index codes). Set any of dims (engineering dimension chains; auto_dimensions in the project JSON), refs (room reference schedule with tags; references — a tag, once given, stays with its piece: new pieces take the next free number and removed ones leave a gap, so a print and the plan a week later agree; renumber=true numbers them again in reading order), details (brand/model/link in refs; reference_details), legend (symbol legend with counts): a switch answers with the modes, changed, and what it shows — chains [[from,to,cm]] for dims, symbols {discipline:[[name,count]]} for legend — not the schedule; refs=true, or no switch at all, returns {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. bake=true turns the automatic chains into editable dimensions (ids returned). Give pieces brand/model/url via update."
+        name = "annotations",
+        description = "Plan annotations, read. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. q=<text> searches label text on every storey; q=re:<pattern> by a regex (`re:^\\[\\d+\\]$` finds index codes). With neither, returns the schedule {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]} — the modes on, and the room reference schedule with its tags. edit_annotations turns modes on and off, ties dimensions and bakes chains. Give pieces brand/model/url via update."
     )]
+    pub(crate) fn read_annotations(
+        &self,
+        Parameters(p): Parameters<AnnotationReadParams>,
+    ) -> Result<String, ErrorData> {
+        self.annotations(Parameters(AnnotationParams {
+            stale: p.stale,
+            q: p.q,
+            ..AnnotationParams::default()
+        }))
+    }
+    #[tool(
+        description = "Change the plan annotations. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first; one whose anchor died with a deleted piece is tied again to what it touches now, or else released (no anchor) instead of staying stale. Set any of dims (engineering dimension chains; auto_dimensions in the project JSON), refs (room reference schedule with tags; references — a tag, once given, stays with its piece: new pieces take the next free number and removed ones leave a gap, so a print and the plan a week later agree; renumber=true numbers them again in reading order), details (brand/model/link in refs; reference_details), legend (symbol legend with counts): a switch answers with the modes, changed, and what it shows — chains [[from,to,cm]] for dims, symbols {discipline:[[name,count]]} for legend — not the schedule; refs=true returns {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. bake=true turns the automatic chains into editable dimensions (ids returned). The annotations tool reads them (stale, q, the schedule)."
+    )]
+    pub(crate) fn edit_annotations(
+        &self,
+        Parameters(p): Parameters<AnnotationEditParams>,
+    ) -> Result<String, ErrorData> {
+        let p = AnnotationParams {
+            anchor: p.anchor,
+            dims: p.dims,
+            refs: p.refs,
+            details: p.details,
+            bake: p.bake,
+            renumber: p.renumber,
+            legend: p.legend,
+            ..AnnotationParams::default()
+        };
+        let asked = [
+            p.anchor, p.dims, p.refs, p.details, p.bake, p.renumber, p.legend,
+        ];
+        if asked.iter().all(Option::is_none) {
+            return Err(invalid(
+                "nothing to change: anchor, bake, renumber, or a mode (dims, refs, details, legend); to read, use annotations",
+            ));
+        }
+        self.annotations(Parameters(p))
+    }
+    /// Plan annotations: every read and change, as one call.
     pub(crate) fn annotations(
         &self,
         Parameters(p): Parameters<AnnotationParams>,

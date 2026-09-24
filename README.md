@@ -239,6 +239,9 @@ bedroom with a door and a window, furnish it and render a photo."*
 
 ### Tools
 
+Reads and changes are separate tools: a read never changes the plan, so an AI client can run it
+without asking, and asks before each change.
+
 | Tool | What it does |
 |------|--------------|
 | `get_home` | Compact state (`detail=summary` for counts, bounds and room areas) |
@@ -246,18 +249,19 @@ bedroom with a door and a window, furnish it and render a photo."*
 | `update` / `move` / `delete` | Edit any element by id |
 | `arrange` | Copies in a row, rotate, mirror, group/ungroup, drawing order |
 | `split_wall` / `merge_walls` | Split a wall in two, or join walls on one line into a single wall |
-| `checkpoint` | Name where the plan is and come back to it, keeping every id |
-| `set_home` | Project name and compass (north) |
+| `checkpoint` / `checkpoints` | Name where the plan is and come back to it, keeping every id |
+| `set_home` | Project name, compass (north), the city whose code applies and who lives there |
 | `set_background` | Scanned plan at real scale: calibrations, X/Y scale, rotation |
-| `trace_background` | Find walls in the scanned plan and list or create them |
+| `trace_background` / `trace_walls` | Find walls in the scanned plan, and create them |
 | `joinery` | Parametric cabinets, slatted panels, countertops with cutouts, plaster coves, shadow gaps and modular sofas; workshop rules come back as notes and never refuse to draw |
 | `cabinet_run` | Fill a wall with cabinets sized for it: even modules around corners, doors, windows, fridge and stove, drawer unit by the stove, blind corners in L kitchens |
 | `fit_roof` | Walls, glass and panels take the shape of the roof above (A-frame gables, sheds) and keep following it |
 | `embed` | Embed a sink bowl or cooktop in a countertop (exact cutout) or an oven/microwave in a cabinet niche; the item moves with its host |
-| `lighting` | Lux per room by photometry (fixtures in lm/W, color temperature, spots, LED panels and strips) against NBR ISO/CIE 8995-1; `fill` places the fixtures a room needs |
+| `lighting` | Lux per room by photometry (fixtures in lm/W, color temperature, spots, LED panels and strips) against NBR ISO/CIE 8995-1; `fill_lighting` places the fixtures a room needs |
 | `ergonomics` | Review for the people living there: circulation, beds/seats/bathrooms per person, kitchen, doors, ceiling heights, windows, wheelchair use (NBR 9050, NBR 15575-1) |
-| `cut_list` | Cut list of the joinery builds (boards merged, edge banding, hardware) as CSV, or DXF/SVG sheets |
+| `cut_list` / `export_cut_list` | Cut list of the joinery builds (boards merged, edge banding, hardware), written as CSV or DXF/SVG sheets |
 | `render_plan` | PNG of the plan, exactly as the user sees it (`bg` overlays the scan) |
+| `show_plan` | The plan inside the chat, as an interactive viewer (pan, zoom, 3D) in clients that speak MCP Apps |
 | `render_3d` | Software 3D: aerial, visitor, stored cameras, elevations and sections |
 | `render_photo` | Path-traced photo with sun and lamps |
 | `export_plan` | PDF, SVG, PNG plan; GLB/OBJ model |
@@ -265,11 +269,13 @@ bedroom with a door and a window, furnish it and render a photo."*
 | `catalog` | Search the parametric furniture catalog (rows `[id,name,w,d,h]`) |
 | `place` | Furniture, doors and windows (snap into walls, swing side), beams, finishes, glass, batch defaults |
 | `check_layout` | Overlaps, pieces in walls, blocked doors, cabinets turned against their own fronts, doors in no wall, pieces outside rooms, areas vs. reference |
-| `variants` | Plan versions as tabs: list with stats, duplicate, switch, rename, delete |
-| `levels` / `cameras` / `video` | Storeys, points of view, camera path videos |
-| `materials` / `disciplines` / `annotations` | Finishes, electrical and plumbing projects, dimension chains and reference schedules; `stale` finds notes whose numbers stopped matching the drawing, `anchor` ties dimensions to what they mark so they measure themselves again |
+| `accept` | Mark findings of any review as looked at, with the reason; `prune` drops the ones whose problem is gone |
+| `variants` / `edit_variants` | Plan versions as tabs: list with stats; duplicate, switch, rename, delete |
+| `levels` / `cameras` / `video` | Storeys, points of view, camera path videos — each changed through its `edit_*` |
+| `electrical` / `plumbing` | NBR 5410 / NBR 5626 / NBR 8160 projects over the plan: checks, circuits and panel, Wi-Fi coverage; `edit_electrical` / `edit_plumbing` assign circuits and lay the runs |
+| `materials` / `disciplines` / `annotations` | Finishes, which projects and layers are shown, dimension chains and reference schedules; `stale` finds notes whose numbers stopped matching the drawing, and `edit_annotations anchor` ties dimensions to what they mark so they measure themselves again |
 | `measure` | Tape over the plan: free floor around a piece, the gap between two, what a straight probe runs into — and `fit`, how big a piece can grow before a clearance breaks |
-| `plugins` / `sessions` | External plugins and the people working on the project |
+| `plugins` / `run_plugin` / `sessions` | External plugins and the people working on the project |
 | `undo` / `redo` / `checkpoint` | Shared history with the user; named points to come back to, ids intact |
 
 ## Modes

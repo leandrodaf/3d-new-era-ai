@@ -32,6 +32,10 @@ pub(crate) struct SetHomeParams {
     properties: Option<serde_json::Map<String, serde_json::Value>>,
     /// Storey whose properties `properties` changes, e.g. `lv2`.
     level: Option<String>,
+    /// Who lives there — occupants, children, elderly, wheelchair, stature
+    /// cm, scope — kept with the project: ergonomics and every dry run then
+    /// score for them. What is left out stays as it was.
+    people: Option<super::check::People>,
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct PluginsParams {
@@ -81,7 +85,7 @@ fn with_extension(path: PathBuf) -> PathBuf {
 #[tool_router(router = project_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Rename the project, set or remove project properties (properties {key: value|null}, or a storey's with level), set the compass (north), and set the city whose building code applies (city=sao-paulo). The city belongs to the project: ergonomics, check_layout and every dry run then weigh the same municipal rules, so a change can be tested against the score it moves."
+        description = "Rename the project, set or remove project properties (properties {key: value|null}, or a storey's with level), set the compass (north), set the city whose building code applies (city=sao-paulo), and say who lives there (people {occupants, children, elderly, wheelchair, stature cm, scope}). City and people belong to the project: ergonomics, check_layout and every dry run then weigh the same rules for the same people, so a change can be tested against the score it moves."
     )]
     pub(crate) fn set_home(
         &self,
@@ -147,6 +151,26 @@ impl NewEraMcp {
                 commands.push(Command::SetProperties { properties });
             }
         }
+        if let Some(people) = &p.people {
+            let kept = newera_ergonomics::Profile {
+                city: None,
+                ..people.over(doc.home())
+            };
+            let json = serde_json::to_string(&kept).unwrap_or_default();
+            // Into the project's properties change when there is one, so the
+            // whole call stays one step.
+            let joined = commands.iter_mut().find_map(|c| match c {
+                Command::SetProperties { properties } => Some(properties),
+                _ => None,
+            });
+            if let Some(properties) = joined {
+                properties.insert(newera_ergonomics::PEOPLE.to_owned(), json);
+            } else {
+                let mut properties = doc.home().properties.clone();
+                properties.insert(newera_ergonomics::PEOPLE.to_owned(), json);
+                commands.push(Command::SetProperties { properties });
+            }
+        }
         if commands.is_empty() {
             return Err(invalid("nothing to change"));
         }
@@ -201,7 +225,10 @@ impl NewEraMcp {
         name = "plugins",
         description = "Plugins (external programs editing through the HTTP API): rows [name,title,description]. Run one with run_plugin."
     )]
-    pub(crate) fn list_plugins(&self) -> Result<String, ErrorData> {
+    pub(crate) fn list_plugins(
+        &self,
+        Parameters(_): Parameters<super::Nothing>,
+    ) -> Result<String, ErrorData> {
         self.plugins(Parameters(PluginsParams::default()))
     }
     #[tool(
@@ -273,7 +300,10 @@ impl NewEraMcp {
         name = "variants",
         description = "Plan versions (tabs): rows [i,name,active,walls,rooms,m2,furniture,issues]. Edits apply to the active version; change them with edit_variants."
     )]
-    pub(crate) fn list_variants(&self) -> Result<String, ErrorData> {
+    pub(crate) fn list_variants(
+        &self,
+        Parameters(_): Parameters<super::Nothing>,
+    ) -> Result<String, ErrorData> {
         self.variants(Parameters(VariantsParams::default()))
     }
     #[tool(
@@ -323,7 +353,10 @@ impl NewEraMcp {
         name = "checkpoints",
         description = "What checkpoint remembered: rows [label, changes ago]. A checkpoint lives with the project and survives saving."
     )]
-    pub(crate) fn list_checkpoints(&self) -> Result<String, ErrorData> {
+    pub(crate) fn list_checkpoints(
+        &self,
+        Parameters(_): Parameters<super::Nothing>,
+    ) -> Result<String, ErrorData> {
         self.checkpoint(Parameters(CheckpointParams {
             action: Some("list".to_owned()),
             label: None,

@@ -10,9 +10,10 @@ use super::reply::invalid;
 use crate::compact;
 
 /// Who lives there, as far as this call says; the rest is the project's.
-#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[derive(Debug, Default, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct People {
-    /// Disciplines included in the score. Architecture always counts; excluded findings remain visible. Kept for later reviews and dry runs.
+    /// Disciplines included in the score. Architecture always counts; excluded findings remain visible.
     scope: Option<newera_ergonomics::ReviewScope>,
     /// People living in the home (default 2).
     occupants: Option<u32>,
@@ -30,7 +31,8 @@ pub(crate) struct People {
 }
 
 impl People {
-    fn given(&self) -> bool {
+    #[cfg(test)]
+    pub(crate) fn given(&self) -> bool {
         self.scope.is_some()
             || self.occupants.is_some()
             || self.children.is_some()
@@ -40,7 +42,7 @@ impl People {
     }
 
     /// The project's people with what this call says on top.
-    fn over(&self, home: &newera_core::Home) -> newera_ergonomics::Profile {
+    pub(crate) fn over(&self, home: &newera_core::Home) -> newera_ergonomics::Profile {
         let kept = newera_ergonomics::Profile::of(home);
         newera_ergonomics::Profile {
             scope: self.scope.unwrap_or(kept.scope),
@@ -51,6 +53,84 @@ impl People {
             stature: self.stature.or(kept.stature),
             city: self.city.clone(),
         }
+    }
+}
+
+/// Makes these people the project's, so every later review and dry run
+/// scores for them. One undoable step, and none when nothing changes. The
+/// tools do this through `set_home(people=…)`; the tests, through the
+/// all-in-one `ergonomics` below.
+#[cfg(test)]
+pub(crate) fn keep_people(doc: &mut newera_core::Document, people: &People) {
+    let kept = newera_ergonomics::Profile {
+        city: None,
+        ..people.over(doc.home())
+    };
+    if newera_ergonomics::Profile::of(doc.home()) != kept {
+        let mut properties = doc.home().properties.clone();
+        properties.insert(
+            newera_ergonomics::PEOPLE.to_owned(),
+            serde_json::to_string(&kept).unwrap_or_default(),
+        );
+        let _ = doc.execute(newera_core::Command::SetProperties { properties });
+    }
+}
+
+/// Layout check of one storey, or all.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CheckReadParams {
+    /// Expected room areas in m² by room name or id, e.g. {"Sala": 10.91};
+    /// adds rows [room, expected, actual, diff %].
+    areas: Option<std::collections::BTreeMap<String, f64>>,
+    /// Storey to check: an id like `lv3`, or `all` for every storey that is
+    /// not a reference layer. Default: the storey being shown.
+    level: Option<String>,
+}
+
+/// Findings looked at, from any review.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct AcceptParams {
+    /// `[[key, reason]]`, key as the review names it (`check_layout`,
+    /// ergonomics, electrical, plumbing): it keeps showing there with the
+    /// reason and stops counting. An empty reason takes it back.
+    #[serde(default)]
+    accept: Vec<Vec<String>>,
+    /// Drop every acceptance whose finding is gone — the `orphaned` the
+    /// reviews list — from all of them at once.
+    #[serde(default)]
+    prune: bool,
+}
+
+/// Families whose keys name a pair or a set of ids, sorted: the layout
+/// check's. Its keys are accepted however the ids come.
+const LAYOUT_FAMILIES: [&str; 15] = [
+    "overlap",
+    "blocked",
+    "backwards",
+    "in_wall",
+    "blocks_door",
+    "blocks_window",
+    "outside_rooms",
+    "loose",
+    "outgrew_niche",
+    "loose_opening",
+    "turned",
+    "unclear_front",
+    "no_door",
+    "unrated_light",
+    "above_ceiling",
+];
+
+/// The key a finding is kept under.
+fn accepted_key(raw: &str) -> String {
+    let raw = raw.trim();
+    match raw.split_once(':') {
+        None => newera_core::Issue::normalize_key(raw),
+        Some((family, _)) if LAYOUT_FAMILIES.contains(&family) => {
+            newera_core::Issue::normalize_key(raw)
+        }
+        Some(_) => raw.to_owned(),
     }
 }
 
@@ -92,27 +172,94 @@ fn round2(v: f64) -> f64 {
 #[tool_router(router = check_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Ergonomics and habitability review for the people living there. It never blocks anything: it reads the drawing and says what it finds, and the drawing stays the user's — somebody sketching to learn or to see an idea is not stopped by a standard. (occupants, children, elderly, wheelchair, stature cm, city; the people given are kept with the project and used when a later call or a dry run gives none, so a dry run's score is the one this review gives): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen (work triangle, counter heights, Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. Reply {score, score_basis, scope, scores:{architecture,electrical,plumbing}, layout, coverage, capacity, findings:[{sev, place, msg, key, weight, discipline, in_scope, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. scope={electrical:false,plumbing:false} scores architecture only; all findings remain visible, excluded ones weigh zero. The scope is saved for later reviews and dry runs. layout includes geometric checks on the active storey; coverage declares limits. Scores are heuristic, not project completion or certification. weight is what the score would gain if that one went away, so a score that moved can be read; key names the finding for accept. src is the source the finding stands on, empty when it is common practice; resolve it in sources instead of asking. tier is the reliability ladder A obliges (Brazilian standard, municipal code) · B references (foreign standard) · C doctrine · D measured · E survey — and it is why a finding is an error or only a tip. fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap). city, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against a standard the more restrictive one wins — set it once with set_home(city=…) so dry runs and check_layout weigh the same rules. accept=[[key, reason]] marks findings already looked at: they stay in the report with their reason and stop costing score, which is what lets a correct plan reach zero pendencies honestly; accept=[[key, empty]] takes it back. orphaned [[key, reason]] lists acceptances no current finding answers to, on any storey, for these people — the problem was fixed, and would come back already silenced; prune=true drops them."
+        name = "ergonomics",
+        description = "Ergonomics and habitability review for the people living there. It never blocks anything: it reads the drawing and says what it finds, and the drawing stays the user's — somebody sketching to learn or to see an idea is not stopped by a standard. People (occupants, children, elderly, wheelchair, stature cm, city, scope) given here weigh this review only; set_home(people=…) keeps them with the project, and every review and dry run then scores for them. It covers room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen (work triangle, counter heights, Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. Reply {score, score_basis, scope, scores:{architecture,electrical,plumbing}, layout, coverage, capacity, findings:[{sev, place, msg, key, weight, discipline, in_scope, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. scope={electrical:false,plumbing:false} scores architecture only; all findings remain visible, excluded ones weigh zero. layout includes geometric checks on the active storey; coverage declares limits. Scores are heuristic, not project completion or certification. weight is what the score would gain if that one went away, so a score that moved can be read. src is the source the finding stands on, empty when it is common practice; resolve it in sources instead of asking. tier is the reliability ladder A obliges (Brazilian standard, municipal code) · B references (foreign standard) · C doctrine · D measured · E survey — and it is why a finding is an error or only a tip. fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap). city, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against a standard the more restrictive one wins — set it once with set_home(city=…) so dry runs and check_layout weigh the same rules. key names the finding for the accept tool: a finding accepted there stays in the report with its reason and stops costing score, which is what lets a correct plan reach zero pendencies honestly. orphaned [[key, reason]] lists acceptances no current finding answers to — the problem was fixed, and would come back already silenced; accept(prune=true) drops them."
     )]
+    pub(crate) fn read_ergonomics(&self, Parameters(people): Parameters<People>) -> String {
+        self.review(&ErgonomicsParams {
+            people,
+            ..ErgonomicsParams::default()
+        })
+    }
+    #[tool(
+        name = "check_layout",
+        description = "Layout problems: above_ceiling, overlap, blocked, in_wall, blocks_door, blocks_window, no_door, unrated_light, turned, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose (a fixed point with nothing to be fixed to: loose in a room, on glass, in a door or window span, hanging under the ceiling, with why); {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under), served (a project point inside a piece on purpose: the water point in the basin, the outlet behind the fridge or set into a cabinet) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocks_window reports nearby tall/elevated solids masking the window, with extent [width,height] cm; compact countertop objects are exempt, so this does not certify sash operation or ventilation. blocks_door includes a 60 cm approach on either face, even for sliding doors and passages. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. backwards is a piece whose back belongs on a wall (sofa, bed, toilet, TV, desk — the catalog tool marks them `wall`) with its front against a wall instead: it is turned half around; fix.angle turns it the right way, and the piece's back then touches that wall only if it was flush — placing again with wall=<id> seats it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. unrated_light is a light fixture with neither lumens nor watts — only the relative power an import carries — so the lighting tool's lux for its room are a guess: set its output with update(light={lm or w}). no_door is a bedroom or bathroom (by name) with no door — only open passages, listed, or no way in at all — said once the storey has doors somewhere; a living room, kitchen or balcony left open is not. unclear_front is a group whose parts name fronts on more than one face with no clear winner (candidates, strongest first; placed is the angle's guess every \"in front of\" falls back to) — rename the misleading part or set the angle. Handles weigh most. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. above_ceiling compares the full luminaire footprint with the same room ceiling surface used in 3D, with ceiling/top/over in cm: declared storey height, sloping wall profiles and lower roof panels. Hidden ceilings and unknown uncovered slopes are not inferred. Every row is an object with the `key` it is accepted by (in_wall {key, piece, wall}, blocks_door {key, door, by}). The accept tool marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed here under accepted {key, kind, why, extent} with its reason, kept in the project; orphaned [[key, reason]] lists acceptances whose finding is gone on every storey, and accept(prune=true) drops them. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing."
+    )]
+    pub(crate) fn read_check_layout(
+        &self,
+        Parameters(p): Parameters<CheckReadParams>,
+    ) -> Result<String, ErrorData> {
+        self.check_layout(Parameters(CheckParams {
+            areas: p.areas,
+            level: p.level,
+            ..CheckParams::default()
+        }))
+    }
+    #[tool(
+        description = "Mark findings of check_layout, ergonomics, electrical or plumbing as looked at, by the key the review gives: accept=[[key, reason]] — they stay in their review with the reason and stop counting (score, pendencies, dry runs); an empty reason takes one back. prune=true drops every acceptance whose finding is gone (the reviews list them as orphaned). One undoable step. Reply ok, with accepted and removed counts; read the review again to see it."
+    )]
+    pub(crate) fn accept(
+        &self,
+        Parameters(p): Parameters<AcceptParams>,
+    ) -> Result<String, ErrorData> {
+        if p.accept.is_empty() && !p.prune {
+            return Err(invalid(
+                "nothing to do: accept=[[key, reason]] (keys come from check_layout, ergonomics, electrical or plumbing) or prune=true",
+            ));
+        }
+        let mut doc = self.document.write();
+        let before = doc.home().accepted.clone();
+        let mut accepted = before.clone();
+        if p.prune {
+            let profile = newera_ergonomics::Profile::of(doc.home());
+            let orphans = newera_core::Issue::orphaned(doc.home())
+                .into_iter()
+                .chain(newera_ergonomics::orphaned(doc.home(), &profile))
+                .chain(newera_core::electrical::orphaned(doc.home()))
+                .chain(newera_core::plumbing::orphaned(doc.home()));
+            for (key, _) in orphans {
+                accepted.remove(&key);
+            }
+        }
+        for pair in &p.accept {
+            let key = accepted_key(pair.first().map_or("", String::as_str));
+            if key.is_empty() || key.ends_with(':') {
+                return Err(invalid(format!(
+                    "accept: {pair:?} names no finding; use the key a review gives, e.g. overlap:f12+f30"
+                )));
+            }
+            match pair.get(1).map(|why| why.trim()) {
+                None | Some("") => accepted.remove(&key),
+                Some(why) => accepted.insert(key, why.to_owned()),
+            };
+        }
+        let added = accepted.keys().filter(|k| !before.contains_key(*k)).count();
+        let removed = before.keys().filter(|k| !accepted.contains_key(*k)).count();
+        if accepted != before {
+            doc.execute(newera_core::Command::SetAccepted { accepted })
+                .map_err(super::reply::core)?;
+        }
+        Ok(format!(
+            "{} accepted={added} removed={removed}",
+            super::reply::ok(&doc, &[])
+        ))
+    }
+    /// Ergonomics review that also keeps the people given and applies
+    /// acceptances, as the tool once did; the tools split that between
+    /// `ergonomics`, `set_home` and `accept`, and the tests keep the shorthand.
+    #[cfg(test)]
     pub(crate) fn ergonomics(&self, Parameters(p): Parameters<ErgonomicsParams>) -> String {
-        let profile = p.people.over(self.document.read().home());
         if p.people.given() {
             // The people a review is conducted for become the project's, so
             // the next dry run scores for them too.
-            let mut doc = self.document.write();
-            let kept = newera_ergonomics::Profile {
-                city: None,
-                ..profile.clone()
-            };
-            if newera_ergonomics::Profile::of(doc.home()) != kept {
-                let mut properties = doc.home().properties.clone();
-                properties.insert(
-                    newera_ergonomics::PEOPLE.to_owned(),
-                    serde_json::to_string(&kept).unwrap_or_default(),
-                );
-                let _ = doc.execute(newera_core::Command::SetProperties { properties });
-            }
+            keep_people(&mut self.document.write(), &p.people);
         }
+        self.review(&p)
+    }
+
+    /// The review itself: reads, except for what `accept` and `prune` ask.
+    fn review(&self, p: &ErgonomicsParams) -> String {
+        let profile = p.people.over(self.document.read().home());
         if !p.accept.is_empty() || p.prune {
             let mut doc = self.document.write();
             let mut accepted = doc.home().accepted.clone();
@@ -186,9 +333,7 @@ impl NewEraMcp {
         }
         out.to_string()
     }
-    #[tool(
-        description = "Layout problems: above_ceiling, overlap, blocked, in_wall, blocks_door, blocks_window, no_door, unrated_light, turned, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose (a fixed point with nothing to be fixed to: loose in a room, on glass, in a door or window span, hanging under the ceiling, with why); {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under), served (a project point inside a piece on purpose: the water point in the basin, the outlet behind the fridge or set into a cabinet) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocks_window reports nearby tall/elevated solids masking the window, with extent [width,height] cm; compact countertop objects are exempt, so this does not certify sash operation or ventilation. blocks_door includes a 60 cm approach on either face, even for sliding doors and passages. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. backwards is a piece whose back belongs on a wall (sofa, bed, toilet, TV, desk — the catalog tool marks them `wall`) with its front against a wall instead: it is turned half around; fix.angle turns it the right way, and the piece's back then touches that wall only if it was flush — placing again with wall=<id> seats it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. unrated_light is a light fixture with neither lumens nor watts — only the relative power an import carries — so the lighting tool's lux for its room are a guess: set its output with update(light={lm or w}). no_door is a bedroom or bathroom (by name) with no door — only open passages, listed, or no way in at all — said once the storey has doors somewhere; a living room, kitchen or balcony left open is not. unclear_front is a group whose parts name fronts on more than one face with no clear winner (candidates, strongest first; placed is the angle's guess every \"in front of\" falls back to) — rename the misleading part or set the angle. Handles weigh most. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. above_ceiling compares the full luminaire footprint with the same room ceiling surface used in 3D, with ceiling/top/over in cm: declared storey height, sloping wall profiles and lower roof panels. Hidden ceilings and unknown uncovered slopes are not inferred. Every row is an object with the `key` it is accepted by (in_wall {key, piece, wall}, blocks_door {key, door, by}). accept=[[key, reason]] marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed under accepted {key, kind, why, extent} with its reason, kept in the project; accept=[[key, \"\"]] takes it back; orphaned [[key, reason]] lists acceptances whose finding is gone on every storey, and prune=true drops them. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing."
-    )]
+    /// Layout check that also applies acceptances; the tools split that between `check_layout` and `accept`.
     pub(crate) fn check_layout(
         &self,
         Parameters(p): Parameters<CheckParams>,
@@ -474,7 +619,7 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .find(|call| call["tool"] == "check_layout")
+            .find(|call| call["review"] == "check_layout" && call["tool"] == "accept")
             .unwrap();
         assert_eq!(
             call["orphaned"],
@@ -499,7 +644,7 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .find(|call| call["tool"] == "ergonomics")
+            .find(|call| call["review"] == "ergonomics" && call["tool"] == "accept")
             .unwrap();
         assert_eq!(
             ergonomics_call["orphaned"],
@@ -1250,5 +1395,94 @@ mod tests {
         // And it is remembered: the next review does not accuse it again.
         let again = review(r#"{"occupants":3,"wheelchair":true}"#);
         assert_eq!(again["score"], after["score"], "{again}");
+    }
+
+    /// The tools: reviews read, `accept` writes, `set_home` keeps the people.
+    #[test]
+    fn reviews_read_and_accept_writes() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}],"rooms":[{"name":"Quarto","at":[200,150]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"wardrobe","at":[200,150]},{"cat":"fridge","at":[200,150]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let rev = || s.document.read().revision();
+        let before = rev();
+
+        // A review for four people weighs them, and keeps nothing.
+        let four: serde_json::Value = serde_json::from_str(&s.read_ergonomics(Parameters(
+            serde_json::from_str(r#"{"occupants":4}"#).unwrap(),
+        )))
+        .unwrap();
+        assert_eq!(rev(), before, "a review is a read");
+        let layout: serde_json::Value = serde_json::from_str(
+            &s.read_check_layout(Parameters(CheckReadParams::default()))
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(rev(), before, "a check is a read");
+
+        // set_home keeps them, in one step; the plain review then agrees.
+        s.set_home(Parameters(
+            serde_json::from_str(r#"{"people":{"occupants":4}}"#).unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(rev(), before + 1);
+        let kept: serde_json::Value =
+            serde_json::from_str(&s.read_ergonomics(Parameters(People::default()))).unwrap();
+        assert_eq!(kept["score"], four["score"], "{kept}");
+
+        // accept marks the clash by the key the check gave, ids in any order.
+        let key = layout["overlap"][0]["key"]
+            .as_str()
+            .expect("a clash")
+            .to_owned();
+        let (family, ids) = key.split_once(':').unwrap();
+        let reversed: Vec<&str> = ids.split('+').rev().collect();
+        let reply = s
+            .accept(Parameters(
+                serde_json::from_value(serde_json::json!({
+                    "accept": [[format!("{family}:{}", reversed.join("+")), "caixa do modelo"]]
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        assert!(reply.ends_with("accepted=1 removed=0"), "{reply}");
+        assert_eq!(
+            s.document
+                .read()
+                .home()
+                .accepted
+                .get(&key)
+                .map(String::as_str),
+            Some("caixa do modelo")
+        );
+
+        // Once the clash is gone, prune drops what it was accepted for.
+        s.delete(Parameters(
+            serde_json::from_value(serde_json::json!({"ids": [ids.split('+').next().unwrap()]}))
+                .unwrap(),
+        ))
+        .unwrap();
+        let reply = s
+            .accept(Parameters(
+                serde_json::from_str(r#"{"prune":true}"#).unwrap(),
+            ))
+            .unwrap();
+        assert!(reply.ends_with("accepted=0 removed=1"), "{reply}");
+        assert!(s.document.read().home().accepted.is_empty());
+
+        // And an empty call says what it wants.
+        let why = s.accept(Parameters(AcceptParams::default())).unwrap_err();
+        assert!(why.message.contains("prune=true"), "{}", why.message);
     }
 }

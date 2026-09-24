@@ -15,6 +15,7 @@ use crate::compact;
 use crate::edit::{self, BackgroundParams};
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TraceParams {
     /// Luminance 0..255 below which a gray pixel is ink (default 128; raise it for light gray walls).
     threshold: Option<u8>,
@@ -29,6 +30,7 @@ pub(crate) struct TraceParams {
     region: Option<[f64; 4]>,
     /// Create the walls (one undo step) instead of only listing them.
     #[serde(default)]
+    #[schemars(skip)]
     create: bool,
     /// Wall height cm when creating (default 250).
     h: Option<f64>,
@@ -54,8 +56,31 @@ impl NewEraMcp {
         Ok(ok(&doc, &[]))
     }
     #[tool(
-        description = "Trace walls from the background image (set_background first): thick dark or gray bands across or down the image become walls (colored areas — lawn, plants, furniture — are ignored; collinear pieces split by doors/windows up to max_gap join; region limits the search). Returns rows [[x1,y1],[x2,y2],t] in plan cm; create=true adds them as walls. Check with render_plan bg=0.5."
+        name = "trace_background",
+        description = "Trace walls from the background image (set_background first): thick dark or gray bands across or down the image become walls (colored areas — lawn, plants, furniture — are ignored; collinear pieces split by doors/windows up to max_gap join; region limits the search). Returns rows [[x1,y1],[x2,y2],t] in plan cm; trace_walls adds them as walls. Check with render_plan bg=0.5."
     )]
+    pub(crate) fn read_trace(
+        &self,
+        Parameters(p): Parameters<TraceParams>,
+    ) -> Result<String, ErrorData> {
+        if p.create {
+            return Err(invalid(
+                "trace_background only lists; trace_walls creates them",
+            ));
+        }
+        self.trace_background(Parameters(p))
+    }
+    #[tool(
+        description = "Trace walls from the background image, as trace_background does, and create them in one undo step (h: wall height cm, default 250). Check with render_plan bg=0.5."
+    )]
+    pub(crate) fn trace_walls(
+        &self,
+        Parameters(mut p): Parameters<TraceParams>,
+    ) -> Result<String, ErrorData> {
+        p.create = true;
+        self.trace_background(Parameters(p))
+    }
+    /// Traces the background, and creates the walls when asked.
     pub(crate) fn trace_background(
         &self,
         Parameters(p): Parameters<TraceParams>,

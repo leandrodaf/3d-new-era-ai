@@ -65,6 +65,34 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
         Effect::Read,
         false,
     ),
+    ("check_layout", "Check the layout", Effect::Read, false),
+    ("ergonomics", "Review ergonomics", Effect::Read, false),
+    (
+        "electrical",
+        "Check the electrical project",
+        Effect::Read,
+        false,
+    ),
+    (
+        "plumbing",
+        "Check the plumbing project",
+        Effect::Read,
+        false,
+    ),
+    ("lighting", "Rate the lighting", Effect::Read, false),
+    (
+        "annotations",
+        "Read dimensions, tags and notes",
+        Effect::Read,
+        false,
+    ),
+    (
+        "trace_background",
+        "Find walls in a scan",
+        Effect::Read,
+        false,
+    ),
+    ("cut_list", "Cut list", Effect::Read, false),
     ("render_plan", "Render the floor plan", Effect::Read, false),
     ("show_plan", "Show the plan", Effect::Read, false),
     ("render_3d", "Render a 3D view", Effect::Read, false),
@@ -77,15 +105,10 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
         Effect::Add,
         false,
     ),
+    ("trace_walls", "Trace walls from a scan", Effect::Add, false),
     (
-        "trace_background",
-        "Trace walls from a scan",
-        Effect::Add,
-        false,
-    ),
-    (
-        "lighting",
-        "Check and fill the lighting",
+        "fill_lighting",
+        "Fill a room with light",
         Effect::Add,
         false,
     ),
@@ -131,15 +154,19 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
         false,
     ),
     (
-        "annotations",
-        "Dimensions, tags and notes",
+        "edit_annotations",
+        "Change dimensions and tags",
         Effect::Change,
         false,
     ),
-    ("check_layout", "Check the layout", Effect::Change, false),
-    ("ergonomics", "Review ergonomics", Effect::Change, false),
-    ("electrical", "Electrical project", Effect::Change, false),
-    ("plumbing", "Plumbing project", Effect::Change, false),
+    (
+        "edit_electrical",
+        "Change the electrical project",
+        Effect::Change,
+        false,
+    ),
+    ("edit_plumbing", "Lay a pipe run", Effect::Change, false),
+    ("accept", "Accept findings", Effect::Change, false),
     ("set_home", "Project settings", Effect::Change, false),
     (
         "set_background",
@@ -154,7 +181,12 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
     ("open_home", "Open a project", Effect::Change, false),
     ("save_home", "Save the project", Effect::Change, false),
     ("export_plan", "Export the plan", Effect::Change, false),
-    ("cut_list", "Cut list", Effect::Change, false),
+    (
+        "export_cut_list",
+        "Write the cut list",
+        Effect::Change,
+        false,
+    ),
     // Beyond the project.
     ("run_plugin", "Run a plugin", Effect::Change, true),
     ("feedback", "Report to the developers", Effect::Add, true),
@@ -271,6 +303,41 @@ mod tests {
             )
             .expect_err("a read is refused");
             assert!(why.contains(read), "{tool}: {why}");
+        }
+    }
+
+    /// A read given a write's argument refuses it by name, instead of
+    /// answering as if the change had been made.
+    #[test]
+    fn a_read_refuses_a_write_argument() {
+        use newera_core::{Document, SharedDocument};
+        let document = SharedDocument::new(Document::default());
+        for (tool, args) in [
+            ("cameras", serde_json::json!({"action": "delete", "i": 0})),
+            ("levels", serde_json::json!({"action": "add"})),
+            ("video", serde_json::json!({"action": "clear"})),
+            ("variants", serde_json::json!({"action": "new"})),
+            ("checkpoints", serde_json::json!({"label": "a"})),
+            ("plugins", serde_json::json!({"name": "x"})),
+            ("plumbing", serde_json::json!({"action": "route"})),
+            ("disciplines", serde_json::json!({"d": "plumbing"})),
+            (
+                "electrical",
+                serde_json::json!({"ids": ["f1"], "circuit": "C1"}),
+            ),
+            ("lighting", serde_json::json!({"fill": "downlight"})),
+            ("annotations", serde_json::json!({"anchor": true})),
+            ("check_layout", serde_json::json!({"prune": true})),
+            ("ergonomics", serde_json::json!({"accept": [["k", "r"]]})),
+            ("trace_background", serde_json::json!({"create": true})),
+            ("cut_list", serde_json::json!({"path": "/tmp/x.csv"})),
+        ] {
+            let why =
+                crate::call(document.clone(), tool, args).expect_err("a write argument is refused");
+            assert!(
+                why.contains("unknown field") || why.contains("only"),
+                "{tool}: {why}"
+            );
         }
     }
 

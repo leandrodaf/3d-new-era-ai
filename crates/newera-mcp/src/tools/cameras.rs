@@ -61,7 +61,10 @@ impl NewEraMcp {
         name = "cameras",
         description = "Stored points of view: {active: visitor|aerial, rows [i,name,x,y,z,yaw,pitch,fov]}, cm and degrees. Change them with edit_cameras."
     )]
-    pub(crate) fn list_cameras(&self) -> Result<String, ErrorData> {
+    pub(crate) fn list_cameras(
+        &self,
+        Parameters(_): Parameters<super::Nothing>,
+    ) -> Result<String, ErrorData> {
         self.cameras(Parameters(CamerasParams::default()))
     }
     #[tool(
@@ -153,7 +156,10 @@ impl NewEraMcp {
         name = "video",
         description = "The video camera path: {fps,speed,secs,rows [i,x,y,z,yaw,pitch,fov]}, cm, degrees, m/s. Change it and render it with edit_video."
     )]
-    pub(crate) fn list_video(&self) -> Result<String, ErrorData> {
+    pub(crate) fn list_video(
+        &self,
+        Parameters(_): Parameters<super::Nothing>,
+    ) -> Result<String, ErrorData> {
         self.video(Parameters(VideoParams::default()))
     }
     #[tool(

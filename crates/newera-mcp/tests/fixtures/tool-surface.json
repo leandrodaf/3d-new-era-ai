@@ -1,55 +1,59 @@
 {
-  "annotations": {
+  "accept": {
     "annotations": {
       "destructiveHint": true,
       "openWorldHint": false,
       "readOnlyHint": false,
-      "title": "Dimensions, tags and notes"
+      "title": "Accept findings"
     },
-    "description": "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first; one whose anchor died with a deleted piece is tied again to what it touches now, or else released (no anchor) instead of staying stale. q=<text> searches label text on every storey; q=re:<pattern> by a regex (`re:^\\[\\d+\\]$` finds index codes). Set any of dims (engineering dimension chains; auto_dimensions in the project JSON), refs (room reference schedule with tags; references — a tag, once given, stays with its piece: new pieces take the next free number and removed ones leave a gap, so a print and the plan a week later agree; renumber=true numbers them again in reading order), details (brand/model/link in refs; reference_details), legend (symbol legend with counts): a switch answers with the modes, changed, and what it shows — chains [[from,to,cm]] for dims, symbols {discipline:[[name,count]]} for legend — not the schedule; refs=true, or no switch at all, returns {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. bake=true turns the automatic chains into editable dimensions (ids returned). Give pieces brand/model/url via update.",
+    "description": "Mark findings of check_layout, ergonomics, electrical or plumbing as looked at, by the key the review gives: accept=[[key, reason]] — they stay in their review with the reason and stop counting (score, pendencies, dry runs); an empty reason takes one back. prune=true drops every acceptance whose finding is gone (the reviews list them as orphaned). One undoable step. Reply ok, with accepted and removed counts; read the review again to see it.",
     "inputSchema": {
       "properties": {
-        "anchor": {
-          "description": "Tie every straight dimension to what its ends touch right now, so from here on they follow the drawing. Run it while the numbers are right",
-          "type": "boolean"
+        "accept": {
+          "default": [],
+          "description": "`[[key, reason]]`, key as the review names it (`check_layout`, ergonomics, electrical, plumbing): it keeps showing there with the reason and stops counting. An empty reason takes it back",
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "array"
         },
-        "bake": {
-          "description": "Convert the automatic dimension chains into editable dimensions",
+        "prune": {
+          "default": false,
+          "description": "Drop every acceptance whose finding is gone — the `orphaned` the reviews list — from all of them at once",
           "type": "boolean"
-        },
-        "details": {
-          "description": "Include brand, model and link in references (`reference_details`)",
-          "type": "boolean"
-        },
-        "dims": {
-          "description": "Show engineering dimension chains (`auto_dimensions` in the project JSON)",
-          "type": "boolean"
-        },
-        "legend": {
-          "description": "Legend of electrical/plumbing symbols with counts",
-          "type": "boolean"
-        },
+        }
+      },
+      "type": "object"
+    },
+    "name": "accept",
+    "title": "Accept findings"
+  },
+  "annotations": {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Read dimensions, tags and notes"
+    },
+    "description": "Plan annotations, read. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. q=<text> searches label text on every storey; q=re:<pattern> by a regex (`re:^\\[\\d+\\]$` finds index codes). With neither, returns the schedule {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]} — the modes on, and the room reference schedule with its tags. edit_annotations turns modes on and off, ties dimensions and bakes chains. Give pieces brand/model/url via update.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
         "q": {
           "description": "Search label text, accent- and case-insensitive, e.g. `porta`; or `re:<pattern>` for a regular expression",
           "type": "string"
         },
-        "refs": {
-          "description": "Show the room reference schedule and tags (`references` in the JSON)",
-          "type": "boolean"
-        },
-        "renumber": {
-          "description": "Number the schedule again in reading order, closing the gaps pieces left behind. Numbers are otherwise kept by each piece for good",
-          "type": "boolean"
-        },
         "stale": {
-          "description": "Dimensions and notes that no longer match the drawing: rows [id, written, measured, against, text]. A plan of joinery is read off its notes, so one that still says 66,5 over a corridor of 86 is worse than no note at all",
+          "description": "Dimensions and notes that no longer match the drawing: rows [id, written, measured, against, text]",
           "type": "boolean"
         }
       },
       "type": "object"
     },
     "name": "annotations",
-    "title": "Dimensions, tags and notes"
+    "title": "Read dimensions, tags and notes"
   },
   "arrange": {
     "annotations": {
@@ -205,7 +209,7 @@
     },
     "description": "Stored points of view: {active: visitor|aerial, rows [i,name,x,y,z,yaw,pitch,fov]}, cm and degrees. Change them with edit_cameras.",
     "inputSchema": {
-      "properties": {},
+      "additionalProperties": false,
       "type": "object"
     },
     "name": "cameras",
@@ -244,25 +248,14 @@
   },
   "check_layout": {
     "annotations": {
-      "destructiveHint": true,
       "openWorldHint": false,
-      "readOnlyHint": false,
+      "readOnlyHint": true,
       "title": "Check the layout"
     },
-    "description": "Layout problems: above_ceiling, overlap, blocked, in_wall, blocks_door, blocks_window, no_door, unrated_light, turned, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose (a fixed point with nothing to be fixed to: loose in a room, on glass, in a door or window span, hanging under the ceiling, with why); {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under), served (a project point inside a piece on purpose: the water point in the basin, the outlet behind the fridge or set into a cabinet) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocks_window reports nearby tall/elevated solids masking the window, with extent [width,height] cm; compact countertop objects are exempt, so this does not certify sash operation or ventilation. blocks_door includes a 60 cm approach on either face, even for sliding doors and passages. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. backwards is a piece whose back belongs on a wall (sofa, bed, toilet, TV, desk — the catalog tool marks them `wall`) with its front against a wall instead: it is turned half around; fix.angle turns it the right way, and the piece's back then touches that wall only if it was flush — placing again with wall=<id> seats it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. unrated_light is a light fixture with neither lumens nor watts — only the relative power an import carries — so the lighting tool's lux for its room are a guess: set its output with update(light={lm or w}). no_door is a bedroom or bathroom (by name) with no door — only open passages, listed, or no way in at all — said once the storey has doors somewhere; a living room, kitchen or balcony left open is not. unclear_front is a group whose parts name fronts on more than one face with no clear winner (candidates, strongest first; placed is the angle's guess every \"in front of\" falls back to) — rename the misleading part or set the angle. Handles weigh most. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. above_ceiling compares the full luminaire footprint with the same room ceiling surface used in 3D, with ceiling/top/over in cm: declared storey height, sloping wall profiles and lower roof panels. Hidden ceilings and unknown uncovered slopes are not inferred. Every row is an object with the `key` it is accepted by (in_wall {key, piece, wall}, blocks_door {key, door, by}). accept=[[key, reason]] marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed under accepted {key, kind, why, extent} with its reason, kept in the project; accept=[[key, \"\"]] takes it back; orphaned [[key, reason]] lists acceptances whose finding is gone on every storey, and prune=true drops them. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing.",
+    "description": "Layout problems: above_ceiling, overlap, blocked, in_wall, blocks_door, blocks_window, no_door, unrated_light, turned, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose (a fixed point with nothing to be fixed to: loose in a room, on glass, in a door or window span, hanging under the ceiling, with why); {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under), served (a project point inside a piece on purpose: the water point in the basin, the outlet behind the fridge or set into a cabinet) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocks_window reports nearby tall/elevated solids masking the window, with extent [width,height] cm; compact countertop objects are exempt, so this does not certify sash operation or ventilation. blocks_door includes a 60 cm approach on either face, even for sliding doors and passages. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. backwards is a piece whose back belongs on a wall (sofa, bed, toilet, TV, desk — the catalog tool marks them `wall`) with its front against a wall instead: it is turned half around; fix.angle turns it the right way, and the piece's back then touches that wall only if it was flush — placing again with wall=<id> seats it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. unrated_light is a light fixture with neither lumens nor watts — only the relative power an import carries — so the lighting tool's lux for its room are a guess: set its output with update(light={lm or w}). no_door is a bedroom or bathroom (by name) with no door — only open passages, listed, or no way in at all — said once the storey has doors somewhere; a living room, kitchen or balcony left open is not. unclear_front is a group whose parts name fronts on more than one face with no clear winner (candidates, strongest first; placed is the angle's guess every \"in front of\" falls back to) — rename the misleading part or set the angle. Handles weigh most. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. above_ceiling compares the full luminaire footprint with the same room ceiling surface used in 3D, with ceiling/top/over in cm: declared storey height, sloping wall profiles and lower roof panels. Hidden ceilings and unknown uncovered slopes are not inferred. Every row is an object with the `key` it is accepted by (in_wall {key, piece, wall}, blocks_door {key, door, by}). The accept tool marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed here under accepted {key, kind, why, extent} with its reason, kept in the project; orphaned [[key, reason]] lists acceptances whose finding is gone on every storey, and accept(prune=true) drops them. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing.",
     "inputSchema": {
+      "additionalProperties": false,
       "properties": {
-        "accept": {
-          "default": [],
-          "description": "Pairs already looked at: `[[key, reason]]`, key as the report names it (`overlap:f817+f830`, or just `f817+f830`). An empty reason takes it back",
-          "items": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "type": "array"
-        },
         "areas": {
           "additionalProperties": {
             "type": "number"
@@ -273,11 +266,6 @@
         "level": {
           "description": "Storey to check: an id like `lv3`, or `all` for every storey that is not a reference layer. Default: the storey being shown",
           "type": "string"
-        },
-        "prune": {
-          "default": false,
-          "description": "Drop the acceptances listed in `orphaned`, in one undoable step",
-          "type": "boolean"
         }
       },
       "type": "object"
@@ -316,7 +304,7 @@
     },
     "description": "What checkpoint remembered: rows [label, changes ago]. A checkpoint lives with the project and survives saving.",
     "inputSchema": {
-      "properties": {},
+      "additionalProperties": false,
       "type": "object"
     },
     "name": "checkpoints",
@@ -796,13 +784,13 @@
   },
   "cut_list": {
     "annotations": {
-      "destructiveHint": true,
       "openWorldHint": false,
-      "readOnlyHint": false,
+      "readOnlyHint": true,
       "title": "Cut list"
     },
-    "description": "Cut list of joinery builds, and of groups drawn by hand: each part of a drawn group up to 50 mm thick is a board at the size it was drawn (board is its finish and thickness, no edge banding), the groups are named in drawn and the parts that are not boards in skipped [[id,name]]. Rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. path .csv, or .dxf/.svg (boards laid out on sheets), writes a file. sources names the panel standards behind the boards: MDF is a dry-process fibreboard (NBR 15316), MDP a particleboard of 551 to 750 kg/m³ that holds screws better (NBR 14810).",
+    "description": "Cut list of joinery builds, and of groups drawn by hand: each part of a drawn group up to 50 mm thick is a board at the size it was drawn (board is its finish and thickness, no edge banding), the groups are named in drawn and the parts that are not boards in skipped [[id,name]]. Rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. export_cut_list writes it as .csv, or .dxf/.svg (boards laid out on sheets). sources names the panel standards behind the boards: MDF is a dry-process fibreboard (NBR 15316), MDP a particleboard of 551 to 750 kg/m³ that holds screws better (NBR 14810).",
     "inputSchema": {
+      "additionalProperties": false,
       "properties": {
         "ids": {
           "description": "Build or drawn group ids (default: every build and drawn group on this storey)",
@@ -810,10 +798,6 @@
             "type": "string"
           },
           "type": "array"
-        },
-        "path": {
-          "description": "Write `.csv` (spreadsheet), `.dxf` (sheets for CNC) or `.svg` (sheets to view)",
-          "type": "string"
         }
       },
       "type": "object"
@@ -858,6 +842,7 @@
     },
     "description": "Electrical and plumbing projects and plan layers over the plan. active (default): {active, hidden, layers {key:{pieces, hidden}}} — the discipline new symbols go to, what is hidden, and the layers (lighting, appliances, joinery); get_home gives each piece its plan_layer. quantities: {electrical:[[kind,count,names?]], plumbing:[...], lines_cm:{...}} — grouped by catalog kind (every low outlet together), with the names of the points as the detail. Change what is shown with edit_disciplines.",
     "inputSchema": {
+      "additionalProperties": false,
       "properties": {
         "action": {
           "description": "`active` (default) or `quantities`",
@@ -868,6 +853,51 @@
     },
     "name": "disciplines",
     "title": "Show what the plan displays"
+  },
+  "edit_annotations": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Change dimensions and tags"
+    },
+    "description": "Change the plan annotations. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first; one whose anchor died with a deleted piece is tied again to what it touches now, or else released (no anchor) instead of staying stale. Set any of dims (engineering dimension chains; auto_dimensions in the project JSON), refs (room reference schedule with tags; references — a tag, once given, stays with its piece: new pieces take the next free number and removed ones leave a gap, so a print and the plan a week later agree; renumber=true numbers them again in reading order), details (brand/model/link in refs; reference_details), legend (symbol legend with counts): a switch answers with the modes, changed, and what it shows — chains [[from,to,cm]] for dims, symbols {discipline:[[name,count]]} for legend — not the schedule; refs=true returns {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. bake=true turns the automatic chains into editable dimensions (ids returned). The annotations tool reads them (stale, q, the schedule).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "description": "Tie every straight dimension to what its ends touch right now, so from here on they follow the drawing. Run it while the numbers are right",
+          "type": "boolean"
+        },
+        "bake": {
+          "description": "Convert the automatic dimension chains into editable dimensions",
+          "type": "boolean"
+        },
+        "details": {
+          "description": "Include brand, model and link in references (`reference_details`)",
+          "type": "boolean"
+        },
+        "dims": {
+          "description": "Show engineering dimension chains (`auto_dimensions` in the project JSON)",
+          "type": "boolean"
+        },
+        "legend": {
+          "description": "Legend of electrical/plumbing symbols with counts",
+          "type": "boolean"
+        },
+        "refs": {
+          "description": "Show the room reference schedule and tags (`references` in the JSON)",
+          "type": "boolean"
+        },
+        "renumber": {
+          "description": "Number the schedule again in reading order, closing the gaps pieces left behind. Numbers are otherwise kept by each piece for good",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "edit_annotations",
+    "title": "Change dimensions and tags"
   },
   "edit_cameras": {
     "annotations": {
@@ -954,6 +984,131 @@
     "name": "edit_disciplines",
     "title": "Show or hide disciplines"
   },
+  "edit_electrical": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Change the electrical project"
+    },
+    "description": "Change the electrical and telecom project (the electrical tool reads it: check, circuits, wifi). assign {ids, circuit, va?} — or the whole division at once, circuits {\"C1\": [ids], \"C2\": [ids]} — writes the circuits (and power, and volts 127|220 per point — a 220 V outlet makes its circuit 220 V) on points in one undoable step. voltage {volts?, short_ka?, earthing?: TN-S|TN-C-S|TT}. cable {kind: power|data|tv, pts} (with ids or circuit instead of pts, it is a route): draws a run of the electrical project, told apart on the plan (power solid, network dashed, TV dash-dot); check then reports cables_m, the length by kind with a tenth for the drops, and network or TV points no run reaches, or a telecom panel none reaches. route {kind: power|data|tv, ids? | circuit?, via?: ceiling|floor|wall|tape, cat?: cat5e|cat6|cat6a, from?}: lays the run the way it is built, along the walls and inside them (or in the slab), from the nearest panel of its kind to the points (all of the kind when none given), sharing the trunk, and draws it replacing the earlier run of the same circuit and the cables drawn by hand to its points (listed in replaced_drawn); replies {via, suggested, length_m {horizontal, vertical, total}, by_premise_m, bends, materials: [[item, qty, unit]]} — conduit, boxes, wire by conductor, cable, connectors. via=tape lays adhesive flat wiring tape (Eletrofitas) on the surface of walls and ceiling for power only: the model by the load and whether any point is a socket (sockets take the earthed EF18.9.18), refused over its rating or in a bathroom or outdoors, bought as Leroy Merlin kits by piece (codes, prices, splices) with tape {model, tracks, rated_a, load_a, earthed, pieces_m, splices, total_brl, notes}. Without via it takes the cheapest premise that can be built; a via that cannot reach a point (wall with a point out of every wall; ceiling with a low point out of every wall, nowhere to drop) is refused naming the points. wifi {ids, standard?, poe?, uplink?, bands?} writes those on the access points (wifi-point), in one undoable step. assign on automation points takes standby_w, on a dimmer max_w, on a panel modules.",
+    "inputSchema": {
+      "$defs": {
+        "Point2": {
+          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "properties": {
+        "action": {
+          "description": "`assign`: put `ids` on `circuit` (empty takes them off), with `va` to set their power; `voltage`: the supply, 127 or 220 V; `cable`, `route` or `wifi`",
+          "type": "string"
+        },
+        "band": {
+          "description": "For `wifi`: the band the suggestion aims at, `2.4`, `5` (default) or `6`",
+          "type": "string"
+        },
+        "bands": {
+          "description": "For `wifi`: the bands they radiate when fewer than their generation's, e.g. `2.4,5` for a dual-band Wi-Fi 7",
+          "type": "string"
+        },
+        "cat": {
+          "description": "For `route` of data: `cat5e`, `cat6` (default) or `cat6a`",
+          "type": "string"
+        },
+        "circuit": {
+          "description": "Circuit name, e.g. `C3`",
+          "type": "string"
+        },
+        "circuits": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "For `assign`: the whole division at once, `{\"C1\": [ids], \"C2\": [ids]}`, in one undoable step",
+          "type": "object"
+        },
+        "earthing": {
+          "description": "For `voltage`: the earthing scheme, `TN-S`, `TN-C-S` or `TT`",
+          "type": "string"
+        },
+        "from": {
+          "description": "For `route`: the panel it starts from; default the nearest of its kind",
+          "type": "string"
+        },
+        "ids": {
+          "default": [],
+          "description": "Point ids for `assign`",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "description": "For `cable`: what the run carries, `power`, `data` or `tv`",
+          "type": "string"
+        },
+        "max_w": {
+          "description": "For `assign` on a dimmer: the most lighting it takes, W",
+          "type": "number"
+        },
+        "modules": {
+          "description": "For `assign` on a distribution panel: the DIN modules it holds",
+          "type": "integer"
+        },
+        "poe": {
+          "description": "For `wifi`: whether `ids` are fed by their data cable (`PoE`)",
+          "type": "boolean"
+        },
+        "pts": {
+          "default": [],
+          "description": "For `cable`: the run's points `[[x,y], …]`, cm",
+          "items": {
+            "$ref": "#/$defs/Point2"
+          },
+          "type": "array"
+        },
+        "short_ka": {
+          "description": "For `voltage`: the presumed short-circuit current at the delivery point, kA, as the utility informs it",
+          "type": "number"
+        },
+        "standard": {
+          "description": "For `wifi`: the access points' standard, `wifi5`, `wifi6`, `wifi6e` or `wifi7`, written on `ids`",
+          "type": "string"
+        },
+        "standby_w": {
+          "description": "For `assign` on automation points: standby consumption, W",
+          "type": "number"
+        },
+        "uplink": {
+          "description": "For `wifi`: the access points' wired uplink, Gbps (1, 2.5, 5, 10)",
+          "type": "number"
+        },
+        "va": {
+          "description": "Power per point, VA, instead of the norm's default",
+          "type": "number"
+        },
+        "via": {
+          "description": "For `route`: where the run passes, `ceiling` (slab, dropping in the walls), `floor` or `wall`. Omitted: the cheapest that can be built",
+          "type": "string"
+        },
+        "volts": {
+          "description": "Supply voltage, V; with `assign`, the points' own, 127 or 220",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "edit_electrical",
+    "title": "Change the electrical project"
+  },
   "edit_levels": {
     "annotations": {
       "destructiveHint": true,
@@ -992,6 +1147,50 @@
     },
     "name": "edit_levels",
     "title": "Change storeys"
+  },
+  "edit_plumbing": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Lay a pipe run"
+    },
+    "description": "Lay a pipe run of the plumbing project (the plumbing tool reads it). route {kind: cold|hot|sewer|vent, ids?, via?: ceiling|floor|wall, from?, depth?}: lays the run from its source to the points along the walls and inside them, or through the ceiling or under the floor, sharing the trunk, draws it (replacing the earlier run of the same points and the lines drawn by hand to them, listed in replaced_drawn) and replies {via, suggested, length_m, by_premise_m, bends, branches, materials: [[item, qty, unit]]} — water: pipe and bars, 90° elbows, tees, threaded elbows at the points, a gate valve per room, adhesive; sewer: the branch at the largest diameter it takes, the drops at each point's own, a 45° Y junction at each branch (never a 90° tee), two 45° elbows per turn, sealing rings, trap boxes. Sewer runs only under the floor, by gravity, with 2 % fall up to 75 mm and 1 % above: the reply says needs_depth_cm, and with depth a run that does not fit is refused saying how much it needs. Without via the cheapest premise that can be built is taken; one that cannot (a point in no wall; from the ceiling a low point in no wall, nowhere to drop; sewer up to the ceiling or lying in a wall) is refused with why.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "`route`",
+          "type": "string"
+        },
+        "depth": {
+          "description": "For `route` of sewer: the height free under the finished floor, cm (slab recess, or the ceiling void of the storey below)",
+          "type": "number"
+        },
+        "from": {
+          "description": "For `route`: the piece it starts from (a water meter, a valve, the heater, the inspection box or stack); default the nearest of its kind",
+          "type": "string"
+        },
+        "ids": {
+          "default": [],
+          "description": "For `route`: the points; default every point of the kind",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "description": "For `route`: what the run carries, `cold`, `hot` or `sewer`",
+          "type": "string"
+        },
+        "via": {
+          "description": "For `route`: `ceiling`, `floor` or `wall`; omitted, the cheapest that can be built",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "edit_plumbing",
+    "title": "Lay a pipe run"
   },
   "edit_variants": {
     "annotations": {
@@ -1090,144 +1289,27 @@
   },
   "electrical": {
     "annotations": {
-      "destructiveHint": true,
       "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Electrical project"
+      "readOnlyHint": true,
+      "title": "Check the electrical project"
     },
-    "description": "Electrical and telecom project, NBR 5410 and NBR 16264 (residential cabling). Points are the electrical pieces (catalog electrical: outlets, switches, lighting points, panel, network-outlet RJ45, tv-outlet, wifi-point, telecom-panel) plus every fixture that lights. check (default): {points:{kind:count}, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — accept=[[key, reason]] with any action marks findings looked at (they stay listed with the reason and stop counting in pending), an empty reason takes one back, orphaned lists acceptances whose finding is gone and prune=true drops them — a ceiling lighting point per room, general-use outlets per room (kitchens and laundries one per 3.5 m of perimeter, bathrooms one by the basin, living rooms and bedrooms one per 5 m), RJ45 and TV outlets per room as NBR 16264 table 1 recommends (2 RJ45 and 1 TV in bedrooms, living rooms, offices, kitchens and laundries; 3 and 2 in a home theater; 1 and 1 elsewhere; a Wi-Fi point is not an RJ45 outlet), a power outlet by the telecom panel, a distribution and a telecom panel, points without a circuit, lighting and outlets sharing a circuit, a dedicated load not alone. circuits: rows [name, kinds, points, VA, V, A, wire mm², breaker A, DR] and main_breaker {a, phases, load_a_per_phase}: the supply to ask for, by Enel SP's categories on 127/220 V (single-phase up to 12 kW with no 220 V circuit, two-phase up to 20 kW, three-phase up to 75 kW) and the smallest of its fixed entry breakers (50, 63, 80, 100… A) — power by NBR 5410 (lighting per room by area: 100 VA up to 6 m² and 60 VA per whole 4 m² beyond, shared by its points; 600 VA for each of the first three outlets of a kitchen, laundry or bathroom, 100 VA after and elsewhere; dedicated points at their rated power, a shower 7500 W and air conditioning 1500 until written) unless set; the section is the smallest from 1.5 mm² (lighting) or 2.5 (with outlets) whose capacity, corrected for the circuits sharing its conduit on the laid-out runs (table 42, or grouping written on the project), admits a breaker between the current and it; DR on every point of a room with a bath or shower, on kitchen, laundry, service and garage points (lighting at 2.50 m or higher excepted) and on outdoor and balcony outlets; a shower over 4.4 kVA runs on 220 V. check also says lighting and outlets sharing a circuit only when NBR 5410 9.5.3.3 forbids it (over 16 A, or all lighting or all outlets on shared circuits), kitchen and laundry outlets sharing with anything else, equipment over 10 A not alone, and a voltage drop over 4 % to the farthest point of a laid-out run. assign {ids, circuit, va?} — or the whole division at once, circuits {\"C1\": [ids], \"C2\": [ids]} — writes the circuits (and power, and volts 127|220 per point — a 220 V outlet makes its circuit 220 V) on points in one undoable step. voltage {volts?, short_ka?, earthing?: TN-S|TN-C-S|TT}. circuits also gives panel {devices: [[device, count, DIN modules]], modules {used, capacity, capacity_written, spare}, dps, earthing, icn_ka, selective}: one-pole breakers for 127 V circuits and two-pole for 220 V between phases, a two-pole DR per circuit that needs one, the main breaker, the surge protector (DPS class II, a module per phase and neutral) and NBR 5410's spare ways (2 up to 6 circuits, 3 up to 12, 4 up to 30, 15 % above); capacity is the panel's modules (assign modules on it) or a guess from its size, and check says when it does not fit, when the main breaker is under twice the largest partial (selectivity) and when the short-circuit level was assumed. cable {kind: power|data|tv, pts} (with ids or circuit instead of pts, it is a route): draws a run of the electrical project, told apart on the plan (power solid, network dashed, TV dash-dot); check then reports cables_m, the length by kind with a tenth for the drops, and network or TV points no run reaches, or a telecom panel none reaches. route {kind: power|data|tv, ids? | circuit?, via?: ceiling|floor|wall|tape, cat?: cat5e|cat6|cat6a, from?}: lays the run the way it is built, along the walls and inside them (or in the slab), from the nearest panel of its kind to the points (all of the kind when none given), sharing the trunk, and draws it replacing the earlier run of the same circuit and the cables drawn by hand to its points (listed in replaced_drawn); replies {via, suggested, length_m {horizontal, vertical, total}, by_premise_m, bends, materials: [[item, qty, unit]]} — conduit, boxes, wire by conductor, cable, connectors. via=tape lays adhesive flat wiring tape (Eletrofitas) on the surface of walls and ceiling for power only: the model by the load and whether any point is a socket (sockets take the earthed EF18.9.18), refused over its rating or in a bathroom or outdoors, bought as Leroy Merlin kits by piece (codes, prices, splices) with tape {model, tracks, rated_a, load_a, earthed, pieces_m, splices, total_brl, notes}. Without via it takes the cheapest premise that can be built; a via that cannot reach a point (wall with a point out of every wall; ceiling with a low point out of every wall, nowhere to drop) is refused naming the points. Automation (catalog smart-relay, smart-switch, dimmer, presence-sensor, smart-lock): each draws its standby on its circuit (assign standby_w; relay, dimmer and sensor 1 W, smart switch 1.2 by default, from manufacturers' sheets), circuits reports standby_w, and check asks a relay or smart switch for a neutral in its box, a dimmer for the room's lighting to fit its max_w (default 1.1 A at the supply voltage, some 140 W at 127 V) and pass 10 W, a ceiling sensor to be between 2.2 and 3 m (manufacturers install at about 2.4) and to see the room's far corner (about 1.45 × its height), a lock to sit on a door. wifi {ids?, standard?: wifi5|wifi6|wifi6e|wifi7, poe?, band?: 2.4|5|6}: writes the standard and PoE on access points (wifi-point) when given, and replies {access_points: [[id, standard, bands, uplink]], coverage: [[room, band, median dBm, worst dBm (9 places in 10), share at -67 dBm or better, grade]], suggested: {standard, band, points: [[x, y, z, room]], short: [rooms still under -67 dBm]}} — signal estimated from free-space loss, distance and each wall crossed by its material and thickness (a door or window where the path goes through one), per band; the suggestion is the fewest ceiling points (up to four) at room centres covering the rooms people use. check also asks each access point for its data cable, power (an outlet within 1.5 m or poe) and a cable category that carries its uplink (uplink up to 2.5 GbE: Cat 5e; 5 GbE: Cat 6; 10 GbE: Cat 6A). Circuit numbers are drawn next to the points on the plan, and with annotations(legend=true) the load schedule under the legend.",
+    "description": "Electrical and telecom project, NBR 5410 and NBR 16264 (residential cabling). Points are the electrical pieces (catalog electrical: outlets, switches, lighting points, panel, network-outlet RJ45, tv-outlet, wifi-point, telecom-panel) plus every fixture that lights. check (default): {points:{kind:count}, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — orphaned lists acceptances whose finding is gone (the accept tool marks findings looked at, and its prune drops those) — a ceiling lighting point per room, general-use outlets per room (kitchens and laundries one per 3.5 m of perimeter, bathrooms one by the basin, living rooms and bedrooms one per 5 m), RJ45 and TV outlets per room as NBR 16264 table 1 recommends (2 RJ45 and 1 TV in bedrooms, living rooms, offices, kitchens and laundries; 3 and 2 in a home theater; 1 and 1 elsewhere; a Wi-Fi point is not an RJ45 outlet), a power outlet by the telecom panel, a distribution and a telecom panel, points without a circuit, lighting and outlets sharing a circuit, a dedicated load not alone. circuits: rows [name, kinds, points, VA, V, A, wire mm², breaker A, DR] and main_breaker {a, phases, load_a_per_phase}: the supply to ask for, by Enel SP's categories on 127/220 V (single-phase up to 12 kW with no 220 V circuit, two-phase up to 20 kW, three-phase up to 75 kW) and the smallest of its fixed entry breakers (50, 63, 80, 100… A) — power by NBR 5410 (lighting per room by area: 100 VA up to 6 m² and 60 VA per whole 4 m² beyond, shared by its points; 600 VA for each of the first three outlets of a kitchen, laundry or bathroom, 100 VA after and elsewhere; dedicated points at their rated power, a shower 7500 W and air conditioning 1500 until written) unless set; the section is the smallest from 1.5 mm² (lighting) or 2.5 (with outlets) whose capacity, corrected for the circuits sharing its conduit on the laid-out runs (table 42, or grouping written on the project), admits a breaker between the current and it; DR on every point of a room with a bath or shower, on kitchen, laundry, service and garage points (lighting at 2.50 m or higher excepted) and on outdoor and balcony outlets; a shower over 4.4 kVA runs on 220 V. check also says lighting and outlets sharing a circuit only when NBR 5410 9.5.3.3 forbids it (over 16 A, or all lighting or all outlets on shared circuits), kitchen and laundry outlets sharing with anything else, equipment over 10 A not alone, and a voltage drop over 4 % to the farthest point of a laid-out run. circuits also gives panel {devices: [[device, count, DIN modules]], modules {used, capacity, capacity_written, spare}, dps, earthing, icn_ka, selective}: one-pole breakers for 127 V circuits and two-pole for 220 V between phases, a two-pole DR per circuit that needs one, the main breaker, the surge protector (DPS class II, a module per phase and neutral) and NBR 5410's spare ways (2 up to 6 circuits, 3 up to 12, 4 up to 30, 15 % above); capacity is the panel's modules (assign modules on it) or a guess from its size, and check says when it does not fit, when the main breaker is under twice the largest partial (selectivity) and when the short-circuit level was assumed. Automation (catalog smart-relay, smart-switch, dimmer, presence-sensor, smart-lock): each draws its standby on its circuit (assign standby_w; relay, dimmer and sensor 1 W, smart switch 1.2 by default, from manufacturers' sheets), circuits reports standby_w, and check asks a relay or smart switch for a neutral in its box, a dimmer for the room's lighting to fit its max_w (default 1.1 A at the supply voltage, some 140 W at 127 V) and pass 10 W, a ceiling sensor to be between 2.2 and 3 m (manufacturers install at about 2.4) and to see the room's far corner (about 1.45 × its height), a lock to sit on a door. wifi {ids?, standard?: wifi5|wifi6|wifi6e|wifi7, poe?, band?: 2.4|5|6}: writes the standard and PoE on access points (wifi-point) when given, and replies {access_points: [[id, standard, bands, uplink]], coverage: [[room, band, median dBm, worst dBm (9 places in 10), share at -67 dBm or better, grade]], suggested: {standard, band, points: [[x, y, z, room]], short: [rooms still under -67 dBm]}} — signal estimated from free-space loss, distance and each wall crossed by its material and thickness (a door or window where the path goes through one), per band; the suggestion is the fewest ceiling points (up to four) at room centres covering the rooms people use. check also asks each access point for its data cable, power (an outlet within 1.5 m or poe) and a cable category that carries its uplink (uplink up to 2.5 GbE: Cat 5e; 5 GbE: Cat 6; 10 GbE: Cat 6A). Circuit numbers are drawn next to the points on the plan, and with edit_annotations(legend=true) the load schedule under the legend. Changes — assign, voltage, cable, route, and the standard, PoE, uplink or bands of access points — are edit_electrical.",
     "inputSchema": {
-      "$defs": {
-        "Point2": {
-          "description": "[x, y] in centimeters; x grows right, y grows down",
-          "items": {
-            "type": "number"
-          },
-          "maxItems": 2,
-          "minItems": 2,
-          "type": "array"
-        }
-      },
+      "additionalProperties": false,
       "properties": {
-        "accept": {
-          "default": [],
-          "description": "Findings looked at: `[[key, reason]]`; they stay listed with the reason and stop counting as pending. An empty reason takes one back",
-          "items": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "type": "array"
-        },
         "action": {
-          "description": "`check` (default): points by kind and what the norm finds; `circuits`: the load schedule; `assign`: put `ids` on `circuit` (empty takes them off), with `va` to set their power; `voltage`: the supply, 127 or 220 V",
+          "description": "`check` (default): points by kind and what the norm finds; `circuits`: the load schedule and the panel; `wifi`: coverage and a suggestion",
           "type": "string"
         },
         "band": {
           "description": "For `wifi`: the band the suggestion aims at, `2.4`, `5` (default) or `6`",
           "type": "string"
-        },
-        "bands": {
-          "description": "For `wifi`: the bands they radiate when fewer than their generation's, e.g. `2.4,5` for a dual-band Wi-Fi 7",
-          "type": "string"
-        },
-        "cat": {
-          "description": "For `route` of data: `cat5e`, `cat6` (default) or `cat6a`",
-          "type": "string"
-        },
-        "circuit": {
-          "description": "Circuit name, e.g. `C3`",
-          "type": "string"
-        },
-        "circuits": {
-          "additionalProperties": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "description": "For `assign`: the whole division at once, `{\"C1\": [ids], \"C2\": [ids]}`, in one undoable step",
-          "type": "object"
-        },
-        "earthing": {
-          "description": "For `voltage`: the earthing scheme, `TN-S`, `TN-C-S` or `TT`",
-          "type": "string"
-        },
-        "from": {
-          "description": "For `route`: the panel it starts from; default the nearest of its kind",
-          "type": "string"
-        },
-        "ids": {
-          "default": [],
-          "description": "Point ids for `assign`",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "kind": {
-          "description": "For `cable`: what the run carries, `power`, `data` or `tv`",
-          "type": "string"
-        },
-        "max_w": {
-          "description": "For `assign` on a dimmer: the most lighting it takes, W",
-          "type": "number"
-        },
-        "modules": {
-          "description": "For `assign` on a distribution panel: the DIN modules it holds",
-          "type": "integer"
-        },
-        "poe": {
-          "description": "For `wifi`: whether `ids` are fed by their data cable (`PoE`)",
-          "type": "boolean"
-        },
-        "prune": {
-          "default": false,
-          "description": "Drop the acceptances listed in `orphaned`",
-          "type": "boolean"
-        },
-        "pts": {
-          "default": [],
-          "description": "For `cable`: the run's points `[[x,y], …]`, cm",
-          "items": {
-            "$ref": "#/$defs/Point2"
-          },
-          "type": "array"
-        },
-        "short_ka": {
-          "description": "For `voltage`: the presumed short-circuit current at the delivery point, kA, as the utility informs it",
-          "type": "number"
-        },
-        "standard": {
-          "description": "For `wifi`: the access points' standard, `wifi5`, `wifi6`, `wifi6e` or `wifi7`, written on `ids`",
-          "type": "string"
-        },
-        "standby_w": {
-          "description": "For `assign` on automation points: standby consumption, W",
-          "type": "number"
-        },
-        "uplink": {
-          "description": "For `wifi`: the access points' wired uplink, Gbps (1, 2.5, 5, 10)",
-          "type": "number"
-        },
-        "va": {
-          "description": "Power per point, VA, instead of the norm's default",
-          "type": "number"
-        },
-        "via": {
-          "description": "For `route`: where the run passes, `ceiling` (slab, dropping in the walls), `floor` or `wall`. Omitted: the cheapest that can be built",
-          "type": "string"
-        },
-        "volts": {
-          "description": "Supply voltage, V; with `assign`, the points' own, 127 or 220",
-          "type": "number"
         }
       },
       "type": "object"
     },
     "name": "electrical",
-    "title": "Electrical project"
+    "title": "Check the electrical project"
   },
   "embed": {
     "annotations": {
@@ -1285,12 +1367,11 @@
   },
   "ergonomics": {
     "annotations": {
-      "destructiveHint": true,
       "openWorldHint": false,
-      "readOnlyHint": false,
+      "readOnlyHint": true,
       "title": "Review ergonomics"
     },
-    "description": "Ergonomics and habitability review for the people living there. It never blocks anything: it reads the drawing and says what it finds, and the drawing stays the user's — somebody sketching to learn or to see an idea is not stopped by a standard. (occupants, children, elderly, wheelchair, stature cm, city; the people given are kept with the project and used when a later call or a dry run gives none, so a dry run's score is the one this review gives): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen (work triangle, counter heights, Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. Reply {score, score_basis, scope, scores:{architecture,electrical,plumbing}, layout, coverage, capacity, findings:[{sev, place, msg, key, weight, discipline, in_scope, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. scope={electrical:false,plumbing:false} scores architecture only; all findings remain visible, excluded ones weigh zero. The scope is saved for later reviews and dry runs. layout includes geometric checks on the active storey; coverage declares limits. Scores are heuristic, not project completion or certification. weight is what the score would gain if that one went away, so a score that moved can be read; key names the finding for accept. src is the source the finding stands on, empty when it is common practice; resolve it in sources instead of asking. tier is the reliability ladder A obliges (Brazilian standard, municipal code) · B references (foreign standard) · C doctrine · D measured · E survey — and it is why a finding is an error or only a tip. fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap). city, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against a standard the more restrictive one wins — set it once with set_home(city=…) so dry runs and check_layout weigh the same rules. accept=[[key, reason]] marks findings already looked at: they stay in the report with their reason and stop costing score, which is what lets a correct plan reach zero pendencies honestly; accept=[[key, empty]] takes it back. orphaned [[key, reason]] lists acceptances no current finding answers to, on any storey, for these people — the problem was fixed, and would come back already silenced; prune=true drops them.",
+    "description": "Ergonomics and habitability review for the people living there. It never blocks anything: it reads the drawing and says what it finds, and the drawing stays the user's — somebody sketching to learn or to see an idea is not stopped by a standard. People (occupants, children, elderly, wheelchair, stature cm, city, scope) given here weigh this review only; set_home(people=…) keeps them with the project, and every review and dry run then scores for them. It covers room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen (work triangle, counter heights, Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. Reply {score, score_basis, scope, scores:{architecture,electrical,plumbing}, layout, coverage, capacity, findings:[{sev, place, msg, key, weight, discipline, in_scope, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. scope={electrical:false,plumbing:false} scores architecture only; all findings remain visible, excluded ones weigh zero. layout includes geometric checks on the active storey; coverage declares limits. Scores are heuristic, not project completion or certification. weight is what the score would gain if that one went away, so a score that moved can be read. src is the source the finding stands on, empty when it is common practice; resolve it in sources instead of asking. tier is the reliability ladder A obliges (Brazilian standard, municipal code) · B references (foreign standard) · C doctrine · D measured · E survey — and it is why a finding is an error or only a tip. fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap). city, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against a standard the more restrictive one wins — set it once with set_home(city=…) so dry runs and check_layout weigh the same rules. key names the finding for the accept tool: a finding accepted there stays in the report with its reason and stops costing score, which is what lets a correct plan reach zero pendencies honestly. orphaned [[key, reason]] lists acceptances no current finding answers to — the problem was fixed, and would come back already silenced; accept(prune=true) drops them.",
     "inputSchema": {
       "$defs": {
         "ReviewScope": {
@@ -1308,18 +1389,8 @@
           "type": "object"
         }
       },
+      "additionalProperties": false,
       "properties": {
-        "accept": {
-          "default": [],
-          "description": "Findings already analysed: `[[key, reason]]`. They keep showing, with the reason, and stop costing score. An empty reason takes it back",
-          "items": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "type": "array"
-        },
         "children": {
           "description": "Of them, children (sleep in single beds or cribs)",
           "type": "integer"
@@ -1336,14 +1407,9 @@
           "description": "People living in the home (default 2)",
           "type": "integer"
         },
-        "prune": {
-          "default": false,
-          "description": "Drop the acceptances listed in `orphaned`, in one undoable step",
-          "type": "boolean"
-        },
         "scope": {
           "$ref": "#/$defs/ReviewScope",
-          "description": "Disciplines included in the score. Architecture always counts; excluded findings remain visible. Kept for later reviews and dry runs"
+          "description": "Disciplines included in the score. Architecture always counts; excluded findings remain visible"
         },
         "stature": {
           "description": "Height of the main cook, cm, to size the countertop (default 165)",
@@ -1358,6 +1424,37 @@
     },
     "name": "ergonomics",
     "title": "Review ergonomics"
+  },
+  "export_cut_list": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Write the cut list"
+    },
+    "description": "Write the cut list of joinery builds (and of groups drawn by hand) to a file: path .csv (spreadsheet), .dxf (boards laid out on sheets, for CNC) or .svg (sheets to view). ids: builds or drawn groups (default every one on this storey). The cut_list tool reads it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "ids": {
+          "description": "Build or drawn group ids (default: every build and drawn group on this storey)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "path": {
+          "description": "`.csv` (spreadsheet), `.dxf` (sheets for CNC) or `.svg` (sheets to view)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "name": "export_cut_list",
+    "title": "Write the cut list"
   },
   "export_plan": {
     "annotations": {
@@ -1450,6 +1547,42 @@
     },
     "name": "feedback",
     "title": "Report to the developers"
+  },
+  "fill_lighting": {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Fill a room with light"
+    },
+    "description": "Fill a room with a grid of one fixture (downlight, led-panel, light-ceiling, pendant) until the work plane reaches the room's ABNT NBR ISO/CIE 8995-1 reference, or lux; the grid is checked by the same photometry as the lighting tool. Reply placed ids, and the room's rating before and after.",
+    "inputSchema": {
+      "properties": {
+        "fixture": {
+          "description": "The fixture to place in a grid: `downlight`, `led-panel`, `light-ceiling`, `pendant`",
+          "type": "string"
+        },
+        "lux": {
+          "description": "Lux wanted instead of the room's reference",
+          "type": "number"
+        },
+        "plane": {
+          "description": "Work plane height cm (default 75)",
+          "type": "number"
+        },
+        "room": {
+          "description": "Room id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room",
+        "fixture"
+      ],
+      "type": "object"
+    },
+    "name": "fill_lighting",
+    "title": "Fill a room with light"
   },
   "fit_roof": {
     "annotations": {
@@ -1633,7 +1766,7 @@
     },
     "description": "Storeys: rows [id,name,elev,h,selected,layout_index,viewable,reference]. Other tools act on the selected storey; change them with edit_levels.",
     "inputSchema": {
-      "properties": {},
+      "additionalProperties": false,
       "type": "object"
     },
     "name": "levels",
@@ -1641,22 +1774,14 @@
   },
   "lighting": {
     "annotations": {
-      "destructiveHint": false,
       "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Check and fill the lighting"
+      "readOnlyHint": true,
+      "title": "Rate the lighting"
     },
-    "description": "Lighting design by photometry: every fixture's flux (lm, or W × lamp efficacy), color temperature and distribution (bulb, spot beam, LED panel/strip) lights the work plane by the inverse-square cosine law, walls casting shadows, plus interreflection (split flux). Reply rooms [[id,name,m²,avg lx,min lx,uniformity,reference lx,fixtures,W/m²,verdict]] against ABNT NBR ISO/CIE 8995-1 residential references. fill=<fixture> with room places a verified grid reaching the reference (or lux). Set a piece's light with place/update light {lm|w,lamp,k,beam,area}.",
+    "description": "Lighting design by photometry: every fixture's flux (lm, or W × lamp efficacy), color temperature and distribution (bulb, spot beam, LED panel/strip) lights the work plane by the inverse-square cosine law, walls casting shadows, plus interreflection (split flux). Reply rooms [[id,name,m²,avg lx,min lx,uniformity,reference lx,fixtures,W/m²,verdict]] against ABNT NBR ISO/CIE 8995-1 residential references. fill_lighting places the fixtures a room needs. Set a piece's light with place/update light {lm|w,lamp,k,beam,area}.",
     "inputSchema": {
+      "additionalProperties": false,
       "properties": {
-        "fill": {
-          "description": "Fill `room` with a grid of this fixture until it reaches the lux wanted: `downlight`, `led-panel`, `light-ceiling`, `pendant`",
-          "type": "string"
-        },
-        "lux": {
-          "description": "Lux wanted instead of the room's reference",
-          "type": "number"
-        },
         "plane": {
           "description": "Work plane height cm (default 75)",
           "type": "number"
@@ -1669,7 +1794,7 @@
       "type": "object"
     },
     "name": "lighting",
-    "title": "Check and fill the lighting"
+    "title": "Rate the lighting"
   },
   "materials": {
     "annotations": {
@@ -2152,7 +2277,7 @@
     },
     "description": "Plugins (external programs editing through the HTTP API): rows [name,title,description]. Run one with run_plugin.",
     "inputSchema": {
-      "properties": {},
+      "additionalProperties": false,
       "type": "object"
     },
     "name": "plugins",
@@ -2160,63 +2285,17 @@
   },
   "plumbing": {
     "annotations": {
-      "destructiveHint": true,
       "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Plumbing project"
+      "readOnlyHint": true,
+      "title": "Check the plumbing project"
     },
-    "description": "Plumbing project, NBR 5626 (cold and hot water) and NBR 8160 (sewer). Points are the plumbing pieces (catalog plumbing: cold-water, hot-water, sewer, valve, grease-trap, inspection-box, water-meter, gas-point, vent-pipe, and the drains as the models they are: floor-drain caixa sifonada 150x150x50, floor-drain-100, floor-drain-75 (150x185x75, up to 15 UHC), trap-drain-small (seal under 50 mm, no trap), dry-drain, linear-drain (w 50/70/90, no trap), linear-drain-trap, rain-drain for open areas; drains are set flush in the floor of a room, never in a wall, a door span or under a cabinet) and what a point is comes from its catalog, never its name; fixtures are the pieces that use water (toilet, basin, kitchen sink, shower, bathtub, washer, laundry sink, dishwasher). check (default): {points:{kind:count}, pipes_m, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — a cold-water point by every fixture and a sewer point (or a floor drain for basin, shower, tub and machines) within reach, the discharge diameter it needs (toilet 100 mm, kitchen sink and machines 50, others 40); hot water where the project has any; a floor drain in every bathroom, kitchen and laundry, inside the shower area where there is one, at least one real trap (50 mm seal) per room, the UHC its outlet takes (50 mm: 6, 75 mm: 15), rain drains for open terraces; a grease trap for a kitchen sink; the premises — where the water comes from (water-meter or valve) and where the sewer goes (inspection-box or stack); points no drawn pipe of their kind reaches. accept=[[key, reason]] and prune=true as in electrical. route {kind: cold|hot|sewer|vent, ids?, via?: ceiling|floor|wall, from?, depth?}: lays the run from its source to the points along the walls and inside them, or through the ceiling or under the floor, sharing the trunk, draws it (replacing the earlier run of the same points and the lines drawn by hand to them, listed in replaced_drawn) and replies {via, suggested, length_m, by_premise_m, bends, branches, materials: [[item, qty, unit]]} — water: pipe and bars, 90° elbows, tees, threaded elbows at the points, a gate valve per room, adhesive; sewer: the branch at the largest diameter it takes, the drops at each point's own, a 45° Y junction at each branch (never a 90° tee), two 45° elbows per turn, sealing rings, trap boxes. Sewer runs only under the floor, by gravity, with 2 % fall up to 75 mm and 1 % above: the reply says needs_depth_cm, and with depth a run that does not fit is refused saying how much it needs. Without via the cheapest premise that can be built is taken; one that cannot (a point in no wall; from the ceiling a low point in no wall, nowhere to drop; sewer up to the ceiling or lying in a wall) is refused with why.",
+    "description": "Plumbing project, NBR 5626 (cold and hot water) and NBR 8160 (sewer). Points are the plumbing pieces (catalog plumbing: cold-water, hot-water, sewer, valve, grease-trap, inspection-box, water-meter, gas-point, vent-pipe, and the drains as the models they are: floor-drain caixa sifonada 150x150x50, floor-drain-100, floor-drain-75 (150x185x75, up to 15 UHC), trap-drain-small (seal under 50 mm, no trap), dry-drain, linear-drain (w 50/70/90, no trap), linear-drain-trap, rain-drain for open areas; drains are set flush in the floor of a room, never in a wall, a door span or under a cabinet) and what a point is comes from its catalog, never its name; fixtures are the pieces that use water (toilet, basin, kitchen sink, shower, bathtub, washer, laundry sink, dishwasher). check (default): {points:{kind:count}, pipes_m, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — a cold-water point by every fixture and a sewer point (or a floor drain for basin, shower, tub and machines) within reach, the discharge diameter it needs (toilet 100 mm, kitchen sink and machines 50, others 40); hot water where the project has any; a floor drain in every bathroom, kitchen and laundry, inside the shower area where there is one, at least one real trap (50 mm seal) per room, the UHC its outlet takes (50 mm: 6, 75 mm: 15), rain drains for open terraces; a grease trap for a kitchen sink; the premises — where the water comes from (water-meter or valve) and where the sewer goes (inspection-box or stack); points no drawn pipe of their kind reaches. orphaned lists acceptances whose finding is gone (the accept tool marks findings looked at, and its prune drops those). Pipe runs are laid with edit_plumbing.",
     "inputSchema": {
-      "properties": {
-        "accept": {
-          "default": [],
-          "description": "Findings looked at: `[[key, reason]]`; an empty reason takes one back",
-          "items": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "type": "array"
-        },
-        "action": {
-          "description": "`check` (default) or `route`",
-          "type": "string"
-        },
-        "depth": {
-          "description": "For `route` of sewer: the height free under the finished floor, cm (slab recess, or the ceiling void of the storey below)",
-          "type": "number"
-        },
-        "from": {
-          "description": "For `route`: the piece it starts from (a water meter, a valve, the heater, the inspection box or stack); default the nearest of its kind",
-          "type": "string"
-        },
-        "ids": {
-          "default": [],
-          "description": "For `route`: the points; default every point of the kind",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "kind": {
-          "description": "For `route`: what the run carries, `cold`, `hot` or `sewer`",
-          "type": "string"
-        },
-        "prune": {
-          "default": false,
-          "description": "Drop the acceptances listed in `orphaned`",
-          "type": "boolean"
-        },
-        "via": {
-          "description": "For `route`: `ceiling`, `floor` or `wall`; omitted, the cheapest that can be built",
-          "type": "string"
-        }
-      },
+      "additionalProperties": false,
       "type": "object"
     },
     "name": "plumbing",
-    "title": "Plumbing project"
+    "title": "Check the plumbing project"
   },
   "redo": {
     "annotations": {
@@ -2541,9 +2620,44 @@
       "readOnlyHint": false,
       "title": "Project settings"
     },
-    "description": "Rename the project, set or remove project properties (properties {key: value|null}, or a storey's with level), set the compass (north), and set the city whose building code applies (city=sao-paulo). The city belongs to the project: ergonomics, check_layout and every dry run then weigh the same municipal rules, so a change can be tested against the score it moves.",
+    "description": "Rename the project, set or remove project properties (properties {key: value|null}, or a storey's with level), set the compass (north), set the city whose building code applies (city=sao-paulo), and say who lives there (people {occupants, children, elderly, wheelchair, stature cm, scope}). City and people belong to the project: ergonomics, check_layout and every dry run then weigh the same rules for the same people, so a change can be tested against the score it moves.",
     "inputSchema": {
       "$defs": {
+        "People": {
+          "additionalProperties": false,
+          "description": "Who lives there, as far as this call says; the rest is the project's",
+          "properties": {
+            "children": {
+              "description": "Of them, children (sleep in single beds or cribs)",
+              "type": "integer"
+            },
+            "city": {
+              "description": "City whose building code applies for this call only, e.g. `sao-paulo`; `set_home(city=…)` keeps it with the project",
+              "type": "string"
+            },
+            "elderly": {
+              "description": "Of them, elderly people",
+              "type": "integer"
+            },
+            "occupants": {
+              "description": "People living in the home (default 2)",
+              "type": "integer"
+            },
+            "scope": {
+              "$ref": "#/$defs/ReviewScope",
+              "description": "Disciplines included in the score. Architecture always counts; excluded findings remain visible"
+            },
+            "stature": {
+              "description": "Height of the main cook, cm, to size the countertop (default 165)",
+              "type": "number"
+            },
+            "wheelchair": {
+              "description": "Someone uses a wheelchair: NBR 9050 turning space, doors and reach",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
         "Point2": {
           "description": "[x, y] in centimeters; x grows right, y grows down",
           "items": {
@@ -2552,6 +2666,20 @@
           "maxItems": 2,
           "minItems": 2,
           "type": "array"
+        },
+        "ReviewScope": {
+          "description": "Disciplines included in the habitability score. Architecture is always included; other findings remain visible even when outside the score",
+          "properties": {
+            "electrical": {
+              "default": true,
+              "type": "boolean"
+            },
+            "plumbing": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          "type": "object"
         }
       },
       "properties": {
@@ -2579,6 +2707,10 @@
         "north": {
           "description": "Clockwise degrees from plan up to north",
           "type": "number"
+        },
+        "people": {
+          "$ref": "#/$defs/People",
+          "description": "Who lives there — occupants, children, elderly, wheelchair, stature cm, scope — kept with the project: ergonomics and every dry run then score for them. What is left out stays as it was"
         },
         "properties": {
           "additionalProperties": true,
@@ -2643,19 +2775,14 @@
   },
   "trace_background": {
     "annotations": {
-      "destructiveHint": false,
       "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Trace walls from a scan"
+      "readOnlyHint": true,
+      "title": "Find walls in a scan"
     },
-    "description": "Trace walls from the background image (set_background first): thick dark or gray bands across or down the image become walls (colored areas — lawn, plants, furniture — are ignored; collinear pieces split by doors/windows up to max_gap join; region limits the search). Returns rows [[x1,y1],[x2,y2],t] in plan cm; create=true adds them as walls. Check with render_plan bg=0.5.",
+    "description": "Trace walls from the background image (set_background first): thick dark or gray bands across or down the image become walls (colored areas — lawn, plants, furniture — are ignored; collinear pieces split by doors/windows up to max_gap join; region limits the search). Returns rows [[x1,y1],[x2,y2],t] in plan cm; trace_walls adds them as walls. Check with render_plan bg=0.5.",
     "inputSchema": {
+      "additionalProperties": false,
       "properties": {
-        "create": {
-          "default": false,
-          "description": "Create the walls (one undo step) instead of only listing them",
-          "type": "boolean"
-        },
         "h": {
           "description": "Wall height cm when creating (default 250)",
           "type": "number"
@@ -2692,6 +2819,55 @@
       "type": "object"
     },
     "name": "trace_background",
+    "title": "Find walls in a scan"
+  },
+  "trace_walls": {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Trace walls from a scan"
+    },
+    "description": "Trace walls from the background image, as trace_background does, and create them in one undo step (h: wall height cm, default 250). Check with render_plan bg=0.5.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "h": {
+          "description": "Wall height cm when creating (default 250)",
+          "type": "number"
+        },
+        "max_gap": {
+          "description": "Doors and windows up to this wide don't split a wall, cm (default 130)",
+          "type": "number"
+        },
+        "min_len": {
+          "description": "Shortest wall kept, cm (default 60)",
+          "type": "number"
+        },
+        "region": {
+          "description": "Only this part of the plan `[x0, y0, x1, y1]` cm",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+        },
+        "t_max": {
+          "type": "number"
+        },
+        "t_min": {
+          "description": "Wall thickness range, cm (default 5..45)",
+          "type": "number"
+        },
+        "threshold": {
+          "description": "Luminance 0..255 below which a gray pixel is ink (default 128; raise it for light gray walls)",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "trace_walls",
     "title": "Trace walls from a scan"
   },
   "undo": {
@@ -3125,7 +3301,7 @@
     },
     "description": "Plan versions (tabs): rows [i,name,active,walls,rooms,m2,furniture,issues]. Edits apply to the active version; change them with edit_variants.",
     "inputSchema": {
-      "properties": {},
+      "additionalProperties": false,
       "type": "object"
     },
     "name": "variants",
@@ -3139,7 +3315,7 @@
     },
     "description": "The video camera path: {fps,speed,secs,rows [i,x,y,z,yaw,pitch,fov]}, cm, degrees, m/s. Change it and render it with edit_video.",
     "inputSchema": {
-      "properties": {},
+      "additionalProperties": false,
       "type": "object"
     },
     "name": "video",

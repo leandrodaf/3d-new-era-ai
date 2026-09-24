@@ -70,12 +70,20 @@ way it looks with place facing=+x|-x|+y|-y|[x,y]|<id> instead of working out ang
 plan: 0 front to +y, 90 to -x, 180 to -y, 270 to +x), or wall=<id> to put its back on a wall; place replies \
 faces=<id>:<side>, and check_layout lists pieces turned to face a wall as backwards. \
 Spots, panels and pendants are kept on the ceiling for you: a pendant takes elev (shade height) or h (drop). Every change is one undoable step. Use render_plan to check visually. \
-A project can hold several plan versions (variants tool); tools act on the active one. \
+A project can hold several plan versions (variants, edit_variants); tools act on the active one. \
+Reads never change the plan; what changes it is a tool of its own (edit_cameras beside cameras, accept for review findings, fill_lighting, trace_walls, export_cut_list). \
 Finishes are short strings: `#rrggbb` paint, a pattern like `tiles #ffffff 60x60 r45` \
 (tint, tile cm, rotation) or `img:path 90x90`; `none` clears. Wall types and patterns: materials tool. \
 When a tool answers less than you asked, makes you take a detour, or leads you to a wrong conclusion \
 before the right one, report it with the feedback tool as it happens, with the whole case (the call, the literal \
 reply, what was true, what it cost, the change that would help and what must not get worse) — then carry on.";
+
+/// The arguments of a read that takes none. Anything given is refused by
+/// name: a write's argument sent to its read would otherwise be dropped in
+/// silence, and the agent would think it had changed something.
+#[derive(Debug, Default, serde::Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Nothing {}
 
 /// The MCP server. Cheap to clone: it only holds a handle to the document.
 #[derive(Debug, Clone)]
