@@ -89,6 +89,7 @@ fn app_icon() -> Option<std::sync::Arc<eframe::egui::IconData>> {
 pub async fn start_web(
     canvas: web_sys::HtmlCanvasElement,
     project: Option<(String, Vec<u8>)>,
+    asked: bool,
 ) -> Result<(), wasm_bindgen::JsValue> {
     let document = SharedDocument::default();
     eframe::WebRunner::new()
@@ -108,8 +109,10 @@ pub async fn start_web(
                 }
                 let mut app = app::NewEraApp::new(cc, document, None);
                 // The demo home is what a first visit opens on; someone who
-                // was already drawing here gets their own work back instead.
-                if let Some((name, bytes)) = project.filter(|_| !app.restored) {
+                // was already drawing here gets their own work back instead —
+                // unless the address asked for a project (a link from their
+                // AI, "open in the editor"), which is what they came for.
+                if let Some((name, bytes)) = project.filter(|_| asked || !app.restored) {
                     app.open_bytes(&name, &bytes);
                 }
                 Ok(Box::new(app))

@@ -38,6 +38,7 @@ pub async fn start(
     canvas_id: String,
     name: Option<String>,
     bytes: Option<Vec<u8>>,
+    asked: Option<bool>,
 ) -> Result<(), JsValue> {
     use wasm_bindgen::JsCast;
     console_error_panic_hook::set_once();
@@ -50,7 +51,7 @@ pub async fn start(
         .ok_or_else(|| JsValue::from_str("canvas not found"))?
         .dyn_into::<web_sys::HtmlCanvasElement>()?;
     let project = bytes.map(|b| (name.unwrap_or_else(|| "projeto.newera".into()), b));
-    newera_app::start_web(canvas, project).await
+    newera_app::start_web(canvas, project, asked.unwrap_or(false)).await
 }
 
 /// Runs a bounded render in an isolated worker, reporting progress by message.

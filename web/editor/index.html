@@ -266,7 +266,7 @@
       glue = await boot(true);
     }
     loading.remove();
-    await glue.start("newera", name, bytes);
+    await glue.start("newera", name, bytes, params.has("project"));
     window.neweraReady = true;
   } catch (error) {
     window.neweraFail(error);
