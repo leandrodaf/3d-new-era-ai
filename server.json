@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.3dneweraai/newera",
+  "title": "3D New Era AI",
+  "description": "Design homes with your AI: floor plans, furniture, joinery, lighting and photos, live.",
+  "version": "1.7.0",
+  "websiteUrl": "https://3dneweraai.com",
+  "repository": {
+    "url": "https://github.com/leandrodaf/3d-new-era-ai",
+    "source": "github"
+  },
+  "icons": [
+    {
+      "src": "https://3dneweraai.com/icon-256.png",
+      "mimeType": "image/png",
+      "sizes": ["256x256"]
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/leandrodaf/3d-new-era-ai/releases/download/v1.7.0/newera-mcp.mcpb",
+      "version": "1.7.0",
+      "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

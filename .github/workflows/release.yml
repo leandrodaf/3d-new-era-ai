@@ -160,3 +160,28 @@ jobs:
             dist/newera-*
             dist/SHA256SUMS.txt
           generate_release_notes: true
+
+  # The MCP Registry, and through it every catalog that reads it (VS Code,
+  # GitHub, Glama, PulseMCP, mcp.so, JetBrains, Zed). Skipped until the
+  # domain key exists (scripts/registry-key.sh), so a fork never tries.
+  registry:
+    name: Publish to the MCP Registry
+    needs: publish
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    env:
+      MCP_REGISTRY_PRIVATE_KEY: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+        if: env.MCP_REGISTRY_PRIVATE_KEY != ''
+      - uses: actions/download-artifact@v8
+        if: env.MCP_REGISTRY_PRIVATE_KEY != ''
+        with:
+          name: newera-mcp.mcpb
+          path: dist
+      - name: Publish
+        if: env.MCP_REGISTRY_PRIVATE_KEY != ''
+        run: |
+          curl -sL https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz \
+            | tar xz -C "$RUNNER_TEMP" mcp-publisher
+          MCP_PUBLISHER="$RUNNER_TEMP/mcp-publisher" scripts/registry-publish.sh "${GITHUB_REF_NAME#v}" dist/newera-mcp.mcpb
