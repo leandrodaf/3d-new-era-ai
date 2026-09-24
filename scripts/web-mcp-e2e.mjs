@@ -339,7 +339,7 @@ try {
     const downloads = mkdtempSync(join(tmpdir(), "newera-video-download-"));
     await send("Browser.setDownloadBehavior", {behavior:"allow",downloadPath:downloads});
     await rpc(mcpUrl, {jsonrpc:"2.0",id:36,method:"tools/call",
-      params:{name:"cameras",arguments:{action:"view",i:0}}});
+      params:{name:"edit_cameras",arguments:{action:"view",i:0}}});
     const click = async (x,y) => {
       await send("Input.dispatchMouseEvent", {type:"mouseMoved",x,y});
       await send("Input.dispatchMouseEvent", {type:"mousePressed",x,y,button:"left",clickCount:1});
