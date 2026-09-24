@@ -2232,8 +2232,6 @@ fn tool_hint(tool: Tool) -> &'static str {
     }
 }
 
-/// A cluster of keys: buttons that belong together, sunk into the chrome as
-/// one block, the way a keyboard groups its rows.
 /// Rings the button in use with the accent. Drawn over it rather than set as
 /// its stroke: egui sizes a button for the theme's stroke, which is none at
 /// rest, so an extra one made the chosen button grow whenever the pointer
@@ -2248,6 +2246,8 @@ fn ring(ui: &egui::Ui, response: &egui::Response, color: egui::Color32) {
     );
 }
 
+/// A cluster of keys: buttons that belong together, sunk into the chrome as
+/// one block, the way a keyboard groups its rows.
 fn keys<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     let t = crate::theme::of(ui.visuals());
     egui::Frame::new()
