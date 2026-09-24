@@ -88,9 +88,54 @@ jobs:
           name: ${{ matrix.asset }}
           path: ${{ matrix.asset }}
 
+  # One MCP Bundle for every platform, from the binaries just built: what Claude
+  # Desktop installs with a double click, and the package the MCP Registry
+  # lists. On macOS because that is where lipo makes the Apple binary
+  # universal and codesign signs it again.
+  mcpb:
+    name: Pack newera-mcp.mcpb
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mcpb"
+          mkdir -p "$work/linux" "$work/arm" "$work/intel" "$work/windows"
+          tar xzf dist/newera-linux-x64.tar.gz -C "$work/linux"
+          ditto -x -k dist/newera-macos-apple-silicon.zip "$work/arm"
+          ditto -x -k dist/newera-macos-intel.zip "$work/intel"
+          unzip -q dist/newera-windows-x64.zip -d "$work/windows"
+          lipo -create -output "$work/newera-macos" \
+            "$work/arm/3D New Era AI.app/Contents/MacOS/newera" \
+            "$work/intel/3D New Era AI.app/Contents/MacOS/newera"
+          codesign --force --sign - "$work/newera-macos"
+          version="${GITHUB_REF_NAME#v}"
+          case "$version" in
+            [0-9]*) ;;
+            *) version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)" ;;
+          esac
+          scripts/mcpb.sh --version "$version" --out newera-mcp.mcpb \
+            --linux "$work/linux/newera/newera" \
+            --darwin "$work/newera-macos" \
+            --windows "$work/windows/3D New Era AI/newera.exe"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: newera-mcp.mcpb
+          path: newera-mcp.mcpb
+
   publish:
     name: Publish GitHub release
-    needs: build
+    needs: [build, mcpb]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:

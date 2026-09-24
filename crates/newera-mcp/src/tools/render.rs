@@ -217,8 +217,10 @@ impl NewEraMcp {
         );
         let svg = to_svg(&scene, &SvgOptions::default());
         #[allow(clippy::cast_precision_loss)]
-        let area =
-            (home.rooms.iter().map(newera_core::Room::area).sum::<f64>() / 1000.0).round() / 10.0;
+        // An empty sum is -0.0, and "-0 m²" reads as a bug: + 0.0 makes it 0.
+        let area = (home.rooms.iter().map(newera_core::Room::area).sum::<f64>() / 1000.0).round()
+            / 10.0
+            + 0.0;
         let summary = serde_json::json!({
             "rooms": home.rooms.len(),
             "area": area,

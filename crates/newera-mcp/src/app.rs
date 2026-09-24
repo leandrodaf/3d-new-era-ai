@@ -111,6 +111,14 @@ mod tests {
     }
 
     #[test]
+    fn an_empty_plan_has_no_negative_area() {
+        let document = newera_core::SharedDocument::new(newera_core::Document::default());
+        let shown = crate::call(document, VIEWER_TOOL, serde_json::json!({})).unwrap();
+        let text = shown.content[0].as_text().unwrap().text.clone();
+        assert!(text.contains(" 0 m²") && !text.contains("-0"), "{text}");
+    }
+
+    #[test]
     fn listing_leaves_the_contents_out() {
         let list = resource_list();
         assert_eq!(list["resources"][0]["uri"], VIEWER_URI);
