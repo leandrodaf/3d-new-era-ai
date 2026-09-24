@@ -474,21 +474,50 @@ cliente.
       Enterprise, Flathub: opcionais; todos são cadastros ou lojas em nome do projeto
       (e alguns exigem a produção no ar). Ficam para depois das etapas 2 a 5 publicadas.
 
-### O que falta, e é seu
+### O que falta
 
-O código das etapas 0 a 5 está pronto e testado na branch. Falta o que só você pode fazer:
+Feito em 24/09/2026: a branch `feat/distribution-endgame` foi mesclada na `main` e a
+versão **1.8.0** saiu (tag `v1.8.0`): release no GitHub com o `newera-mcp.mcpb`, deploy
+do `newera-cloud` na VPS pelo CI e o site com as páginas legais.
 
-1. **Revisar e mesclar** `feat/distribution-endgame` e lançar uma versão (o `.mcpb`, o
-   registry, o winget e o Homebrew saem do job de release).
-2. **Publicações e cadastros da Etapa 2** (lista acima: registry, Claude Desktop, Console,
-   Cursor, Smithery, Glama, awesome-mcp-servers, mcp.so, winget, tap do Homebrew, tópicos).
-3. **Produção do `newera-cloud` na VPS**, juntos: hoje ele roda só local
-   (`crates/newera-cloud/local`). Na hora: banco, secrets (Resend, Google, Polar) e a
-   correção do `rust:1.95-slim-bookworm` no `Dockerfile` do relay.
-4. **Polar** (Etapa 5) e **e-mails** `privacidade@`/`contato@3dneweraai.com`.
-5. **Diretórios de conector** (Claude e OpenAI) depois da produção: plano Claude Team,
-   identidade verificada na OpenAI, conta de teste para os revisores, e o MCP remoto no
-   plugin.
+Quem faz cada passo: **você** (conta, pagamento, identidade, decisão) ou **eu, com a
+sua confirmação a cada envio** (formulário, publicação, configuração em painel).
+
+**1. Produção**
+- [ ] Conferir o deploy da 1.8.0 (`/cloud/health` 200 na VPS) — eu
+- [ ] Primeiro backup do banco no R2: `backup-agora --app newera-relay` — eu
+- [ ] Chave do Resend no `app.env` da VPS (entrar por e-mail) — **você** cria a conta e
+      verifica o domínio no Resend; eu ponho a chave
+- [ ] Google (opcional): cliente OAuth "Web application" com redirect
+      `https://mcp.3dneweraai.com/login/google/callback` — **você**
+- [ ] E-mails `privacidade@` e `contato@3dneweraai.com` (Cloudflare Email Routing) — eu
+
+**2. Pagamento (Polar)**
+- [ ] Conta e dados de recebimento — **você**
+- [ ] Produto de assinatura (mensal e anual), link de checkout e webhook para
+      `https://mcp.3dneweraai.com/billing/polar` — eu, no painel
+- [ ] `POLAR_WEBHOOK_SECRET`, `NEWERA_POLAR_CHECKOUT_URL`, `NEWERA_POLAR_PLANS` no
+      `app.env` da VPS — eu
+- [ ] Link de apoio no README e no site — eu
+
+**3. Registries e diretórios (Etapa 2)**
+- [ ] `scripts/registry-key.sh` e commit do `site/.well-known/mcp-registry-auth`; a
+      próxima versão publica no MCP Registry sozinha — eu
+- [ ] Formulário do Claude Desktop com o `.mcpb` (https://clau.de/desktop-extention-submission) — eu
+- [ ] Plugin no Console da Anthropic (https://platform.claude.com/plugins/submit) e no
+      Cursor Marketplace (https://cursor.com/marketplace/publish) — eu
+- [ ] Tópicos do repositório: `mcp`, `mcp-server`, `gemini-cli-extension` — eu
+- [ ] Smithery (`smithery mcp publish`), Glama (claim), mcp.so, PR no awesome-mcp-servers — eu
+- [ ] winget: fork do winget-pkgs, PR com `packaging/winget/…` (atualizado para 1.8.0)
+      e o secret `WINGET_TOKEN` — eu, com um token que **você** cria
+- [ ] Homebrew: repositório `leandrodaf/homebrew-tap` com o cask e o secret
+      `HOMEBREW_TAP_TOKEN` — eu, com o token que **você** cria
+
+**4. Diretórios de conector (depois de 1 e 2)**
+- [ ] Plugin com o MCP remoto (`https://mcp.3dneweraai.com/mcp`) — eu
+- [ ] Claude Connectors Directory — exige plano Claude Team (**você** assina)
+- [ ] OpenAI Plugins Directory — exige identidade verificada na OpenAI (**você**)
+- [ ] Conta de teste com plano pago para os revisores — eu
 
 ---
 
