@@ -152,8 +152,11 @@ impl NewEraMcp {
             ..RenderOptions::default()
         };
         let load = |path: &str| {
-            image::open(newera_core::resolve_asset(project.as_deref(), path))
+            // Through the file layer every other asset read uses, so a
+            // server's jail applies here too.
+            newera_core::vfs::read(&newera_core::resolve_asset(project.as_deref(), path))
                 .ok()
+                .and_then(|bytes| image::load_from_memory(&bytes).ok())
                 .map(|img| img.to_rgba8())
         };
         render_png(&scene, &options, &load)

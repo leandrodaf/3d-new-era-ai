@@ -171,18 +171,67 @@ pub fn snapshot_paths(
 pub fn read(path: &Path) -> std::io::Result<Vec<u8>> {
     match mounted(path) {
         Some(bytes) => Ok(bytes.to_vec()),
+        None if !allowed(path) => Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "outside the projects",
+        )),
         None => std::fs::read(path),
     }
 }
 
 /// Whether the file is mounted or exists on disk.
 pub fn exists(path: &Path) -> bool {
-    mounted(path).is_some() || path.exists()
+    mounted(path).is_some() || (allowed(path) && path.exists())
+}
+
+/// Where disk reads may go, once set: a server running projects for many
+/// people must not let one of them name a texture like `/proc/self/environ`
+/// and have it read. The desktop never sets it.
+static JAIL: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Confines every disk read through here to `root`, for the rest of the
+/// process. Called once; a second call is ignored.
+pub fn jail(root: &Path) {
+    let _ = JAIL.set(key(root));
+}
+
+/// Whether a disk read of `path` is allowed: always, unless jailed; then
+/// only a path inside the jail with no `..` in it.
+pub fn allowed(path: &Path) -> bool {
+    let Some(root) = JAIL.get() else {
+        return true;
+    };
+    let path = key(path);
+    path.is_absolute()
+        && path.starts_with(root)
+        && !path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Outside the jail nothing is read; inside, only without `..`.
+    #[test]
+    fn a_jail_confines_reads() {
+        // The jail is process-wide and set once, so the check is on the rule
+        // itself with a root of its own.
+        let root = key(Path::new("/srv/newera/projects"));
+        let inside = |p: &str| {
+            let path = key(Path::new(p));
+            path.is_absolute()
+                && path.starts_with(&root)
+                && !path
+                    .components()
+                    .any(|c| matches!(c, std::path::Component::ParentDir))
+        };
+        assert!(inside("/srv/newera/projects/p1/wood.jpg"));
+        assert!(!inside("/proc/self/environ"));
+        assert!(!inside("/srv/newera/projects/../../etc/passwd"));
+        assert!(!inside("relative/texture.png"));
+    }
 
     #[test]
     fn scene_snapshot_keeps_model_dependencies_without_charging_unused_files() {
