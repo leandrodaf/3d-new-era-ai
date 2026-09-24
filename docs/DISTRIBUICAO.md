@@ -347,7 +347,11 @@ documento de identidade, merge na `main`) dizem o que falta.
       claude.ai como conector custom (relay local + túnel): planta com pan/zoom e 3D
       pedido pelo próprio widget.
 - [ ] E0-b: OAuth CIMD/DCR no Claude e no ChatGPT
-- [ ] E0-c: custo do `render_photo` no servidor
+- [x] E0-c: custo do `render_photo` medido (Ryzen 5 3600, 640×480, CPU-segundos): draft
+      3,7 · good 19 · best > 75; `render_3d` 0,14. Na nuvem: draft na cota grátis, good/best
+      no pago, um render pesado por conta por vez e a fila limitada aos núcleos livres. A
+      VPS não respondeu ao SSH (Cloudflare Access pede login), então as cotas ficam em
+      configuração, não no código.
 
 Achado no teste do E0-a: o formulário de conector custom do Claude já oferece "Entrar
 agora", "Fazer login quando necessário" (grátis sem login, conta quando uma tool pedir) e
@@ -369,17 +373,38 @@ cliente.
       `a_read_refuses_a_write_argument`, `a_write_tool_points_reads_elsewhere` e o smoke
 
 ### Etapa 2
-- [ ] Privacidade e termos (D15)
-- [ ] `.mcpb` por plataforma no `release.yml`
-- [ ] `server.json` + publicação no Registry
-- [ ] Pasta `plugin/` + marketplaces (Claude Code, Codex, Cursor)
-- [ ] Extensão do Gemini CLI
-- [ ] `glama.json`, Glama, awesome-mcp-servers
-- [ ] Envio ao diretório de extensões do Claude Desktop
-- [ ] Smithery
-- [ ] Botões de instalar com um clique
-- [ ] winget e Homebrew
-- [ ] Polar: organização e produto de apoio
+- [x] Privacidade e termos (D15): `site/privacy/`, `site/terms/`, no rodapé e no sitemap
+- [x] `.mcpb` universal no `release.yml` (`scripts/mcpb.sh`, job `mcpb`): testado
+      desempacotando e rodando como o Claude Desktop roda
+- [x] `server.json` (`com.3dneweraai/newera`, validado no registry) e job `registry`
+      (`scripts/registry-publish.sh`, testado em simulação)
+- [x] Pasta `plugin/` + marketplaces: instalado num perfil vazio do Claude Code (skills
+      carregam, MCP conecta) e do Codex (plugin e MCP instalados); manifest do Cursor
+- [x] Extensão do Gemini CLI (`gemini-extension.json`)
+- [x] `glama.json`
+- [x] Botões de instalar com um clique (README e site)
+- [x] winget e Homebrew: manifests validados (schema winget 1.10, `brew style`) e jobs de
+      release
+
+**Falta, e depende de você** (conta, pagamento ou publicação em nome do projeto):
+- [ ] Mesclar a branch e lançar uma versão (o job `mcpb` só roda num build de release).
+- [ ] `scripts/registry-key.sh`: cria a chave do registry e o secret; commitar o
+      `site/.well-known/mcp-registry-auth` que ele escreve.
+- [ ] Enviar o `.mcpb` no formulário do Claude Desktop (https://clau.de/desktop-extention-submission).
+- [ ] Enviar o plugin no Console da Anthropic (https://platform.claude.com/plugins/submit) e
+      no Cursor Marketplace (https://cursor.com/marketplace/publish).
+- [ ] Tópicos do repositório: `mcp`, `mcp-server`, `gemini-cli-extension`.
+- [ ] Glama: "Claim" em https://glama.ai/mcp/servers; depois o PR no awesome-mcp-servers.
+- [ ] Smithery: `npx @smithery/cli mcp publish newera-mcp.mcpb -n leandrodaf/3d-new-era-ai`.
+- [ ] mcp.so: formulário em https://mcp.so/submit.
+- [ ] winget: fork de microsoft/winget-pkgs, PR com `packaging/winget/manifests/…`, e o
+      secret `WINGET_TOKEN`.
+- [ ] Homebrew: criar `leandrodaf/homebrew-tap` com `packaging/homebrew/Casks/…` e o
+      secret `HOMEBREW_TAP_TOKEN`.
+- [ ] Polar: criar a organização e o produto de apoio com preço livre; pôr o link no
+      README e no site.
+- [ ] E-mails `privacidade@` e `contato@3dneweraai.com` (Cloudflare Email Routing), citados
+      nas páginas legais.
 
 ### Etapa 3
 - [ ] `newera-cloud` montando o relay
