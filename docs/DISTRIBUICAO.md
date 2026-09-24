@@ -536,8 +536,9 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
       instruções dos checks (Dockerfile e health check) quando aprovar
 - [x] Secret `WINGET_TOKEN` (classic, `public_repo`, vence em 24/09/2027), também no
       1Password
-- [ ] winget: o primeiro PR no microsoft/winget-pkgs com os manifestos da 1.8.0
-      (`scripts/winget.sh`); as versões seguintes o release envia sozinho
+- [x] winget: primeiro PR aberto em 24/09/2026, https://github.com/microsoft/winget-pkgs/pull/440827;
+      falta **você** assinar o CLA da Microsoft (o bot pede no PR) e os revisores aprovarem;
+      as versões seguintes o release envia sozinho
 - [x] Homebrew: repositório `leandrodaf/homebrew-tap` com o cask da 1.8.0
       (`brew install --cask leandrodaf/tap/3d-new-era-ai`) — eu
 - [x] Secret `HOMEBREW_TAP_TOKEN` (fine-grained, só no tap, Contents: write, sem validade),

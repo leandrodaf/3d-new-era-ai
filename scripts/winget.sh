@@ -56,11 +56,12 @@ PackageName: 3D New Era AI
 PackageUrl: https://3dneweraai.com
 License: MIT OR Apache-2.0
 LicenseUrl: https://github.com/leandrodaf/3d-new-era-ai#license
-ShortDescription: Open-source home design and floor plan editor with a built-in MCP server for AI agents.
+ShortDescription: Design your home by talking to your AI, and see every change on screen.
 Description: |-
-  3D New Era AI is an open-source home design, floor plan and interior design editor. Its built-in
-  Model Context Protocol server lets an AI agent draw walls, furnish rooms, build joinery, check
-  lighting and ergonomics against standards and render photos, live on screen. No account, no cloud.
+  3D New Era AI is a free home design app. Draw the floor plan, furnish the rooms and plan kitchens
+  and wardrobes yourself, or ask Claude, ChatGPT or another AI to do it for you: every change shows
+  up on your screen as it happens and is one Ctrl+Z away. See the result as a plan, a 3D view or a
+  realistic photo. Your projects stay on your computer; no account needed.
 Moniker: newera
 Tags:
   - architecture
