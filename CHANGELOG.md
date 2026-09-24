@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Axes in the top right corner of the 3D view, as in Blender. Click a ball to look at the
+  house from the front, back, left, right or top; drag the disc to orbit. The top view
+  reads like the plan, x right and y down.
+
 ### Fixed
 
 - The selected tool and the AI button in the toolbar no longer change size when the
