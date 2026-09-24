@@ -473,3 +473,4 @@ button { font: inherit; color: inherit; }
 /* One-click installs under the client tabs. */
 .oneclick__lead { margin: 18px 0 8px; color: var(--graphite); font-size: 14px; }
 .oneclick { display: flex; flex-wrap: wrap; gap: 8px; }
+.oneclick .btn { height: 44px; }

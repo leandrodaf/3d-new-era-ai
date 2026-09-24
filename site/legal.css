@@ -45,7 +45,8 @@ body {
 
 .legal h1 { font-size: 2rem; margin: 0.4em 0 0.2em; }
 .legal h2 { font-size: 1.15rem; margin: 2em 0 0.5em; }
-.legal a { color: var(--accent); }
+/* Inline links get a taller hit area; padding on inline boxes leaves the lines alone. */
+.legal a { color: var(--accent); padding: 11px 0; }
 .legal code { font: 0.9em var(--mono); overflow-wrap: anywhere; }
 .legal hr { border: 0; border-top: 1px solid var(--rule); margin: 56px 0; }
 .legal__back,
