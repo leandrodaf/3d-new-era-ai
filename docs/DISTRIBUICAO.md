@@ -15,7 +15,7 @@ marketplace e regra.
 3. [Decisões fixadas agora](#3-decisões-fixadas-agora)
 4. [Etapas](#4-etapas)
 5. [Canais destravados por etapa](#5-canais-destravados-por-etapa)
-6. [Monetização com Polar.sh](#6-monetização-com-polarsh)
+6. [Monetização com o Paddle](#6-monetização-com-o-paddle)
 7. [Pendências e riscos](#7-pendências-e-riscos)
 8. [Progresso](#8-progresso)
 
@@ -54,7 +54,7 @@ O usuário escolhe onde; a IA não percebe diferença.
         │ (grátis, sem conta, nada sai da máquina)     │ (OAuth; grátis com cota, "cafezinho" amplia)
         ▼                                              ▼
  ┌──────────────────┐        ┌────────────────────────── newera-cloud ───────────────────────────┐
- │ App desktop      │        │ contas + OAuth 2.1 (CIMD e DCR)    planos/cotas ◄── webhook Polar  │
+ │ App desktop      │        │ contas + OAuth 2.1 (CIMD e DCR)    planos/cotas ◄── webhook Paddle │
  │ `newera`         │        │                                                                    │
  └──────────────────┘        │ roteador de sessão (por conta):                                    │
                              │   ├─ aba do usuário aberta em 3dneweraai.com/app → relay → a aba    │
@@ -78,7 +78,7 @@ O usuário escolhe onde; a IA não percebe diferença.
      `.newera` para abrir no desktop.
 - **Quem usa o desktop:** instala com winget, brew, `.mcpb` ou o instalador. A IA fala
   com o app local, sem conta e sem nuvem, grátis para sempre.
-- **Quem paga o cafezinho:** assina no site pelo Polar. Com o mesmo login, ganha cota
+- **Quem paga o cafezinho:** assina no site pelo Paddle. Com o mesmo login, ganha cota
   maior, foto e vídeo renderizados na nuvem e mais projetos guardados.
 
 ### Promessas que não mudam
@@ -124,14 +124,14 @@ primeira linha de código.
 | D6 | Conteúdo do widget | **SVG da planta + PNG 3D gerados no servidor**, numa página HTML sem nada a buscar (`ui://newera/plan-viewer.html`). O viewer WASM fica para quando os hosts aceitarem `wasm-unsafe-eval` (ext-apps #605) | Resolvido pelo E0-a: o sandbox recusa WebAssembly. A página funciona em qualquer host e é a mesma em todos os transportes. |
 | D7 | Conta | **A conta é nossa**: tabela `accounts` com ID próprio no Postgres, identidade = e-mail verificado. O jeito de entrar (link por e-mail, Google, GitHub) pode mudar; o ID, não | Site, conector do Claude, ChatGPT e Codex usam a mesma conta. O pagamento se liga ao ID. |
 | D8 | OAuth | **Servidor de autorização dentro do `newera-cloud`**, OAuth 2.1 + PKCE S256, registro de cliente por **CIMD e DCR**, `/.well-known/oauth-protected-resource` | O Claude aceita os dois registros e a OpenAI prefere CIMD. Os callbacks são específicos de cada cliente, então é preciso controlar o servidor. |
-| D9 | Planos | **Cotas desde o primeiro dia**: toda conta tem um plano (`free` no começo), e as tools checam "tem cota?", nunca "é pagante?" | Ligar o Polar na Etapa 5 só muda qual plano a conta tem. Nenhuma tool é tocada. |
-| D10 | Pagamento | **Polar.sh**, uma organização só, da doação à assinatura. O cliente no Polar se liga à conta pelo ID externo (`account.id`); o e-mail serve de reserva | Não cria dois caixas para migrar. A doação da Etapa 2 já cai onde a assinatura vai cair. |
+| D9 | Planos | **Cotas desde o primeiro dia**: toda conta tem um plano (`free` no começo), e as tools checam "tem cota?", nunca "é pagante?" | Ligar o pagamento na Etapa 5 só muda qual plano a conta tem. Nenhuma tool é tocada. |
+| D10 | Pagamento | **Paddle** (merchant of record), no lugar do Polar desde 24/09/2026: o Polar não paga vendedor no Brasil. O Paddle aceita vendedor brasileiro e paga em dólar (wire ou Payoneer). O checkout abre na página da conta e leva o id da conta em `custom_data`; o e-mail é o reserva | Um caixa só, que recebe no Brasil. Trocar de novo só muda `billing.rs`: as tools leem as cotas (D9). |
 | D11 | Armazenamento na nuvem | **Arquivo `.newera` inteiro no Postgres** (`bytea`), atrás de uma camada de armazenamento; R2 quando o volume pedir | O mesmo formato do desktop: baixar e abrir funciona sem conversão. O backup diário do Postgres já vai para o R2. |
 | D12 | Plugin | **Uma pasta `plugin/` no formato Agent Plugins**, com skills compartilhadas por Claude Code, Codex e Cursor | Na Etapa 2 o MCP aponta para o local. Na Etapa 4 ganha o remoto: muda uma configuração, não código. |
 | D13 | Artefato local | **Um `.mcpb` por plataforma**, gerado no `release.yml`, com o nome `newera-mcp-<plataforma>.mcpb` | O mesmo arquivo serve Claude Desktop, Registry, Smithery e Windows. O Registry exige "mcp" no nome. |
 | D14 | Comportamento do stdio | **`newera mcp` se liga à janela aberta** (proxy para `127.0.0.1:7878`) **e, sem janela, roda headless** | Tem de valer antes de publicar o `.mcpb`. Mudar depois de listado mudaria o que os usuários já instalaram. |
 | D16 | Superfície hospedada | **Mesmas tools, menos as que só fazem sentido na máquina do usuário**: `feedback` (manda dados aos desenvolvedores e é pedido por instrução — os diretórios recusam as duas coisas), `run_plugin`/`plugins` (rodam programas locais) e caminhos de arquivo livres (`open_home`, `save_home`, `export_*`, `set_background`, `edit_video render`), que na nuvem viram o projeto e os arquivos da própria conta | Um perfil de exposição no `newera-cloud`, não um fork: as tools continuam as do `newera-mcp` (D4). |
-| D15 | Privacidade e termos | **Escritos já cobrindo o endgame**: contas, nuvem opcional, Polar como merchant of record, telemetria. Publicados em URLs fixas (`3dneweraai.com/privacy`, `/terms`) | Todo formulário pede essas URLs. Ter o texto final desde o início evita reenviar cadastros. |
+| D15 | Privacidade e termos | **Escritos já cobrindo o endgame**: contas, nuvem opcional, Paddle como merchant of record, telemetria. Publicados em URLs fixas (`3dneweraai.com/privacy`, `/terms`) | Todo formulário pede essas URLs. Ter o texto final desde o início evita reenviar cadastros. |
 
 ## 4. Etapas
 
@@ -183,7 +183,7 @@ Regras das etapas:
 - `smithery mcp publish`.
 - Botões de instalar com um clique (Cursor, LM Studio, VS Code) no README e no site.
 - WinGet Releaser e um repositório Homebrew próprio.
-- Organização no Polar com o produto de apoio (D10); link no README e no site.
+- Link de apoio no README e no site, para a página de preços (D10).
 
 **Não fazer:**
 - GitHub Sponsors ou Apoia.se: seria um segundo caixa.
@@ -228,9 +228,9 @@ nenhuma aba aberta. Isso vem na Etapa 4.
 ### Etapa 5: cafezinho
 
 **Entregas:**
-- Produtos de assinatura no Polar (mensal e anual).
+- Produtos de assinatura no Paddle (mensal e anual).
 - Checkout no site.
-- Webhook do Polar atualizando o plano da conta (D9, D10). **Nenhuma tool muda.**
+- Webhook do Paddle atualizando o plano da conta (D9, D10). **Nenhuma tool muda.**
 - Conta de teste dos revisores com o plano pago.
 - Quem doou na Etapa 2 com o mesmo e-mail ganha o benefício combinado.
 
@@ -263,7 +263,7 @@ nenhuma aba aberta. Isso vem na Etapa 4.
 | **OpenAI Plugins Directory (ChatGPT + Codex)** | 4 | submissão |
 | Microsoft Store / Windows ODR, Docker, Copilot Studio, Gemini Enterprise | 6 | ver R4 e R5 |
 
-## 6. Monetização com Polar.sh
+## 6. Monetização com o Paddle
 
 ### 6.1 Modelo
 
@@ -271,46 +271,42 @@ nenhuma aba aberta. Isso vem na Etapa 4.
 
 - **Grátis e open source para sempre:** o app desktop, o editor web, o MCP local, o link
   anônimo do relay e o uso da nuvem dentro da cota `free`.
-- **Pago ("cafezinho"):** só o que custa servidor:
-  - cota maior;
-  - `render_photo` e vídeo na nuvem;
-  - mais projetos e mais espaço guardados.
-- **Sequência:** doação na Etapa 2 e assinatura na Etapa 5, as duas pelo Polar (D10).
+- **Pago (Supporter, "cafezinho"):** só o que custa servidor, US$ 5/mês ou US$ 48/ano:
+  - fotos em alta qualidade (100 por mês) e 200 rascunhos por dia;
+  - até 100 projetos e 2 GB guardados.
 
-### 6.2 Por que o Polar
+### 6.2 Por que o Paddle (e não mais o Polar)
 
-- Feito para projetos open source, e o próprio Polar tem código aberto.
-- É **merchant of record**: vende em nome do projeto e recolhe o imposto do mundo todo
-  (VAT, sales tax).
-- Faz o payout no Brasil, via Stripe Connect Express.
-- Uma plataforma só para doação, assinatura, license keys e benefícios automáticos
-  (acesso a repositório no GitHub, cargo no Discord).
+- O Polar paga o vendedor pelo Stripe Connect Express, que **não atende vendedor no
+  Brasil**. A troca foi feita em 24/09/2026, antes de qualquer venda.
+- O Paddle é **merchant of record**: vende em nome do projeto, recolhe o imposto do mundo
+  todo (VAT, sales tax), emite o recibo e cuida de reembolso e disputa.
+- **Aceita vendedor no Brasil** e paga **em dólar**, por wire ou Payoneer, todo dia 15,
+  a partir de US$ 100 de saldo (em alguns países há tarifa SWIFT de US$ 15).
+- Assinatura, portal do cliente (trocar cartão, cancelar) e prévia de preço na moeda do
+  comprador.
+- Taxa: 5% + US$ 0,50 por transação. No plano de US$ 5 sobram ~US$ 4,25; no anual de
+  US$ 48, ~US$ 45,10.
 
-| Plano Polar | Taxa por transação |
-|---|---|
-| Starter (grátis) | 5% + US$ 0,50 (+1,5% em cartão internacional) |
-| Pro (US$ 20/mês) | 3,8% + US$ 0,40 |
+### 6.3 Integração (feita)
 
-Começar no Starter. O Pro só compensa quando a economia em taxas passar de US$ 20 por mês.
-
-**Limitação:** o pagador **não tem Pix**, só cartão. Se isso afastar muitos
-brasileiros, dá para somar Pix Automático por um PSP nacional só para o Brasil (exige
-MEI/CNPJ e nota fiscal). Esse PSP alimentaria os mesmos planos de D9, sem tocar nas tools.
-
-### 6.3 Integração
-
-1. **Etapa 2 (doação):**
-   - produto de apoio com preço livre, único ou mensal;
-   - link no README, no site e no "Sobre" do app;
-   - **nunca** dentro das tools do MCP (R6).
-2. **Etapa 5 (assinatura):**
-   - produtos mensal e anual;
-   - checkout no site com a página do Polar;
-   - o webhook do Polar (início, renovação, cancelamento) atualiza o plano da conta;
-   - as tools só conferem a cota (D9).
-
-**Preço:** a taxa fixa (US$ 0,50) come 25–50% de um plano de US$ 1–2. Mínimo de
-~US$ 3–5 por mês, ou plano anual (uma taxa fixa por ano em vez de doze).
+- **Checkout:** `/billing/checkout` (logado) abre o checkout do Paddle (Paddle.js, com o
+  token do lado do cliente) com o e-mail e o id da conta em `custom_data`. Mostra o preço
+  em moeda local pela prévia do Paddle; US$ 5 e US$ 48 se ela não carregar.
+- **Webhook:** `/billing/paddle`, eventos `subscription.*`, assinatura `Paddle-Signature`
+  (HMAC-SHA256 de `ts:corpo`, 5 min de tolerância, várias `h1` durante a troca de
+  segredo). `active` e `trialing` dão o Supporter; `past_due`, `paused` e `canceled`, o
+  grátis.
+- **Quem pagou:** o id da conta no `custom_data`; senão, o cliente do Paddle já ligado a
+  uma conta; senão, com a chave de API, o e-mail do cliente (a conta é criada se não
+  existir).
+- **Gerenciar:** `/billing/manage` abre o portal do cliente do Paddle (chave de API).
+- **Conta apagada:** a assinatura é cancelada no fim do período pago (chave de API).
+- **Configuração:** `PADDLE_CLIENT_TOKEN`, `PADDLE_WEBHOOK_SECRET`,
+  `PADDLE_PRICE_MONTHLY` e `PADDLE_PRICE_YEARLY` (os quatro, ou o plano pago fica
+  desligado), `PADDLE_API_KEY` (opcional) e `PADDLE_ENVIRONMENT` (`sandbox` para testar).
+- **Site:** `/pricing/`, `/refund/` (reembolso integral em 14 dias) e os termos com o
+  nome do vendedor e o Paddle como revendedor, que a revisão de domínio do Paddle exige.
 
 **Dentro dos diretórios:**
 - nada de preço, botão de upgrade ou link de checkout no chat;
@@ -326,9 +322,7 @@ Detalhes em R6.
 | WASM dentro do iframe da MCP App | **Resolvido: não roda hoje** (ext-apps #605). Plano B em produção | E0-a |
 | OAuth com CIMD nos dois clientes | Não testado | E0-b |
 | Custo de CPU do render na nuvem | Não medido; define a cota grátis e o preço | E0-c |
-| ID externo do cliente no Polar | Conferir na API ao integrar; o e-mail é o reserva (D10) | Etapa 2 |
-| Preço livre no Polar para a doação | Conferir ao configurar | Etapa 2 |
-| Pagador sem Pix no Polar | Medir desistências no checkout brasileiro | Etapa 5 |
+| Aprovação do domínio no Paddle | Revisão manual do site; as páginas pedidas estão no ar | Etapa 5 |
 | Plano Claude Team para submeter o conector | Custo recorrente | Etapa 4 |
 | Developer Mode do ChatGPT para Plus/Pro | Fontes se contradizem | Etapa 3 (testar com conta real) |
 | Países disponíveis no Plugins Directory | A doc não lista | Etapa 4 |
@@ -401,8 +395,7 @@ cliente.
       secret `WINGET_TOKEN`.
 - [ ] Homebrew: criar `leandrodaf/homebrew-tap` com `packaging/homebrew/Casks/…` e o
       secret `HOMEBREW_TAP_TOKEN`.
-- [ ] Polar: criar a organização e o produto de apoio com preço livre; pôr o link no
-      README e no site.
+- [x] Link de apoio no README e no site (página de preços) — ver Etapa 5
 - [ ] E-mails `privacidade@` e `contato@3dneweraai.com` (Cloudflare Email Routing), citados
       nas páginas legais.
 
@@ -458,19 +451,16 @@ cliente.
       da produção no ar, do plano Claude Team e da identidade verificada na OpenAI
 
 ### Etapa 5
-- [x] Webhook do Polar (`/billing/polar`, `crates/newera-cloud/src/billing.rs`): assinatura
-      Standard Webhooks verificada (segredos `whsec_` e os antigos), plano da conta segue a
-      assinatura (ativa → `supporter`, revogada → `free`), conta criada pelo e-mail se a
-      pessoa pagou antes de entrar
-- [x] Botão "Apoiar com um cafezinho (plano pago)" só na página da conta, com e-mail e id
-      da conta no link de checkout — nada é vendido dentro do chat
+- [x] Pagamento pelo Paddle (`crates/newera-cloud/src/billing.rs`, 24/09/2026), no lugar do
+      Polar, que não paga vendedor no Brasil: checkout na página da conta com o id da
+      conta, webhook `subscription.*` verificado, portal do cliente, cancelamento ao apagar
+      a conta; testes de ponta a ponta contra um Paddle de mentira
+- [x] Botão "Apoiar com um cafezinho (plano pago)" só na página da conta — nada é vendido
+      dentro do chat
 - [x] Nenhuma tool mudou: elas leem as cotas do plano (D9)
-- [x] No Polar: organização `3d-new-era-ai`, "Supporter (monthly)" US$ 5/mês e
-      "Supporter (yearly)" US$ 48/ano, um link de checkout com os dois e o webhook
-      `newera-cloud` (eventos `subscription.*`, API 2026-04) para
-      `https://mcp.3dneweraai.com/billing/polar`
-- [x] `POLAR_WEBHOOK_SECRET`, `NEWERA_POLAR_CHECKOUT_URL` e `NEWERA_POLAR_PLANS` no
-      ambiente do serviço
+- [x] Páginas `/pricing/` e `/refund/`, termos com o vendedor e o Paddle como revendedor
+- [ ] Conta no Paddle, aprovação do domínio e as chaves no `app.env` da VPS — ver
+      "O que falta", item 2
 
 ### Etapa 6
 - [ ] Microsoft Store/MSIX, Windows ODR, Docker MCP Catalog, Copilot Studio, Gemini
@@ -499,20 +489,24 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
 - [x] E-mails `privacidade@` e `contato@3dneweraai.com` (Cloudflare Email Routing ligado,
       MX e SPF do Cloudflare, as duas regras encaminham para leandro.daf4@gmail.com) — eu
 
-**2. Pagamento (Polar)**
-- [ ] Conta e dados de recebimento — **você**
-- [x] Produtos no painel — eu:
-      - "Supporter (monthly)", US$ 5/mês: `afb196b2-844f-46c3-899a-b2bf9df7a68b`
-      - "Supporter (yearly)", US$ 48/ano: `593fc418-b65a-410d-861b-20c59da0d419`
-- [x] Link de checkout "Supporter (account page)" com os dois produtos, volta para
-      `https://mcp.3dneweraai.com/account`:
-      `https://buy.polar.sh/polar_cl_fXCqiyLmYzA1cWpJbo6wRKH6hZtqwmshPeNAD2TfpP1` — eu
-- [x] Webhook `newera-cloud` para `https://mcp.3dneweraai.com/billing/polar`, formato
-      Raw, API 2026-04, os 11 eventos `subscription.*` — eu
-- [x] `POLAR_WEBHOOK_SECRET` (o *Signing secret* do webhook), `NEWERA_POLAR_CHECKOUT_URL`
-      e `NEWERA_POLAR_PLANS` no `app.env` da VPS e o container recriado (24/09/2026):
-      `POST /billing/polar` sem assinatura responde 401 — você, com o script sem eco
-- [x] Link de apoio no README ("Support the project") e no rodapé do site ("Apoiar ☕") — eu
+**2. Pagamento (Paddle)** — o Polar saiu: não paga vendedor no Brasil. O código está pronto
+e testado; falta a conta.
+- [ ] Criar a conta no Paddle (https://www.paddle.com, "Get started"), como pessoa física,
+      com os dados de recebimento (wire em dólar ou Payoneer) — **você**
+- [ ] Pedir a aprovação do domínio `3dneweraai.com` (o checkout abre em
+      `mcp.3dneweraai.com`) — **você** pede; o site já tem o que a revisão exige
+- [ ] No painel do Paddle — eu, com ele aberto:
+      - produto "Supporter" com dois preços: US$ 5/mês e US$ 48/ano;
+      - destino de notificação `https://mcp.3dneweraai.com/billing/paddle`, eventos
+        `subscription.*`;
+      - token do lado do cliente e uma chave de API (clientes: ler; sessões do portal e
+        assinaturas: escrever);
+      - link de pagamento padrão: `https://mcp.3dneweraai.com/billing/checkout`
+- [ ] `PADDLE_CLIENT_TOKEN`, `PADDLE_WEBHOOK_SECRET`, `PADDLE_PRICE_MONTHLY`,
+      `PADDLE_PRICE_YEARLY` e `PADDLE_API_KEY` no `app.env` da VPS, container recriado
+      — você, com o comando sem eco; as variáveis `POLAR_*` de lá podem sair
+- [ ] Testar uma assinatura de verdade e o reembolso — eu
+- [x] Código, testes, páginas de preço e reembolso, termos — eu
 
 **3. Registries e diretórios (Etapa 2)**
 - [x] `scripts/registry-key.sh` e commit do `site/.well-known/mcp-registry-auth`;
@@ -901,7 +895,7 @@ Exigem MCP remoto público e estável. Ficam para a Etapa 6, depois do motor na 
 | Mostrar planos, preço ou upgrade | Proibido nas descrições das tools (conta como prompt injection) | Proibido: "must not display subscription plans... or promote upgrades" |
 | Link para checkout | Evitar; erro factual com URL é o limite razoável | Proibido linkar checkout ou página de upgrade |
 | Comissão da plataforma | Nenhuma | Nenhuma (e nenhum repasse) |
-| Checkout próprio | No site, via Polar.sh | No site, via Polar.sh. O Instant Checkout foi aposentado em mar/2026, e o ACP ficou para bens físicos |
+| Checkout próprio | No site, via Paddle | No site, via Paddle. O Instant Checkout foi aposentado em mar/2026, e o ACP ficou para bens físicos |
 
 **Freemium no ChatGPT:** declarar `securitySchemes` com **`noauth` e `oauth2` juntos**
 por tool. As tools grátis funcionam anonimamente; as pagas pedem a conta vinculada.
@@ -918,7 +912,7 @@ portal pergunta isso.
 
 ## R7. Alternativas de pagamento avaliadas
 
-Descartadas em favor do Polar.sh (seção 6). Ficam aqui para consulta.
+Descartadas em favor do Paddle (seção 6). O Polar.sh foi a primeira escolha e saiu em 24/09/2026 porque não paga vendedor no Brasil. Ficam aqui para consulta.
 
 | Opção | Taxa | Brasil / Pix | Serve para assinatura de SaaS? |
 |---|---|---|---|
@@ -1065,6 +1059,9 @@ casos de teste) está em `docs/connector-review.md`.
 
 - https://docs.github.com/sponsors
 - https://docs.oscollective.org
+- https://www.paddle.com/help/start/intro-to-paddle/which-countries-are-supported-by-paddle
+- https://www.paddle.com/help/manage/get-paid/when-and-how-do-i-get-paid
+- https://developer.paddle.com/webhooks/signature-verification
 - https://polar.sh/resources/pricing
 - https://polar.sh/docs/merchant-of-record/supported-countries
 - https://developer.paddle.com/changelog/2026/pix-automatico/
