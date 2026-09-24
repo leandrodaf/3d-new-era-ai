@@ -40,17 +40,30 @@ jobs:
   # Portão: a imagem só é publicada com a suíte inteira verde. Muita app
   # aplica o schema no próprio boot, então um deploy quebrado não é
   # "endpoint fora do ar" — é migração rodando contra o banco de produção.
-  # The gate: the image is only published with the suite green. This app is
-  # Rust and keeps nothing in a database, so the template's Postgres service
-  # and Go steps are replaced by what actually guards this service.
+  # This app is Rust: the template's Go steps are replaced by what guards
+  # it — the relay's and the hosted service's suites, the latter against the
+  # Postgres below.
   test:
     runs-on: ubuntu-latest
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/newera_relay
+    services:
+      postgres:
+        image: postgres:17.6-bookworm
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: newera_relay
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy -p newera-relay --all-targets --locked -- -D warnings
-      - run: cargo test -p newera-relay --locked
+      - run: cargo clippy -p newera-relay -p newera-cloud --all-targets --locked -- -D warnings
+      - run: cargo test -p newera-relay -p newera-cloud --locked
 
   build:
     needs: test
@@ -189,7 +202,7 @@ jobs:
           # caminho real do tráfego, e não um teste por dentro que pode
           # passar com a rota de rede quebrada.
           for i in $(seq 1 20); do
-            code=$(ssh deploy-target "curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:7979/health" || echo 000)
+            code=$(ssh deploy-target "curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:7979/cloud/health" || echo 000)
             if [ "$code" = "200" ]; then echo "saudável (tentativa $i)"; exit 0; fi
             echo "tentativa $i: HTTP $code"; sleep 6
           done

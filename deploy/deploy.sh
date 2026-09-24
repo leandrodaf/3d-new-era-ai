@@ -66,7 +66,7 @@ $COMPOSE up -d --remove-orphans --build
 wait_healthy() {
   local tries=$1
   for _ in $(seq 1 "$tries"); do
-    if [ "$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:7979/health || echo 000)" = "200" ]; then
+    if [ "$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:7979/cloud/health || echo 000)" = "200" ]; then
       return 0
     fi
     sleep 6

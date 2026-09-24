@@ -156,12 +156,22 @@ pub fn router(state: &AppState) -> Router {
     newera_relay::router_with(state.rooms.clone()).merge(cloud)
 }
 
+/// Healthy means the database answers: the deploy checks this, and rolls
+/// back a version whose service cannot reach its data.
 async fn health(
     axum::extract::State(state): axum::extract::State<AppState>,
-) -> axum::Json<serde_json::Value> {
+) -> (axum::http::StatusCode, axum::Json<serde_json::Value>) {
     let db = sqlx::query_scalar::<_, i32>("select 1")
         .fetch_one(&state.db)
         .await
         .is_ok();
-    axum::Json(serde_json::json!({ "ok": db, "database": db }))
+    let status = if db {
+        axum::http::StatusCode::OK
+    } else {
+        axum::http::StatusCode::SERVICE_UNAVAILABLE
+    };
+    (
+        status,
+        axum::Json(serde_json::json!({ "ok": db, "database": db })),
+    )
 }

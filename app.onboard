@@ -1,10 +1,14 @@
-# The MCP relay for the browser editor, on the VPS.
+# The hosted 3D New Era AI (newera-cloud), on the VPS.
 #
-# What it is: a small HTTP + WebSocket service that lets an AI reach the
-# editor running in somebody's browser tab. It stores nothing — no project,
-# no user, no rows — and everything it holds dies with the process. The
-# Postgres this recipe provisions is therefore idle by design; it comes with
-# the standard, and the standard is worth more than the 70 MB it costs.
+# What it is: the relay that lets an AI reach the editor in somebody's
+# browser tab, plus accounts, OAuth for AI clients, one fixed MCP address and
+# the editor with no window, which renders plans and photos on this machine.
+# Accounts, plans and cloud projects live in the Postgres this recipe
+# provisions — backed up daily to R2.
+#
+# The name stays newera-relay: it is the directory, the Postgres, the
+# backups and the tunnel route that already exist, and renaming them would
+# mean moving a live database for a label.
 APP_NAME=newera-relay
 GITHUB_REPO=leandrodaf/3d-new-era-ai
 HOSTNAME_PUBLICO=mcp.3dneweraai.com
@@ -15,21 +19,27 @@ HOSTNAME_PUBLICO=mcp.3dneweraai.com
 APP_PORT=7979
 HOST_PORT=7979
 
-HEALTH_PATH=/health
+# Healthy means the database answers (503 otherwise), so a deploy that
+# cannot reach its data is rolled back.
+HEALTH_PATH=/cloud/health
 LOG_TAG=relay
 
-# It writes nothing to disk.
+# What it writes to disk is a cache (projects unpacked while they are
+# worked on, top views): losing it on a new container costs nothing.
 APP_DATA_DIR=
 
-# It holds rooms in memory: a few kilobytes each, thousands at most.
-APP_MEM=256m
+# Rooms are kilobytes; what weighs is a photo being path-traced (a few
+# hundred MB at the most for a large plan). One core at most: the machine
+# has two, and the other apps keep theirs.
+APP_MEM=1g
+APP_CPUS=1
 PG_MEM=512m
 PG_SHARED_BUFFERS=128MB
 PG_EFFECTIVE_CACHE=384MB
 PG_MAX_CONNECTIONS=20
 
-# Nothing here is worth restoring, but the standard keeps the window open in
-# case that ever changes. Away from the hours the other apps use.
+# Accounts and projects: the daily backup is what they are restored from.
+# Away from the hours the other apps use.
 R2_BUCKET=newera-relay-backups
 BACKUP_HOUR=09
 
