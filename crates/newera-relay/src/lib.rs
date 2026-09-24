@@ -140,6 +140,10 @@ struct Room {
     /// When the tab last went away, for the grace period.
     orphaned_at: Option<Instant>,
     touched: Instant,
+    /// The account the person in the tab signed in with, once the tab claims
+    /// the room for it: then their AI reaches it through the account, with
+    /// no secret in any URL. `None` for a tab nobody signed into.
+    owner: Option<String>,
 }
 
 impl Room {
@@ -154,6 +158,7 @@ impl Room {
             next_call: 0,
             orphaned_at: Some(Instant::now()),
             touched: Instant::now(),
+            owner: None,
         }
     }
 
@@ -285,6 +290,51 @@ impl Rooms {
             times.retain(|at| now.duration_since(*at) < hour);
             !times.is_empty()
         });
+    }
+
+    /// Hands a room to an account. Only the tab that holds it can — it shows
+    /// its key — and whoever calls this has already checked, by its own
+    /// means, that the account is the person in that tab.
+    ///
+    /// An account keeps one room: a tab claiming a new one takes the account
+    /// from the old, so "the tab I have open" is never ambiguous.
+    ///
+    /// # Errors
+    ///
+    /// When the room is not there or the key is not its own.
+    ///
+    /// # Panics
+    ///
+    /// If another thread panicked while holding the rooms.
+    pub fn claim(&self, room: &str, tab_key: &str, owner: &str) -> Result<(), &'static str> {
+        let mut held = self.0.lock().expect("rooms");
+        match held.rooms.get(room) {
+            Some(entry) if same_secret(&entry.tab_key, tab_key) => {}
+            _ => return Err("that room is not yours"),
+        }
+        for (id, entry) in &mut held.rooms {
+            if id != room && entry.owner.as_deref() == Some(owner) {
+                entry.owner = None;
+            }
+        }
+        let entry = held.rooms.get_mut(room).expect("checked above");
+        entry.owner = Some(owner.to_owned());
+        entry.touched = Instant::now();
+        Ok(())
+    }
+
+    /// The room an account's tab holds, while that tab is connected.
+    ///
+    /// # Panics
+    ///
+    /// If another thread panicked while holding the rooms.
+    pub fn owned_by(&self, owner: &str) -> Option<String> {
+        self.sweep();
+        let held = self.0.lock().expect("rooms");
+        held.rooms
+            .iter()
+            .find(|(_, entry)| entry.owner.as_deref() == Some(owner) && entry.outbox.is_some())
+            .map(|(id, _)| id.clone())
     }
 
     /// How many rooms are held right now — for `/health`, not for listing.
@@ -541,8 +591,6 @@ async fn no_stream() -> Response {
 /// One JSON-RPC message in, at most one out.
 async fn answer(rooms: &Rooms, room: &str, token: &str, message: &Value) -> Option<Value> {
     let id = message.get("id").cloned().unwrap_or(Value::Null);
-    let method = message.get("method").and_then(Value::as_str).unwrap_or("");
-    let params = message.get("params").cloned().unwrap_or(Value::Null);
     let notification = message.get("id").is_none();
 
     // Every method below needs the room, and a wrong token must not tell
@@ -565,6 +613,23 @@ async fn answer(rooms: &Rooms, room: &str, token: &str, message: &Value) -> Opti
                 "this address is not open — the tab that made it is gone",
             )
         });
+    }
+    answer_in(rooms, room, message).await
+}
+
+/// One JSON-RPC message for a room whoever asks has already been let into —
+/// by its token in the URL, or by the account that owns it.
+///
+/// # Panics
+///
+/// If another thread panicked while holding the rooms.
+pub async fn answer_in(rooms: &Rooms, room: &str, message: &Value) -> Option<Value> {
+    let id = message.get("id").cloned().unwrap_or(Value::Null);
+    let method = message.get("method").and_then(Value::as_str).unwrap_or("");
+    let params = message.get("params").cloned().unwrap_or(Value::Null);
+    let notification = message.get("id").is_none();
+    if let Some(entry) = rooms.0.lock().expect("rooms").rooms.get_mut(room) {
+        entry.touched = Instant::now();
     }
 
     match method {
@@ -851,6 +916,53 @@ mod tests {
         // And a wrong token reads nothing, as for tools.
         let other = answer(&rooms, &id, &"0".repeat(32), &read).await.unwrap();
         assert_eq!(other["error"]["code"], -32001);
+    }
+
+    /// A tab hands its room to the account signed in there; only the tab
+    /// that holds the key can, an account keeps one room, and the account
+    /// reaches the room only while the tab is connected.
+    #[tokio::test]
+    async fn an_account_reaches_the_tab_it_claimed() {
+        let rooms = Rooms::default();
+        let (first, first_key, _) = rooms.open("test", None).expect("a room");
+        let (second, second_key, _) = rooms.open("test", None).expect("another");
+        assert!(
+            rooms.claim(&first, &second_key, "acct-1").is_err(),
+            "another tab's key"
+        );
+        rooms
+            .claim(&first, &first_key, "acct-1")
+            .expect("its own key");
+        assert_eq!(rooms.owned_by("acct-1"), None, "no tab connected yet");
+
+        let (tx, _rx) = mpsc::unbounded_channel();
+        rooms
+            .0
+            .lock()
+            .unwrap()
+            .rooms
+            .get_mut(&first)
+            .unwrap()
+            .outbox = Some(tx.clone());
+        assert_eq!(rooms.owned_by("acct-1").as_deref(), Some(first.as_str()));
+        assert_eq!(rooms.owned_by("acct-2"), None);
+
+        // The same person opens another tab: the account follows it.
+        rooms
+            .0
+            .lock()
+            .unwrap()
+            .rooms
+            .get_mut(&second)
+            .unwrap()
+            .outbox = Some(tx);
+        rooms.claim(&second, &second_key, "acct-1").unwrap();
+        assert_eq!(rooms.owned_by("acct-1").as_deref(), Some(second.as_str()));
+
+        // And the account's AI is answered without any token.
+        let hello = json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}});
+        let answer = answer_in(&rooms, &second, &hello).await.expect("an answer");
+        assert_eq!(answer["result"]["serverInfo"]["name"], "3d-new-era-ai");
     }
 
     /// One address cannot take the whole relay: after the hour's worth of
