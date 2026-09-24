@@ -121,7 +121,7 @@ primeira linha de código.
 | D3 | Serviço hospedado | **Um binário só, `newera-cloud`**, que monta o `newera-relay` como biblioteca (`router_with` já existe) e soma MCP hospedado, OAuth, contas e webhooks | O relay não é reescrito, vira uma rota. Deploy, domínio e TLS continuam os mesmos. |
 | D4 | Superfície de tools | **Anotações, `title` e o recurso de UI vivem em `newera-mcp`** | Desktop, relay e nuvem herdam de graça. Nada de "anotação só na nuvem". |
 | D5 | Interface no chat | **Padrão aberto MCP Apps** (`_meta.ui`, `ui://`), não o Apps SDK proprietário | Um widget serve Claude, ChatGPT, VS Code, Cursor, Goose... |
-| D6 | Conteúdo do widget | **O viewer WASM que já existe (`newera-web`)**, se passar no spike E0-a. Senão, o plano B: SVG da planta + PNG 3D gerados no servidor | Não escrever um viewer JS novo. O plano B também é peça final: é o fallback para clientes sem MCP Apps. |
+| D6 | Conteúdo do widget | **SVG da planta + PNG 3D gerados no servidor**, numa página HTML sem nada a buscar (`ui://newera/plan-viewer.html`). O viewer WASM fica para quando os hosts aceitarem `wasm-unsafe-eval` (ext-apps #605) | Resolvido pelo E0-a: o sandbox recusa WebAssembly. A página funciona em qualquer host e é a mesma em todos os transportes. |
 | D7 | Conta | **A conta é nossa**: tabela `accounts` com ID próprio no Postgres, identidade = e-mail verificado. O jeito de entrar (link por e-mail, Google, GitHub) pode mudar; o ID, não | Site, conector do Claude, ChatGPT e Codex usam a mesma conta. O pagamento se liga ao ID. |
 | D8 | OAuth | **Servidor de autorização dentro do `newera-cloud`**, OAuth 2.1 + PKCE S256, registro de cliente por **CIMD e DCR**, `/.well-known/oauth-protected-resource` | O Claude aceita os dois registros e a OpenAI prefere CIMD. Os callbacks são específicos de cada cliente, então é preciso controlar o servidor. |
 | D9 | Planos | **Cotas desde o primeiro dia**: toda conta tem um plano (`free` no começo), e as tools checam "tem cota?", nunca "é pagante?" | Ligar o Polar na Etapa 5 só muda qual plano a conta tem. Nenhuma tool é tocada. |
@@ -130,6 +130,7 @@ primeira linha de código.
 | D12 | Plugin | **Uma pasta `plugin/` no formato Agent Plugins**, com skills compartilhadas por Claude Code, Codex e Cursor | Na Etapa 2 o MCP aponta para o local. Na Etapa 4 ganha o remoto: muda uma configuração, não código. |
 | D13 | Artefato local | **Um `.mcpb` por plataforma**, gerado no `release.yml`, com o nome `newera-mcp-<plataforma>.mcpb` | O mesmo arquivo serve Claude Desktop, Registry, Smithery e Windows. O Registry exige "mcp" no nome. |
 | D14 | Comportamento do stdio | **`newera mcp` se liga à janela aberta** (proxy para `127.0.0.1:7878`) **e, sem janela, roda headless** | Tem de valer antes de publicar o `.mcpb`. Mudar depois de listado mudaria o que os usuários já instalaram. |
+| D16 | Superfície hospedada | **Mesmas tools, menos as que só fazem sentido na máquina do usuário**: `feedback` (manda dados aos desenvolvedores e é pedido por instrução — os diretórios recusam as duas coisas), `run_plugin`/`plugins` (rodam programas locais) e caminhos de arquivo livres (`open_home`, `save_home`, `export_*`, `set_background`, `edit_video render`), que na nuvem viram o projeto e os arquivos da própria conta | Um perfil de exposição no `newera-cloud`, não um fork: as tools continuam as do `newera-mcp` (D4). |
 | D15 | Privacidade e termos | **Escritos já cobrindo o endgame**: contas, nuvem opcional, Polar como merchant of record, telemetria. Publicados em URLs fixas (`3dneweraai.com/privacy`, `/terms`) | Todo formulário pede essas URLs. Ter o texto final desde o início evita reenviar cadastros. |
 
 ## 4. Etapas
@@ -322,7 +323,7 @@ Detalhes em R6.
 
 | Item | Situação | Onde se resolve |
 |---|---|---|
-| WASM dentro do iframe da MCP App | **Não verificado.** Maior risco técnico | E0-a (plano B já definido em D6) |
+| WASM dentro do iframe da MCP App | **Resolvido: não roda hoje** (ext-apps #605). Plano B em produção | E0-a |
 | OAuth com CIMD nos dois clientes | Não testado | E0-b |
 | Custo de CPU do render na nuvem | Não medido; define a cota grátis e o preço | E0-c |
 | ID externo do cliente no Polar | Conferir na API ao integrar; o e-mail é o reserva (D10) | Etapa 2 |
@@ -340,17 +341,32 @@ Marcado conforme cada item é implementado, testado e commitado na branch
 documento de identidade, merge na `main`) dizem o que falta.
 
 ### Etapa 0
-- [ ] E0-a: viewer WASM como MCP App
+- [x] E0-a: viewer WASM como MCP App — **não roda hoje**: o sandbox das MCP Apps não
+      permite `wasm-unsafe-eval` (spec `2026-01-26`; proposta aberta em ext-apps #605 /
+      PR #667). Vale o plano B de D6: SVG da planta + PNG 3D do servidor. Testado no
+      claude.ai como conector custom (relay local + túnel): planta com pan/zoom e 3D
+      pedido pelo próprio widget.
 - [ ] E0-b: OAuth CIMD/DCR no Claude e no ChatGPT
 - [ ] E0-c: custo do `render_photo` no servidor
 
+Achado no teste do E0-a: o formulário de conector custom do Claude já oferece "Entrar
+agora", "Fazer login quando necessário" (grátis sem login, conta quando uma tool pedir) e
+"Sem login", além de cabeçalhos fixos. O "quando necessário" é o freemium de D9 pronto no
+cliente.
+
 ### Etapa 1
-- [ ] `title` e anotações em todas as tools
-- [ ] Leitura separada de escrita
-- [ ] Erros acionáveis e descrições sem ordens ao modelo
-- [ ] Recurso `ui://` (MCP App) em todos os transportes
-- [ ] `newera mcp` ligado à janela aberta (D14)
-- [ ] Testes do checklist R8 no CI
+- [x] `title` e anotações em todas as tools (`crates/newera-mcp/src/hints.rs`)
+- [x] Leitura separada de escrita: 59 tools; toda leitura tem nome próprio (`cameras`,
+      `levels`, `check_layout`, `ergonomics`, `electrical`, `lighting`…) e as mudanças
+      ficaram em `edit_*`, `accept`, `fill_lighting`, `trace_walls`, `export_cut_list`,
+      `run_plugin`, `checkpoint`; as pessoas da revisão vão em `set_home(people=…)`
+- [x] Erros acionáveis e descrições sem ordens ao modelo (a instrução de `feedback` sai
+      só na superfície hospedada, D16)
+- [x] Recurso `ui://` (MCP App) em todos os transportes: `show_plan` +
+      `ui://newera/plan-viewer.html`, servido pelo handshake e pelo relay
+- [x] `newera mcp` ligado à janela aberta (D14)
+- [x] Testes do checklist R8 no CI: `every_tool_has_hints`, `reads_change_nothing`,
+      `a_read_refuses_a_write_argument`, `a_write_tool_points_reads_elsewhere` e o smoke
 
 ### Etapa 2
 - [ ] Privacidade e termos (D15)
