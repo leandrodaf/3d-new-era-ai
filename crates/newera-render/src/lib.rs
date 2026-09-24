@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 pub use camera::{Side, View};
-pub use mesh::{IMAGE_BASE, Mesh, ModelSource, Selection, Vertex};
+pub use mesh::{CUTAWAY_HEIGHT, Cutaway, IMAGE_BASE, Mesh, ModelSource, Selection, Vertex};
 pub use raster::{RenderOptions, render};
 
 /// Top-view images of pieces for the plan, rendered once and cached as PNG
@@ -577,9 +577,21 @@ pub fn render_home(
     height: u32,
     assets: Option<&Path>,
 ) -> image::RgbaImage {
+    render_home_cut(home, view, None, width, height, assets)
+}
+
+/// [`render_home`] with some walls brought down to show the rooms.
+pub fn render_home_cut(
+    home: &newera_core::Home,
+    view: &View,
+    cutaway: Option<&Cutaway>,
+    width: u32,
+    height: u32,
+    assets: Option<&Path>,
+) -> image::RgbaImage {
     let cache = ModelCache::default();
     let models = |piece: &newera_core::Furniture| cache.piece_model(piece, assets);
-    let mut mesh = Mesh::from_home(home, &Selection::new(), &models);
+    let mut mesh = Mesh::from_home_cut(home, &Selection::new(), &models, cutaway);
     // A section seen from above shows the walls it cuts as solid.
     if let (Some(near), Some(_)) = (view.near, view.ortho) {
         let dir = (view.eye - view.target).normalize_or_zero();

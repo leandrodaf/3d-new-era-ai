@@ -74,6 +74,8 @@ pub(crate) struct Render3dParams {
     /// height for top); what lies between the viewer and it is cut away — walls
     /// and pieces alike. front views from large y, back from y=0.
     cut: Option<f64>,
+    /// `up` (default), `cutaway` or `down`.
+    walls: Option<String>,
     w: Option<u32>,
     h: Option<u32>,
 }
@@ -201,7 +203,7 @@ impl NewEraMcp {
         )]))
     }
     #[tool(
-        description = "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations — front looks from the plan's bottom edge (large y) toward y=0, back from y=0 toward large y, left from x=0, right from large x; cut=cm makes a section keeping only what is beyond that plane from the viewer (front cut=200 keeps y<200, so the wall at y=0 stays as the backdrop; to remove it look from back), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). Keep w/h small."
+        description = "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations — front looks from the plan's bottom edge (large y) toward y=0, back from y=0 toward large y, left from x=0, right from large x; cut=cm makes a section keeping only what is beyond that plane from the viewer (front cut=200 keeps y<200, so the wall at y=0 stays as the backdrop; to remove it look from back), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). walls=cutaway drops the walls between the eye and a room to 40 cm, walls=down drops them all; either hides ceilings, roofs and the doors, windows and wall pieces of lowered walls, to see the furniture from the side. Keep w/h small."
     )]
     pub(crate) fn render_3d(
         &self,
@@ -245,10 +247,23 @@ impl NewEraMcp {
             }
             (None, Some(other)) => return Err(invalid(format!("unknown view `{other}`"))),
         };
+        let cutaway = match p.walls.as_deref() {
+            None | Some("up") => None,
+            Some("cutaway") => {
+                let toward = view.target - view.eye;
+                Some(newera_render::Cutaway::facing(
+                    home,
+                    Point2::new(f64::from(toward.x), f64::from(toward.z)),
+                ))
+            }
+            Some("down") => Some(newera_render::Cutaway::all(home)),
+            Some(other) => return Err(invalid(format!("unknown walls `{other}`"))),
+        };
         let home = home.clone();
         let assets = doc.asset_dir();
         drop(doc);
-        let image = newera_render::render_home(&home, &view, w, h, assets.as_deref());
+        let image =
+            newera_render::render_home_cut(&home, &view, cutaway.as_ref(), w, h, assets.as_deref());
         let mut png = Vec::new();
         image::DynamicImage::ImageRgba8(image)
             .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
@@ -424,6 +439,40 @@ mod tests {
             .is_err()
         );
     }
+    #[test]
+    fn render_3d_brings_the_walls_down() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}],"rooms":[{"name":"Sala","at":[200,150]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let png = |walls: &str| {
+            let result = s
+                .render_3d(Parameters(Render3dParams {
+                    walls: Some(walls.into()),
+                    w: Some(96),
+                    h: Some(72),
+                    ..Render3dParams::default()
+                }))
+                .unwrap();
+            let ContentBlock::Image(image) = &result.content[0] else {
+                panic!("expected image")
+            };
+            image.data.clone()
+        };
+        let up = png("up");
+        assert_ne!(png("cutaway"), up, "the near walls came down");
+        assert_ne!(png("down"), up);
+        assert!(
+            s.render_3d(Parameters(Render3dParams {
+                walls: Some("sideways".into()),
+                ..Render3dParams::default()
+            }))
+            .is_err()
+        );
+    }
+
     #[test]
     fn exports_pdf_and_3d_models() {
         let s = server();

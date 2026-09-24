@@ -11,6 +11,12 @@ All notable changes to this project are documented here. The format follows
 - Axes in the top right corner of the 3D view, as in Blender. Click a ball to look at the
   house from the front, back, left, right or top; drag the disc to orbit. The top view
   reads like the plan, x right and y down.
+- Walls in the 3D view can come down to show the rooms: up, cutaway (the walls between
+  the camera and a room drop to 40 cm and follow the camera as it turns) or down.
+  Ceilings, roofs and the doors, windows and pieces hanging on lowered walls hide with
+  them. Three buttons in the toolbar and the View menu switch it.
+- `render_3d` takes `walls=cutaway|down` to draw the same way, so an agent can see the
+  furniture of a room from the side.
 
 ### Fixed
 

@@ -1770,6 +1770,18 @@ impl NewEraApp {
                 ui.separator();
                 self.viewpoints_menu(ui);
                 ui.separator();
+                ui.label(format!("{} {}", icon::WALL, crate::i18n::tr("Paredes")));
+                for walls in crate::view::scene::Walls::ALL {
+                    if ui
+                        .radio(self.scene.walls == walls, walls.label())
+                        .on_hover_text(walls.hint())
+                        .clicked()
+                    {
+                        self.scene.walls = walls;
+                        ui.close();
+                    }
+                }
+                ui.separator();
                 let mut sun = self.scene.sun_hour.is_some();
                 if ui
                     .checkbox(
@@ -1973,6 +1985,47 @@ impl NewEraApp {
                     .clicked()
                 {
                     self.plan.request_fit();
+                }
+            });
+            // How tall the walls stand in 3D. Each button is laid out like its
+            // neighbours around an invisible glyph, then drawn over with a
+            // little room showing that mode.
+            keys(ui, |ui| {
+                for walls in crate::view::scene::Walls::ALL {
+                    let chosen = self.scene.walls == walls;
+                    let button = egui::Button::selectable(
+                        chosen,
+                        big(icon::WALL).color(egui::Color32::TRANSPARENT),
+                    );
+                    let response = ui.add(button);
+                    // Named after the mode, not the glyph it is laid out around.
+                    response.widget_info(|| {
+                        egui::WidgetInfo::selected(
+                            egui::WidgetType::Button,
+                            true,
+                            chosen,
+                            walls.label(),
+                        )
+                    });
+                    let response = response.on_hover_text(format!(
+                        "{}: {}\n{}",
+                        crate::i18n::tr("Paredes"),
+                        walls.label(),
+                        walls.hint()
+                    ));
+                    let look = ui.style().interact_selectable(&response, chosen);
+                    let behind = if chosen {
+                        t.inset.blend(ui.visuals().selection.bg_fill)
+                    } else {
+                        t.inset.blend(look.weak_bg_fill)
+                    };
+                    walls.paint_icon(ui.painter(), response.rect, look.fg_stroke.color, behind);
+                    if chosen {
+                        ring(ui, &response, t.accent);
+                    }
+                    if response.clicked() {
+                        self.scene.walls = walls;
+                    }
                 }
             });
             keys(ui, |ui| crate::ai::button(self, ui));
@@ -3742,5 +3795,31 @@ mod variant_tests {
         h.get_by_label_contains("Fechar versão").click();
         h.run_steps(4);
         assert_eq!(h.state().document.read().variant_count(), 1);
+    }
+
+    #[test]
+    fn the_wall_buttons_switch_the_3d_and_keep_their_size() {
+        let mut h = app();
+        h.run_steps(3);
+        let widths = |h: &Harness<'static, NewEraApp>| {
+            crate::view::scene::Walls::ALL
+                .iter()
+                .map(|w| h.get_by_label(w.label()).rect().width())
+                .collect::<Vec<f32>>()
+        };
+        let at_rest = widths(&h);
+        assert!(
+            at_rest.iter().all(|w| (w - at_rest[0]).abs() < 0.01),
+            "{at_rest:?}"
+        );
+
+        h.get_by_label("Recortadas").click();
+        h.run_steps(3);
+        assert_eq!(h.state().scene.walls, crate::view::scene::Walls::Cutaway);
+        // The one in use keeps its size, with the pointer on it or away.
+        assert_eq!(widths(&h), at_rest);
+        h.hover_at(egui::pos2(640.0, 400.0));
+        h.run_steps(2);
+        assert_eq!(widths(&h), at_rest);
     }
 }
