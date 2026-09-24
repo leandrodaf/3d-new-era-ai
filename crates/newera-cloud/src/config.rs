@@ -59,6 +59,13 @@ pub struct Config {
     pub google: Option<Google>,
     /// The browser editor, where "open in the editor" goes.
     pub editor_url: String,
+    /// Polar's webhook secret; without it, paid plans are off.
+    pub polar_webhook_secret: Option<String>,
+    /// The Polar checkout link the account page offers.
+    pub polar_checkout_url: Option<String>,
+    /// Which plan each Polar product gives, `(product id, plan code)`; a
+    /// product not listed gives `supporter`.
+    pub polar_plans: Vec<(String, String)>,
     /// The port to listen on, on every interface of the container; the
     /// Cloudflare tunnel in front is what reaches it.
     pub port: u16,
@@ -73,6 +80,12 @@ impl std::fmt::Debug for Config {
             .field("mail", &self.mail)
             .field("google", &self.google)
             .field("editor_url", &self.editor_url)
+            .field(
+                "polar_webhook_secret",
+                &self.polar_webhook_secret.as_ref().map(|_| "<hidden>"),
+            )
+            .field("polar_checkout_url", &self.polar_checkout_url)
+            .field("polar_plans", &self.polar_plans)
             .field("port", &self.port)
             .finish()
     }
@@ -120,6 +133,12 @@ impl Config {
         };
         let editor_url =
             var("NEWERA_EDITOR_URL").unwrap_or_else(|| "https://3dneweraai.com/app/".to_owned());
+        let polar_plans = var("NEWERA_POLAR_PLANS")
+            .unwrap_or_default()
+            .split(',')
+            .filter_map(|pair| pair.split_once('='))
+            .map(|(product, plan)| (product.trim().to_owned(), plan.trim().to_owned()))
+            .collect();
         let port = var("PORT")
             .map(|p| p.parse().context("PORT"))
             .transpose()?
@@ -131,6 +150,9 @@ impl Config {
             mail,
             google,
             editor_url,
+            polar_webhook_secret: var("POLAR_WEBHOOK_SECRET"),
+            polar_checkout_url: var("NEWERA_POLAR_CHECKOUT_URL"),
+            polar_plans,
             port,
         })
     }

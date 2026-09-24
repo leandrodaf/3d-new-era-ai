@@ -29,6 +29,7 @@ pub async fn show(State(app): State<AppState>, headers: HeaderMap) -> Response {
 <p>{email}</p>
 <p class="muted">{plan_label}: <b>{plan}</b></p>
 {projects}
+{support}
 <a class="button" href="https://3dneweraai.com/app/">{editor}</a>
 <a class="button ghost" href="/logout">{out}</a>
 <details><summary class="muted">{close}</summary>
@@ -43,6 +44,13 @@ pub async fn show(State(app): State<AppState>, headers: HeaderMap) -> Response {
         plan_label = lang.pick("Plano", "Plan"),
         plan = escape(&plan.map_or_else(|| "Free".to_owned(), |p| p.name)),
         projects = project_list(&app, &account.id, lang).await,
+        support = crate::billing::checkout_link(&app, &account).map_or_else(String::new, |link| {
+            format!(
+                r#"<a class="button ghost" href="{}">{}</a>"#,
+                escape(&link),
+                lang.pick("Apoiar com um cafezinho (plano pago)", "Support with a coffee (paid plan)")
+            )
+        }),
         editor = lang.pick("Abrir o editor", "Open the editor"),
         out = lang.pick("Sair", "Sign out"),
         close = lang.pick("Apagar a conta", "Close the account"),

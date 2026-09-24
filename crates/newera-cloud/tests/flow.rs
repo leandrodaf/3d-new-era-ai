@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 use sha2::Digest as _;
 
 const SITE: &str = "http://127.0.0.1:8790";
+const POLAR_SECRET: &str = "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw";
 
 /// A fresh database for one test, migrated, and the service on a free port.
 async fn service() -> Option<(String, AppState)> {
@@ -44,6 +45,9 @@ async fn service() -> Option<(String, AppState)> {
         mail: Mail::Log,
         google: None,
         editor_url: format!("{SITE}/editor/"),
+        polar_webhook_secret: Some(POLAR_SECRET.to_owned()),
+        polar_checkout_url: Some("https://buy.polar.sh/polar_cl_test".to_owned()),
+        polar_plans: vec![("prod_cafe".to_owned(), "supporter".to_owned())],
         port: 0,
     };
     let state = AppState::new(config, db);
@@ -732,4 +736,86 @@ async fn sign_in_never_redirects_elsewhere() {
         .await;
         assert_eq!(back, expected, "{asked}");
     }
+}
+
+/// A Polar delivery for `data`, signed as Polar signs.
+async fn polar(base: &str, kind: &str, data: Value, sign: bool) -> u16 {
+    let body = json!({"type": kind, "data": data}).to_string();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let mut request = client()
+        .post(format!("{base}/billing/polar"))
+        .header("webhook-id", "msg_test")
+        .header("webhook-timestamp", now.to_string());
+    if sign {
+        request = request.header(
+            "webhook-signature",
+            newera_cloud::billing::signature(POLAR_SECRET, "msg_test", now, body.as_bytes()),
+        );
+    }
+    request.body(body).send().await.unwrap().status().as_u16()
+}
+
+#[tokio::test]
+async fn a_subscription_raises_the_plan_and_its_end_lowers_it() {
+    let Some((base, state)) = service().await else {
+        return;
+    };
+    let ana = newera_cloud::accounts::find_or_create(&state.db, "ana@example.com")
+        .await
+        .unwrap();
+    let plan = |id: String| {
+        let db = state.db.clone();
+        async move {
+            newera_cloud::accounts::plan_of(&db, &id)
+                .await
+                .unwrap()
+                .code
+        }
+    };
+    assert_eq!(plan(ana.id.clone()).await, "free");
+
+    let subscription = |status: &str| {
+        json!({
+            "id": "sub_1", "status": status, "product_id": "prod_cafe",
+            "current_period_end": "2099-01-01T00:00:00Z",
+            "customer": {"id": "cus_1", "email": "ana@example.com", "external_id": ana.id},
+        })
+    };
+    assert_eq!(
+        polar(&base, "subscription.active", subscription("active"), false).await,
+        401,
+        "unsigned"
+    );
+    assert_eq!(
+        polar(&base, "subscription.active", subscription("active"), true).await,
+        200
+    );
+    assert_eq!(plan(ana.id.clone()).await, "supporter");
+    assert_eq!(
+        polar(&base, "subscription.revoked", subscription("revoked"), true).await,
+        200
+    );
+    assert_eq!(
+        plan(ana.id.clone()).await,
+        "free",
+        "a revoked plan is the free one"
+    );
+
+    // Paid before ever signing in: the account is there, by the address.
+    let early = json!({
+        "id": "sub_2", "status": "active", "product_id": "prod_cafe",
+        "current_period_end": "2099-01-01T00:00:00Z",
+        "customer": {"id": "cus_2", "email": "bia@example.com"},
+    });
+    assert_eq!(polar(&base, "subscription.created", early, true).await, 200);
+    let bia = newera_cloud::accounts::find_or_create(&state.db, "BIA@example.com")
+        .await
+        .unwrap();
+    assert_eq!(plan(bia.id).await, "supporter");
+
+    // Other events are acknowledged and change nothing.
+    assert_eq!(polar(&base, "order.created", json!({}), true).await, 202);
 }
