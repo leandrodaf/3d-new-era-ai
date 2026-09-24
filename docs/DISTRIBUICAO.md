@@ -493,7 +493,8 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
       verifica o domínio no Resend; eu ponho a chave
 - [ ] Google (opcional): cliente OAuth "Web application" com redirect
       `https://mcp.3dneweraai.com/login/google/callback` — **você**
-- [ ] E-mails `privacidade@` e `contato@3dneweraai.com` (Cloudflare Email Routing) — eu
+- [x] E-mails `privacidade@` e `contato@3dneweraai.com` (Cloudflare Email Routing ligado,
+      MX e SPF do Cloudflare, as duas regras encaminham para leandro.daf4@gmail.com) — eu
 
 **2. Pagamento (Polar)**
 - [ ] Conta e dados de recebimento — **você**
@@ -509,16 +510,22 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
       e `NEWERA_POLAR_PLANS` no `app.env` da VPS e o container recriado — **você** roda o
       script que lê o segredo sem eco (o acesso à VPS de produção é seu); depois disso,
       `POST /billing/polar` sem assinatura responde 401 em vez de 404
-- [ ] Link de apoio no README e no site — eu
+- [x] Link de apoio no README ("Support the project") e no rodapé do site ("Apoiar ☕") — eu
 
 **3. Registries e diretórios (Etapa 2)**
-- [ ] `scripts/registry-key.sh` e commit do `site/.well-known/mcp-registry-auth`; a
-      próxima versão publica no MCP Registry sozinha — eu
-- [ ] Formulário do Claude Desktop com o `.mcpb` (https://clau.de/desktop-extention-submission) — eu
+- [x] `scripts/registry-key.sh` e commit do `site/.well-known/mcp-registry-auth`;
+      `com.3dneweraai/newera` 1.8.0 publicado no MCP Registry oficial — eu
+- [ ] Formulário do Claude Desktop com o `.mcpb` (https://clau.de/desktop-extention-submission):
+      textos preenchidos; falta anexar o `.mcpb` (68 MB, pelo seletor do Drive), marcar as
+      opções e enviar — **você**
 - [ ] Plugin no Console da Anthropic (https://platform.claude.com/plugins/submit) e no
       Cursor Marketplace (https://cursor.com/marketplace/publish) — eu
-- [ ] Tópicos do repositório: `mcp`, `mcp-server`, `gemini-cli-extension` — eu
-- [ ] Smithery (`smithery mcp publish`), Glama (claim), mcp.so, PR no awesome-mcp-servers — eu
+- [x] Tópicos do repositório: `mcp`, `mcp-server`, `gemini-cli-extension` (no lugar de
+      `desktop-app`: o GitHub aceita 20) — eu
+- [x] mcp.so: https://github.com/chatmcp/mcpso/issues/4361 — eu
+- [x] PR no awesome-mcp-servers: https://github.com/punkpeye/awesome-mcp-servers/pull/15045 — eu
+- [ ] Smithery (`smithery mcp publish`, pede login) e Glama (claim, pede login) — eu,
+      com o navegador em primeiro plano
 - [ ] winget: fork do winget-pkgs, PR com `packaging/winget/…` (atualizado para 1.8.0)
       e o secret `WINGET_TOKEN` — eu, com um token que **você** cria
 - [ ] Homebrew: repositório `leandrodaf/homebrew-tap` com o cask e o secret
