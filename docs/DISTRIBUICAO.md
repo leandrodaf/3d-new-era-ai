@@ -464,10 +464,12 @@ cliente.
 - [x] Botão "Apoiar com um cafezinho (plano pago)" só na página da conta, com e-mail e id
       da conta no link de checkout — nada é vendido dentro do chat
 - [x] Nenhuma tool mudou: elas leem as cotas do plano (D9)
-- [ ] No Polar (depende de você): criar a organização, o produto de assinatura (mensal e
-      anual), o link de checkout e o webhook para `https://mcp.3dneweraai.com/billing/polar`;
-      depois `POLAR_WEBHOOK_SECRET`, `NEWERA_POLAR_CHECKOUT_URL` e `NEWERA_POLAR_PLANS`
-      no ambiente do serviço
+- [x] No Polar: organização `3d-new-era-ai`, "Supporter (monthly)" US$ 5/mês e
+      "Supporter (yearly)" US$ 48/ano, um link de checkout com os dois e o webhook
+      `newera-cloud` (eventos `subscription.*`, API 2026-04) para
+      `https://mcp.3dneweraai.com/billing/polar`
+- [ ] `POLAR_WEBHOOK_SECRET`, `NEWERA_POLAR_CHECKOUT_URL` e `NEWERA_POLAR_PLANS` no
+      ambiente do serviço
 
 ### Etapa 6
 - [ ] Microsoft Store/MSIX, Windows ODR, Docker MCP Catalog, Copilot Studio, Gemini
@@ -484,8 +486,9 @@ Quem faz cada passo: **você** (conta, pagamento, identidade, decisão) ou **eu,
 sua confirmação a cada envio** (formulário, publicação, configuração em painel).
 
 **1. Produção**
-- [ ] Conferir o deploy da 1.8.0 (`/cloud/health` 200 na VPS) — eu
-- [ ] Primeiro backup do banco no R2: `backup-agora --app newera-relay` — eu
+- [x] Conferir o deploy da 1.8.0 (`/cloud/health` 200 na VPS) — eu
+- [x] Primeiro backup do banco no R2: `backup-agora --app newera-relay` (verificado,
+      `daily/newera_relay-2026-09-24T17-56-40Z.sql.gz`) — eu
 - [ ] Chave do Resend no `app.env` da VPS (entrar por e-mail) — **você** cria a conta e
       verifica o domínio no Resend; eu ponho a chave
 - [ ] Google (opcional): cliente OAuth "Web application" com redirect
@@ -494,10 +497,18 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
 
 **2. Pagamento (Polar)**
 - [ ] Conta e dados de recebimento — **você**
-- [ ] Produto de assinatura (mensal e anual), link de checkout e webhook para
-      `https://mcp.3dneweraai.com/billing/polar` — eu, no painel
-- [ ] `POLAR_WEBHOOK_SECRET`, `NEWERA_POLAR_CHECKOUT_URL`, `NEWERA_POLAR_PLANS` no
-      `app.env` da VPS — eu
+- [x] Produtos no painel — eu:
+      - "Supporter (monthly)", US$ 5/mês: `afb196b2-844f-46c3-899a-b2bf9df7a68b`
+      - "Supporter (yearly)", US$ 48/ano: `593fc418-b65a-410d-861b-20c59da0d419`
+- [x] Link de checkout "Supporter (account page)" com os dois produtos, volta para
+      `https://mcp.3dneweraai.com/account`:
+      `https://buy.polar.sh/polar_cl_fXCqiyLmYzA1cWpJbo6wRKH6hZtqwmshPeNAD2TfpP1` — eu
+- [x] Webhook `newera-cloud` para `https://mcp.3dneweraai.com/billing/polar`, formato
+      Raw, API 2026-04, os 11 eventos `subscription.*` — eu
+- [ ] `POLAR_WEBHOOK_SECRET` (o *Signing secret* do webhook), `NEWERA_POLAR_CHECKOUT_URL`
+      e `NEWERA_POLAR_PLANS` no `app.env` da VPS e o container recriado — **você** roda o
+      script que lê o segredo sem eco (o acesso à VPS de produção é seu); depois disso,
+      `POST /billing/polar` sem assinatura responde 401 em vez de 404
 - [ ] Link de apoio no README e no site — eu
 
 **3. Registries e diretórios (Etapa 2)**
