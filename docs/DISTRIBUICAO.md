@@ -933,27 +933,28 @@ Descartadas em favor do Polar.sh (seção 6). Ficam aqui para consulta.
 
 ## R8. Checklist de submissão
 
-Vale para todos os diretórios. Os itens de tool viram testes no CI na Etapa 1.
+Vale para todos os diretórios. O kit para copiar nos formulários (descrições, prompts,
+casos de teste) está em `docs/connector-review.md`.
 
-- [ ] Toda tool com `title` e anotações corretas (`readOnlyHint`, `destructiveHint`,
-      `openWorldHint`).
-- [ ] Tools de leitura separadas das de escrita; nomes com até 64 caracteres.
-- [ ] Erros que dizem o que fazer.
-- [ ] Descrições sem ordens ao modelo, sem propaganda, sem upsell.
-- [ ] Nada de venda, preço ou link de checkout dentro do chat.
-- [ ] Nenhuma tool que faça pagamento.
-- [ ] Versão grátis útil por si só, não uma demo (a OpenAI recusa).
-- [ ] Dados mínimos; nada de histórico da conversa, IDs internos ou IDs de sessão.
-- [ ] Política de privacidade e termos publicados em 3dneweraai.com.
-- [ ] Documentação pública do conector.
-- [ ] Prompts de exemplo (≥3 para o Claude) e casos de teste (≥5 positivos, ≥3
-      negativos para a OpenAI).
+- [x] Toda tool com `title` e anotações corretas (`readOnlyHint`, `destructiveHint`,
+      `openWorldHint`) — testes `every_tool_has_hints` e `reads_change_nothing`.
+- [x] Tools de leitura separadas das de escrita; nomes com até 64 caracteres.
+- [x] Erros que dizem o que fazer.
+- [x] Descrições sem ordens ao modelo, sem propaganda, sem upsell.
+- [x] Nada de venda, preço ou link de checkout dentro do chat.
+- [x] Nenhuma tool que faça pagamento.
+- [x] Versão grátis útil por si só, não uma demo (a OpenAI recusa).
+- [x] Dados mínimos; nada de histórico da conversa, IDs internos ou IDs de sessão.
+- [x] Política de privacidade e termos publicados em 3dneweraai.com.
+- [x] Documentação pública do conector: https://3dneweraai.com/connector/
+- [x] Prompts de exemplo (5) e casos de teste (7 positivos, 4 negativos) em
+      `docs/connector-review.md`.
 - [ ] Conta de teste completa, com plano pago liberado e sem MFA.
-- [ ] Screenshots da MCP App (3–5 PNG, ≥1000px, sem o prompt), claro e escuro,
-      responsivo de 320px até tela cheia.
-- [ ] CSP declarando todos os domínios do widget.
-- [ ] Deixar claro que as imagens vêm de renderização determinística, não de IA
-      generativa.
+- [x] Screenshots da MCP App em `docs/images/connector/`: planta e 3D, claro e escuro,
+      1200 px e celular (1080 px a 3x), sem o prompt.
+- [x] CSP declarando todos os domínios do widget (nenhum: não carrega nada da rede).
+- [x] Deixar claro que as imagens vêm de renderização determinística, não de IA
+      generativa (na página do conector e na descrição longa).
 - [ ] Organização Claude Team (para enviar ao Connectors Directory).
 - [ ] Identidade verificada na OpenAI Platform.
 

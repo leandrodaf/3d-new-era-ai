@@ -144,7 +144,11 @@ and viewer and serves them at `http://127.0.0.1:8790`.
 
 ## Connect your AI
 
-Open the editor (or run `newera serve` for no window). It serves MCP at
+**In Claude, ChatGPT and other AIs, with nothing installed.** Add a connector with the
+address **`https://mcp.3dneweraai.com/mcp`** and sign in with your email; your projects
+stay in your account. Step by step: <https://3dneweraai.com/connector/>.
+
+**With the app.** Open the editor (or run `newera serve` for no window). It serves MCP at
 **`http://127.0.0.1:7878/mcp`** — point your AI there and it edits the plan you see, live.
 
 **In a browser, with nothing installed.** Open <https://3dneweraai.com/app/>,
