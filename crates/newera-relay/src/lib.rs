@@ -102,8 +102,13 @@ enum ToTab {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum FromTab {
-    /// Sent once, on connecting: the tools this window offers.
-    Hello { tools: Value },
+    /// Sent once, on connecting: the tools this window offers, and the
+    /// pages (MCP Apps) some of them show in the chat, with their contents.
+    Hello {
+        tools: Value,
+        #[serde(default)]
+        resources: Value,
+    },
     /// The answer to a call.
     Result {
         id: u64,
@@ -127,6 +132,8 @@ struct Room {
     outbox: Option<mpsc::UnboundedSender<ToTab>>,
     /// The tools this tab said it has, from its `hello`.
     tools: Value,
+    /// The pages this tab said it has, contents included, from its `hello`.
+    resources: Value,
     /// Calls in flight, waiting on the tab.
     waiting: HashMap<u64, oneshot::Sender<Result<Value, String>>>,
     next_call: u64,
@@ -142,6 +149,7 @@ impl Room {
             client_token,
             outbox: None,
             tools: json!([]),
+            resources: json!([]),
             waiting: HashMap::new(),
             next_call: 0,
             orphaned_at: Some(Instant::now()),
@@ -462,7 +470,10 @@ async fn hold_tab(socket: WebSocket, rooms: Rooms, room: String) {
         };
         entry.touched = Instant::now();
         match from {
-            FromTab::Hello { tools } => entry.tools = tools,
+            FromTab::Hello { tools, resources } => {
+                entry.tools = tools;
+                entry.resources = resources;
+            }
             FromTab::Result {
                 id,
                 ok,
@@ -589,7 +600,7 @@ async fn answer(rooms: &Rooms, room: &str, token: &str, message: &Value) -> Opti
                 "id": id,
                 "result": {
                     "protocolVersion": version,
-                    "capabilities": { "tools": {} },
+                    "capabilities": { "tools": {}, "resources": {} },
                     "serverInfo": {
                         "name": "3d-new-era-ai",
                         "title": "3D New Era AI (browser)",
@@ -611,6 +622,41 @@ async fn answer(rooms: &Rooms, room: &str, token: &str, message: &Value) -> Opti
                 "id": id,
                 "result": { "tools": tools.unwrap_or_else(|| json!([])) }
             }))
+        }
+        "resources/list" | "resources/read" => {
+            let resources = {
+                let held = rooms.0.lock().expect("rooms");
+                held.rooms
+                    .get(room)
+                    .map(|entry| entry.resources.clone())
+                    .unwrap_or_default()
+            };
+            let resources = resources.as_array().cloned().unwrap_or_default();
+            if method == "resources/list" {
+                let listed: Vec<Value> = resources
+                    .into_iter()
+                    .map(|mut r| {
+                        if let Some(map) = r.as_object_mut() {
+                            map.remove("text");
+                            map.remove("blob");
+                        }
+                        r
+                    })
+                    .collect();
+                return Some(json!({"jsonrpc": "2.0", "id": id, "result": {"resources": listed}}));
+            }
+            let uri = params
+                .get("uri")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            Some(match resources.into_iter().find(|r| r["uri"] == uri) {
+                Some(found) => json!({"jsonrpc": "2.0", "id": id, "result": {"contents": [found]}}),
+                None => error_body(
+                    &id,
+                    -32002,
+                    &format!("no resource {uri}; resources/list names the ones there are"),
+                ),
+            })
         }
         "tools/call" => {
             let name = params
@@ -772,6 +818,39 @@ mod tests {
         assert_eq!(answer["result"]["protocolVersion"], "2025-06-18");
         assert_eq!(answer["result"]["serverInfo"]["name"], "3d-new-era-ai");
         assert!(answer["result"]["capabilities"]["tools"].is_object());
+    }
+
+    /// The pages a tab offers are listed without their contents and read
+    /// whole; a page nobody offered is an error that says where to look.
+    #[tokio::test]
+    async fn a_tab_serves_its_pages() {
+        let rooms = Rooms::default();
+        let (id, _tab, token) = rooms.open("test", None).expect("a room");
+        {
+            let mut held = rooms.0.lock().unwrap();
+            held.rooms.get_mut(&id).unwrap().resources = json!([
+                {"uri": "ui://newera/plan-viewer.html", "mimeType": "text/html;profile=mcp-app", "text": "<html></html>"}
+            ]);
+        }
+        let list = json!({"jsonrpc": "2.0", "id": 1, "method": "resources/list"});
+        let listed = answer(&rooms, &id, &token, &list).await.unwrap();
+        let first = &listed["result"]["resources"][0];
+        assert_eq!(first["uri"], "ui://newera/plan-viewer.html");
+        assert!(first.get("text").is_none(), "a listing carries no contents");
+
+        let read = json!({"jsonrpc": "2.0", "id": 2, "method": "resources/read",
+            "params": {"uri": "ui://newera/plan-viewer.html"}});
+        let page = answer(&rooms, &id, &token, &read).await.unwrap();
+        assert_eq!(page["result"]["contents"][0]["text"], "<html></html>");
+
+        let missing = json!({"jsonrpc": "2.0", "id": 3, "method": "resources/read",
+            "params": {"uri": "ui://elsewhere"}});
+        let none = answer(&rooms, &id, &token, &missing).await.unwrap();
+        assert_eq!(none["error"]["code"], -32002);
+
+        // And a wrong token reads nothing, as for tools.
+        let other = answer(&rooms, &id, &"0".repeat(32), &read).await.unwrap();
+        assert_eq!(other["error"]["code"], -32001);
     }
 
     /// One address cannot take the whole relay: after the hour's worth of

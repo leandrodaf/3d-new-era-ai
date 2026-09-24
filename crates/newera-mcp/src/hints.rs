@@ -52,6 +52,7 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
     ("measure", "Measure the plan", Effect::Read, false),
     ("sessions", "List who is editing", Effect::Read, false),
     ("render_plan", "Render the floor plan", Effect::Read, false),
+    ("show_plan", "Show the plan", Effect::Read, false),
     ("render_3d", "Render a 3D view", Effect::Read, false),
     ("render_photo", "Render a photo", Effect::Read, false),
     // Writes that only add.

@@ -119,6 +119,11 @@ rm -rf "$(dirname "$TMP_PROJECT")"
 
 reply=$(rpc '{"jsonrpc":"2.0","id":3,"method":"tools/list"}')
 check "tools carry read/write hints" "$reply" '"readOnlyHint":true'
+check "show_plan opens the viewer" "$reply" '"resourceUri":"ui://newera/plan-viewer.html"'
+reply=$(rpc '{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"ui://newera/plan-viewer.html"}}')
+check "the viewer page is served" "$reply" '"mimeType":"text/html;profile=mcp-app"'
+reply=$(call show_plan '{}')
+check "show_plan hands the drawing to the viewer" "$reply" '"svg":"<svg'
 
 # `newera mcp` with the window open edits that window, not a project of its own.
 reply=$({

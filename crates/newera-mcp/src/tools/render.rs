@@ -203,6 +203,44 @@ impl NewEraMcp {
         )]))
     }
     #[tool(
+        description = "Show the plan to the user as an interactive viewer (pan, zoom, 3D view, open in the editor) where the chat client can display one. Reply: a one-line summary for you; the drawing goes to the viewer. To look at the plan yourself use render_plan."
+    )]
+    pub(crate) fn show_plan(&self) -> CallToolResult {
+        let doc = self.document.read();
+        let home = doc.home().level_view(doc.home().current_level());
+        let scene = plan_scene(
+            &home,
+            &SceneOptions {
+                show_background: false,
+                ..SceneOptions::default()
+            },
+        );
+        let svg = to_svg(&scene, &SvgOptions::default());
+        #[allow(clippy::cast_precision_loss)]
+        let area =
+            (home.rooms.iter().map(newera_core::Room::area).sum::<f64>() / 1000.0).round() / 10.0;
+        let summary = serde_json::json!({
+            "rooms": home.rooms.len(),
+            "area": area,
+            "walls": home.walls.len(),
+            "pieces": home.furniture.len(),
+        });
+        let text = format!(
+            "shown: {} rooms, {area} m², {} walls, {} pieces",
+            home.rooms.len(),
+            home.walls.len(),
+            home.furniture.len()
+        );
+        let mut result = CallToolResult::success(vec![ContentBlock::text(text)]);
+        result.structured_content = Some(serde_json::json!({
+            "name": home.name,
+            "svg": svg,
+            "summary": summary,
+            "editor": "https://3dneweraai.com/app/",
+        }));
+        result
+    }
+    #[tool(
         description = "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations — front looks from the plan's bottom edge (large y) toward y=0, back from y=0 toward large y, left from x=0, right from large x; cut=cm makes a section keeping only what is beyond that plane from the viewer (front cut=200 keeps y<200, so the wall at y=0 stays as the backdrop; to remove it look from back), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). walls=cutaway drops the walls between the eye and a room to 40 cm, walls=down drops them all; either hides ceilings, roofs and the doors, windows and wall pieces of lowered walls, to see the furniture from the side. Keep w/h small."
     )]
     pub(crate) fn render_3d(

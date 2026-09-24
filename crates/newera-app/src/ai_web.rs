@@ -345,10 +345,17 @@ fn hold(
                             format!("{} Browser replies also include recovery state, current_revision, saved_revision or restored_from_revision, timestamp and any storage failure.", tool.description.as_deref().unwrap_or(""))
                         } else { tool.description.as_deref().unwrap_or("").to_owned() },
                         "inputSchema": tool.input_schema,
+                        "title": tool.title,
+                        "annotations": tool.annotations,
+                        "_meta": tool.meta,
                     })
                 })
                 .collect();
-            let hello = serde_json::json!({"type": "hello", "tools": tools});
+            let hello = serde_json::json!({
+                "type": "hello",
+                "tools": tools,
+                "resources": newera_mcp::app::resources(),
+            });
             let _ = socket.send_with_str(&hello.to_string());
             {
                 let mut held = state.borrow_mut();

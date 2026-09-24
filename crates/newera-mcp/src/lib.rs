@@ -5,6 +5,7 @@
 //! that the desktop UI is also rendering. Whatever an agent does shows up on
 //! screen immediately and can be undone with Ctrl+Z.
 
+pub mod app;
 mod compact;
 mod edit;
 mod hints;
@@ -214,6 +215,7 @@ pub fn call(
                 .map_err(reason)?,
         )),
         "new_home" => Ok(said(server.new_home())),
+        "show_plan" => Ok(server.show_plan()),
         "plugins" => Ok(said(
             server.plugins(Parameters(params(args)?)).map_err(reason)?,
         )),

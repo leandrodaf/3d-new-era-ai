@@ -13,7 +13,7 @@
 //! | [`cabinets`] | `cabinet_run`, `embed` |
 //! | [`roof`] | `fit_roof` |
 //! | [`lighting`] | `lighting` |
-//! | [`render`] | `render_plan`, `render_3d`, `render_photo`, `export_plan` |
+//! | [`render`] | `render_plan`, `show_plan`, `render_3d`, `render_photo`, `export_plan` |
 //! | [`cameras`] | `cameras`, `video` |
 //! | [`measure`] | `measure` |
 //! | [`check`] | `check_layout`, `ergonomics` |
@@ -128,6 +128,7 @@ impl NewEraMcp {
                 route.attr.input_schema = std::sync::Arc::new(map);
             }
             crate::hints::apply(&mut route.attr);
+            crate::app::link(&mut route.attr);
         }
         Self {
             document,
@@ -162,13 +163,46 @@ impl ServerHandler for NewEraMcp {
         self.tool_router.call(call).await
     }
 
-    fn get_info(&self) -> ServerConfig {
-        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(
-                Implementation::new("3d-new-era-ai", env!("CARGO_PKG_VERSION"))
-                    .with_title("3D New Era AI"),
+    async fn list_resources(
+        &self,
+        _request: Option<rmcp::model::PaginatedRequestParams>,
+        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::ListResourcesResult, rmcp::ErrorData> {
+        serde_json::from_value(crate::app::resource_list())
+            .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None))
+    }
+
+    async fn read_resource(
+        &self,
+        request: rmcp::model::ReadResourceRequestParams,
+        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::ReadResourceResponse, rmcp::ErrorData> {
+        let found = crate::app::read(&request.uri).ok_or_else(|| {
+            rmcp::ErrorData::resource_not_found(
+                format!(
+                    "no resource {}; resources/list names the ones there are",
+                    request.uri
+                ),
+                None,
             )
-            .with_instructions(INSTRUCTIONS)
+        })?;
+        serde_json::from_value(found)
+            .map(rmcp::model::ReadResourceResponse::Complete)
+            .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None))
+    }
+
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(
+            ServerCapabilities::builder()
+                .enable_tools()
+                .enable_resources()
+                .build(),
+        )
+        .with_server_info(
+            Implementation::new("3d-new-era-ai", env!("CARGO_PKG_VERSION"))
+                .with_title("3D New Era AI"),
+        )
+        .with_instructions(INSTRUCTIONS)
     }
 }
 
