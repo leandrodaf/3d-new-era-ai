@@ -145,8 +145,9 @@ clientes que só iniciam um processo, stdio com `newera mcp`:
 { "mcpServers": { "newera": { "command": "newera", "args": ["mcp"] } } }
 ```
 
-Pelo stdio o agente trabalha num projeto próprio em segundo plano, não na janela aberta;
-use o endereço HTTP para projetar junto, ao vivo. Depois é só pedir, por exemplo: *"Desenhe
+Com o editor aberto, o stdio edita a planta dessa janela, como o endereço HTTP; sem
+janela (ou com `newera mcp --standalone`) o agente trabalha num projeto próprio em
+segundo plano. Depois é só pedir, por exemplo: *"Desenhe
 um quarto de 4 × 5 m com porta e janela, mobilie e gere uma foto."*
 
 ---

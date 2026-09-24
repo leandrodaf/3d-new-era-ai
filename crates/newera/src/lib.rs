@@ -7,6 +7,7 @@
 //! Two binaries share it: `newera` for the terminal and `newera-gui`, which
 //! on Windows opens without a console window behind the editor.
 
+mod bridge;
 mod demo;
 
 use std::net::SocketAddr;
@@ -55,8 +56,14 @@ enum Mode {
     },
     /// Run only the HTTP + MCP server, without a window.
     Serve,
-    /// Serve MCP over stdin/stdout.
-    Mcp,
+    /// Serve MCP over stdin/stdout. With the editor (or `newera serve`)
+    /// already open on this machine, the agent edits the plan on screen;
+    /// otherwise, or with `--standalone`, a project of its own.
+    Mcp {
+        /// Never attach to an open window.
+        #[arg(long)]
+        standalone: bool,
+    },
     /// Crash reports and usage notes: `status`, `on`, `off`, or `test` to send
     /// one event and print its id.
     Telemetry {
@@ -75,7 +82,7 @@ pub fn run() -> anyhow::Result<()> {
     let mode_name = match mode {
         Mode::Gui { .. } => "gui",
         Mode::Serve => "serve",
-        Mode::Mcp => "mcp",
+        Mode::Mcp { .. } => "mcp",
         Mode::Telemetry { .. } => "cli",
     };
     let _telemetry = newera_telemetry::init(mode_name);
@@ -116,6 +123,17 @@ pub fn run() -> anyhow::Result<()> {
         return telemetry(action);
     }
 
+    // A file or the sample house means a project of its own: attaching to
+    // the window would silently ignore it.
+    if let Mode::Mcp { standalone: false } = mode
+        && !cli.demo
+        && cli.file.is_none()
+        && let Some(window) = bridge::window(cli.addr, cli.token.as_deref())
+    {
+        tracing::info!("attached to the open window at {}", cli.addr);
+        return bridge::run(&window);
+    }
+
     let mut document = Document::new(if cli.demo {
         demo::sample_home()
     } else {
@@ -134,7 +152,7 @@ pub fn run() -> anyhow::Result<()> {
     match mode {
         Mode::Gui { no_server } => run_gui(document, cli.addr, cli.token.as_deref(), no_server),
         Mode::Serve => runtime()?.block_on(serve_until_ctrl_c(document, cli.addr, cli.token)),
-        Mode::Mcp => runtime()?
+        Mode::Mcp { .. } => runtime()?
             .block_on(newera_mcp::serve_stdio(document))
             .context("MCP stdio server failed"),
         Mode::Telemetry { .. } => unreachable!("answered above"),

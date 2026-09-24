@@ -38,10 +38,13 @@ newera-sh3d.workspace = true
 newera-mcp.workspace = true
 newera-server.workspace = true
 newera-telemetry.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+# Talks to an open window from `newera mcp`: loopback only, no TLS needed.
+ureq = { version = "3.4.2", default-features = false }
 
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1.26"

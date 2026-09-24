@@ -117,5 +117,19 @@ reply=$(call open_home '{"path":"'"$TMP_PROJECT"'.newera"}')
 check "open_home restores" "$(count w)" "9"
 rm -rf "$(dirname "$TMP_PROJECT")"
 
+reply=$(rpc '{"jsonrpc":"2.0","id":3,"method":"tools/list"}')
+check "tools carry read/write hints" "$reply" '"readOnlyHint":true'
+
+# `newera mcp` with the window open edits that window, not a project of its own.
+reply=$({
+  echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"'"$PROTOCOL"'","capabilities":{},"clientInfo":{"name":"smoke","version":"1"}}}'
+  sleep 0.5
+  echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+  echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create","arguments":{"walls":[{"pts":[[0,900],[400,900]]}]}}}'
+  sleep 1.5
+} | "$BIN" mcp --addr "127.0.0.1:${PORT}" 2>/dev/null)
+check "stdio attaches to the open window" "$reply" 'ok rev='
+check "the window has the stdio wall" "$(count w)" "10"
+
 rm -f "$LOG.headers"
 echo "All good."

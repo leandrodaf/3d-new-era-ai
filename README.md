@@ -232,8 +232,9 @@ process, stdio with `newera mcp`:
 { "mcpServers": { "newera": { "command": "newera", "args": ["mcp"] } } }
 ```
 
-With stdio the agent works on its own project in the background, not on the open
-window; use the URL to design together live. Then just ask, for example: *"Draw a 4 × 5 m
+With the editor open, stdio edits the plan in that window, just like the URL; with no
+window (or `newera mcp --standalone`) the agent works on its own project in the
+background. Then just ask, for example: *"Draw a 4 × 5 m
 bedroom with a door and a window, furnish it and render a photo."*
 
 ### Tools
@@ -278,7 +279,7 @@ newera [FILE]           # desktop editor with embedded HTTP + MCP server
 newera --demo           # start with a sample house
 newera gui --no-server  # editor only
 newera serve [FILE]     # headless HTTP + MCP server
-newera mcp              # MCP over stdio
+newera mcp              # MCP over stdio (the open window, if there is one)
 ```
 
 Options: `--addr 127.0.0.1:7878` (or `NEWERA_ADDR`), `--token` (or `NEWERA_TOKEN`, required

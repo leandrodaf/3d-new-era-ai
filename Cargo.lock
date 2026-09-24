@@ -3228,10 +3228,12 @@ dependencies = [
  "newera-server",
  "newera-sh3d",
  "newera-telemetry",
+ "serde_json",
  "tokio",
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "ureq",
  "winresource",
 ]
 
