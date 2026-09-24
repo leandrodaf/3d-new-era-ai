@@ -528,12 +528,14 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
 - [x] PR no awesome-mcp-servers: https://github.com/punkpeye/awesome-mcp-servers/pull/15045 — eu
 - [ ] Smithery (`smithery mcp publish`, pede login) e Glama (claim, pede login) — eu,
       com o navegador em primeiro plano
-- [ ] winget: fork do winget-pkgs, PR com `packaging/winget/…` (atualizado para 1.8.0)
-      e o secret `WINGET_TOKEN` — eu, com um token que **você** cria
+- [x] Secret `WINGET_TOKEN` (classic, `public_repo`, vence em 24/09/2027), também no
+      1Password
+- [ ] winget: o primeiro PR no microsoft/winget-pkgs com os manifestos da 1.8.0
+      (`scripts/winget.sh`); as versões seguintes o release envia sozinho
 - [x] Homebrew: repositório `leandrodaf/homebrew-tap` com o cask da 1.8.0
       (`brew install --cask leandrodaf/tap/3d-new-era-ai`) — eu
-- [ ] Secret `HOMEBREW_TAP_TOKEN` (fine-grained, só no tap, Contents: write), para as
-      próximas versões atualizarem o cask sozinhas — **você** cria o token
+- [x] Secret `HOMEBREW_TAP_TOKEN` (fine-grained, só no tap, Contents: write, sem validade),
+      também no 1Password: as próximas versões atualizam o cask sozinhas
 
 **4. Diretórios de conector (depois de 1 e 2)**
 - [ ] Plugin com o MCP remoto (`https://mcp.3dneweraai.com/mcp`) — eu
