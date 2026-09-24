@@ -521,8 +521,8 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
 - [x] Cursor Marketplace: pedido de publisher enviado em 24/09/2026 (`@3d-new-era-ai`,
       `.cursor-plugin/marketplace.json` na raiz apontando para `./plugin`,
       logo em `assets/logo-plate.png`) — eu
-- [ ] Plugin no Console da Anthropic (https://platform.claude.com/plugins/submit) — eu,
-      depois que **você** entrar no Console
+- [x] Plugin no Console da Anthropic enviado em 24/09/2026 ("3d-new-era-ai", caminho
+      `plugin`, aguardando revisão em https://platform.claude.com/plugins/submissions)
 - [x] Tópicos do repositório: `mcp`, `mcp-server`, `gemini-cli-extension` (no lugar de
       `desktop-app`: o GitHub aceita 20) — eu
 - [x] mcp.so: https://github.com/chatmcp/mcpso/issues/4361 — eu
