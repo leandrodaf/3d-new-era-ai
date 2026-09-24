@@ -492,8 +492,7 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
 - [x] Resend: domínio `3dneweraai.com` (São Paulo) com DKIM e os CNAME `rsend`/`send` no
       Cloudflare; chave "Sending access" no 1Password ("3D New Era AI - Resend") e no
       `app.env` da VPS (24/09/2026)
-- [ ] Resend marcar o domínio como *Verified* (o DNS público já responde) e testar a
-      entrada por e-mail em https://mcp.3dneweraai.com/login
+- [x] Resend verificou o domínio; a entrada por e-mail foi entregue e usada (24/09/2026)
 - [ ] Google (opcional): cliente OAuth "Web application" com redirect
       `https://mcp.3dneweraai.com/login/google/callback` — **você**
 - [x] E-mails `privacidade@` e `contato@3dneweraai.com` (Cloudflare Email Routing ligado,
@@ -528,9 +527,9 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
       `desktop-app`: o GitHub aceita 20) — eu
 - [x] mcp.so: https://github.com/chatmcp/mcpso/issues/4361 — eu
 - [x] PR no awesome-mcp-servers: https://github.com/punkpeye/awesome-mcp-servers/pull/15045 — eu
-- [x] Smithery: `leandro-daf4/new-era-3d` apontando para `https://mcp.3dneweraai.com/mcp`
-- [ ] Smithery: autorizar o OAuth da primeira leitura das tools e publicar a release (depende
-      do Resend verificado para entrar na nuvem) — eu
+- [x] Smithery: `leandro-daf4/new-era-3d` publicado (https://smithery.ai/servers/leandro-daf4/new-era-3d),
+      apontando para `https://mcp.3dneweraai.com/mcp`; o OAuth com CIMD passou de ponta a
+      ponta e o Smithery leu 57 tools e 1 resource — eu
 - [ ] Glama (claim, pede login) — eu, depois que **você** entrar
 - [x] Secret `WINGET_TOKEN` (classic, `public_repo`, vence em 24/09/2027), também no
       1Password
