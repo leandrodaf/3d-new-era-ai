@@ -24,19 +24,22 @@ pub(crate) struct JoineryParams {
     p: Option<serde_json::Map<String, serde_json::Value>>,
     /// Center on the plan (default: 0,0), or `wall` (+`along` cm) to back it onto a wall.
     at: Option<Point2>,
+    /// Wall to back it onto, instead of `at`.
     wall: Option<String>,
+    /// With `wall`: center along it, cm from its start (default: the middle).
     along: Option<f64>,
-    /// Clockwise degrees; bottom above the floor, cm (wall cabinets).
+    /// Clockwise degrees.
     angle: Option<f64>,
+    /// Bottom above the floor, cm (wall cabinets).
     elev: Option<f64>,
     /// `cove`/`shadow_gap`: room id whose outline to follow.
     room: Option<String>,
-    /// Only check and report, create nothing.
     /// Changing a build's size: the face that stays where it is — `back`
     /// (default: joinery stands against a wall), `front`, `left`, `right`,
     /// `bottom`, `top` or a plan side `+x` `-x` `+y` `-y`; `center` grows
     /// around the middle.
     anchor: Option<String>,
+    /// Only check and report, create nothing.
     #[serde(default)]
     dry: bool,
 }

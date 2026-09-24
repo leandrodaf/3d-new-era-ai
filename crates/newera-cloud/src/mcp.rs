@@ -141,6 +141,10 @@ fn hosted_tools() -> Vec<Value> {
     for tool in &mut tools {
         if let Some((_, meaning)) = CLOUD_MEANING.iter().find(|(n, _)| tool["name"] == *n) {
             tool["description"] = json!(meaning);
+            // Here a file comes back as a link, in an `ok` line.
+            if tool["name"] == "export_cut_list" {
+                tool["outputSchema"] = newera_mcp::output::ok_schema();
+            }
         }
     }
     tools.push(json!({
@@ -149,6 +153,16 @@ fn hosted_tools() -> Vec<Value> {
         "description": "The projects kept in the account: rows [name, id, kb, updated, active], the space used and the plan's limits. open_home switches the active one; new_home starts one.",
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false},
         "annotations": {"title": "List your projects", "readOnlyHint": true, "openWorldHint": false},
+        "outputSchema": {
+            "type": "object",
+            "properties": {
+                "rows": {"type": "array", "description": "[name, id, kb, updated (unix seconds), active]"},
+                "columns": {"type": "array", "items": {"type": "string"}, "description": "What each row holds"},
+                "used_kb": {"type": "integer", "description": "Space the projects take, kB"},
+                "limits": {"type": "object", "description": "What the account's plan allows"},
+            },
+            "required": ["rows", "columns", "used_kb", "limits"],
+        },
     }));
     tools
 }
@@ -181,6 +195,9 @@ async fn answer(
                         "name": "3d-new-era-ai",
                         "title": "3D New Era AI",
                         "version": env!("CARGO_PKG_VERSION"),
+                        "description": newera_mcp::output::DESCRIPTION,
+                        "websiteUrl": newera_mcp::output::WEBSITE,
+                        "icons": newera_mcp::output::icons(),
                     },
                     "instructions": INSTRUCTIONS,
                 }),
@@ -216,7 +233,13 @@ async fn answer(
             if name != "projects"
                 && let Some(room) = app.rooms.owned_by(&account.id)
             {
-                return newera_relay::answer_in(&app.rooms, &room, message).await;
+                // The tab may run an editor older than this service: its
+                // answer gets its fields here, as the engine's do.
+                let mut answer = newera_relay::answer_in(&app.rooms, &room, message).await;
+                if let Some(result) = answer.as_mut().and_then(|a| a.get_mut("result")) {
+                    newera_mcp::output::structure_json(result);
+                }
+                return answer;
             }
             let args = params.get("arguments").cloned().unwrap_or(Value::Null);
             let plan = match crate::accounts::plan_of(&app.db, &account.id).await {
@@ -243,7 +266,10 @@ async fn answer(
                 )
                 .await
             {
-                Ok(answer) => Some(result(&id, answer)),
+                Ok(mut answer) => {
+                    newera_mcp::output::structure_json(&mut answer);
+                    Some(result(&id, answer))
+                }
                 Err(err) => {
                     tracing::error!("engine {name}: {err:#}");
                     Some(result(

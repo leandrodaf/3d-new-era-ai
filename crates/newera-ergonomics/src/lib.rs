@@ -49,7 +49,9 @@ pub use scene::{RoomUse, Scene, Side, Space, Unit, Use};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct ReviewScope {
+    /// Count electrical findings in the score (default true).
     pub electrical: bool,
+    /// Count plumbing findings in the score (default true).
     pub plumbing: bool,
 }
 

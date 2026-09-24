@@ -12,6 +12,8 @@ use crate::edit::{self, PlaceSpec};
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct PlaceParams {
+    /// The pieces to place, one object each: `id` from the catalog (or
+    /// `copy`), and where (`at`, or `wall` + `along`).
     items: Vec<PlaceSpec>,
     /// Fields every item takes unless it sets them (cat, w, d, h, color, mat…).
     defaults: Option<PlaceSpec>,
@@ -28,19 +30,23 @@ pub(crate) struct ArrangeParams {
     /// `array` (copies in a row), `align`, `distribute`, `flip`, `rotate`,
     /// `mirror`, `group`, `ungroup`, `front`, `back`.
     action: String,
+    /// The elements to act on (ungroup: the group).
     ids: Vec<String>,
     /// array: number of copies (default 1).
     n: Option<usize>,
-    /// array: step per copy, cm (dz raises furniture/labels).
+    /// array: step per copy along x, cm.
     dx: Option<f64>,
+    /// array: step per copy along y, cm.
     dy: Option<f64>,
+    /// array: step per copy upwards, cm (furniture and labels).
     dz: Option<f64>,
     /// rotate: pivot `[x,y]` (default the center of the elements).
     about: Option<Point2>,
     /// rotate: clockwise degrees.
     angle: Option<f64>,
-    /// mirror: two points of the mirror line.
+    /// mirror: the first point of the mirror line.
     a: Option<Point2>,
+    /// mirror: the second point of the mirror line.
     b: Option<Point2>,
     /// rotate/mirror: keep the originals and transform a copy.
     #[serde(default)]
@@ -50,8 +56,9 @@ pub(crate) struct ArrangeParams {
     /// align/distribute: `x` or `y`.
     axis: Option<String>,
     /// align: which edge to line up — `low` (left, or top of the plan),
-    /// `middle`, `high` — and `value`, the coordinate to put it on.
+    /// `middle`, `high`.
     edge: Option<String>,
+    /// align: the coordinate, cm, to put that edge on.
     value: Option<f64>,
     /// distribute: centimeters between one piece and the next (default 0).
     gap: Option<f64>,

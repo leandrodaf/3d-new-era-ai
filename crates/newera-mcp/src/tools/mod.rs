@@ -136,6 +136,7 @@ impl NewEraMcp {
                 route.attr.input_schema = std::sync::Arc::new(map);
             }
             crate::hints::apply(&mut route.attr);
+            crate::output::apply(&mut route.attr);
             crate::app::link(&mut route.attr);
         }
         Self {
@@ -161,14 +162,27 @@ impl ServerHandler for NewEraMcp {
         context: rmcp::service::RequestContext<rmcp::RoleServer>,
     ) -> Result<rmcp::model::CallToolResponse, rmcp::ErrorData> {
         #[cfg(not(target_arch = "wasm32"))]
-        if matches!(
+        let answer = if matches!(
             request.name.as_ref(),
             "render_photo" | "render_plan" | "render_3d" | "edit_video"
         ) {
-            return native_job::run(self.clone(), request, context).await;
-        }
-        let call = rmcp::handler::server::tool::ToolCallContext::new(self, request, context);
-        self.tool_router.call(call).await
+            native_job::run(self.clone(), request, context).await
+        } else {
+            let call = rmcp::handler::server::tool::ToolCallContext::new(self, request, context);
+            self.tool_router.call(call).await
+        };
+        #[cfg(target_arch = "wasm32")]
+        let answer = {
+            let call = rmcp::handler::server::tool::ToolCallContext::new(self, request, context);
+            self.tool_router.call(call).await
+        };
+        answer.map(|response| match response {
+            rmcp::model::CallToolResponse::Complete(mut result) => {
+                crate::output::structure(&mut result);
+                rmcp::model::CallToolResponse::Complete(result)
+            }
+            other => other,
+        })
     }
 
     async fn list_resources(
@@ -208,7 +222,10 @@ impl ServerHandler for NewEraMcp {
         )
         .with_server_info(
             Implementation::new("3d-new-era-ai", env!("CARGO_PKG_VERSION"))
-                .with_title("3D New Era AI"),
+                .with_title("3D New Era AI")
+                .with_description(crate::output::DESCRIPTION)
+                .with_website_url(crate::output::WEBSITE)
+                .with_icons(crate::output::icons()),
         )
         .with_instructions(INSTRUCTIONS)
     }

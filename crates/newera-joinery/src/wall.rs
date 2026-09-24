@@ -49,6 +49,7 @@ pub struct CabinetRunParams {
     pub p: Option<serde_json::Map<String, Value>>,
     /// Stretch to fill, cm from the wall start (default: all of it).
     pub from: Option<f64>,
+    /// Where the run ends, cm from the wall start (default: the wall's end).
     pub to: Option<f64>,
     /// Cabinets on that wall that stay as they are.
     pub keep: Option<Vec<String>>,

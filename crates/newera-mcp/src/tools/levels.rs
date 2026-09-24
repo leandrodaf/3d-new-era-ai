@@ -19,6 +19,7 @@ pub(crate) struct LevelsParams {
     action: Option<String>,
     /// Level id, e.g. `lv3`.
     id: Option<String>,
+    /// Storey name for `add` and `update`.
     name: Option<String>,
     /// Storey height cm for `add` and `update`.
     h: Option<f64>,

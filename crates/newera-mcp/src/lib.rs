@@ -9,6 +9,7 @@ pub mod app;
 mod compact;
 mod edit;
 mod hints;
+pub mod output;
 mod schema;
 mod tools;
 mod trace;
@@ -86,6 +87,17 @@ pub fn tools() -> Vec<rmcp::model::Tool> {
 /// Unknown names and arguments that do not fit come back as `Err` with the
 /// reason, which is what an agent needs to fix its own call.
 pub fn call(
+    document: SharedDocument,
+    name: &str,
+    args: serde_json::Value,
+) -> Result<rmcp::model::CallToolResult, String> {
+    let mut result = run(document, name, args)?;
+    output::structure(&mut result);
+    Ok(result)
+}
+
+/// [`call`], before its answer is laid out as fields.
+fn run(
     document: SharedDocument,
     name: &str,
     args: serde_json::Value,

@@ -18,11 +18,15 @@ pub(crate) struct CamerasParams {
     pub(crate) action: Option<String>,
     /// Stored view index.
     pub(crate) i: Option<usize>,
+    /// For `store`: the view's name (default "Ponto de vista N").
     pub(crate) name: Option<String>,
+    /// Eye position on the plan, cm.
     pub(crate) x: Option<f64>,
+    /// Eye position on the plan, cm (y grows down).
     pub(crate) y: Option<f64>,
     /// Eye height cm.
     pub(crate) z: Option<f64>,
+    /// Direction the eye looks, degrees clockwise on the plan.
     pub(crate) yaw: Option<f64>,
     /// Degrees down.
     pub(crate) pitch: Option<f64>,
@@ -39,20 +43,29 @@ pub(crate) struct VideoParams {
     i: Option<usize>,
     /// Stored view index to add as keyframe.
     cam: Option<usize>,
+    /// Keyframe eye position on the plan, cm.
     x: Option<f64>,
+    /// Keyframe eye position on the plan, cm (y grows down).
     y: Option<f64>,
+    /// Keyframe eye height, cm.
     z: Option<f64>,
+    /// Keyframe direction, degrees clockwise on the plan.
     yaw: Option<f64>,
+    /// Keyframe tilt, degrees down.
     pitch: Option<f64>,
+    /// Keyframe horizontal field of view, degrees.
     fov: Option<f64>,
     /// Keyframes for `orbit`.
     n: Option<usize>,
+    /// Frames per second of the rendered video.
     fps: Option<u32>,
     /// Camera speed m/s.
     speed: Option<f64>,
     /// Output `.avi` for `render`.
     path: Option<String>,
+    /// Video width, px.
     w: Option<u32>,
+    /// Video height, px.
     h: Option<u32>,
 }
 #[tool_router(router = cameras_router, vis = "pub(crate)")]

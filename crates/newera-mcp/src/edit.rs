@@ -59,6 +59,7 @@ pub(crate) struct WallPath {
 pub(crate) struct RoomSpec {
     /// Declared room program, independent of name; auto restores inference.
     pub room_use: Option<newera_core::RoomUse>,
+    /// The room's name, e.g. `Sala` or `Banheiro`.
     pub name: String,
     /// Floor polygon. Omit and give `at` to detect the room enclosed by walls.
     pub pts: Option<Vec<Point2>>,
@@ -74,7 +75,9 @@ pub(crate) struct RoomSpec {
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct DimSpec {
+    /// Start of a free dimension, `[x,y]` cm.
     pub a: Option<Point2>,
+    /// End of a free dimension, `[x,y]` cm.
     pub b: Option<Point2>,
     /// Measure a wall: `side` picks the line, `chain` splits at openings.
     pub wall: Option<String>,
@@ -87,16 +90,20 @@ pub(crate) struct DimSpec {
     pub room: Option<String>,
     /// Offset cm from the measured line (default 40 for walls; a/b: left of a→b is positive).
     pub off: Option<f64>,
-    /// Also draw it in 3D, at `elev` cm, tilted `pitch`° around its line (90 = offset upwards).
+    /// Also draw it in 3D.
     #[serde(default)]
     pub in3d: bool,
+    /// With `in3d`: height of the line above the floor, cm.
     pub elev: Option<f64>,
+    /// With `in3d`: tilt around its line, degrees (90 = offset upwards).
     pub pitch: Option<f64>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct LabelSpec {
+    /// What the label says.
     pub text: String,
+    /// Center of the text, `[x,y]` cm.
     pub at: Point2,
     /// Text height cm (default 24).
     pub size: Option<f64>,
@@ -110,7 +117,9 @@ pub(crate) struct LabelSpec {
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct PolylineSpec {
+    /// The line's points, `[[x,y],…]` cm.
     pub pts: Vec<Point2>,
+    /// Join the last point back to the first.
     #[serde(default)]
     pub closed: bool,
     /// Line width cm (default 1).
@@ -131,12 +140,16 @@ pub(crate) struct PolylineSpec {
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct CreateParams {
+    /// Walls, each a chain of points joined corner to corner.
     #[serde(default)]
     pub walls: Vec<WallPath>,
+    /// Rooms: an outline of points, or `at` inside closed walls.
     #[serde(default)]
     pub rooms: Vec<RoomSpec>,
+    /// Dimension lines: between two points, along a wall, or across a room.
     #[serde(default)]
     pub dims: Vec<DimSpec>,
+    /// Text on the plan.
     #[serde(default)]
     pub labels: Vec<LabelSpec>,
     /// Free lines: annotations, arrows, electrical or plumbing runs.
@@ -195,8 +208,11 @@ impl CreateParams {
 
 #[derive(Debug, Default, Clone, Copy, Deserialize, JsonSchema)]
 pub(crate) struct SkylightSpec {
+    /// Center on the plan, `[x,y]` cm.
     pub at: Point2,
+    /// Size along the ridge, cm.
     pub w: Option<f64>,
+    /// Size across the ridge, cm.
     pub d: Option<f64>,
 }
 
@@ -208,7 +224,9 @@ pub(crate) struct SolidSpec {
     /// u runs across the path (for a→b going down the plan, +u is +x),
     /// z is the height above the storey floor.
     pub profile: Option<Vec<Point2>>,
+    /// With `profile`: where the sweep starts, `[x,y]` cm.
     pub a: Option<Point2>,
+    /// With `profile`: where the sweep ends, `[x,y]` cm.
     pub b: Option<Point2>,
     /// Outline thickness cm (default 15).
     pub h: Option<f64>,
@@ -216,8 +234,11 @@ pub(crate) struct SolidSpec {
     pub elev: Option<f64>,
     /// Finish (`wood`, `concrete`, `img:…`).
     pub mat: Option<String>,
+    /// `[r,g,b]`.
     pub color: Option<[u8; 3]>,
+    /// 0..1; e.g. 0.3 for glass.
     pub opacity: Option<f64>,
+    /// The piece's name.
     pub name: Option<String>,
 }
 
@@ -318,6 +339,7 @@ pub(crate) struct RoofSpec {
     pub overhang: Option<f64>,
     /// Panel thickness cm (default 12).
     pub t: Option<f64>,
+    /// Panel color `[r,g,b]`.
     pub color: Option<[u8; 3]>,
     /// Also close the gable ends with sloping walls.
     #[serde(default)]
@@ -326,6 +348,7 @@ pub(crate) struct RoofSpec {
     /// `w` along the ridge and `d` across it (plan size), cm.
     #[serde(default)]
     pub skylights: Vec<SkylightSpec>,
+    /// The roof group's name.
     pub name: Option<String>,
 }
 
@@ -578,6 +601,7 @@ pub(crate) struct UpdateSpec {
     /// Declared room program, independent of name; auto restores inference.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub room_use: Option<newera_core::RoomUse>,
+    /// The element to change.
     #[serde(skip_serializing)]
     pub id: String,
     /// Start point (wall, dimension).
@@ -659,6 +683,7 @@ pub(crate) struct UpdateSpec {
     /// Furniture opacity 0..1.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub opacity: Option<f64>,
+    /// Furniture mirrored left to right.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mirror: Option<bool>,
     /// Which face of the piece stays put when `w`, `d` or `h` change:
@@ -677,6 +702,7 @@ pub(crate) struct UpdateSpec {
     /// (in no layer), or empty to go back to the layer it is in by itself.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub layer: Option<String>,
+    /// Show or hide the element.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visible: Option<bool>,
     /// Furniture light {lm|w, lamp, k, beam, area, z, on}.
@@ -744,6 +770,7 @@ pub(crate) struct UpdateSpec {
     /// furniture around its width axis.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pitch: Option<f64>,
+    /// Label italic text.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub italic: Option<bool>,
     /// Label alignment: `left`, `center`, `right`.
@@ -1382,7 +1409,9 @@ pub(crate) struct BackgroundParams {
     pub angle: Option<f64>,
     /// Plan position cm of the image's top-left corner.
     pub offset: Option<Point2>,
+    /// How opaque the image is drawn, 0..1.
     pub opacity: Option<f64>,
+    /// Show or hide the image without removing it.
     pub visible: Option<bool>,
     /// Remove the background.
     #[serde(default)]
@@ -1776,21 +1805,29 @@ pub(crate) struct PlaceSpec {
     /// `+y`, `-y`), or a point `[x,y]` or an element id to turn toward (an
     /// armchair toward the TV). With `wall` it also picks the wall's side.
     pub facing: Option<Facing>,
-    /// Size overrides, cm.
+    /// Width override, cm.
     pub w: Option<f64>,
+    /// Depth override, cm.
     pub d: Option<f64>,
+    /// Height override, cm.
     pub h: Option<f64>,
+    /// Bottom above the floor, cm.
     pub elev: Option<f64>,
-    /// Tilt around the width axis / the depth axis, degrees (rafters, ramps, panels).
+    /// Tilt around the width axis, degrees (rafters, ramps, panels).
     pub pitch: Option<f64>,
+    /// Tilt around the depth axis, degrees.
     pub roll: Option<f64>,
+    /// The piece's name (default: the catalog's).
     pub name: Option<String>,
+    /// `[r,g,b]`.
     pub color: Option<[u8; 3]>,
     /// Finish over the whole piece: `wood`, `marble #222 60`, `img:photo.jpg 100x80`.
     pub mat: Option<String>,
     /// 0..1; e.g. 0.3 for glass.
     pub opacity: Option<f64>,
+    /// Mirror it left to right.
     pub mirror: Option<bool>,
+    /// Doors: hinge on the right.
     pub hinge_right: Option<bool>,
     /// Glass of a guard or a balcony closure: `laminated`, `tempered`,
     /// `tempered-laminated` or `wired`.
@@ -1802,6 +1839,7 @@ pub(crate) struct PlaceSpec {
     /// With `cat:"beam"`: end points `[x,y,z]` cm (z above the storey floor);
     /// `w`×`h` is the section (default 10×20).
     pub a: Option<[f64; 3]>,
+    /// With `cat:"beam"`: the other end point `[x,y,z]` cm.
     pub b: Option<[f64; 3]>,
     /// Light it gives (fixtures come with theirs).
     pub light: Option<LightSpec>,

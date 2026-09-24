@@ -19,9 +19,11 @@ pub(crate) struct EmbedParams {
     item: Option<String>,
     /// …or a new one from the catalog: `cooktop`, `sink-bowl`, `oven`, `microwave`.
     cat: Option<String>,
-    /// Size of a new item, cm (a real product's measurements).
+    /// Width of a new item, cm (a real product's measurements).
     w: Option<f64>,
+    /// Depth of a new item, cm.
     d: Option<f64>,
+    /// Height of a new item, cm.
     h: Option<f64>,
     /// Joinery countertop (sink, cooktop) or cabinet (oven, microwave: a niche).
     host: String,

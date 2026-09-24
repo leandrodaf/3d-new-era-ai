@@ -24,9 +24,9 @@ pub(crate) struct RenderParams {
     /// The region is fitted to the image's aspect and grown on the short
     /// side — never cropped — so everything asked for is in the picture.
     pub(crate) region: Option<[Point2; 2]>,
-    /// Instead of `region`: a room id or name to frame, with `pad` cm of
-    /// margin around it (default 30).
+    /// Instead of `region`: a room id or name to frame.
     pub(crate) room: Option<String>,
+    /// With `room`: margin around it, cm (default 30).
     pub(crate) pad: Option<f64>,
     /// Draw the grid (default true).
     pub(crate) grid: Option<bool>,
@@ -38,7 +38,9 @@ pub(crate) struct RenderParams {
 pub(crate) struct ExportParams {
     /// Output file: `.pdf`, `.svg`, `.png`, `.glb` or `.obj`.
     path: String,
+    /// `.png` only: width px (default 1600).
     w: Option<u32>,
+    /// `.png` only: height px (default 1200).
     h: Option<u32>,
     /// PDF scale denominator (50 → 1:50); omitted fits the sheet.
     scale: Option<f64>,
@@ -49,13 +51,17 @@ pub(crate) struct PhotoParams {
     view: Option<String>,
     /// Stored point of view index.
     cam: Option<usize>,
+    /// Aerial turn, degrees (default 60).
     yaw: Option<f32>,
+    /// Aerial height angle, degrees (default 40).
     pitch: Option<f32>,
     /// `draft` (default), `good`, `best`.
     quality: Option<String>,
     /// Local solar hour, 0–24.
     hour: Option<f64>,
+    /// Width px (default 480, 64..1600).
     w: Option<u32>,
+    /// Height px (default 360, 64..1200).
     h: Option<u32>,
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -76,7 +82,9 @@ pub(crate) struct Render3dParams {
     cut: Option<f64>,
     /// `up` (default), `cutaway` or `down`.
     walls: Option<String>,
+    /// Width px (default 480, 64..1600).
     w: Option<u32>,
+    /// Height px (default 360, 64..1200).
     h: Option<u32>,
 }
 /// Plan options as the user sees them: backgrounds, and top views for

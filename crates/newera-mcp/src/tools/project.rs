@@ -15,12 +15,15 @@ use crate::compact;
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct SetHomeParams {
+    /// The project's name.
     name: Option<String>,
     /// Clockwise degrees from plan up to north.
     north: Option<f64>,
+    /// Where the compass sits on the plan, `[x,y]` cm.
     compass_at: Option<Point2>,
     /// Compass diameter cm.
     compass_d: Option<f64>,
+    /// Show or hide the compass.
     compass_visible: Option<bool>,
     /// City whose building code applies, e.g. `sao-paulo`; `""` clears it.
     /// Kept with the project, so `ergonomics`, `check_layout` and every dry
@@ -60,6 +63,7 @@ pub(crate) struct VariantsParams {
 pub(crate) struct CheckpointParams {
     /// `checkpoint` (remember here, the default) or `revert` (go back).
     action: Option<String>,
+    /// The checkpoint's name; required by both actions.
     label: Option<String>,
 }
 

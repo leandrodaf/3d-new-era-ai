@@ -21,8 +21,9 @@ pub(crate) struct TraceParams {
     threshold: Option<u8>,
     /// Shortest wall kept, cm (default 60).
     min_len: Option<f64>,
-    /// Wall thickness range, cm (default 5..45).
+    /// Thinnest wall kept, cm (default 5).
     t_min: Option<f64>,
+    /// Thickest wall kept, cm (default 45).
     t_max: Option<f64>,
     /// Doors and windows up to this wide don't split a wall, cm (default 130).
     max_gap: Option<f64>,

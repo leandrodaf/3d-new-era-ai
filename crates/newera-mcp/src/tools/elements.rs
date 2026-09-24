@@ -16,6 +16,7 @@ use crate::edit::{self, CreateParams, UpdateSpec};
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct UpdateParams {
+    /// The elements to change, one object each: `id` and the fields to set.
     #[serde(default)]
     pub(crate) items: Vec<UpdateSpec>,
     /// Rename in bulk by a rule instead of listing items: every name (pieces
@@ -33,16 +34,19 @@ pub(crate) struct UpdateParams {
 }
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct IdsParams {
+    /// The walls to join, in order along the line they make.
     ids: Vec<String>,
 }
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct DeleteParams {
+    /// The elements to delete: walls, rooms, pieces, dimensions, labels, lines.
     ids: Vec<String>,
     /// Also delete the labels left pointing at the deleted pieces.
     labels: Option<bool>,
 }
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct MoveParams {
+    /// The elements to move together.
     ids: Vec<String>,
     /// Shift in x, cm (with `dy`).
     #[serde(default)]
@@ -60,6 +64,7 @@ pub(crate) struct MoveParams {
 }
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct SplitParams {
+    /// The wall to split.
     id: String,
     /// Split position along the wall, 0..1 (default 0.5).
     t: Option<f64>,
