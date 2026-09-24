@@ -13,7 +13,9 @@ use serde_json::{Value, json};
 use sha2::Digest as _;
 
 const SITE: &str = "http://127.0.0.1:8790";
-const POLAR_SECRET: &str = "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw";
+/// A Polar-shaped webhook secret made up for the tests: "whsec_" and the
+/// base64 of "test key, not a secret". Nothing real is written in the code.
+const POLAR_SECRET: &str = concat!("whsec_", "dGVzdCBrZXksIG5vdCBhIHNlY3JldA==");
 
 /// A fresh database for one test, migrated, and the service on a free port.
 async fn service() -> Option<(String, AppState)> {
