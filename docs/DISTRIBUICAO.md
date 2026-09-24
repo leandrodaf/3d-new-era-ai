@@ -468,7 +468,7 @@ cliente.
       "Supporter (yearly)" US$ 48/ano, um link de checkout com os dois e o webhook
       `newera-cloud` (eventos `subscription.*`, API 2026-04) para
       `https://mcp.3dneweraai.com/billing/polar`
-- [ ] `POLAR_WEBHOOK_SECRET`, `NEWERA_POLAR_CHECKOUT_URL` e `NEWERA_POLAR_PLANS` no
+- [x] `POLAR_WEBHOOK_SECRET`, `NEWERA_POLAR_CHECKOUT_URL` e `NEWERA_POLAR_PLANS` no
       ambiente do serviço
 
 ### Etapa 6
@@ -506,10 +506,9 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
       `https://buy.polar.sh/polar_cl_fXCqiyLmYzA1cWpJbo6wRKH6hZtqwmshPeNAD2TfpP1` — eu
 - [x] Webhook `newera-cloud` para `https://mcp.3dneweraai.com/billing/polar`, formato
       Raw, API 2026-04, os 11 eventos `subscription.*` — eu
-- [ ] `POLAR_WEBHOOK_SECRET` (o *Signing secret* do webhook), `NEWERA_POLAR_CHECKOUT_URL`
-      e `NEWERA_POLAR_PLANS` no `app.env` da VPS e o container recriado — **você** roda o
-      script que lê o segredo sem eco (o acesso à VPS de produção é seu); depois disso,
-      `POST /billing/polar` sem assinatura responde 401 em vez de 404
+- [x] `POLAR_WEBHOOK_SECRET` (o *Signing secret* do webhook), `NEWERA_POLAR_CHECKOUT_URL`
+      e `NEWERA_POLAR_PLANS` no `app.env` da VPS e o container recriado (24/09/2026):
+      `POST /billing/polar` sem assinatura responde 401 — você, com o script sem eco
 - [x] Link de apoio no README ("Support the project") e no rodapé do site ("Apoiar ☕") — eu
 
 **3. Registries e diretórios (Etapa 2)**
@@ -528,8 +527,10 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
       com o navegador em primeiro plano
 - [ ] winget: fork do winget-pkgs, PR com `packaging/winget/…` (atualizado para 1.8.0)
       e o secret `WINGET_TOKEN` — eu, com um token que **você** cria
-- [ ] Homebrew: repositório `leandrodaf/homebrew-tap` com o cask e o secret
-      `HOMEBREW_TAP_TOKEN` — eu, com o token que **você** cria
+- [x] Homebrew: repositório `leandrodaf/homebrew-tap` com o cask da 1.8.0
+      (`brew install --cask leandrodaf/tap/3d-new-era-ai`) — eu
+- [ ] Secret `HOMEBREW_TAP_TOKEN` (fine-grained, só no tap, Contents: write), para as
+      próximas versões atualizarem o cask sozinhas — **você** cria o token
 
 **4. Diretórios de conector (depois de 1 e 2)**
 - [ ] Plugin com o MCP remoto (`https://mcp.3dneweraai.com/mcp`) — eu
