@@ -27,6 +27,10 @@ jobs:
         with:
           components: rustfmt
       - run: cargo fmt --all -- --check
+      # The plugin manifests and server.json repeat Cargo.toml's version.
+      - run: scripts/sync-version.sh --check
+      # The plugin and its marketplace load in Claude Code.
+      - run: npx --yes @anthropic-ai/claude-code plugin validate . && npx --yes @anthropic-ai/claude-code plugin validate plugin
 
   clippy:
     name: Clippy

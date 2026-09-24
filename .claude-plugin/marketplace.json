@@ -1,0 +1,18 @@
+{
+  "name": "3d-new-era-ai",
+  "owner": {
+    "name": "Leandro Ferreira",
+    "url": "https://3dneweraai.com"
+  },
+  "metadata": {
+    "description": "The 3D New Era AI plugin: skills and the MCP server for designing homes with your AI."
+  },
+  "plugins": [
+    {
+      "name": "3d-new-era-ai",
+      "source": "./plugin",
+      "description": "Design homes with your AI in 3D New Era AI: floor plans, furniture, joinery, lighting and photos, live in the editor.",
+      "category": "design"
+    }
+  ]
+}

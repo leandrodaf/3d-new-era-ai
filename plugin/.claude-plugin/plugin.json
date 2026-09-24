@@ -1,0 +1,10 @@
+{
+  "name": "3d-new-era-ai",
+  "version": "1.7.0",
+  "description": "Design homes with your AI in 3D New Era AI: floor plans, furniture, joinery, lighting and photos, live in the editor.",
+  "author": { "name": "Leandro Ferreira", "url": "https://3dneweraai.com" },
+  "homepage": "https://3dneweraai.com",
+  "repository": "https://github.com/leandrodaf/3d-new-era-ai",
+  "license": "MIT OR Apache-2.0",
+  "keywords": ["floor plan", "interior design", "architecture", "home design", "mcp"]
+}
