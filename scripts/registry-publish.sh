@@ -22,7 +22,12 @@ trap 'rm -rf "$work"' EXIT
 
 sha="$(sha256sum "$bundle" | cut -d' ' -f1)"
 url="https://github.com/leandrodaf/3d-new-era-ai/releases/download/v${version}/newera-mcp.mcpb"
-VERSION="$version" URL="$url" SHA="$sha" python3 - "$root/server.json" "$work/server.json" <<'PY'
+# Live means the fixed MCP address answers its OAuth metadata.
+remote_live=0
+if curl -sf --max-time 10 https://mcp.3dneweraai.com/.well-known/oauth-protected-resource/mcp >/dev/null; then
+  remote_live=1
+fi
+REMOTE_LIVE="$remote_live" VERSION="$version" URL="$url" SHA="$sha" python3 - "$root/server.json" "$work/server.json" <<'PY'
 import json, os, sys
 server = json.load(open(sys.argv[1]))
 server["version"] = os.environ["VERSION"]
@@ -31,6 +36,11 @@ for package in server.get("packages", []):
         package["identifier"] = os.environ["URL"]
         package["version"] = os.environ["VERSION"]
         package["fileSha256"] = os.environ["SHA"]
+# The hosted address goes in only once it is live: a registry entry that
+# sends people to a service that is not there yet is worse than none.
+live = os.environ.get("REMOTE_LIVE") == "1"
+if not live:
+    server.pop("remotes", None)
 json.dump(server, open(sys.argv[2], "w"), indent=2)
 PY
 

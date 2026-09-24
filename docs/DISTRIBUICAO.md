@@ -126,7 +126,7 @@ primeira linha de código.
 | D8 | OAuth | **Servidor de autorização dentro do `newera-cloud`**, OAuth 2.1 + PKCE S256, registro de cliente por **CIMD e DCR**, `/.well-known/oauth-protected-resource` | O Claude aceita os dois registros e a OpenAI prefere CIMD. Os callbacks são específicos de cada cliente, então é preciso controlar o servidor. |
 | D9 | Planos | **Cotas desde o primeiro dia**: toda conta tem um plano (`free` no começo), e as tools checam "tem cota?", nunca "é pagante?" | Ligar o Polar na Etapa 5 só muda qual plano a conta tem. Nenhuma tool é tocada. |
 | D10 | Pagamento | **Polar.sh**, uma organização só, da doação à assinatura. O cliente no Polar se liga à conta pelo ID externo (`account.id`); o e-mail serve de reserva | Não cria dois caixas para migrar. A doação da Etapa 2 já cai onde a assinatura vai cair. |
-| D11 | Armazenamento na nuvem | **Arquivo `.newera` no R2 + metadados no Postgres** (o padrão da VPS) | O mesmo formato do desktop: baixar e abrir funciona sem conversão. |
+| D11 | Armazenamento na nuvem | **Arquivo `.newera` inteiro no Postgres** (`bytea`), atrás de uma camada de armazenamento; R2 quando o volume pedir | O mesmo formato do desktop: baixar e abrir funciona sem conversão. O backup diário do Postgres já vai para o R2. |
 | D12 | Plugin | **Uma pasta `plugin/` no formato Agent Plugins**, com skills compartilhadas por Claude Code, Codex e Cursor | Na Etapa 2 o MCP aponta para o local. Na Etapa 4 ganha o remoto: muda uma configuração, não código. |
 | D13 | Artefato local | **Um `.mcpb` por plataforma**, gerado no `release.yml`, com o nome `newera-mcp-<plataforma>.mcpb` | O mesmo arquivo serve Claude Desktop, Registry, Smithery e Windows. O Registry exige "mcp" no nome. |
 | D14 | Comportamento do stdio | **`newera mcp` se liga à janela aberta** (proxy para `127.0.0.1:7878`) **e, sem janela, roda headless** | Tem de valer antes de publicar o `.mcpb`. Mudar depois de listado mudaria o que os usuários já instalaram. |
@@ -437,12 +437,23 @@ cliente.
       próximo deploy.
 
 ### Etapa 4
-- [ ] Motor headless com projetos no R2
-- [ ] Fila de trabalhos pesados com cota
-- [ ] Projetos na nuvem (criar, listar, abrir, salvar, baixar)
-- [ ] Arquivos gerados em URLs temporárias
-- [ ] `remotes` no `server.json` e plugin com o remoto
-- [ ] Submissões: Claude Connectors Directory e OpenAI Plugins Directory
+- [x] Motor headless: sem aba aberta, as chamadas rodam no projeto ativo da conta
+      (`crates/newera-cloud/src/engine.rs`). **D11 mudou**: o `.newera` fica no Postgres
+      (`bytea`), que o backup diário já leva ao R2 — projetos pesam de 4 a 420 KB; trocar
+      por objetos no R2 é trocar a implementação de armazenamento, não refazer.
+- [x] Jaula de leitura de disco no `newera-core` (`vfs::jail`): um projeto não lê
+      arquivos de outro nem do servidor
+- [x] Fila de trabalhos pesados com cota: uma renderização pesada por conta, no máximo
+      núcleos−1 ao mesmo tempo; fotos `draft` contam por dia, `good`/`best` por mês
+- [x] Projetos na nuvem: `projects`, `new_home`/`open_home`/`save_home` por nome, lista
+      e download na página da conta, "Abrir no editor" abrindo o projeto da nuvem no
+      editor web (com o cookie)
+- [x] Exportações viram links de 24 h (`/files/…`), nunca gravadas no caminho pedido
+- [x] `remotes` no `server.json` (o script só publica a URL remota quando ela estiver no ar)
+- [ ] Plugin com o MCP remoto: fica para quando a produção existir (senão o Claude Code
+      de quem instalar mostra um servidor quebrado)
+- [ ] Submissões ao Claude Connectors Directory e ao OpenAI Plugins Directory: dependem
+      da produção no ar, do plano Claude Team e da identidade verificada na OpenAI
 
 ### Etapa 5
 - [ ] Assinaturas no Polar + webhook + planos

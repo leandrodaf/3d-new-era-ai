@@ -13,7 +13,9 @@
     {
       "src": "https://3dneweraai.com/icon-256.png",
       "mimeType": "image/png",
-      "sizes": ["256x256"]
+      "sizes": [
+        "256x256"
+      ]
     }
   ],
   "packages": [
@@ -25,6 +27,12 @@
       "transport": {
         "type": "stdio"
       }
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.3dneweraai.com/mcp"
     }
   ]
 }
