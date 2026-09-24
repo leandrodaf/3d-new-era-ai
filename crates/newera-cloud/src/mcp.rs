@@ -164,6 +164,11 @@ fn hosted_tools() -> Vec<Value> {
             "required": ["rows", "columns", "used_kb", "limits"],
         },
     }));
+    // Every tool here works on the account: say so per tool, the way the
+    // OpenAI Apps SDK reads it, so ChatGPT signs the person in first.
+    for tool in &mut tools {
+        tool["securitySchemes"] = json!([{"type": "oauth2", "scopes": [oauth::SCOPE]}]);
+    }
     tools
 }
 
@@ -284,5 +289,25 @@ async fn answer(
             -32601,
             &format!("this server does not do {other}"),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// No hosted tool works without the account, and each one says so.
+    #[test]
+    fn every_hosted_tool_asks_for_the_account() {
+        let tools = hosted_tools();
+        assert!(tools.iter().any(|t| t["name"] == "projects"));
+        for tool in &tools {
+            assert_eq!(
+                tool["securitySchemes"],
+                json!([{"type": "oauth2", "scopes": ["newera"]}]),
+                "{}",
+                tool["name"]
+            );
+        }
     }
 }
