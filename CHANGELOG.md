@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The selected tool and the AI button in the toolbar no longer change size when the
+  pointer goes over them, which nudged the buttons beside them.
+
 ## [1.6.0] - 2026-09-21
 
 ### Added

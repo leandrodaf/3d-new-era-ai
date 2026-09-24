@@ -359,12 +359,20 @@ pub(crate) fn button(app: &mut NewEraApp, ui: &mut egui::Ui) {
     };
 
     let label = RichText::new(icon::ROBOT).size(17.0).strong().color(ink);
+    // The edge is drawn over the button, not set as its stroke: egui sizes a
+    // button for the theme's stroke, which is none at rest, so an extra one
+    // made it shrink whenever the pointer came over it.
     let button = egui::Button::new(label)
         .fill(fill)
-        .stroke(egui::Stroke::new(1.0, edge))
         .corner_radius(6)
         .min_size(egui::vec2(28.0, 26.0));
     let response = ui.add(button);
+    ui.painter().rect_stroke(
+        response.rect,
+        6,
+        egui::Stroke::new(1.0, edge),
+        egui::StrokeKind::Inside,
+    );
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &hint));
     if response.on_hover_text(hint).clicked() {
         app.dialog = Some(crate::dialogs::Dialog::ConnectAi { client: 0 });
