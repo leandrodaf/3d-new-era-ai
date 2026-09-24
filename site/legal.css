@@ -1,0 +1,52 @@
+/* The privacy and terms pages: the site's paper and ink, one readable column. */
+
+:root {
+  --paper: #f4f1ea;
+  --ink: #161513;
+  --ink-2: #3a3833;
+  --graphite: #6d6a62;
+  --rule: #d9d3c5;
+  --accent: #2446d8;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12110f;
+    --ink: #f1ede4;
+    --ink-2: #d4cfc4;
+    --graphite: #9a958a;
+    --rule: #2e2c27;
+    --accent: #7d93ff;
+    color-scheme: dark;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink-2);
+  font: 16px/1.65 var(--sans);
+}
+
+.legal {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 16px 72px;
+}
+
+.legal h1,
+.legal h2 {
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.legal h1 { font-size: 2rem; margin: 0.4em 0 0.2em; }
+.legal h2 { font-size: 1.15rem; margin: 2em 0 0.5em; }
+.legal a { color: var(--accent); }
+.legal code { font: 0.9em var(--mono); overflow-wrap: anywhere; }
+.legal hr { border: 0; border-top: 1px solid var(--rule); margin: 56px 0; }
+.legal__back,
+.legal__meta { color: var(--graphite); font-size: 0.9rem; }

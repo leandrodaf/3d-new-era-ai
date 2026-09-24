@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacidade — 3D New Era AI</title>
+<meta name="description" content="O que o 3D New Era AI coleta, onde fica e como desligar: o app no seu computador, o editor no navegador, o relay de IA e o serviço na nuvem.">
+<link rel="canonical" href="https://3dneweraai.com/privacy/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/legal.css">
+</head>
+<body>
+<main class="legal">
+  <p class="legal__back"><a href="/">← 3D New Era AI</a> · <a href="/terms/">Termos</a> · <a href="#en">English</a></p>
+  <h1>Política de privacidade</h1>
+  <p class="legal__meta">Vigente desde 24 de setembro de 2026.</p>
+
+  <p>O 3D New Era AI é um editor de plantas e interiores de código aberto, com quatro formas de
+  uso. Cada uma trata dados de um jeito, e esta página diz exatamente como. Quem responde por
+  eles é <strong>Leandro Ferreira</strong>, desenvolvedor do projeto (o controlador, nos termos
+  da LGPD). Contato: <a href="mailto:privacidade@3dneweraai.com">privacidade@3dneweraai.com</a>.</p>
+
+  <h2>1. O app no seu computador</h2>
+  <p>O projeto, as fotos e os arquivos ficam no seu disco. O app não tem conta nem login. A IA
+  que você conecta fala com ele pelo endereço local (<code>127.0.0.1</code>) ou pelo stdio, e
+  nada do projeto passa por nós.</p>
+  <p>Com a telemetria ligada (vem ligada; desliga no menu ou com
+  <code>newera telemetry off</code>, e <code>NEWERA_TELEMETRY=0</code> desliga numa execução),
+  o app envia:</p>
+  <ul>
+    <li><strong>Relatórios de falha</strong> ao Sentry: o erro, o rastro do código, o sistema
+    operacional e a versão do app. Não vão endereço IP, nome da máquina, o token do MCP nem a
+    planta.</li>
+    <li><strong>Uma contagem de uso</strong> ao Google Analytics quando o app abre: um
+    identificador aleatório desta instalação, a versão, o sistema, a arquitetura e o modo
+    (janela, servidor, stdio).</li>
+    <li><strong>Relatos da ferramenta <code>feedback</code></strong>, quando a IA a usa: o que
+    ela tentou, o que recebeu e o que ajudaria. Ficam gravados na sua máquina e só são enviados
+    com a telemetria ligada.</li>
+  </ul>
+
+  <h2>2. O editor no navegador (3dneweraai.com/app)</h2>
+  <p>O projeto fica na sua aba e no armazenamento local do navegador (para recuperar depois de
+  um fechamento acidental). O site usa o Google Analytics para contar visitas, com cookies do
+  próprio Google.</p>
+
+  <h2>3. O relay de IA (mcp.3dneweraai.com)</h2>
+  <p>Quando você liga o MCP no editor do navegador, a aba recebe um endereço com dois segredos
+  aleatórios. As mensagens da sua IA passam pelo relay até a aba e voltam; o relay guarda na
+  memória só a sala enquanto ela existe e não grava o projeto, as mensagens nem arquivos. A sala
+  some quando você desliga o MCP ou fecha a aba (com 15 minutos de tolerância para uma
+  recarga). O relay registra a quantidade de salas e, contra abuso, o endereço IP de quem abre
+  salas, por no máximo uma hora.</p>
+
+  <h2>4. O serviço na nuvem (quando você entra com uma conta)</h2>
+  <p>O conector hospedado, usado pelos diretórios do Claude e do ChatGPT, é opcional. Ao usá-lo,
+  tratamos:</p>
+  <ul>
+    <li><strong>Conta</strong>: seu e-mail e a data de criação, para você entrar e para ligar a
+    conta ao seu plano.</li>
+    <li><strong>Projetos na nuvem</strong>: os arquivos <code>.newera</code> que a IA cria ou que
+    você salva ali, e as imagens e exportações geradas, guardados enquanto a conta existir.
+    Você pode baixar ou apagar cada um, a qualquer momento.</li>
+    <li><strong>Uso</strong>: quantas renderizações e quanto espaço você usou, para aplicar as
+    cotas do plano.</li>
+    <li><strong>Pagamento</strong>: feito pelo <a href="https://polar.sh">Polar</a>, que é o
+    vendedor oficial (merchant of record) e trata os dados do cartão e dos impostos. Recebemos
+    do Polar só o seu e-mail, o plano e se a assinatura está ativa.</li>
+  </ul>
+  <p>Não lemos nem guardamos a sua conversa com a IA: recebemos só as chamadas de ferramenta
+  que ela faz (por exemplo, "criar parede de 4 m"). Não vendemos dados nem os usamos para
+  anúncios.</p>
+
+  <h2>5. Onde os dados ficam e com quem</h2>
+  <p>Os serviços rodam num servidor próprio, atrás da Cloudflare. Os arquivos da nuvem ficam no
+  Cloudflare R2. Os operadores que tratam dados em nosso nome são: Cloudflare (rede, DNS,
+  armazenamento), Sentry (falhas), Google (estatísticas de uso) e Polar (pagamentos). Alguns
+  ficam fora do Brasil; a transferência segue as garantias do art. 33 da LGPD.</p>
+
+  <h2>6. Seus direitos</h2>
+  <p>Você pode pedir acesso, correção, portabilidade ou exclusão dos seus dados, e revogar
+  consentimentos, pelo e-mail acima. Apagar a conta apaga os projetos na nuvem em até 30 dias
+  (as cópias de segurança expiram no mesmo prazo). Respondemos em até 15 dias.</p>
+
+  <h2>7. Crianças</h2>
+  <p>O serviço na nuvem é para maiores de 13 anos.</p>
+
+  <h2>8. Mudanças</h2>
+  <p>Mudanças nesta política aparecem aqui, com a nova data, e no histórico público do
+  repositório <a href="https://github.com/leandrodaf/3d-new-era-ai">no GitHub</a>.</p>
+
+  <hr>
+
+  <section id="en" lang="en">
+  <h1>Privacy policy</h1>
+  <p class="legal__meta">Effective September 24, 2026.</p>
+  <p>3D New Era AI is an open-source floor plan and interior design editor, used four ways.
+  Each handles data differently. The controller is <strong>Leandro Ferreira</strong>, the
+  project's developer. Contact: <a href="mailto:privacidade@3dneweraai.com">privacidade@3dneweraai.com</a>.</p>
+  <h2>1. The app on your computer</h2>
+  <p>Projects, photos and files stay on your disk. There is no account. The AI you connect talks
+  to the app over loopback (<code>127.0.0.1</code>) or stdio; nothing of the project reaches us.
+  With telemetry on (the default; off in the menu, with <code>newera telemetry off</code>, or
+  <code>NEWERA_TELEMETRY=0</code> for one run) the app sends crash reports to Sentry (the
+  error, backtrace, OS and app version — never IP address, hostname, MCP token or the plan), one
+  usage ping to Google Analytics when it opens (a random install id, version, OS, architecture
+  and mode), and reports written by the <code>feedback</code> tool, which are kept on your
+  machine and sent only with telemetry on.</p>
+  <h2>2. The editor in the browser</h2>
+  <p>The project lives in your tab and in the browser's local storage, for recovery. The site
+  counts visits with Google Analytics, which sets Google's cookies.</p>
+  <h2>3. The AI relay (mcp.3dneweraai.com)</h2>
+  <p>Messages between your AI and your tab pass through and are not stored; the relay keeps only
+  the room in memory while it exists, and the IP address of who opens rooms for at most an hour,
+  against abuse.</p>
+  <h2>4. The cloud service (when you sign in)</h2>
+  <p>Optional. We keep your email, your cloud projects and generated files (downloadable and
+  deletable at any time), your usage against the plan's quotas, and — from
+  <a href="https://polar.sh">Polar</a>, the merchant of record that handles card data and taxes
+  — your plan and whether it is active. We receive the AI's tool calls, never your
+  conversation. We do not sell data or use it for ads.</p>
+  <h2>5. Where data lives</h2>
+  <p>Our own server behind Cloudflare; cloud files in Cloudflare R2. Processors: Cloudflare,
+  Sentry, Google, Polar. Some are outside Brazil; transfers follow LGPD art. 33.</p>
+  <h2>6. Your rights</h2>
+  <p>Ask for access, correction, portability or deletion by email. Deleting the account removes
+  cloud projects within 30 days, backups included. We answer within 15 days.</p>
+  <h2>7. Children</h2>
+  <p>The cloud service is for people 13 and older.</p>
+  <h2>8. Changes</h2>
+  <p>Changes appear here with a new date, and in the repository's public history.</p>
+  </section>
+</main>
+</body>
+</html>
