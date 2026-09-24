@@ -1,0 +1,44 @@
+# The hosted service on this machine only: newera-cloud and a Postgres of its
+# own. Nothing here is production — the VPS is set up separately, when the
+# time comes.
+#
+#   docker compose -f crates/newera-cloud/local/docker-compose.yml up --build
+#
+# Then the editor at http://127.0.0.1:8790/editor/?relay=http://127.0.0.1:7979
+# (make web-serve), and sign-in links appear in this compose's log.
+name: newera-cloud-local
+
+services:
+  cloud:
+    build:
+      context: ../../..
+      dockerfile: crates/newera-cloud/local/Dockerfile
+    environment:
+      DATABASE_URL: postgres://postgres:local@postgres:5432/newera
+      NEWERA_PUBLIC_URL: http://127.0.0.1:7979
+      NEWERA_SITE_ORIGINS: http://127.0.0.1:8790,http://localhost:8790
+      NEWERA_MAIL: log
+      PORT: "7979"
+    env_file:
+      - path: ./app.env
+        required: false
+    ports:
+      - "127.0.0.1:7979:7979"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: newera
+      POSTGRES_PASSWORD: local
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d newera"]
+      interval: 2s
+      retries: 30
+
+volumes:
+  postgres:

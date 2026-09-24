@@ -24,3 +24,6 @@ web/*.newera
 
 # Wrangler's local cache: account id and deploy state, nothing to version
 .wrangler/
+
+# Local secrets for the hosted service.
+crates/newera-cloud/local/app.env

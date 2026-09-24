@@ -424,8 +424,17 @@ cliente.
       endereço, e não fica mais presa em "Ligando…"
 - [x] Testes: fluxo inteiro contra Postgres (`crates/newera-cloud/tests/flow.rs`, job
       novo no CI) e no navegador (entrar, "Pronto", reivindicar, reiniciar o serviço)
-- [ ] Deploy (imagem e compose do `newera-cloud` na VPS; secrets `RESEND_API_KEY`,
-      `GOOGLE_CLIENT_ID/SECRET` — dependem de você)
+- [x] Roda local por inteiro: `docker compose -f crates/newera-cloud/local/docker-compose.yml up --build`
+      (serviço + Postgres próprio; links de entrada no log). A imagem foi testada saudável.
+- [ ] **Produção na VPS: fica para depois, junto com você.** Nada de produção foi mexido:
+      o `Dockerfile` da raiz, o `deploy/` e o workflow de deploy continuam publicando só
+      o relay. Na hora, é decidir como o `newera-cloud` entra no Docker da VPS, o banco
+      e os secrets (`RESEND_API_KEY`, `GOOGLE_CLIENT_ID/SECRET`, ver
+      `crates/newera-cloud/local/app.env.example`).
+      Achado para essa hora: `rust:1.95-slim` passou a ser Debian mais novo que a base
+      distroless debian12, e um binário compilado ali não sobe (glibc). A imagem local já
+      usa `rust:1.95-slim-bookworm`; o `Dockerfile` do relay vai precisar do mesmo no
+      próximo deploy.
 
 ### Etapa 4
 - [ ] Motor headless com projetos no R2
