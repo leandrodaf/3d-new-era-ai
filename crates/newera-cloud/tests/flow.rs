@@ -741,10 +741,13 @@ async fn sign_in_never_redirects_elsewhere() {
 /// A Polar delivery for `data`, signed as Polar signs.
 async fn polar(base: &str, kind: &str, data: Value, sign: bool) -> u16 {
     let body = json!({"type": kind, "data": data}).to_string();
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
+    let now = i64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs(),
+    )
+    .unwrap();
     let mut request = client()
         .post(format!("{base}/billing/polar"))
         .header("webhook-id", "msg_test")
