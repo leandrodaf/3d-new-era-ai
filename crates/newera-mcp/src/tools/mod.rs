@@ -127,6 +127,7 @@ impl NewEraMcp {
             if let serde_json::Value::Object(map) = schema {
                 route.attr.input_schema = std::sync::Arc::new(map);
             }
+            crate::hints::apply(&mut route.attr);
         }
         Self {
             document,

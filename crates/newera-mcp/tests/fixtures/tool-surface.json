@@ -1,5 +1,11 @@
 {
   "annotations": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Dimensions, tags and notes"
+    },
     "description": "Plan annotations. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first; one whose anchor died with a deleted piece is tied again to what it touches now, or else released (no anchor) instead of staying stale. q=<text> searches label text on every storey; q=re:<pattern> by a regex (`re:^\\[\\d+\\]$` finds index codes). Set any of dims (engineering dimension chains; auto_dimensions in the project JSON), refs (room reference schedule with tags; references — a tag, once given, stays with its piece: new pieces take the next free number and removed ones leave a gap, so a print and the plan a week later agree; renumber=true numbers them again in reading order), details (brand/model/link in refs; reference_details), legend (symbol legend with counts): a switch answers with the modes, changed, and what it shows — chains [[from,to,cm]] for dims, symbols {discipline:[[name,count]]} for legend — not the schedule; refs=true, or no switch at all, returns {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. bake=true turns the automatic chains into editable dimensions (ids returned). Give pieces brand/model/url via update.",
     "inputSchema": {
       "properties": {
@@ -42,9 +48,16 @@
       },
       "type": "object"
     },
-    "name": "annotations"
+    "name": "annotations",
+    "title": "Dimensions, tags and notes"
   },
   "arrange": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Copy, align and group"
+    },
     "description": "Arrange elements in one undo step. array {ids,n,dx,dy,dz} adds n copies stepping by dx/dy/dz cm (rafters, columns); align {ids,axis,edge:low|middle|high,value} lines pieces up by an edge — backs on one line, fronts on another — instead of by centers you work out yourself; distribute {ids,axis,gap?} sets them side by side in the order given, from where the first one is (a run of joinery); flip {ids} turns a piece back to front, rebuilding what is inside it (mirror only swaps left and right and leaves the front where it was); rotate {ids,angle clockwise,about?,copy?}; mirror {ids,a,b,copy?} across the line a-b; group {ids,name?} joins pieces into one box that moves/hides together, ungroup {ids:[group]}; front/back {ids} draws rooms or pieces on top/underneath (pool over deck, rug under sofa). Returns new ids.",
     "inputSchema": {
       "$defs": {
@@ -129,9 +142,16 @@
       ],
       "type": "object"
     },
-    "name": "arrange"
+    "name": "arrange",
+    "title": "Copy, align and group"
   },
   "cabinet_run": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Fill a wall with cabinets"
+    },
     "description": "Fill a wall with cabinets sized for it: measures the free stretches between corners, doors, windows, fridge and stove, splits each into even modules (30-90 cm, no useless leftovers; 15-30 cm pull-outs, fillers under 15; the defaults target=60 max=90 sink_w=80 cooktop_w=60 are the nominal widths of EN 1116, which is what appliances and hardware are made for — bespoke widths in between are fine for a run that receives none), drawer unit beside the stove, countertop on base rows, cabinet over the fridge and hood gap on wall rows, wardrobes (hanging rails, shelves, drawers) on tall rows facing bedrooms; p.sink/p.cooktop place those cabinets and cutouts. Replaces the cabinets already there (keep ids stay). Reply {modules:[[id,role,from,w]],removed,notes}; dry plans only. Change one module afterwards with joinery id.",
     "inputSchema": {
       "properties": {
@@ -174,9 +194,16 @@
       },
       "type": "object"
     },
-    "name": "cabinet_run"
+    "name": "cabinet_run",
+    "title": "Fill a wall with cabinets"
   },
   "cameras": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Points of view"
+    },
     "description": "Points of view. list (default): {active, rows [i,name,x,y,z,yaw,pitch,fov]}. view {i} shows stored view i in the 3D window; aerial returns to the orbit view; store {name?,x?,y?,z?,yaw?,pitch?,fov?,look_at?:[x,y,z]} saves one (missing values from the visitor; yaw 0 looks toward +y/plan bottom, 90 toward -x; pitch positive looks down); delete {i}. cm and degrees.",
     "inputSchema": {
       "properties": {
@@ -224,9 +251,15 @@
       },
       "type": "object"
     },
-    "name": "cameras"
+    "name": "cameras",
+    "title": "Points of view"
   },
   "catalog": {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Search the furniture catalog"
+    },
     "description": "Find catalog items: rows [id,name,w,d,h,front?] in cm. front, when the item has one, is `wall|free <front>/<back>`: every model is built with that front on its local +y (at angle 0 it looks down the plan), `wall` means its back belongs on a wall (bed headboard, wardrobe back, toilet cistern) and `free` that it stands anywhere (armchair, chair); no front means any angle is right. scope=project lists what this plan already uses instead — catalog id or imported model, with how many there are and one id to copy from, narrowed by q over the entry and its pieces' names — which is how a new piece matches the drawing rather than reintroducing a generic one.",
     "inputSchema": {
       "properties": {
@@ -249,9 +282,16 @@
       },
       "type": "object"
     },
-    "name": "catalog"
+    "name": "catalog",
+    "title": "Search the furniture catalog"
   },
   "check_layout": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Check the layout"
+    },
     "description": "Layout problems: above_ceiling, overlap, blocked, in_wall, blocks_door, blocks_window, no_door, unrated_light, turned, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose (a fixed point with nothing to be fixed to: loose in a room, on glass, in a door or window span, hanging under the ceiling, with why); {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under), served (a project point inside a piece on purpose: the water point in the basin, the outlet behind the fridge or set into a cabinet) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocks_window reports nearby tall/elevated solids masking the window, with extent [width,height] cm; compact countertop objects are exempt, so this does not certify sash operation or ventilation. blocks_door includes a 60 cm approach on either face, even for sliding doors and passages. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. backwards is a piece whose back belongs on a wall (sofa, bed, toilet, TV, desk — the catalog tool marks them `wall`) with its front against a wall instead: it is turned half around; fix.angle turns it the right way, and the piece's back then touches that wall only if it was flush — placing again with wall=<id> seats it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. unrated_light is a light fixture with neither lumens nor watts — only the relative power an import carries — so the lighting tool's lux for its room are a guess: set its output with update(light={lm or w}). no_door is a bedroom or bathroom (by name) with no door — only open passages, listed, or no way in at all — said once the storey has doors somewhere; a living room, kitchen or balcony left open is not. unclear_front is a group whose parts name fronts on more than one face with no clear winner (candidates, strongest first; placed is the angle's guess every \"in front of\" falls back to) — rename the misleading part or set the angle. Handles weigh most. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. above_ceiling compares the full luminaire footprint with the same room ceiling surface used in 3D, with ceiling/top/over in cm: declared storey height, sloping wall profiles and lower roof panels. Hidden ceilings and unknown uncovered slopes are not inferred. Every row is an object with the `key` it is accepted by (in_wall {key, piece, wall}, blocks_door {key, door, by}). accept=[[key, reason]] marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed under accepted {key, kind, why, extent} with its reason, kept in the project; accept=[[key, \"\"]] takes it back; orphaned [[key, reason]] lists acceptances whose finding is gone on every storey, and prune=true drops them. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing.",
     "inputSchema": {
       "properties": {
@@ -285,9 +325,16 @@
       },
       "type": "object"
     },
-    "name": "check_layout"
+    "name": "check_layout",
+    "title": "Check the layout"
   },
   "checkpoint": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Checkpoints"
+    },
     "description": "Name where the plan is now, and come back to it. checkpoint {label} remembers this point; revert {label} undoes back down to it, keeping every id — which duplicating a version cannot do, since a copy renumbers. list (default) shows what is remembered and how many changes ago it was. A checkpoint lives with the project and survives saving.",
     "inputSchema": {
       "properties": {
@@ -301,9 +348,16 @@
       },
       "type": "object"
     },
-    "name": "checkpoint"
+    "name": "checkpoint",
+    "title": "Checkpoints"
   },
   "create": {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Draw walls, rooms and more"
+    },
     "description": "Create walls (polylines; hs = height per point for gables), rooms (pts, or at=[x,y] to detect from walls; ceiling_flat=false follows wall profiles instead of the default flat ceiling), dims (a+b or wall id), labels, roofs (rectangle pts, gable|shed, pitch or ridge_h, eave h, overhang, gables=true closes the ends, skylights [{at,w,d}] cut glazed openings) and solids (pts outline raised by h at elev: slabs/mezzanines of any shape; or profile [[u,z]] swept from a to b: gables, ramps) in one atomic step.",
     "inputSchema": {
       "$defs": {
@@ -766,9 +820,16 @@
       },
       "type": "object"
     },
-    "name": "create"
+    "name": "create",
+    "title": "Draw walls, rooms and more"
   },
   "cut_list": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Cut list"
+    },
     "description": "Cut list of joinery builds, and of groups drawn by hand: each part of a drawn group up to 50 mm thick is a board at the size it was drawn (board is its finish and thickness, no edge banding), the groups are named in drawn and the parts that are not boards in skipped [[id,name]]. Rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. path .csv, or .dxf/.svg (boards laid out on sheets), writes a file. sources names the panel standards behind the boards: MDF is a dry-process fibreboard (NBR 15316), MDP a particleboard of 551 to 750 kg/m³ that holds screws better (NBR 14810).",
     "inputSchema": {
       "properties": {
@@ -786,9 +847,16 @@
       },
       "type": "object"
     },
-    "name": "cut_list"
+    "name": "cut_list",
+    "title": "Cut list"
   },
   "delete": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Delete elements"
+    },
     "description": "Delete elements by id, atomically. Labels left pointing at a deleted piece — about it, or standing on it — are named in the reply as labels_left [[id, text]], since an index code over what is now another piece is found by nobody; labels=true deletes them in the same step.",
     "inputSchema": {
       "properties": {
@@ -808,9 +876,16 @@
       ],
       "type": "object"
     },
-    "name": "delete"
+    "name": "delete",
+    "title": "Delete elements"
   },
   "disciplines": {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Show electrical and plumbing"
+    },
     "description": "Electrical and plumbing projects over the plan. active (default) reports {active, hidden}. select {d: electrical|plumbing|architecture}: new symbols (catalog cat electrical/plumbing) and lines go there and the rest is dimmed. select architecture shows architecture: it hides the electrical and plumbing projects (show brings one back); select a project shows it with the architecture dimmed. The 3D follows the plan — hidden projects and layers leave it too — unless show_all_3d=true, which makes the 3D show everything. show/hide {d}, where d can also be a layer of the plan — lighting (lamps, spots, LED), appliances (fridge, stove, oven, hood, washer…) or joinery (cabinets, wardrobes, countertops): hidden from the plan, its exports and the 3D. Pieces are in a layer by what they are, from the moment they are placed; update(layer=lighting|appliances|joinery|none) overrides it, and an empty layer goes back to the automatic one. active also reports layers {key:{pieces, hidden}}; get_home gives each piece its plan_layer. quantities: {electrical:[[kind,count,names?]], plumbing:[...], lines_cm:{...}} — grouped by catalog kind (every low outlet together), with the names of the points as the detail.",
     "inputSchema": {
       "properties": {
@@ -829,9 +904,16 @@
       },
       "type": "object"
     },
-    "name": "disciplines"
+    "name": "disciplines",
+    "title": "Show electrical and plumbing"
   },
   "electrical": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Electrical project"
+    },
     "description": "Electrical and telecom project, NBR 5410 and NBR 16264 (residential cabling). Points are the electrical pieces (catalog electrical: outlets, switches, lighting points, panel, network-outlet RJ45, tv-outlet, wifi-point, telecom-panel) plus every fixture that lights. check (default): {points:{kind:count}, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — accept=[[key, reason]] with any action marks findings looked at (they stay listed with the reason and stop counting in pending), an empty reason takes one back, orphaned lists acceptances whose finding is gone and prune=true drops them — a ceiling lighting point per room, general-use outlets per room (kitchens and laundries one per 3.5 m of perimeter, bathrooms one by the basin, living rooms and bedrooms one per 5 m), RJ45 and TV outlets per room as NBR 16264 table 1 recommends (2 RJ45 and 1 TV in bedrooms, living rooms, offices, kitchens and laundries; 3 and 2 in a home theater; 1 and 1 elsewhere; a Wi-Fi point is not an RJ45 outlet), a power outlet by the telecom panel, a distribution and a telecom panel, points without a circuit, lighting and outlets sharing a circuit, a dedicated load not alone. circuits: rows [name, kinds, points, VA, V, A, wire mm², breaker A, DR] and main_breaker {a, phases, load_a_per_phase}: the supply to ask for, by Enel SP's categories on 127/220 V (single-phase up to 12 kW with no 220 V circuit, two-phase up to 20 kW, three-phase up to 75 kW) and the smallest of its fixed entry breakers (50, 63, 80, 100… A) — power by NBR 5410 (lighting per room by area: 100 VA up to 6 m² and 60 VA per whole 4 m² beyond, shared by its points; 600 VA for each of the first three outlets of a kitchen, laundry or bathroom, 100 VA after and elsewhere; dedicated points at their rated power, a shower 7500 W and air conditioning 1500 until written) unless set; the section is the smallest from 1.5 mm² (lighting) or 2.5 (with outlets) whose capacity, corrected for the circuits sharing its conduit on the laid-out runs (table 42, or grouping written on the project), admits a breaker between the current and it; DR on every point of a room with a bath or shower, on kitchen, laundry, service and garage points (lighting at 2.50 m or higher excepted) and on outdoor and balcony outlets; a shower over 4.4 kVA runs on 220 V. check also says lighting and outlets sharing a circuit only when NBR 5410 9.5.3.3 forbids it (over 16 A, or all lighting or all outlets on shared circuits), kitchen and laundry outlets sharing with anything else, equipment over 10 A not alone, and a voltage drop over 4 % to the farthest point of a laid-out run. assign {ids, circuit, va?} — or the whole division at once, circuits {\"C1\": [ids], \"C2\": [ids]} — writes the circuits (and power, and volts 127|220 per point — a 220 V outlet makes its circuit 220 V) on points in one undoable step. voltage {volts?, short_ka?, earthing?: TN-S|TN-C-S|TT}. circuits also gives panel {devices: [[device, count, DIN modules]], modules {used, capacity, capacity_written, spare}, dps, earthing, icn_ka, selective}: one-pole breakers for 127 V circuits and two-pole for 220 V between phases, a two-pole DR per circuit that needs one, the main breaker, the surge protector (DPS class II, a module per phase and neutral) and NBR 5410's spare ways (2 up to 6 circuits, 3 up to 12, 4 up to 30, 15 % above); capacity is the panel's modules (assign modules on it) or a guess from its size, and check says when it does not fit, when the main breaker is under twice the largest partial (selectivity) and when the short-circuit level was assumed. cable {kind: power|data|tv, pts} (with ids or circuit instead of pts, it is a route): draws a run of the electrical project, told apart on the plan (power solid, network dashed, TV dash-dot); check then reports cables_m, the length by kind with a tenth for the drops, and network or TV points no run reaches, or a telecom panel none reaches. route {kind: power|data|tv, ids? | circuit?, via?: ceiling|floor|wall|tape, cat?: cat5e|cat6|cat6a, from?}: lays the run the way it is built, along the walls and inside them (or in the slab), from the nearest panel of its kind to the points (all of the kind when none given), sharing the trunk, and draws it replacing the earlier run of the same circuit and the cables drawn by hand to its points (listed in replaced_drawn); replies {via, suggested, length_m {horizontal, vertical, total}, by_premise_m, bends, materials: [[item, qty, unit]]} — conduit, boxes, wire by conductor, cable, connectors. via=tape lays adhesive flat wiring tape (Eletrofitas) on the surface of walls and ceiling for power only: the model by the load and whether any point is a socket (sockets take the earthed EF18.9.18), refused over its rating or in a bathroom or outdoors, bought as Leroy Merlin kits by piece (codes, prices, splices) with tape {model, tracks, rated_a, load_a, earthed, pieces_m, splices, total_brl, notes}. Without via it takes the cheapest premise that can be built; a via that cannot reach a point (wall with a point out of every wall; ceiling with a low point out of every wall, nowhere to drop) is refused naming the points. Automation (catalog smart-relay, smart-switch, dimmer, presence-sensor, smart-lock): each draws its standby on its circuit (assign standby_w; relay, dimmer and sensor 1 W, smart switch 1.2 by default, from manufacturers' sheets), circuits reports standby_w, and check asks a relay or smart switch for a neutral in its box, a dimmer for the room's lighting to fit its max_w (default 1.1 A at the supply voltage, some 140 W at 127 V) and pass 10 W, a ceiling sensor to be between 2.2 and 3 m (manufacturers install at about 2.4) and to see the room's far corner (about 1.45 × its height), a lock to sit on a door. wifi {ids?, standard?: wifi5|wifi6|wifi6e|wifi7, poe?, band?: 2.4|5|6}: writes the standard and PoE on access points (wifi-point) when given, and replies {access_points: [[id, standard, bands, uplink]], coverage: [[room, band, median dBm, worst dBm (9 places in 10), share at -67 dBm or better, grade]], suggested: {standard, band, points: [[x, y, z, room]], short: [rooms still under -67 dBm]}} — signal estimated from free-space loss, distance and each wall crossed by its material and thickness (a door or window where the path goes through one), per band; the suggestion is the fewest ceiling points (up to four) at room centres covering the rooms people use. check also asks each access point for its data cable, power (an outlet within 1.5 m or poe) and a cable category that carries its uplink (uplink up to 2.5 GbE: Cat 5e; 5 GbE: Cat 6; 10 GbE: Cat 6A). Circuit numbers are drawn next to the points on the plan, and with annotations(legend=true) the load schedule under the legend.",
     "inputSchema": {
       "$defs": {
@@ -963,9 +1045,16 @@
       },
       "type": "object"
     },
-    "name": "electrical"
+    "name": "electrical",
+    "title": "Electrical project"
   },
   "embed": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Embed an appliance or sink"
+    },
     "description": "Embed an item into joinery with an exact fit: a sink bowl or cooktop into a countertop (cutout from the item's size, generic fixture not drawn), an oven, microwave or other appliance into a cabinet niche (doors above and below, boards around it), a TV onto a slatted panel at seated eye level (z = screen center). The item becomes part of the host and moves with it. item: id in the plan, or cat (+w/d/h) for a new one. Errors say what to change (e.g. use w = 61 no armário). Reply {host, item, kind, cutout|niche, x|bottom, notes}.",
     "inputSchema": {
       "properties": {
@@ -1010,9 +1099,16 @@
       ],
       "type": "object"
     },
-    "name": "embed"
+    "name": "embed",
+    "title": "Embed an appliance or sink"
   },
   "ergonomics": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Review ergonomics"
+    },
     "description": "Ergonomics and habitability review for the people living there. It never blocks anything: it reads the drawing and says what it finds, and the drawing stays the user's — somebody sketching to learn or to see an idea is not stopped by a standard. (occupants, children, elderly, wheelchair, stature cm, city; the people given are kept with the project and used when a later call or a dry run gives none, so a dry run's score is the one this review gives): room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen (work triangle, counter heights, Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. Reply {score, score_basis, scope, scores:{architecture,electrical,plumbing}, layout, coverage, capacity, findings:[{sev, place, msg, key, weight, discipline, in_scope, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. scope={electrical:false,plumbing:false} scores architecture only; all findings remain visible, excluded ones weigh zero. The scope is saved for later reviews and dry runs. layout includes geometric checks on the active storey; coverage declares limits. Scores are heuristic, not project completion or certification. weight is what the score would gain if that one went away, so a score that moved can be read; key names the finding for accept. src is the source the finding stands on, empty when it is common practice; resolve it in sources instead of asking. tier is the reliability ladder A obliges (Brazilian standard, municipal code) · B references (foreign standard) · C doctrine · D measured · E survey — and it is why a finding is an error or only a tip. fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap). city, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against a standard the more restrictive one wins — set it once with set_home(city=…) so dry runs and check_layout weigh the same rules. accept=[[key, reason]] marks findings already looked at: they stay in the report with their reason and stop costing score, which is what lets a correct plan reach zero pendencies honestly; accept=[[key, empty]] takes it back. orphaned [[key, reason]] lists acceptances no current finding answers to, on any storey, for these people — the problem was fixed, and would come back already silenced; prune=true drops them.",
     "inputSchema": {
       "$defs": {
@@ -1079,9 +1175,16 @@
       },
       "type": "object"
     },
-    "name": "ergonomics"
+    "name": "ergonomics",
+    "title": "Review ergonomics"
   },
   "export_plan": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Export the plan"
+    },
     "description": "Export to a file by extension: plan .pdf (A3; scale=50/100 or fit), .svg (true scale) or .png; 3D model .glb or .obj.",
     "inputSchema": {
       "properties": {
@@ -1105,9 +1208,16 @@
       ],
       "type": "object"
     },
-    "name": "export_plan"
+    "name": "export_plan",
+    "title": "Export the plan"
   },
   "feedback": {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Report to the developers"
+    },
     "description": "Report to the developers what a tool could do better, as it happens: a reply that answered less than was asked, a detour, a wrong conclusion reached before the right one, a fix that would distort the plan, something missing. It is a report the fix will be made from, so give the whole case — a vague note gets fixed in a way that breaks what already works. Every part is required: goal (the task and the situation: pieces, rooms, numbers), tried (the exact call with arguments), got (the literal reply), expected (what was true and how you found out), cost (the workaround, extra calls, wrong conclusion), would_help (the concrete change), must_keep (what works today and must not get worse with that change; \"none known\" is an answer). kind friction|bug|idea, tool. Kept on this machine and, while the user's telemetry is on, sent to the project. Reply {kept, sent}; then carry on with the task.",
     "inputSchema": {
       "properties": {
@@ -1157,9 +1267,16 @@
       },
       "type": "object"
     },
-    "name": "feedback"
+    "name": "feedback",
+    "title": "Report to the developers"
   },
   "fit_roof": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Fit walls to the roof"
+    },
     "description": "Fit walls, glass and panels to the roof above them: under an A-frame or shed roof a wall gets a sloping top and is split at the ridge, a panel becomes a triangle or trapezoid (a glass gable with no math); a joinery slatted panel gets its slats cut to the roof line. They keep following the roof when it changes, in the same undo step; off stops that. Reply ok with the count.",
     "inputSchema": {
       "properties": {
@@ -1185,9 +1302,15 @@
       ],
       "type": "object"
     },
-    "name": "fit_roof"
+    "name": "fit_roof",
+    "title": "Fit walls to the roof"
   },
   "get_home": {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Read the home"
+    },
     "description": "Home state. detail=summary is cheapest. Ask for less instead of reading everything: ids=[…] resolves ids (group parts included), room=<id|name> and rect=[[x0,y0],[x1,y1]] read one place, kinds=[walls|rooms|dims|labels|furniture|polylines] and fields=[…] trim each row, parts=true opens groups, ndjson=true prints one element per line so a long answer can be read a slice at a time. Every piece carries bounds (plan box with angle applied) and faces (the side it opens toward). Ids share one counter per version (w1, r2, f3…) and are never reused, so a new version may start at any number.",
     "inputSchema": {
       "properties": {
@@ -1249,9 +1372,16 @@
       },
       "type": "object"
     },
-    "name": "get_home"
+    "name": "get_home",
+    "title": "Read the home"
   },
   "joinery": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Build joinery"
+    },
     "description": "Parametric joinery and interiors; the server computes every board, clearance and rule and replies {id,name,size,parts,hardware,notes}. What a workshop would say — a board nobody stocks, a shelf that will sag, a drawer front too short to grip, a niche shallower than the cooktop standard wants — comes back in notes and is built anyway: the rules advise, they never refuse. Only what has no geometry at all fails, and says why. kind + p: cabinet {w,h,d cm; t 15|18|25 mm; back mm; door hinged|sliding|drawers|none; doors; shelves; drawers; dividers; plinth; cooktop; top_cutout [x,y,w,d] cm from cabinet left-back; color; front finish} · slats {w,h cm; slat, thickness, gap mm; orientation vertical|horizontal; backing; finish} · countertop {length,depth,height,thickness cm; material; support none|legs|brackets; cutouts [{kind sink|cooktop|grommet, x, w?, d?}]} · cove {room or pts; type open|closed|inverted; ceiling, width, drop, slot cm; led} · shadow_gap {room or pts; ceiling, gap, depth cm; led} · sofa {length,depth,seat,back cm; arms straight|rounded|none; modules; color}. Place with at|wall(+along), angle, elev. Change a build: id + p with only new values (e.g. {\"shelves\":3}); a new size keeps its back where it was (anchor back|front|left|right|bottom|top|+x|-x|+y|-y|center). dry=true validates only.",
     "inputSchema": {
       "$defs": {
@@ -1311,9 +1441,16 @@
       },
       "type": "object"
     },
-    "name": "joinery"
+    "name": "joinery",
+    "title": "Build joinery"
   },
   "levels": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Storeys"
+    },
     "description": "Storeys. list (default): rows [id,name,elev,h,selected,layout_index,viewable,reference]. add {name?,h?,elev?} adds one on top (or at elev cm) and selects it; select {id}; delete {id} removes it and its content. update {id, elev?|h?|name?|reference?}: elev raises a storey with its walls, floors and openings (houses on stilts); reference=true marks it a tracing layer (imported plan, older version) that checks and ergonomics skip, which is what you want when two storeys share an elevation. Other tools act on the selected storey.",
     "inputSchema": {
       "properties": {
@@ -1343,9 +1480,16 @@
       },
       "type": "object"
     },
-    "name": "levels"
+    "name": "levels",
+    "title": "Storeys"
   },
   "lighting": {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Check and fill the lighting"
+    },
     "description": "Lighting design by photometry: every fixture's flux (lm, or W × lamp efficacy), color temperature and distribution (bulb, spot beam, LED panel/strip) lights the work plane by the inverse-square cosine law, walls casting shadows, plus interreflection (split flux). Reply rooms [[id,name,m²,avg lx,min lx,uniformity,reference lx,fixtures,W/m²,verdict]] against ABNT NBR ISO/CIE 8995-1 residential references. fill=<fixture> with room places a verified grid reaching the reference (or lux). Set a piece's light with place/update light {lm|w,lamp,k,beam,area}.",
     "inputSchema": {
       "properties": {
@@ -1368,17 +1512,29 @@
       },
       "type": "object"
     },
-    "name": "lighting"
+    "name": "lighting",
+    "title": "Check and fill the lighting"
   },
   "materials": {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List wall types and finishes"
+    },
     "description": "Wall types [id,name,t] (drywall, masonry, concrete…) and finish patterns [key,label,color,tile].",
     "inputSchema": {
       "properties": {},
       "type": "object"
     },
-    "name": "materials"
+    "name": "materials",
+    "title": "List wall types and finishes"
   },
   "measure": {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Measure the plan"
+    },
     "description": "Tape measure over the plan, in cm. from=<id> alone: free floor on all four sides, {clear:{\"+y\":[cm,id,name]}} — dirs picks sides (+x -x +y -y, or front/back/left/right of the piece). from+to (ids or [x,y]): the distance between them, {cm}, or the gap along axis. axis+at: what a straight probe runs into, {spans:[[from,to,id,name]]} with id null for free floor — the answer to \"how wide is the corridor here, and between what\". Add gap=<cm to keep free> and grow=<id> and it also answers how big that piece can be along the axis before the gap is broken, and what stops it there: {fit:{free,max,blocked_by}} — the question a layout decision actually ends in, without trying a size and undoing it. z limits the height band that counts (default 0-200).",
     "inputSchema": {
       "$defs": {
@@ -1454,9 +1610,16 @@
       },
       "type": "object"
     },
-    "name": "measure"
+    "name": "measure",
+    "title": "Measure the plan"
   },
   "merge_walls": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Merge walls"
+    },
     "description": "Join walls that run along the same line into a single wall: the wall a partition interrupted, a stretch imported as many segments, the same wall drawn twice. The longest one keeps its id and its build (thickness, height, type, finishes) and spans them all; the others are deleted, doors and windows stay where they are, and a gap between them is closed. Straight walls on one storey whose centerlines run inside one another; the reply names the id that remains.",
     "inputSchema": {
       "properties": {
@@ -1472,9 +1635,16 @@
       ],
       "type": "object"
     },
-    "name": "merge_walls"
+    "name": "merge_walls",
+    "title": "Merge walls"
   },
   "move": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Move elements"
+    },
     "description": "Move elements by dx,dy cm, or to=[x,y]: the first id (a piece or a label) goes there and the rest keep their offsets. dry=true answers what it would do without writing anything, dry=\"summary\" answers it short; see `update`.",
     "inputSchema": {
       "$defs": {
@@ -1534,17 +1704,31 @@
       ],
       "type": "object"
     },
-    "name": "move"
+    "name": "move",
+    "title": "Move elements"
   },
   "new_home": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "New project"
+    },
     "description": "Start a new empty project.",
     "inputSchema": {
       "properties": {},
       "type": "object"
     },
-    "name": "new_home"
+    "name": "new_home",
+    "title": "New project"
   },
   "open_home": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Open a project"
+    },
     "description": "Open a project (.newera) or import a Sweet Home 3D file (.sh3d), replacing the current one.",
     "inputSchema": {
       "properties": {
@@ -1555,9 +1739,16 @@
       },
       "type": "object"
     },
-    "name": "open_home"
+    "name": "open_home",
+    "title": "Open a project"
   },
   "place": {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Place furniture, doors and windows"
+    },
     "description": "Place catalog items, or copy=<id> of a piece already in the project (its model — even one embedded from an old import —, finish and parts, the id catalog(scope=project) gives): at=[x,y] center (doors/windows near a wall snap into it; into=[x,y] picks the swing side), or wall=id (+along cm) to put doors/windows in a wall or furniture against it, back to the wall and front to the room. Sizes w/d/h override defaults; pitch/roll tilt. Ceiling pieces (spots, LED panels, pendants, ceiling points) always hang from the ceiling the 3D draws — flat, sloping or under a roof — and follow it when they move or it changes: never compute their elev; for a pendant give elev = height of the shade's bottom (over a table ~150-160) or h = its drop, and the cord takes the rest. Which way it looks: facing=+x|-x|+y|-y, [x,y] or an element id to turn its front toward (armchair facing the TV) — prefer it to angle, clockwise degrees on a plan whose y grows down: 0 front to +y, 90 to -x, 180 to -y, 270 to +x (the catalog tool names each front: seat, doors, foot of the bed). A piece whose back belongs on a wall, put at=[x,y] within 30 cm of one with neither angle nor facing, is turned back to that wall on its own. The reply says where each front ended up: faces=f3:+y(seat), turned=f3:back to w2 — read it before building on the piece; mat finish (wood, marble, img:…; 'img:facade.png fit' stretches one image: a reference board to compare with render_3d view=front) and opacity (glass 0.3); defaults {…} fills every item; px=true reads coordinates as background pixels. cat=beam with a,b=[x,y,z] (z above the floor) and w×h section makes rafters, posts and braces; a beam reaching into a roof stops under it. Pools: pool or pool-oval. dry=true answers what it would do — what it would add, the clearances around it, the findings it would settle or create — without writing; dry=\"summary\" answers short.",
     "inputSchema": {
       "$defs": {
@@ -1794,9 +1985,16 @@
       ],
       "type": "object"
     },
-    "name": "place"
+    "name": "place",
+    "title": "Place furniture, doors and windows"
   },
   "plugins": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Run a plugin"
+    },
     "description": "Plugins (external programs editing through the HTTP API). list (default): rows [name,title,description]. run {name,args?}: {ok,code,stdout,stderr,edits,revision}.",
     "inputSchema": {
       "properties": {
@@ -1813,9 +2011,16 @@
       },
       "type": "object"
     },
-    "name": "plugins"
+    "name": "plugins",
+    "title": "Run a plugin"
   },
   "plumbing": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Plumbing project"
+    },
     "description": "Plumbing project, NBR 5626 (cold and hot water) and NBR 8160 (sewer). Points are the plumbing pieces (catalog plumbing: cold-water, hot-water, sewer, valve, grease-trap, inspection-box, water-meter, gas-point, vent-pipe, and the drains as the models they are: floor-drain caixa sifonada 150x150x50, floor-drain-100, floor-drain-75 (150x185x75, up to 15 UHC), trap-drain-small (seal under 50 mm, no trap), dry-drain, linear-drain (w 50/70/90, no trap), linear-drain-trap, rain-drain for open areas; drains are set flush in the floor of a room, never in a wall, a door span or under a cabinet) and what a point is comes from its catalog, never its name; fixtures are the pieces that use water (toilet, basin, kitchen sink, shower, bathtub, washer, laundry sink, dishwasher). check (default): {points:{kind:count}, pipes_m, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — a cold-water point by every fixture and a sewer point (or a floor drain for basin, shower, tub and machines) within reach, the discharge diameter it needs (toilet 100 mm, kitchen sink and machines 50, others 40); hot water where the project has any; a floor drain in every bathroom, kitchen and laundry, inside the shower area where there is one, at least one real trap (50 mm seal) per room, the UHC its outlet takes (50 mm: 6, 75 mm: 15), rain drains for open terraces; a grease trap for a kitchen sink; the premises — where the water comes from (water-meter or valve) and where the sewer goes (inspection-box or stack); points no drawn pipe of their kind reaches. accept=[[key, reason]] and prune=true as in electrical. route {kind: cold|hot|sewer|vent, ids?, via?: ceiling|floor|wall, from?, depth?}: lays the run from its source to the points along the walls and inside them, or through the ceiling or under the floor, sharing the trunk, draws it (replacing the earlier run of the same points and the lines drawn by hand to them, listed in replaced_drawn) and replies {via, suggested, length_m, by_premise_m, bends, branches, materials: [[item, qty, unit]]} — water: pipe and bars, 90° elbows, tees, threaded elbows at the points, a gate valve per room, adhesive; sewer: the branch at the largest diameter it takes, the drops at each point's own, a 45° Y junction at each branch (never a 90° tee), two 45° elbows per turn, sealing rings, trap boxes. Sewer runs only under the floor, by gravity, with 2 % fall up to 75 mm and 1 % above: the reply says needs_depth_cm, and with depth a run that does not fit is refused saying how much it needs. Without via the cheapest premise that can be built is taken; one that cannot (a point in no wall; from the ceiling a low point in no wall, nowhere to drop; sewer up to the ceiling or lying in a wall) is refused with why.",
     "inputSchema": {
       "properties": {
@@ -1866,17 +2071,30 @@
       },
       "type": "object"
     },
-    "name": "plumbing"
+    "name": "plumbing",
+    "title": "Plumbing project"
   },
   "redo": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Redo"
+    },
     "description": "Redo the last undone change.",
     "inputSchema": {
       "properties": {},
       "type": "object"
     },
-    "name": "redo"
+    "name": "redo",
+    "title": "Redo"
   },
   "render_3d": {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Render a 3D view"
+    },
     "description": "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations — front looks from the plan's bottom edge (large y) toward y=0, back from y=0 toward large y, left from x=0, right from large x; cut=cm makes a section keeping only what is beyond that plane from the viewer (front cut=200 keeps y<200, so the wall at y=0 stays as the backdrop; to remove it look from back), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). walls=cutaway drops the walls between the eye and a room to 40 cm, walls=down drops them all; either hides ceilings, roofs and the doors, windows and wall pieces of lowered walls, to see the furniture from the side. Keep w/h small.",
     "inputSchema": {
       "properties": {
@@ -1917,9 +2135,15 @@
       },
       "type": "object"
     },
-    "name": "render_3d"
+    "name": "render_3d",
+    "title": "Render a 3D view"
   },
   "render_photo": {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Render a photo"
+    },
     "description": "Realistic photo (path traced: sun from compass location and time, lamps, glass). cam=i stored view, or view=visitor/aerial (yaw,pitch). quality draft (~10 s) | good | best; hour = local solar time (e.g. 9, 15.5, 20); w/h small. Returns PNG.",
     "inputSchema": {
       "properties": {
@@ -1954,9 +2178,15 @@
       },
       "type": "object"
     },
-    "name": "render_photo"
+    "name": "render_photo",
+    "title": "Render a photo"
   },
   "render_plan": {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Render the floor plan"
+    },
     "description": "PNG of the floor plan, exactly as the user sees it. region=[[minx,miny],[maxx,maxy]] frames a place — it is fitted to the image's aspect by growing the short side, never by cropping, so everything asked for is in the picture — or room=<id|name> with pad cm (default 30) frames a room without working the rectangle out. bg=0..1 overlays the background image to compare with the reference. Keep w/h small to save tokens.",
     "inputSchema": {
       "$defs": {
@@ -2006,9 +2236,16 @@
       },
       "type": "object"
     },
-    "name": "render_plan"
+    "name": "render_plan",
+    "title": "Render the floor plan"
   },
   "save_home": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Save the project"
+    },
     "description": "Save the project (.newera). path optional after the first save.",
     "inputSchema": {
       "properties": {
@@ -2019,17 +2256,30 @@
       },
       "type": "object"
     },
-    "name": "save_home"
+    "name": "save_home",
+    "title": "Save the project"
   },
   "sessions": {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List who is editing"
+    },
     "description": "People and agents on this project now: rows [id,name,cursor,selection,edits].",
     "inputSchema": {
       "properties": {},
       "type": "object"
     },
-    "name": "sessions"
+    "name": "sessions",
+    "title": "List who is editing"
   },
   "set_background": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Set a scanned plan"
+    },
     "description": "Set a scanned plan as background at real scale: path, then cm_per_px (+cm_per_px_y), calibrate {a,b px, cm} or calibrations [{a,b,cm}…] (fits X/Y scales), angle (clockwise °); offset/opacity/visible; clear=true removes.",
     "inputSchema": {
       "$defs": {
@@ -2111,9 +2361,16 @@
       },
       "type": "object"
     },
-    "name": "set_background"
+    "name": "set_background",
+    "title": "Set a scanned plan"
   },
   "set_home": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Project settings"
+    },
     "description": "Rename the project, set or remove project properties (properties {key: value|null}, or a storey's with level), set the compass (north), and set the city whose building code applies (city=sao-paulo). The city belongs to the project: ergonomics, check_layout and every dry run then weigh the same municipal rules, so a change can be tested against the score it moves.",
     "inputSchema": {
       "$defs": {
@@ -2161,9 +2418,16 @@
       },
       "type": "object"
     },
-    "name": "set_home"
+    "name": "set_home",
+    "title": "Project settings"
   },
   "split_wall": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Split a wall"
+    },
     "description": "Split a wall into two joined walls at t (0..1).",
     "inputSchema": {
       "properties": {
@@ -2180,9 +2444,16 @@
       ],
       "type": "object"
     },
-    "name": "split_wall"
+    "name": "split_wall",
+    "title": "Split a wall"
   },
   "trace_background": {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Trace walls from a scan"
+    },
     "description": "Trace walls from the background image (set_background first): thick dark or gray bands across or down the image become walls (colored areas — lawn, plants, furniture — are ignored; collinear pieces split by doors/windows up to max_gap join; region limits the search). Returns rows [[x1,y1],[x2,y2],t] in plan cm; create=true adds them as walls. Check with render_plan bg=0.5.",
     "inputSchema": {
       "properties": {
@@ -2226,17 +2497,31 @@
       },
       "type": "object"
     },
-    "name": "trace_background"
+    "name": "trace_background",
+    "title": "Trace walls from a scan"
   },
   "undo": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Undo"
+    },
     "description": "Undo the last change, whoever made it.",
     "inputSchema": {
       "properties": {},
       "type": "object"
     },
-    "name": "undo"
+    "name": "undo",
+    "title": "Undo"
   },
   "update": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Change elements"
+    },
     "description": "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto/ceiling_flat, polyline divider); a part of a group takes name, brand, model_name and url on its own — its size and place belong to the group. anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. stretch=[part ids] on a group resize says what takes the change: the listed parts grow or shrink, every other part keeps its size and moves along (uprights stay 5.8 cm while the opening between them grows); without it all parts scale together. dry=true answers what it would do — changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), findings resolved and created as issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the same kind check_layout gives (only real defects: a piece resting or built in is never listed), and issues_changed for a clash that stays but grows or shrinks (extent_was) — without writing anything, so a size can be tried before it is applied; dry=\"summary\" answers the same decision without listing the parts a group rebuilds. Otherwise the reply names what changed. rename {pattern, to, what: names|labels} renames in bulk by a regex (Rust syntax, `(?i)` for any case, `$1` in to): every piece name — parts of groups included — or label text that matches, in one step; with dry it lists them first.",
     "inputSchema": {
       "$defs": {
@@ -2635,9 +2920,16 @@
       },
       "type": "object"
     },
-    "name": "update"
+    "name": "update",
+    "title": "Change elements"
   },
   "variants": {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Plan versions"
+    },
     "description": "Plan versions (tabs). list: rows [i,name,active,walls,rooms,m2,furniture,issues]. duplicate/new switch to the new one; edits apply to the active version.",
     "inputSchema": {
       "properties": {
@@ -2656,9 +2948,16 @@
       },
       "type": "object"
     },
-    "name": "variants"
+    "name": "variants",
+    "title": "Plan versions"
   },
   "video": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Video camera path"
+    },
     "description": "Video camera path. list (default): {fps,speed,secs,rows [i,x,y,z,yaw,pitch,fov]}. add {cam? | x?,y?,z?,yaw?,pitch?,fov?, i?} appends a keyframe (missing values from the visitor); delete {i}; clear; orbit {z?,n?} replaces the path with an aerial tour; set {fps?,speed?}; render {path .avi, w?,h?} writes a Motion-JPEG video. cm, degrees, m/s.",
     "inputSchema": {
       "properties": {
@@ -2716,6 +3015,7 @@
       },
       "type": "object"
     },
-    "name": "video"
+    "name": "video",
+    "title": "Video camera path"
   }
 }

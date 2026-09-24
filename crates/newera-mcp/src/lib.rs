@@ -7,6 +7,7 @@
 
 mod compact;
 mod edit;
+mod hints;
 mod schema;
 mod tools;
 mod trace;
