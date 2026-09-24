@@ -171,6 +171,22 @@ button that registers it from there, no terminal. The same panel is how you
 know it worked: it names the client that connected and lists the tools it is
 calling, as it calls them. The status bar says it too, from across the room.
 
+**One click** — with the app installed (the installers put `newera` on your PATH), these
+add it over stdio: with the editor open the AI edits the plan on screen, without it a
+project of its own.
+
+[![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=newera&config=eyJjb21tYW5kIjoibmV3ZXJhIiwiYXJncyI6WyJtY3AiXX0%3D)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_newera-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=newera&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22newera%22%2C%22args%22%3A%5B%22mcp%22%5D%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_newera-24bfa5?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=newera&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22newera%22%2C%22args%22%3A%5B%22mcp%22%5D%7D&quality=insiders)
+
+**Plugin with skills** — Claude Code: `/plugin marketplace add leandrodaf/3d-new-era-ai`,
+then `/plugin install 3d-new-era-ai@3d-new-era-ai`. Codex:
+`codex plugin marketplace add leandrodaf/3d-new-era-ai`. Gemini CLI:
+`gemini extensions install https://github.com/leandrodaf/3d-new-era-ai`.
+
+**Claude Desktop, one click** — download `newera-mcp.mcpb` from the
+[latest release](https://github.com/leandrodaf/3d-new-era-ai/releases/latest) and open it.
+
 **Claude Code**
 
 ```sh

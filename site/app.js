@@ -79,7 +79,7 @@
     "q4": "Does my project go to the cloud?", "a4": "No. The app and its MCP server run on your computer and only accept connections from the same machine. The project is your own <code>.newera</code> file.",
     "q5": "Do I need a graphics card?", "a5": "No. The 3D view uses the GPU when there is one, and photos render on the CPU — even on a headless server.",
     "q6": "Does it open my Sweet Home 3D projects?", "a6": "Yes, <code>.sh3d</code> files open with walls, rooms, furniture, lights, cameras and levels.",
-    "foot.by": "Built in Rust by Leandro Ferreira.", "foot.releases": "Releases", "foot.showcase": "Showcase", "foot.issues": "Report an issue", "foot.privacy": "Privacy", "foot.terms": "Terms",
+    "foot.by": "Built in Rust by Leandro Ferreira.", "foot.releases": "Releases", "foot.showcase": "Showcase", "foot.issues": "Report an issue", "foot.privacy": "Privacy", "foot.terms": "Terms", "ai.oneclick": "Or in one click, with the app installed:",
     "foot.credits": "Reference plan: <i>Typical apartment floor plan FOCSA Building</i>, Osvaldo Valdes, CC BY-SA 4.0. Textures: ambientCG, CC0."
   };
 
@@ -212,6 +212,7 @@
     "foot.showcase": "Galería",
     "foot.issues": "Informar de un problema",
     "foot.privacy": "Privacidad",
+    "ai.oneclick": "O con un clic, con la app instalada:",
     "foot.terms": "Términos",
     "foot.credits": "Plano de referencia: <i>Typical apartment floor plan FOCSA Building</i>, Osvaldo Valdes, CC BY-SA 4.0. Texturas: ambientCG, CC0.",
   };
@@ -345,6 +346,7 @@
     "foot.showcase": "Galerie",
     "foot.issues": "Signaler un problème",
     "foot.privacy": "Confidentialité",
+    "ai.oneclick": "Ou en un clic, l’app installée :",
     "foot.terms": "Conditions",
     "foot.credits": "Plan de référence : <i>Typical apartment floor plan FOCSA Building</i>, Osvaldo Valdes, CC BY-SA 4.0. Textures : ambientCG, CC0.",
   };

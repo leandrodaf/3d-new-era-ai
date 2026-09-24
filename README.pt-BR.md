@@ -84,6 +84,22 @@ Abra o editor (ou rode `newera serve` para ficar sem janela). Ele serve o MCP em
 **`http://127.0.0.1:7878/mcp`** — aponte sua IA para esse endereço e ela edita a planta que
 você está vendo, ao vivo.
 
+**Um clique** — com o app instalado (os instaladores põem `newera` no PATH), estes botões o
+adicionam pelo stdio: com o editor aberto a IA edita a planta na tela; sem ele, um projeto
+próprio.
+
+[![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=newera&config=eyJjb21tYW5kIjoibmV3ZXJhIiwiYXJncyI6WyJtY3AiXX0%3D)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_newera-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=newera&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22newera%22%2C%22args%22%3A%5B%22mcp%22%5D%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_newera-24bfa5?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=newera&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22newera%22%2C%22args%22%3A%5B%22mcp%22%5D%7D&quality=insiders)
+
+**Plugin com skills** — Claude Code: `/plugin marketplace add leandrodaf/3d-new-era-ai`,
+depois `/plugin install 3d-new-era-ai@3d-new-era-ai`. Codex:
+`codex plugin marketplace add leandrodaf/3d-new-era-ai`. Gemini CLI:
+`gemini extensions install https://github.com/leandrodaf/3d-new-era-ai`.
+
+**Claude Desktop, um clique** — baixe o `newera-mcp.mcpb` da
+[última versão](https://github.com/leandrodaf/3d-new-era-ai/releases/latest) e abra.
+
 **Claude Code**
 
 ```sh

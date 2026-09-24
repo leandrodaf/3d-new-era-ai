@@ -469,3 +469,7 @@ button { font: inherit; color: inherit; }
   /* Captions and figure marks: one step up, so they read at arm's length. */
   .fig, figcaption, .mosaic figcaption, .dim--top span { font-size: 12.5px; }
 }
+
+/* One-click installs under the client tabs. */
+.oneclick__lead { margin: 18px 0 8px; color: var(--graphite); font-size: 14px; }
+.oneclick { display: flex; flex-wrap: wrap; gap: 8px; }
