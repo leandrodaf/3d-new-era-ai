@@ -519,14 +519,19 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
       `com.3dneweraai/newera` 1.8.0 publicado no MCP Registry oficial — eu
 - [x] Formulário do Claude Desktop com o `.mcpb` 1.8.0 enviado em 24/09/2026
       (https://clau.de/desktop-extention-submission); a Anthropic só responde se selecionar
-- [ ] Plugin no Console da Anthropic (https://platform.claude.com/plugins/submit) e no
-      Cursor Marketplace (https://cursor.com/marketplace/publish) — eu
+- [x] Cursor Marketplace: pedido de publisher enviado em 24/09/2026 (`@3d-new-era-ai`,
+      `.cursor-plugin/marketplace.json` na raiz apontando para `./plugin`,
+      logo em `assets/logo-plate.png`) — eu
+- [ ] Plugin no Console da Anthropic (https://platform.claude.com/plugins/submit) — eu,
+      depois que **você** entrar no Console
 - [x] Tópicos do repositório: `mcp`, `mcp-server`, `gemini-cli-extension` (no lugar de
       `desktop-app`: o GitHub aceita 20) — eu
 - [x] mcp.so: https://github.com/chatmcp/mcpso/issues/4361 — eu
 - [x] PR no awesome-mcp-servers: https://github.com/punkpeye/awesome-mcp-servers/pull/15045 — eu
-- [ ] Smithery (`smithery mcp publish`, pede login) e Glama (claim, pede login) — eu,
-      com o navegador em primeiro plano
+- [x] Smithery: `leandro-daf4/new-era-3d` apontando para `https://mcp.3dneweraai.com/mcp`
+- [ ] Smithery: autorizar o OAuth da primeira leitura das tools e publicar a release (depende
+      do Resend verificado para entrar na nuvem) — eu
+- [ ] Glama (claim, pede login) — eu, depois que **você** entrar
 - [x] Secret `WINGET_TOKEN` (classic, `public_repo`, vence em 24/09/2027), também no
       1Password
 - [ ] winget: o primeiro PR no microsoft/winget-pkgs com os manifestos da 1.8.0
