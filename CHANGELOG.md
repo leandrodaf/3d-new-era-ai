@@ -6,12 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-09-24
+
+### Added
+
+- Every tool declares an output schema, and every answer carries `structuredContent`
+  laid out from what it already says: a JSON object as it is, a list under `rows`, an
+  `ok rev=N ids=…` line split into its fields, an image as its type. The text the tools
+  answer is unchanged.
+- Every argument of every tool says what it is, nested shapes included.
+- The MCP handshake names the server's icon, description and website.
+- The plugin points at the hosted server (mcp.3dneweraai.com), so it works with nothing
+  installed; `3d-new-era-ai-desktop` keeps the local app and its live window.
+- A public page at 3dneweraai.com/connector/ says how to add the hosted server to Claude
+  and ChatGPT.
+
+### Changed
+
+- Every hosted tool declares the OAuth scheme it needs, and sign-in accepts the
+  `offline_access` scope ChatGPT asks for to stay signed in.
+
 ### Fixed
 
 - With the walls down or cut away in the 3D view, what is held up from the floor stays
   however close to a wall it stands: a worktop on its cabinets, a desk top on its frame,
   a vase on the worktop and a cabinet's own top board used to vanish with the wall. Only
   what hangs on a lowered wall goes now, and whatever rests on it.
+- The site's one-click buttons and legal links are big enough to tap.
 
 ## [1.8.0] - 2026-09-24
 
