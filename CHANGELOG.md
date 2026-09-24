@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- With the walls down or cut away in the 3D view, what is held up from the floor stays
+  however close to a wall it stands: a worktop on its cabinets, a desk top on its frame,
+  a vase on the worktop and a cabinet's own top board used to vanish with the wall. Only
+  what hangs on a lowered wall goes now, and whatever rests on it.
+
 ## [1.8.0] - 2026-09-24
 
 ### Added
