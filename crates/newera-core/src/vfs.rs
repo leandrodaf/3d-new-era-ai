@@ -219,12 +219,14 @@ mod tests {
     fn a_jail_confines_reads() {
         // The jail is process-wide and set once, so the rule is checked with
         // a root of its own, and the unjailed process allows everything.
-        let root = key(Path::new("/srv/newera/projects"));
-        let inside = |p: &str| super::inside(&root, Path::new(p));
-        assert!(inside("/srv/newera/projects/p1/wood.jpg"));
-        assert!(!inside("/proc/self/environ"));
-        assert!(!inside("/srv/newera/projects/../../etc/passwd"));
-        assert!(!inside("relative/texture.png"));
+        // Built from the temp dir, so the paths are absolute on Windows too.
+        let base = std::env::temp_dir();
+        let root = key(&base.join("newera").join("projects"));
+        let inside = |p: &Path| super::inside(&root, p);
+        assert!(inside(&root.join("p1").join("wood.jpg")));
+        assert!(!inside(&base.join("other").join("environ")));
+        assert!(!inside(&root.join("..").join("..").join("passwd")));
+        assert!(!inside(Path::new("relative/texture.png")));
         assert!(
             allowed(Path::new("/anything")),
             "the desktop is never jailed"
