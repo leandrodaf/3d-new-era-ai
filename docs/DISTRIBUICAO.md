@@ -407,11 +407,25 @@ cliente.
       nas páginas legais.
 
 ### Etapa 3
-- [ ] `newera-cloud` montando o relay
-- [ ] Postgres: contas e planos
-- [ ] Servidor OAuth e `/mcp` fixo
-- [ ] Editor web com login e roteamento para a aba
-- [ ] Deploy
+- [x] `newera-cloud` montando o relay (`crates/newera-cloud`; o relay ganhou salas com dono)
+- [x] Postgres: contas, sessões, planos com cotas (`free`, `supporter`), assinaturas e
+      uso — migração `0001`, segredos guardados só como hash
+- [x] Servidor OAuth 2.1 (metadados RFC 9728/8414, registro dinâmico, client metadata
+      documents com proteção contra SSRF, PKCE S256, rotação de refresh com detecção de
+      reuso) e `/mcp` fixo com Bearer
+- [x] Entrar por link no e-mail (Resend) ou Google; página da conta, sair e apagar
+      (tudo some em 30 dias)
+- [x] Editor web: "Entrar para usar no Claude e no ChatGPT" no painel de IA, a aba
+      reivindica a sala para a conta e mostra o endereço fixo
+- [x] Layout do painel de IA corrigido: o bloco da conta estava espremido na linha do
+      título ("No ar…" / "Desligar") e agora tem a sua própria caixa, com o endereço fixo
+      no mesmo estilo do endereço da aba
+- [x] A ligação da aba volta sozinha quando o serviço reinicia (a cada deploy), no mesmo
+      endereço, e não fica mais presa em "Ligando…"
+- [x] Testes: fluxo inteiro contra Postgres (`crates/newera-cloud/tests/flow.rs`, job
+      novo no CI) e no navegador (entrar, "Pronto", reivindicar, reiniciar o serviço)
+- [ ] Deploy (imagem e compose do `newera-cloud` na VPS; secrets `RESEND_API_KEY`,
+      `GOOGLE_CLIENT_ID/SECRET` — dependem de você)
 
 ### Etapa 4
 - [ ] Motor headless com projetos no R2
