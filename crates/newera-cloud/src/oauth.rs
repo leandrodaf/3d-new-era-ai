@@ -27,6 +27,15 @@ use crate::{AppState, accounts, secret};
 
 /// The one scope: act in 3D New Era AI for this account.
 pub const SCOPE: &str = "newera";
+
+/// Asked for by clients that want to stay signed in (`ChatGPT` does). Every
+/// grant already comes with a refresh token, so it changes nothing.
+const OFFLINE: &str = "offline_access";
+
+/// Whether a requested scope asks only for what this server grants.
+fn known_scopes(scope: &str) -> bool {
+    scope.split_whitespace().all(|s| s == SCOPE || s == OFFLINE)
+}
 const ACCESS_SECS: i64 = 3600;
 const REFRESH_DAYS: i64 = 30;
 const CODE_SECS: i64 = 600;
@@ -65,7 +74,7 @@ pub async fn server_metadata(State(state): State<AppState>) -> Response {
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": ["none"],
         "revocation_endpoint_auth_methods_supported": ["none"],
-        "scopes_supported": [SCOPE],
+        "scopes_supported": [SCOPE, OFFLINE],
         "client_id_metadata_document_supported": true,
         "authorization_response_iss_parameter_supported": true,
         "service_documentation": "https://github.com/leandrodaf/3d-new-era-ai#connect-your-ai",
@@ -467,9 +476,9 @@ async fn check(
         return back("invalid_request", "code_challenge_method must be S256");
     }
     if let Some(scope) = &r.scope
-        && scope.split_whitespace().any(|s| s != SCOPE)
+        && !known_scopes(scope)
     {
-        return back("invalid_scope", "the only scope is newera");
+        return back("invalid_scope", "the scopes are newera and offline_access");
     }
     let resource = r.resource.clone();
     if let Some(res) = &resource {
@@ -941,6 +950,15 @@ pub async fn bearer(app: &AppState, headers: &HeaderMap) -> Option<accounts::Acc
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `ChatGPT` asks for `offline_access` next to ours; anything else is refused.
+    #[test]
+    fn offline_access_is_a_known_scope() {
+        assert!(known_scopes("newera"));
+        assert!(known_scopes("newera offline_access"));
+        assert!(known_scopes("offline_access"));
+        assert!(!known_scopes("newera admin"));
+    }
 
     #[test]
     fn only_https_or_loopback_redirects() {
