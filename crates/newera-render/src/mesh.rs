@@ -168,6 +168,10 @@ impl Surface {
 /// Height of a wall brought down to show the rooms, cm.
 pub const CUTAWAY_HEIGHT: f64 = 40.0;
 
+/// How far a piece may sit off the top of what holds it up and still rest on
+/// it, cm: the slack plans are drawn with.
+const REST: f64 = 2.0;
+
 /// Walls drawn low so the rooms show. Ceilings and roofs go too, and so does
 /// whatever stood in or hung on the walls brought down.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -265,20 +269,90 @@ impl Cutaway {
         Some((low, cuts))
     }
 
-    /// Whether `piece` goes with the walls brought down: a roof, a door or
-    /// window in one of them, or anything hanging on one above the cut.
-    fn hides(piece: &Furniture, top: &Furniture, openings: &[FurnitureId], low: &[&Wall]) -> bool {
-        if top.catalog.starts_with("roof") || piece.catalog.starts_with("roof") {
-            return true;
-        }
-        if openings.contains(&piece.id) {
-            return true;
-        }
-        piece.elevation >= CUTAWAY_HEIGHT
+    /// Whether `piece`, a part of `top`, goes with the walls brought down
+    /// whatever holds it: a roof, or a door or window in one of them.
+    fn opens(piece: &Furniture, top: &Furniture, openings: &[FurnitureId]) -> bool {
+        top.catalog.starts_with("roof")
+            || piece.catalog.starts_with("roof")
+            || openings.contains(&piece.id)
+    }
+
+    /// Whether `piece` is fixed above the cut against one of the walls
+    /// brought down, as a wall cabinet or a TV is.
+    fn against(piece: &Furniture, low: &[&Wall]) -> bool {
+        piece.height_range().0 >= CUTAWAY_HEIGHT
             && low.iter().any(|wall| {
                 piece.position.distance_to_segment(wall.start, wall.end)
                     <= wall.thickness / 2.0 + piece.depth.min(piece.width) / 2.0 + 5.0
             })
+    }
+
+    /// Whether `piece` sits on `under`: its bottom at `under`'s top, give or
+    /// take [`REST`], and over it rather than beside it.
+    fn rests_on(piece: &Furniture, under: &Furniture) -> bool {
+        if (under.height_range().1 - piece.height_range().0).abs() > REST {
+            return false;
+        }
+        let (a, b) = newera_core::plan_bounds(piece);
+        let (c, d) = newera_core::plan_bounds(under);
+        a.x.max(c.x) < b.x.min(d.x) && a.y.max(c.y) < b.y.min(d.y)
+    }
+
+    /// Which pieces go with the walls brought down, one flag per entry of
+    /// `pieces` (a piece on the plan and those of its parts drawn).
+    ///
+    /// Only what hangs on a lowered wall goes, and whatever rests on it.
+    /// Being close to the wall is not enough: a worktop on its cabinets, a
+    /// desk top on its frame and the vase on the worktop are held up from the
+    /// floor, and stay however close to the wall they stand. A piece is
+    /// judged whole: a cabinet keeps its top board, a wall cabinet takes its
+    /// doors along.
+    fn hidden(
+        pieces: &[(&Furniture, Vec<&Furniture>)],
+        openings: &[FurnitureId],
+        low: &[&Wall],
+    ) -> Vec<bool> {
+        let raised = |top: &Furniture| top.height_range().0 >= CUTAWAY_HEIGHT;
+        // What each raised piece rests on; doors, windows and roofs hold nothing.
+        let under: Vec<Vec<usize>> = pieces
+            .iter()
+            .enumerate()
+            .map(|(i, (top, _))| {
+                if !raised(top) {
+                    return Vec::new();
+                }
+                pieces
+                    .iter()
+                    .enumerate()
+                    .filter(|(j, (other, leaves))| {
+                        *j != i
+                            && !leaves.iter().any(|leaf| Self::opens(leaf, other, openings))
+                            && leaves.iter().any(|leaf| Self::rests_on(top, leaf))
+                    })
+                    .map(|(j, _)| j)
+                    .collect()
+            })
+            .collect();
+        // Held from the start: what stands on the floor, and what is raised
+        // clear of the lowered walls resting on nothing (a pendant, a
+        // mezzanine). Then whatever rests on something held.
+        let mut held: Vec<bool> = pieces
+            .iter()
+            .zip(&under)
+            .map(|((top, _), under)| !raised(top) || (under.is_empty() && !Self::against(top, low)))
+            .collect();
+        loop {
+            let more: Vec<usize> = (0..pieces.len())
+                .filter(|&i| !held[i] && under[i].iter().any(|&j| held[j]))
+                .collect();
+            if more.is_empty() {
+                break;
+            }
+            for i in more {
+                held[i] = true;
+            }
+        }
+        held.into_iter().map(|held| !held).collect()
     }
 }
 
@@ -364,15 +438,38 @@ impl Mesh {
             {
                 mesh.add_polyline(line, base);
             }
-            for top in &view.furniture {
-                let highlight = selection.contains(&ElementId::Furniture(top.id));
-                if !home.shown_in_3d(top.discipline, None) {
+            let pieces: Vec<(&Furniture, Vec<&Furniture>)> = view
+                .furniture
+                .iter()
+                .filter(|top| home.shown_in_3d(top.discipline, None))
+                .map(|top| {
+                    let leaves = top
+                        .visible_leaves()
+                        .into_iter()
+                        .filter(|leaf| {
+                            home.shown_in_3d(
+                                leaf.discipline,
+                                newera_core::layer_in_group(top, leaf),
+                            )
+                        })
+                        .collect();
+                    (top, leaves)
+                })
+                .collect();
+            let hidden = match cutaway {
+                Some(_) => Cutaway::hidden(&pieces, &openings, &low),
+                None => vec![false; pieces.len()],
+            };
+            for ((top, leaves), gone) in pieces.iter().zip(hidden) {
+                if gone {
                     continue;
                 }
-                for piece in top.visible_leaves().into_iter().filter(|leaf| {
-                    home.shown_in_3d(leaf.discipline, newera_core::layer_in_group(top, leaf))
-                        && !(cutaway.is_some() && Cutaway::hides(leaf, top, &openings, &low))
-                }) {
+                let highlight = selection.contains(&ElementId::Furniture(top.id));
+                for piece in leaves
+                    .iter()
+                    .copied()
+                    .filter(|leaf| !(cutaway.is_some() && Cutaway::opens(leaf, top, &openings)))
+                {
                     let local = models(piece).unwrap_or_else(|| newera_catalog::piece_mesh(piece));
                     mesh.add_piece(piece, &local, base, highlight);
                 }
@@ -2246,5 +2343,124 @@ mod cutaway_tests {
             Some(&Cutaway::all(&walls)),
         );
         assert!((highest(&low) - 0.4).abs() < 1e-3, "{}", highest(&low));
+    }
+
+    /// A catalog piece of `size` [w, d, h] cm centered `at`, bottom at `elev`.
+    fn put(
+        home: &mut Home,
+        catalog: &str,
+        at: (f64, f64),
+        size: [f64; 3],
+        elev: f64,
+    ) -> FurnitureId {
+        let id = home.new_furniture_id();
+        let mut piece = newera_catalog::find(catalog)
+            .unwrap()
+            .instantiate(id, Point2::new(at.0, at.1));
+        [piece.width, piece.depth, piece.height] = size;
+        piece.elevation = elev;
+        home.furniture.push(piece);
+        id
+    }
+
+    /// The pieces that go with every wall brought down.
+    fn gone(home: &Home) -> Vec<FurnitureId> {
+        let all = Cutaway::all(home);
+        let low: Vec<&Wall> = home
+            .walls
+            .iter()
+            .filter(|w| all.walls.contains(&w.id))
+            .collect();
+        let pieces: Vec<(&Furniture, Vec<&Furniture>)> = home
+            .furniture
+            .iter()
+            .map(|f| (f, f.visible_leaves()))
+            .collect();
+        let mut out: Vec<FurnitureId> = pieces
+            .iter()
+            .zip(Cutaway::hidden(&pieces, &[], &low))
+            .filter(|(_, gone)| *gone)
+            .map(|((f, _), _)| f.id)
+            .collect();
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn what_rests_on_the_floor_stays_however_close_to_the_wall() {
+        // The top wall's room face is at y = 7.5.
+        let mut home = box_home();
+        put(
+            &mut home,
+            "base-cabinet",
+            (200.0, 37.5),
+            [100.0, 60.0, 72.0],
+            0.0,
+        );
+        // The worktop over it runs into the wall, and the vase on it all but
+        // touches the wall too: both are held up from the floor.
+        let worktop = put(&mut home, "box", (200.0, 37.5), [120.0, 60.0, 3.0], 72.0);
+        let vase = put(&mut home, "box", (240.0, 18.0), [20.0, 20.0, 30.0], 75.0);
+        // A desk top against the bottom wall, on a rail that stands clear of it.
+        put(&mut home, "box", (200.0, 350.0), [100.0, 6.0, 3.0], 69.5);
+        put(&mut home, "box", (200.0, 357.5), [120.0, 70.0, 2.5], 72.5);
+        assert!(gone(&home).is_empty(), "{:?}", gone(&home));
+
+        // Drawn, not only kept: the worktop adds to the mesh with walls down.
+        let all = Cutaway::all(&home);
+        let cut = |home: &Home| {
+            Mesh::from_home_cut(home, &Selection::new(), &no_models, Some(&all))
+                .indices
+                .len()
+        };
+        let mut bare = home.clone();
+        bare.furniture.retain(|f| f.id != worktop && f.id != vase);
+        assert!(cut(&home) > cut(&bare));
+    }
+
+    #[test]
+    fn what_hangs_on_a_lowered_wall_goes_with_what_it_holds() {
+        let mut home = box_home();
+        let hung = put(
+            &mut home,
+            "wall-cabinet",
+            (60.0, 25.0),
+            [60.0, 35.0, 70.0],
+            150.0,
+        );
+        let on_it = put(&mut home, "box", (60.0, 25.0), [20.0, 20.0, 30.0], 220.0);
+        // Over a counter, with the usual gap between them: still hung.
+        put(
+            &mut home,
+            "base-cabinet",
+            (200.0, 37.5),
+            [60.0, 60.0, 90.0],
+            0.0,
+        );
+        let over = put(
+            &mut home,
+            "wall-cabinet",
+            (200.0, 25.0),
+            [60.0, 35.0, 70.0],
+            150.0,
+        );
+        // Beside a tall cabinet, touching its side: hung all the same.
+        put(
+            &mut home,
+            "base-cabinet",
+            (320.0, 37.5),
+            [60.0, 60.0, 220.0],
+            0.0,
+        );
+        let beside = put(
+            &mut home,
+            "wall-cabinet",
+            (260.0, 25.0),
+            [60.0, 35.0, 70.0],
+            150.0,
+        );
+        let mut expected = vec![hung, on_it, over, beside];
+        expected.sort();
+        assert_eq!(gone(&home), expected);
     }
 }
