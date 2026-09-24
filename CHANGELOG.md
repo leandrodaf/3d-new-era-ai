@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-09-24
+
+### Changed
+
+- The paid plan is sold through Paddle instead of Polar, which cannot pay out to a seller
+  in Brazil. The account page opens Paddle's checkout (`/billing/checkout`), shows the
+  price in the buyer's currency, and "Manage subscription" opens Paddle's customer portal.
+  Closing an account stops the charges at the end of the paid period.
+- The site has a pricing page and a refund policy (full refund within 14 days), and the
+  terms name the seller and Paddle as the merchant of record.
+
 ## [1.9.0] - 2026-09-24
 
 ### Added
@@ -589,7 +600,10 @@ MCP server, with everything below.
 - `scripts/mcp.sh` / `make mcp` to call MCP tools from the shell.
 - CI for formatting, clippy, tests on Linux/macOS/Windows, MCP smoke test, MSRV and cargo-deny; release builds.
 
-[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.9.1...HEAD
+[1.9.1]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.9.0...v1.9.1
+[1.9.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.8.0...v1.9.0
+[1.8.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.4.3...v1.5.0
