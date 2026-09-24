@@ -27,7 +27,7 @@ const RELAY: &str = "https://mcp.3dneweraai.com";
 const REMEMBERED: &str = "newera-mcp-room";
 
 /// Tools the browser does not offer: they would hold the window for minutes.
-const TOO_SLOW_HERE: [&str; 1] = ["video"];
+const TOO_SLOW_HERE: [&str; 2] = ["video", "edit_video"];
 
 /// Where this tab is in the business of being reachable.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

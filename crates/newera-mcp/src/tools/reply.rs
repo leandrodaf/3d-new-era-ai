@@ -375,6 +375,26 @@ pub(super) fn applied(doc: &Document, before: &Home) -> String {
     format!("{} {diff}", ok(doc, &[]))
 }
 
+/// The action a write tool was asked for. Reads live in their own tool, so
+/// a client can run them without asking and ask before every change; a read
+/// asked of the write tool is sent there by name.
+pub(super) fn write_action<'a>(
+    action: Option<&'a str>,
+    writes: &[&str],
+    reads_in: &str,
+) -> Result<&'a str, ErrorData> {
+    let choices = writes.join(", ");
+    match action {
+        Some(a) if writes.contains(&a) => Ok(a),
+        Some(a) => Err(invalid(format!(
+            "unknown action `{a}`: {choices} (to read, use {reads_in})"
+        ))),
+        None => Err(invalid(format!(
+            "`action` is required: {choices} (to read, use {reads_in})"
+        ))),
+    }
+}
+
 pub(super) fn invalid(message: impl Into<String>) -> ErrorData {
     ErrorData::invalid_params(message.into(), None)
 }

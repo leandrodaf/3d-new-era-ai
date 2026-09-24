@@ -199,60 +199,17 @@
   },
   "cameras": {
     "annotations": {
-      "destructiveHint": true,
       "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Points of view"
+      "readOnlyHint": true,
+      "title": "List points of view"
     },
-    "description": "Points of view. list (default): {active, rows [i,name,x,y,z,yaw,pitch,fov]}. view {i} shows stored view i in the 3D window; aerial returns to the orbit view; store {name?,x?,y?,z?,yaw?,pitch?,fov?,look_at?:[x,y,z]} saves one (missing values from the visitor; yaw 0 looks toward +y/plan bottom, 90 toward -x; pitch positive looks down); delete {i}. cm and degrees.",
+    "description": "Stored points of view: {active: visitor|aerial, rows [i,name,x,y,z,yaw,pitch,fov]}, cm and degrees. Change them with edit_cameras.",
     "inputSchema": {
-      "properties": {
-        "action": {
-          "description": "`list` (default), `view`, `aerial`, `store`, `delete`",
-          "type": "string"
-        },
-        "fov": {
-          "description": "Horizontal field of view, degrees",
-          "type": "number"
-        },
-        "i": {
-          "description": "Stored view index",
-          "type": "integer"
-        },
-        "look_at": {
-          "description": "For `store`: point `[x,y,z]` cm to look at (sets yaw and pitch)",
-          "items": {
-            "type": "number"
-          },
-          "maxItems": 3,
-          "minItems": 3,
-          "type": "array"
-        },
-        "name": {
-          "type": "string"
-        },
-        "pitch": {
-          "description": "Degrees down",
-          "type": "number"
-        },
-        "x": {
-          "type": "number"
-        },
-        "y": {
-          "type": "number"
-        },
-        "yaw": {
-          "type": "number"
-        },
-        "z": {
-          "description": "Eye height cm",
-          "type": "number"
-        }
-      },
+      "properties": {},
       "type": "object"
     },
     "name": "cameras",
-    "title": "Points of view"
+    "title": "List points of view"
   },
   "catalog": {
     "annotations": {
@@ -333,13 +290,13 @@
       "destructiveHint": true,
       "openWorldHint": false,
       "readOnlyHint": false,
-      "title": "Checkpoints"
+      "title": "Remember or go back"
     },
-    "description": "Name where the plan is now, and come back to it. checkpoint {label} remembers this point; revert {label} undoes back down to it, keeping every id — which duplicating a version cannot do, since a copy renumbers. list (default) shows what is remembered and how many changes ago it was. A checkpoint lives with the project and survives saving.",
+    "description": "Name where the plan is now, and come back to it. {label} (action checkpoint, the default) remembers this point; action=revert {label} undoes back down to it, keeping every id — which duplicating a version cannot do, since a copy renumbers. A checkpoint lives with the project and survives saving; the checkpoints tool lists them.",
     "inputSchema": {
       "properties": {
         "action": {
-          "description": "`list` (default), `checkpoint` (remember here), `revert` (go back)",
+          "description": "`checkpoint` (remember here, the default) or `revert` (go back)",
           "type": "string"
         },
         "label": {
@@ -349,7 +306,21 @@
       "type": "object"
     },
     "name": "checkpoint",
-    "title": "Checkpoints"
+    "title": "Remember or go back"
+  },
+  "checkpoints": {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List checkpoints"
+    },
+    "description": "What checkpoint remembered: rows [label, changes ago]. A checkpoint lives with the project and survives saving.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "checkpoints",
+    "title": "List checkpoints"
   },
   "create": {
     "annotations": {
@@ -881,16 +852,92 @@
   },
   "disciplines": {
     "annotations": {
-      "destructiveHint": false,
       "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Show electrical and plumbing"
+      "readOnlyHint": true,
+      "title": "Show what the plan displays"
     },
-    "description": "Electrical and plumbing projects over the plan. active (default) reports {active, hidden}. select {d: electrical|plumbing|architecture}: new symbols (catalog cat electrical/plumbing) and lines go there and the rest is dimmed. select architecture shows architecture: it hides the electrical and plumbing projects (show brings one back); select a project shows it with the architecture dimmed. The 3D follows the plan — hidden projects and layers leave it too — unless show_all_3d=true, which makes the 3D show everything. show/hide {d}, where d can also be a layer of the plan — lighting (lamps, spots, LED), appliances (fridge, stove, oven, hood, washer…) or joinery (cabinets, wardrobes, countertops): hidden from the plan, its exports and the 3D. Pieces are in a layer by what they are, from the moment they are placed; update(layer=lighting|appliances|joinery|none) overrides it, and an empty layer goes back to the automatic one. active also reports layers {key:{pieces, hidden}}; get_home gives each piece its plan_layer. quantities: {electrical:[[kind,count,names?]], plumbing:[...], lines_cm:{...}} — grouped by catalog kind (every low outlet together), with the names of the points as the detail.",
+    "description": "Electrical and plumbing projects and plan layers over the plan. active (default): {active, hidden, layers {key:{pieces, hidden}}} — the discipline new symbols go to, what is hidden, and the layers (lighting, appliances, joinery); get_home gives each piece its plan_layer. quantities: {electrical:[[kind,count,names?]], plumbing:[...], lines_cm:{...}} — grouped by catalog kind (every low outlet together), with the names of the points as the detail. Change what is shown with edit_disciplines.",
     "inputSchema": {
       "properties": {
         "action": {
-          "description": "`active` (default), `select`, `show`, `hide`, `quantities`",
+          "description": "`active` (default) or `quantities`",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "disciplines",
+    "title": "Show what the plan displays"
+  },
+  "edit_cameras": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Change points of view"
+    },
+    "description": "Change the points of view. view {i} shows stored view i in the 3D window; aerial returns to the orbit view; store {name?,x?,y?,z?,yaw?,pitch?,fov?,look_at?:[x,y,z]} saves one (missing values from the visitor; yaw 0 looks toward +y/plan bottom, 90 toward -x; pitch positive looks down); delete {i}. cm and degrees. The list is the cameras tool.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "`view`, `aerial`, `store` or `delete`",
+          "type": "string"
+        },
+        "fov": {
+          "description": "Horizontal field of view, degrees",
+          "type": "number"
+        },
+        "i": {
+          "description": "Stored view index",
+          "type": "integer"
+        },
+        "look_at": {
+          "description": "For `store`: point `[x,y,z]` cm to look at (sets yaw and pitch)",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "pitch": {
+          "description": "Degrees down",
+          "type": "number"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "yaw": {
+          "type": "number"
+        },
+        "z": {
+          "description": "Eye height cm",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "edit_cameras",
+    "title": "Change points of view"
+  },
+  "edit_disciplines": {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Show or hide disciplines"
+    },
+    "description": "Change what the plan shows. select {d: electrical|plumbing|architecture}: new symbols (catalog cat electrical/plumbing) and lines go there and the rest is dimmed; select architecture hides the electrical and plumbing projects (show brings one back); select a project shows it with the architecture dimmed. show/hide {d}, where d can also be a layer of the plan — lighting (lamps, spots, LED), appliances (fridge, stove, oven, hood, washer…) or joinery (cabinets, wardrobes, countertops): hidden from the plan, its exports and the 3D. The 3D follows the plan unless show_all_3d=true, which makes it show everything. Pieces are in a layer by what they are; update(layer=lighting|appliances|joinery|none) overrides it. What is shown now is the disciplines tool.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "`select`, `show` or `hide`",
           "type": "string"
         },
         "d": {
@@ -904,8 +951,142 @@
       },
       "type": "object"
     },
-    "name": "disciplines",
-    "title": "Show electrical and plumbing"
+    "name": "edit_disciplines",
+    "title": "Show or hide disciplines"
+  },
+  "edit_levels": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Change storeys"
+    },
+    "description": "Change the storeys. add {name?,h?,elev?} adds one on top (or at elev cm) and selects it; select {id}; delete {id} removes it and its content. update {id, elev?|h?|name?|reference?}: elev raises a storey with its walls, floors and openings (houses on stilts); reference=true marks it a tracing layer (imported plan, older version) that checks and ergonomics skip, which is what you want when two storeys share an elevation. Other tools act on the selected storey. The list is the levels tool.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "`add`, `select`, `update` or `delete`",
+          "type": "string"
+        },
+        "elev": {
+          "description": "Floor elevation cm for `add` and `update` (e.g. a house on stilts)",
+          "type": "number"
+        },
+        "h": {
+          "description": "Storey height cm for `add` and `update`",
+          "type": "number"
+        },
+        "id": {
+          "description": "Level id, e.g. `lv3`",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "reference": {
+          "description": "Mark the storey as a reference layer: a traced plan, a scan, an earlier version. Its content is drawing, not building, so layout checks and ergonomics leave it alone even when it sits at the same elevation as the storey being designed",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "edit_levels",
+    "title": "Change storeys"
+  },
+  "edit_variants": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Change plan versions"
+    },
+    "description": "Change the plan versions (tabs): duplicate {name?} copies the active one, new {name?} starts an empty one — both switch to it; switch {i}; rename {i,name}; delete {i}. Edits apply to the active version. The list is the variants tool.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "`duplicate` (copy active), `new` (empty), `switch`, `rename` or `delete`",
+          "type": "string"
+        },
+        "i": {
+          "description": "Variant index for switch/rename/delete",
+          "type": "integer"
+        },
+        "name": {
+          "description": "Name for duplicate/new/rename",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "edit_variants",
+    "title": "Change plan versions"
+  },
+  "edit_video": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Change or render the video"
+    },
+    "description": "Change the video camera path, or render it. add {cam? | x?,y?,z?,yaw?,pitch?,fov?, i?} appends a keyframe (missing values from the visitor); delete {i}; clear; orbit {z?,n?} replaces the path with an aerial tour; set {fps?,speed?}; render {path .avi, w?,h?} writes a Motion-JPEG video. cm, degrees, m/s. The path itself is the video tool.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "`add`, `delete`, `clear`, `orbit`, `set` or `render`",
+          "type": "string"
+        },
+        "cam": {
+          "description": "Stored view index to add as keyframe",
+          "type": "integer"
+        },
+        "fov": {
+          "type": "number"
+        },
+        "fps": {
+          "type": "integer"
+        },
+        "h": {
+          "type": "integer"
+        },
+        "i": {
+          "description": "Keyframe index (`delete`, or insert position for `add`)",
+          "type": "integer"
+        },
+        "n": {
+          "description": "Keyframes for `orbit`",
+          "type": "integer"
+        },
+        "path": {
+          "description": "Output `.avi` for `render`",
+          "type": "string"
+        },
+        "pitch": {
+          "type": "number"
+        },
+        "speed": {
+          "description": "Camera speed m/s",
+          "type": "number"
+        },
+        "w": {
+          "type": "integer"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "yaw": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "edit_video",
+    "title": "Change or render the video"
   },
   "electrical": {
     "annotations": {
@@ -1446,42 +1627,17 @@
   },
   "levels": {
     "annotations": {
-      "destructiveHint": true,
       "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Storeys"
+      "readOnlyHint": true,
+      "title": "List storeys"
     },
-    "description": "Storeys. list (default): rows [id,name,elev,h,selected,layout_index,viewable,reference]. add {name?,h?,elev?} adds one on top (or at elev cm) and selects it; select {id}; delete {id} removes it and its content. update {id, elev?|h?|name?|reference?}: elev raises a storey with its walls, floors and openings (houses on stilts); reference=true marks it a tracing layer (imported plan, older version) that checks and ergonomics skip, which is what you want when two storeys share an elevation. Other tools act on the selected storey.",
+    "description": "Storeys: rows [id,name,elev,h,selected,layout_index,viewable,reference]. Other tools act on the selected storey; change them with edit_levels.",
     "inputSchema": {
-      "properties": {
-        "action": {
-          "description": "`list` (default), `add`, `select`, `update`, `delete`",
-          "type": "string"
-        },
-        "elev": {
-          "description": "Floor elevation cm for `add` and `update` (e.g. a house on stilts)",
-          "type": "number"
-        },
-        "h": {
-          "description": "Storey height cm for `add` and `update`",
-          "type": "number"
-        },
-        "id": {
-          "description": "Level id, e.g. `lv3`",
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "reference": {
-          "description": "Mark the storey as a reference layer: a traced plan, a scan, an earlier version. Its content is drawing, not building, so layout checks and ergonomics leave it alone even when it sits at the same elevation as the storey being designed",
-          "type": "boolean"
-        }
-      },
+      "properties": {},
       "type": "object"
     },
     "name": "levels",
-    "title": "Storeys"
+    "title": "List storeys"
   },
   "lighting": {
     "annotations": {
@@ -1990,29 +2146,17 @@
   },
   "plugins": {
     "annotations": {
-      "destructiveHint": true,
-      "openWorldHint": true,
-      "readOnlyHint": false,
-      "title": "Run a plugin"
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List plugins"
     },
-    "description": "Plugins (external programs editing through the HTTP API). list (default): rows [name,title,description]. run {name,args?}: {ok,code,stdout,stderr,edits,revision}.",
+    "description": "Plugins (external programs editing through the HTTP API): rows [name,title,description]. Run one with run_plugin.",
     "inputSchema": {
-      "properties": {
-        "action": {
-          "description": "`list` (default) or `run`",
-          "type": "string"
-        },
-        "args": {
-          "description": "Arguments passed to the plugin as JSON"
-        },
-        "name": {
-          "type": "string"
-        }
-      },
+      "properties": {},
       "type": "object"
     },
     "name": "plugins",
-    "title": "Run a plugin"
+    "title": "List plugins"
   },
   "plumbing": {
     "annotations": {
@@ -2238,6 +2382,32 @@
     },
     "name": "render_plan",
     "title": "Render the floor plan"
+  },
+  "run_plugin": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Run a plugin"
+    },
+    "description": "Run a plugin (an external program editing through the HTTP API) by name, with args as JSON: {ok,code,stdout,stderr,edits,revision}. The plugins tool lists them.",
+    "inputSchema": {
+      "properties": {
+        "args": {
+          "description": "Arguments passed to the plugin as JSON"
+        },
+        "name": {
+          "description": "Plugin to run, by name (the plugins tool lists them)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "run_plugin",
+    "title": "Run a plugin"
   },
   "save_home": {
     "annotations": {
@@ -2949,97 +3119,30 @@
   },
   "variants": {
     "annotations": {
-      "destructiveHint": false,
       "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Plan versions"
+      "readOnlyHint": true,
+      "title": "List plan versions"
     },
-    "description": "Plan versions (tabs). list: rows [i,name,active,walls,rooms,m2,furniture,issues]. duplicate/new switch to the new one; edits apply to the active version.",
+    "description": "Plan versions (tabs): rows [i,name,active,walls,rooms,m2,furniture,issues]. Edits apply to the active version; change them with edit_variants.",
     "inputSchema": {
-      "properties": {
-        "action": {
-          "description": "`list` (default), `duplicate` (copy active), `new` (empty), `switch`, `rename`, `delete`",
-          "type": "string"
-        },
-        "i": {
-          "description": "Variant index for switch/rename/delete",
-          "type": "integer"
-        },
-        "name": {
-          "description": "Name for duplicate/new/rename",
-          "type": "string"
-        }
-      },
+      "properties": {},
       "type": "object"
     },
     "name": "variants",
-    "title": "Plan versions"
+    "title": "List plan versions"
   },
   "video": {
     "annotations": {
-      "destructiveHint": true,
       "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Video camera path"
+      "readOnlyHint": true,
+      "title": "Read the video path"
     },
-    "description": "Video camera path. list (default): {fps,speed,secs,rows [i,x,y,z,yaw,pitch,fov]}. add {cam? | x?,y?,z?,yaw?,pitch?,fov?, i?} appends a keyframe (missing values from the visitor); delete {i}; clear; orbit {z?,n?} replaces the path with an aerial tour; set {fps?,speed?}; render {path .avi, w?,h?} writes a Motion-JPEG video. cm, degrees, m/s.",
+    "description": "The video camera path: {fps,speed,secs,rows [i,x,y,z,yaw,pitch,fov]}, cm, degrees, m/s. Change it and render it with edit_video.",
     "inputSchema": {
-      "properties": {
-        "action": {
-          "description": "`list` (default), `add`, `delete`, `clear`, `orbit`, `set`, `render`",
-          "type": "string"
-        },
-        "cam": {
-          "description": "Stored view index to add as keyframe",
-          "type": "integer"
-        },
-        "fov": {
-          "type": "number"
-        },
-        "fps": {
-          "type": "integer"
-        },
-        "h": {
-          "type": "integer"
-        },
-        "i": {
-          "description": "Keyframe index (`delete`, or insert position for `add`)",
-          "type": "integer"
-        },
-        "n": {
-          "description": "Keyframes for `orbit`",
-          "type": "integer"
-        },
-        "path": {
-          "description": "Output `.avi` for `render`",
-          "type": "string"
-        },
-        "pitch": {
-          "type": "number"
-        },
-        "speed": {
-          "description": "Camera speed m/s",
-          "type": "number"
-        },
-        "w": {
-          "type": "integer"
-        },
-        "x": {
-          "type": "number"
-        },
-        "y": {
-          "type": "number"
-        },
-        "yaw": {
-          "type": "number"
-        },
-        "z": {
-          "type": "number"
-        }
-      },
+      "properties": {},
       "type": "object"
     },
     "name": "video",
-    "title": "Video camera path"
+    "title": "Read the video path"
   }
 }

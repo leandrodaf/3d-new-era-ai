@@ -110,7 +110,12 @@ pub fn call(
     match name {
         "disciplines" => Ok(said(
             server
-                .disciplines(Parameters(params(args)?))
+                .read_disciplines(Parameters(params(args)?))
+                .map_err(reason)?,
+        )),
+        "edit_disciplines" => Ok(said(
+            server
+                .edit_disciplines(Parameters(params(args)?))
                 .map_err(reason)?,
         )),
         "annotations" => Ok(said(
@@ -136,11 +141,17 @@ pub fn call(
                 .cabinet_run(Parameters(params(args)?))
                 .map_err(reason)?,
         )),
-        "cameras" => Ok(said(
-            server.cameras(Parameters(params(args)?)).map_err(reason)?,
+        "cameras" => Ok(said(server.list_cameras().map_err(reason)?)),
+        "edit_cameras" => Ok(said(
+            server
+                .edit_cameras(Parameters(params(args)?))
+                .map_err(reason)?,
         )),
-        "video" => Ok(said(
-            server.video(Parameters(params(args)?)).map_err(reason)?,
+        "video" => Ok(said(server.list_video().map_err(reason)?)),
+        "edit_video" => Ok(said(
+            server
+                .edit_video(Parameters(params(args)?))
+                .map_err(reason)?,
         )),
         "ergonomics" => Ok(said(server.ergonomics(Parameters(params(args)?)))),
         "check_layout" => Ok(said(
@@ -189,8 +200,11 @@ pub fn call(
         "cut_list" => Ok(said(
             server.cut_list(Parameters(params(args)?)).map_err(reason)?,
         )),
-        "levels" => Ok(said(
-            server.levels(Parameters(params(args)?)).map_err(reason)?,
+        "levels" => Ok(said(server.list_levels().map_err(reason)?)),
+        "edit_levels" => Ok(said(
+            server
+                .edit_levels(Parameters(params(args)?))
+                .map_err(reason)?,
         )),
         "lighting" => Ok(said(
             server.lighting(Parameters(params(args)?)).map_err(reason)?,
@@ -216,16 +230,23 @@ pub fn call(
         )),
         "new_home" => Ok(said(server.new_home())),
         "show_plan" => Ok(server.show_plan()),
-        "plugins" => Ok(said(
-            server.plugins(Parameters(params(args)?)).map_err(reason)?,
+        "plugins" => Ok(said(server.list_plugins().map_err(reason)?)),
+        "run_plugin" => Ok(said(
+            server
+                .run_plugin(Parameters(params(args)?))
+                .map_err(reason)?,
         )),
         "sessions" => Ok(said(server.sessions())),
-        "variants" => Ok(said(
-            server.variants(Parameters(params(args)?)).map_err(reason)?,
+        "variants" => Ok(said(server.list_variants().map_err(reason)?)),
+        "edit_variants" => Ok(said(
+            server
+                .edit_variants(Parameters(params(args)?))
+                .map_err(reason)?,
         )),
+        "checkpoints" => Ok(said(server.list_checkpoints().map_err(reason)?)),
         "checkpoint" => Ok(said(
             server
-                .checkpoint(Parameters(params(args)?))
+                .set_checkpoint(Parameters(params(args)?))
                 .map_err(reason)?,
         )),
         "undo" => Ok(said(server.undo().map_err(reason)?)),

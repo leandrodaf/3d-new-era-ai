@@ -11,9 +11,11 @@
 //! service — hands out the same answer. A tool missing from it fails
 //! `every_tool_has_hints`.
 //!
-//! The hints describe the worst any action of a tool can do: `cameras` lists
-//! views, but it also deletes one, so it is a destructive write. A tool that
-//! only adds (a wall, a piece, a copy) is a write that is not destructive.
+//! The hints describe the worst any action of a tool can do: `edit_cameras`
+//! stores a view, but it also deletes one, so it is a destructive write. Reads
+//! live in tools of their own (`cameras` lists), so they never share a tool
+//! with a change: a client runs a read without asking. A tool that only adds
+//! (a wall, a piece, a copy) is a write that is not destructive.
 
 use rmcp::model::{Tool, ToolAnnotations};
 
@@ -51,6 +53,18 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
     ),
     ("measure", "Measure the plan", Effect::Read, false),
     ("sessions", "List who is editing", Effect::Read, false),
+    ("cameras", "List points of view", Effect::Read, false),
+    ("video", "Read the video path", Effect::Read, false),
+    ("levels", "List storeys", Effect::Read, false),
+    ("variants", "List plan versions", Effect::Read, false),
+    ("checkpoints", "List checkpoints", Effect::Read, false),
+    ("plugins", "List plugins", Effect::Read, false),
+    (
+        "disciplines",
+        "Show what the plan displays",
+        Effect::Read,
+        false,
+    ),
     ("render_plan", "Render the floor plan", Effect::Read, false),
     ("show_plan", "Show the plan", Effect::Read, false),
     ("render_3d", "Render a 3D view", Effect::Read, false),
@@ -75,10 +89,9 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
         Effect::Add,
         false,
     ),
-    ("variants", "Plan versions", Effect::Add, false),
     (
-        "disciplines",
-        "Show electrical and plumbing",
+        "edit_disciplines",
+        "Show or hide disciplines",
         Effect::Add,
         false,
     ),
@@ -98,9 +111,25 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
     ),
     ("embed", "Embed an appliance or sink", Effect::Change, false),
     ("fit_roof", "Fit walls to the roof", Effect::Change, false),
-    ("levels", "Storeys", Effect::Change, false),
-    ("cameras", "Points of view", Effect::Change, false),
-    ("video", "Video camera path", Effect::Change, false),
+    ("edit_levels", "Change storeys", Effect::Change, false),
+    (
+        "edit_cameras",
+        "Change points of view",
+        Effect::Change,
+        false,
+    ),
+    (
+        "edit_video",
+        "Change or render the video",
+        Effect::Change,
+        false,
+    ),
+    (
+        "edit_variants",
+        "Change plan versions",
+        Effect::Change,
+        false,
+    ),
     (
         "annotations",
         "Dimensions, tags and notes",
@@ -118,7 +147,7 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
         Effect::Change,
         false,
     ),
-    ("checkpoint", "Checkpoints", Effect::Change, false),
+    ("checkpoint", "Remember or go back", Effect::Change, false),
     ("undo", "Undo", Effect::Change, false),
     ("redo", "Redo", Effect::Change, false),
     ("new_home", "New project", Effect::Change, false),
@@ -127,7 +156,7 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
     ("export_plan", "Export the plan", Effect::Change, false),
     ("cut_list", "Cut list", Effect::Change, false),
     // Beyond the project.
-    ("plugins", "Run a plugin", Effect::Change, true),
+    ("run_plugin", "Run a plugin", Effect::Change, true),
     ("feedback", "Report to the developers", Effect::Add, true),
 ];
 
@@ -182,6 +211,67 @@ mod tests {
         seen.sort_unstable();
         seen.dedup();
         assert_eq!(seen.len(), HINTS.len(), "a tool has two rows");
+    }
+
+    /// A tool labelled a read changes nothing: called on a plan with walls,
+    /// a room and a piece, the revision stays where it was. A client runs
+    /// these without asking, so a label that lied would let a change through
+    /// unseen.
+    #[test]
+    fn reads_change_nothing() {
+        use newera_core::{Document, SharedDocument};
+        let document = SharedDocument::new(Document::default());
+        crate::call(
+            document.clone(),
+            "create",
+            serde_json::json!({
+                "walls": [{"pts": [[0, 0], [400, 0], [400, 300], [0, 300]], "closed": true}],
+                "rooms": [{"name": "Sala", "at": [200, 150]}],
+            }),
+        )
+        .expect("a room to read");
+        let before = document.read().revision();
+        for tool in crate::tools() {
+            let read = tool
+                .annotations
+                .as_ref()
+                .and_then(|h| h.read_only_hint)
+                .unwrap_or(false);
+            // The photo is a path tracer: minutes in a debug build, and a
+            // read like the other renders.
+            if !read || tool.name == "render_photo" {
+                continue;
+            }
+            let _ = crate::call(document.clone(), &tool.name, serde_json::json!({}));
+            assert_eq!(
+                document.read().revision(),
+                before,
+                "{} is labelled a read but changed the plan",
+                tool.name
+            );
+        }
+    }
+
+    /// A write tool refuses a read, and says which tool answers it.
+    #[test]
+    fn a_write_tool_points_reads_elsewhere() {
+        use newera_core::{Document, SharedDocument};
+        let document = SharedDocument::new(Document::default());
+        for (tool, read) in [
+            ("edit_cameras", "cameras"),
+            ("edit_levels", "levels"),
+            ("edit_video", "video"),
+            ("edit_variants", "variants"),
+            ("edit_disciplines", "disciplines"),
+        ] {
+            let why = crate::call(
+                document.clone(),
+                tool,
+                serde_json::json!({"action": "list"}),
+            )
+            .expect_err("a read is refused");
+            assert!(why.contains(read), "{tool}: {why}");
+        }
     }
 
     /// Titles are for people, and the directories cap tool names at 64

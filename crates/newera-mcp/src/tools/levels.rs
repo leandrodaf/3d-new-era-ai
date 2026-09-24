@@ -10,12 +10,12 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use super::NewEraMcp;
-use super::reply::{core, invalid, ok};
+use super::reply::{core, invalid, ok, write_action};
 use crate::compact;
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct LevelsParams {
-    /// `list` (default), `add`, `select`, `update`, `delete`.
+    /// `add`, `select`, `update` or `delete`.
     action: Option<String>,
     /// Level id, e.g. `lv3`.
     id: Option<String>,
@@ -33,8 +33,27 @@ pub(crate) struct LevelsParams {
 #[tool_router(router = levels_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Storeys. list (default): rows [id,name,elev,h,selected,layout_index,viewable,reference]. add {name?,h?,elev?} adds one on top (or at elev cm) and selects it; select {id}; delete {id} removes it and its content. update {id, elev?|h?|name?|reference?}: elev raises a storey with its walls, floors and openings (houses on stilts); reference=true marks it a tracing layer (imported plan, older version) that checks and ergonomics skip, which is what you want when two storeys share an elevation. Other tools act on the selected storey."
+        name = "levels",
+        description = "Storeys: rows [id,name,elev,h,selected,layout_index,viewable,reference]. Other tools act on the selected storey; change them with edit_levels."
     )]
+    pub(crate) fn list_levels(&self) -> Result<String, ErrorData> {
+        self.levels(Parameters(LevelsParams::default()))
+    }
+    #[tool(
+        description = "Change the storeys. add {name?,h?,elev?} adds one on top (or at elev cm) and selects it; select {id}; delete {id} removes it and its content. update {id, elev?|h?|name?|reference?}: elev raises a storey with its walls, floors and openings (houses on stilts); reference=true marks it a tracing layer (imported plan, older version) that checks and ergonomics skip, which is what you want when two storeys share an elevation. Other tools act on the selected storey. The list is the levels tool."
+    )]
+    pub(crate) fn edit_levels(
+        &self,
+        Parameters(p): Parameters<LevelsParams>,
+    ) -> Result<String, ErrorData> {
+        write_action(
+            p.action.as_deref(),
+            &["add", "select", "update", "delete"],
+            "levels",
+        )?;
+        self.levels(Parameters(p))
+    }
+    /// Storeys: the list, and every change to them.
     pub(crate) fn levels(
         &self,
         Parameters(p): Parameters<LevelsParams>,

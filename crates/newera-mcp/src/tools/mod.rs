@@ -155,7 +155,7 @@ impl ServerHandler for NewEraMcp {
         #[cfg(not(target_arch = "wasm32"))]
         if matches!(
             request.name.as_ref(),
-            "render_photo" | "render_plan" | "render_3d" | "video"
+            "render_photo" | "render_plan" | "render_3d" | "edit_video"
         ) {
             return native_job::run(self.clone(), request, context).await;
         }

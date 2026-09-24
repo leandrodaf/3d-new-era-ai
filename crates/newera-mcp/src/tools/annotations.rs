@@ -11,7 +11,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use super::NewEraMcp;
-use super::reply::{core, invalid, ok};
+use super::reply::{core, invalid, ok, write_action};
 use crate::compact;
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -46,7 +46,7 @@ pub(crate) struct AnnotationParams {
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct DisciplineParams {
-    /// `active` (default), `select`, `show`, `hide`, `quantities`.
+    /// `select`, `show` or `hide`.
     action: Option<String>,
     /// Whether the 3D shows everything (true) or hides what the plan hides
     /// (false). Applies with any action.
@@ -55,11 +55,53 @@ pub(crate) struct DisciplineParams {
     /// plan layer: `lighting`, `appliances` or `joinery`.
     d: Option<String>,
 }
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct DisciplineReadParams {
+    /// `active` (default) or `quantities`.
+    action: Option<String>,
+}
 #[tool_router(router = annotations_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Electrical and plumbing projects over the plan. active (default) reports {active, hidden}. select {d: electrical|plumbing|architecture}: new symbols (catalog cat electrical/plumbing) and lines go there and the rest is dimmed. select architecture shows architecture: it hides the electrical and plumbing projects (show brings one back); select a project shows it with the architecture dimmed. The 3D follows the plan — hidden projects and layers leave it too — unless show_all_3d=true, which makes the 3D show everything. show/hide {d}, where d can also be a layer of the plan — lighting (lamps, spots, LED), appliances (fridge, stove, oven, hood, washer…) or joinery (cabinets, wardrobes, countertops): hidden from the plan, its exports and the 3D. Pieces are in a layer by what they are, from the moment they are placed; update(layer=lighting|appliances|joinery|none) overrides it, and an empty layer goes back to the automatic one. active also reports layers {key:{pieces, hidden}}; get_home gives each piece its plan_layer. quantities: {electrical:[[kind,count,names?]], plumbing:[...], lines_cm:{...}} — grouped by catalog kind (every low outlet together), with the names of the points as the detail."
+        name = "disciplines",
+        description = "Electrical and plumbing projects and plan layers over the plan. active (default): {active, hidden, layers {key:{pieces, hidden}}} — the discipline new symbols go to, what is hidden, and the layers (lighting, appliances, joinery); get_home gives each piece its plan_layer. quantities: {electrical:[[kind,count,names?]], plumbing:[...], lines_cm:{...}} — grouped by catalog kind (every low outlet together), with the names of the points as the detail. Change what is shown with edit_disciplines."
     )]
+    pub(crate) fn read_disciplines(
+        &self,
+        Parameters(p): Parameters<DisciplineReadParams>,
+    ) -> Result<String, ErrorData> {
+        let action = match p.action.as_deref().unwrap_or("active") {
+            read @ ("active" | "quantities") => read,
+            other => {
+                return Err(invalid(format!(
+                    "unknown action `{other}`: active or quantities (to change what is shown, use edit_disciplines)"
+                )));
+            }
+        };
+        self.disciplines(Parameters(DisciplineParams {
+            action: Some(action.to_owned()),
+            ..DisciplineParams::default()
+        }))
+    }
+    #[tool(
+        description = "Change what the plan shows. select {d: electrical|plumbing|architecture}: new symbols (catalog cat electrical/plumbing) and lines go there and the rest is dimmed; select architecture hides the electrical and plumbing projects (show brings one back); select a project shows it with the architecture dimmed. show/hide {d}, where d can also be a layer of the plan — lighting (lamps, spots, LED), appliances (fridge, stove, oven, hood, washer…) or joinery (cabinets, wardrobes, countertops): hidden from the plan, its exports and the 3D. The 3D follows the plan unless show_all_3d=true, which makes it show everything. Pieces are in a layer by what they are; update(layer=lighting|appliances|joinery|none) overrides it. What is shown now is the disciplines tool."
+    )]
+    pub(crate) fn edit_disciplines(
+        &self,
+        Parameters(p): Parameters<DisciplineParams>,
+    ) -> Result<String, ErrorData> {
+        // show_all_3d on its own is a change too, and needs no other action.
+        if p.action.is_none() && p.show_all_3d.is_some() {
+            return self.disciplines(Parameters(p));
+        }
+        write_action(
+            p.action.as_deref(),
+            &["select", "show", "hide"],
+            "disciplines",
+        )?;
+        self.disciplines(Parameters(p))
+    }
+    /// Disciplines and plan layers: what is shown, and every change to it.
     pub(crate) fn disciplines(
         &self,
         Parameters(p): Parameters<DisciplineParams>,

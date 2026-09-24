@@ -10,7 +10,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use super::NewEraMcp;
-use super::reply::{core, invalid, ok};
+use super::reply::{core, invalid, ok, write_action};
 use crate::compact;
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -37,13 +37,14 @@ pub(crate) struct SetHomeParams {
 pub(crate) struct PluginsParams {
     /// `list` (default) or `run`.
     action: Option<String>,
+    /// Plugin to run, by name (the plugins tool lists them).
     name: Option<String>,
     /// Arguments passed to the plugin as JSON.
     args: Option<serde_json::Value>,
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct VariantsParams {
-    /// `list` (default), `duplicate` (copy active), `new` (empty), `switch`, `rename`, `delete`.
+    /// `duplicate` (copy active), `new` (empty), `switch`, `rename` or `delete`.
     action: Option<String>,
     /// Variant index for switch/rename/delete.
     i: Option<usize>,
@@ -53,11 +54,18 @@ pub(crate) struct VariantsParams {
 /// A point in the work, by name.
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct CheckpointParams {
-    /// `list` (default), `checkpoint` (remember here), `revert` (go back).
+    /// `checkpoint` (remember here, the default) or `revert` (go back).
     action: Option<String>,
     label: Option<String>,
 }
 
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct RunPluginParams {
+    /// Plugin to run, by name (the plugins tool lists them).
+    name: String,
+    /// Arguments passed to the plugin as JSON.
+    args: Option<serde_json::Value>,
+}
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct PathParams {
     /// Project file (`.newera`). Optional for save when already saved once.
@@ -190,8 +198,26 @@ impl NewEraMcp {
         ok(&doc, &[])
     }
     #[tool(
-        description = "Plugins (external programs editing through the HTTP API). list (default): rows [name,title,description]. run {name,args?}: {ok,code,stdout,stderr,edits,revision}."
+        name = "plugins",
+        description = "Plugins (external programs editing through the HTTP API): rows [name,title,description]. Run one with run_plugin."
     )]
+    pub(crate) fn list_plugins(&self) -> Result<String, ErrorData> {
+        self.plugins(Parameters(PluginsParams::default()))
+    }
+    #[tool(
+        description = "Run a plugin (an external program editing through the HTTP API) by name, with args as JSON: {ok,code,stdout,stderr,edits,revision}. The plugins tool lists them."
+    )]
+    pub(crate) fn run_plugin(
+        &self,
+        Parameters(p): Parameters<RunPluginParams>,
+    ) -> Result<String, ErrorData> {
+        self.plugins(Parameters(PluginsParams {
+            action: Some("run".to_owned()),
+            name: Some(p.name),
+            args: p.args,
+        }))
+    }
+    /// Plugins: the list, and running one.
     pub(crate) fn plugins(
         &self,
         Parameters(p): Parameters<PluginsParams>,
@@ -244,8 +270,27 @@ impl NewEraMcp {
         serde_json::json!({ "rev": doc.revision(), "rows": rows }).to_string()
     }
     #[tool(
-        description = "Plan versions (tabs). list: rows [i,name,active,walls,rooms,m2,furniture,issues]. duplicate/new switch to the new one; edits apply to the active version."
+        name = "variants",
+        description = "Plan versions (tabs): rows [i,name,active,walls,rooms,m2,furniture,issues]. Edits apply to the active version; change them with edit_variants."
     )]
+    pub(crate) fn list_variants(&self) -> Result<String, ErrorData> {
+        self.variants(Parameters(VariantsParams::default()))
+    }
+    #[tool(
+        description = "Change the plan versions (tabs): duplicate {name?} copies the active one, new {name?} starts an empty one — both switch to it; switch {i}; rename {i,name}; delete {i}. Edits apply to the active version. The list is the variants tool."
+    )]
+    pub(crate) fn edit_variants(
+        &self,
+        Parameters(p): Parameters<VariantsParams>,
+    ) -> Result<String, ErrorData> {
+        write_action(
+            p.action.as_deref(),
+            &["duplicate", "new", "switch", "rename", "delete"],
+            "variants",
+        )?;
+        self.variants(Parameters(p))
+    }
+    /// Plan versions: the list, and every change to them.
     pub(crate) fn variants(
         &self,
         Parameters(p): Parameters<VariantsParams>,
@@ -275,8 +320,35 @@ impl NewEraMcp {
         }
     }
     #[tool(
-        description = "Name where the plan is now, and come back to it. checkpoint {label} remembers this point; revert {label} undoes back down to it, keeping every id — which duplicating a version cannot do, since a copy renumbers. list (default) shows what is remembered and how many changes ago it was. A checkpoint lives with the project and survives saving."
+        name = "checkpoints",
+        description = "What checkpoint remembered: rows [label, changes ago]. A checkpoint lives with the project and survives saving."
     )]
+    pub(crate) fn list_checkpoints(&self) -> Result<String, ErrorData> {
+        self.checkpoint(Parameters(CheckpointParams {
+            action: Some("list".to_owned()),
+            label: None,
+        }))
+    }
+    #[tool(
+        name = "checkpoint",
+        description = "Name where the plan is now, and come back to it. {label} (action checkpoint, the default) remembers this point; action=revert {label} undoes back down to it, keeping every id — which duplicating a version cannot do, since a copy renumbers. A checkpoint lives with the project and survives saving; the checkpoints tool lists them."
+    )]
+    pub(crate) fn set_checkpoint(
+        &self,
+        Parameters(p): Parameters<CheckpointParams>,
+    ) -> Result<String, ErrorData> {
+        let action = write_action(
+            Some(p.action.as_deref().unwrap_or("checkpoint")),
+            &["checkpoint", "set", "revert"],
+            "checkpoints",
+        )?
+        .to_owned();
+        self.checkpoint(Parameters(CheckpointParams {
+            action: Some(action),
+            label: p.label,
+        }))
+    }
+    /// Checkpoints: the list, remembering one, and going back to one.
     pub(crate) fn checkpoint(
         &self,
         Parameters(p): Parameters<CheckpointParams>,

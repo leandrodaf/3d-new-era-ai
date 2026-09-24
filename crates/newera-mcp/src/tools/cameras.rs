@@ -9,12 +9,12 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use super::NewEraMcp;
-use super::reply::{core, invalid, ok};
+use super::reply::{core, invalid, ok, write_action};
 use crate::compact;
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct CamerasParams {
-    /// `list` (default), `view`, `aerial`, `store`, `delete`.
+    /// `view`, `aerial`, `store` or `delete`.
     pub(crate) action: Option<String>,
     /// Stored view index.
     pub(crate) i: Option<usize>,
@@ -33,7 +33,7 @@ pub(crate) struct CamerasParams {
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct VideoParams {
-    /// `list` (default), `add`, `delete`, `clear`, `orbit`, `set`, `render`.
+    /// `add`, `delete`, `clear`, `orbit`, `set` or `render`.
     action: Option<String>,
     /// Keyframe index (`delete`, or insert position for `add`).
     i: Option<usize>,
@@ -58,8 +58,27 @@ pub(crate) struct VideoParams {
 #[tool_router(router = cameras_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Points of view. list (default): {active, rows [i,name,x,y,z,yaw,pitch,fov]}. view {i} shows stored view i in the 3D window; aerial returns to the orbit view; store {name?,x?,y?,z?,yaw?,pitch?,fov?,look_at?:[x,y,z]} saves one (missing values from the visitor; yaw 0 looks toward +y/plan bottom, 90 toward -x; pitch positive looks down); delete {i}. cm and degrees."
+        name = "cameras",
+        description = "Stored points of view: {active: visitor|aerial, rows [i,name,x,y,z,yaw,pitch,fov]}, cm and degrees. Change them with edit_cameras."
     )]
+    pub(crate) fn list_cameras(&self) -> Result<String, ErrorData> {
+        self.cameras(Parameters(CamerasParams::default()))
+    }
+    #[tool(
+        description = "Change the points of view. view {i} shows stored view i in the 3D window; aerial returns to the orbit view; store {name?,x?,y?,z?,yaw?,pitch?,fov?,look_at?:[x,y,z]} saves one (missing values from the visitor; yaw 0 looks toward +y/plan bottom, 90 toward -x; pitch positive looks down); delete {i}. cm and degrees. The list is the cameras tool."
+    )]
+    pub(crate) fn edit_cameras(
+        &self,
+        Parameters(p): Parameters<CamerasParams>,
+    ) -> Result<String, ErrorData> {
+        write_action(
+            p.action.as_deref(),
+            &["view", "aerial", "store", "delete"],
+            "cameras",
+        )?;
+        self.cameras(Parameters(p))
+    }
+    /// Points of view: the list, and every change to it.
     pub(crate) fn cameras(
         &self,
         Parameters(p): Parameters<CamerasParams>,
@@ -131,8 +150,27 @@ impl NewEraMcp {
         Ok(ok(&doc, &[]))
     }
     #[tool(
-        description = "Video camera path. list (default): {fps,speed,secs,rows [i,x,y,z,yaw,pitch,fov]}. add {cam? | x?,y?,z?,yaw?,pitch?,fov?, i?} appends a keyframe (missing values from the visitor); delete {i}; clear; orbit {z?,n?} replaces the path with an aerial tour; set {fps?,speed?}; render {path .avi, w?,h?} writes a Motion-JPEG video. cm, degrees, m/s."
+        name = "video",
+        description = "The video camera path: {fps,speed,secs,rows [i,x,y,z,yaw,pitch,fov]}, cm, degrees, m/s. Change it and render it with edit_video."
     )]
+    pub(crate) fn list_video(&self) -> Result<String, ErrorData> {
+        self.video(Parameters(VideoParams::default()))
+    }
+    #[tool(
+        description = "Change the video camera path, or render it. add {cam? | x?,y?,z?,yaw?,pitch?,fov?, i?} appends a keyframe (missing values from the visitor); delete {i}; clear; orbit {z?,n?} replaces the path with an aerial tour; set {fps?,speed?}; render {path .avi, w?,h?} writes a Motion-JPEG video. cm, degrees, m/s. The path itself is the video tool."
+    )]
+    pub(crate) fn edit_video(
+        &self,
+        Parameters(p): Parameters<VideoParams>,
+    ) -> Result<String, ErrorData> {
+        write_action(
+            p.action.as_deref(),
+            &["add", "delete", "clear", "orbit", "set", "render"],
+            "video",
+        )?;
+        self.video(Parameters(p))
+    }
+    /// The video camera path: the list, and every change to it.
     pub(crate) fn video(
         &self,
         Parameters(p): Parameters<VideoParams>,
