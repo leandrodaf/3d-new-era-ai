@@ -109,10 +109,12 @@ impl Engine {
     /// # Panics
     ///
     /// If another thread panicked while holding the engine's state.
+    #[allow(clippy::too_many_arguments, reason = "each is one fact about the call")]
     pub async fn call(
         &self,
         db: &PgPool,
         public_url: &str,
+        editor_url: &str,
         account: &str,
         plan: &Plan,
         name: &str,
@@ -226,6 +228,17 @@ impl Engine {
             && let Some(why) = self.save(db, account, plan, &loaded).await?
         {
             return Ok(refused(why));
+        }
+        // "Open in the editor" opens this very project there.
+        if name == "show_plan" && result["isError"] != true {
+            let mut result = result;
+            let file = format!("{public_url}/account/projects/{}", loaded.project);
+            result["structuredContent"]["editor"] = json!(format!(
+                "{editor_url}?project={}&relay={}",
+                crate::login::url_encode(&file),
+                crate::login::url_encode(public_url)
+            ));
+            return Ok(result);
         }
         if let Some((target, file_name, ext)) = export
             && result["isError"] != true

@@ -104,12 +104,15 @@ pub fn router(state: &AppState) -> Router {
     let site = Router::new()
         .route("/account/me", get(account::me))
         .route("/account/claim", post(account::claim))
+        .route("/account/projects/{id}", get(account::download))
         .layer(
             CorsLayer::new()
                 .allow_origin(origins)
                 .allow_credentials(true)
                 .allow_methods([Method::GET, Method::POST])
-                .allow_headers([header::CONTENT_TYPE]),
+                .allow_headers([header::CONTENT_TYPE])
+                // The editor names a cloud project by the file name it comes with.
+                .expose_headers([header::CONTENT_DISPOSITION]),
         );
     let cloud = Router::new()
         .route("/cloud/health", get(health))
@@ -146,7 +149,6 @@ pub fn router(state: &AppState) -> Router {
         .route("/account/done", get(account::done))
         .route("/mcp", post(mcp::post).get(mcp::get))
         .route("/files/{token}", get(files::get))
-        .route("/account/projects/{id}", get(account::download))
         .merge(site)
         .with_state(state.clone());
     newera_relay::router_with(state.rooms.clone()).merge(cloud)

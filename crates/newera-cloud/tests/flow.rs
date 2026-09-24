@@ -43,6 +43,7 @@ async fn service() -> Option<(String, AppState)> {
         site_origins: vec![SITE.to_owned()],
         mail: Mail::Log,
         google: None,
+        editor_url: format!("{SITE}/editor/"),
         port: 0,
     };
     let state = AppState::new(config, db);
@@ -512,6 +513,43 @@ async fn an_ai_client_is_allowed_in_and_reaches_the_tab() {
     assert_eq!(back["isError"], false, "{back}");
     let renamed = call(48, "save_home", json!({"path": "Apartamento.newera"})).await;
     assert_eq!(renamed["content"][0]["text"], "ok saved Apartamento");
+    // "Open in the editor" is this project, which the site may fetch with the
+    // person's cookie — and nobody else may.
+    let shown = call(50, "show_plan", json!({})).await;
+    let editor = shown["structuredContent"]["editor"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        editor.starts_with(&format!("{SITE}/editor/?project=")),
+        "{editor}"
+    );
+    let project_url = param(
+        &format!("http://x/{}", editor.split('/').next_back().unwrap()),
+        "project",
+    )
+    .unwrap();
+    let fetched = http
+        .get(&project_url)
+        .header("cookie", &cookie)
+        .header("origin", SITE)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(fetched.status(), 200);
+    assert_eq!(
+        fetched.headers()["access-control-allow-credentials"],
+        "true"
+    );
+    assert!(
+        fetched.headers()["content-disposition"]
+            .to_str()
+            .unwrap()
+            .contains("Apartamento.newera")
+    );
+    assert!(fetched.bytes().await.unwrap().starts_with(b"PK"));
+    let stranger = http.get(&project_url).send().await.unwrap();
+    assert_ne!(stranger.status(), 200, "only its owner downloads a project");
     let refused = call(49, "set_background", json!({"path": "/etc/passwd"})).await;
     assert_eq!(refused["isError"], true);
 

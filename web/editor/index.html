@@ -240,13 +240,19 @@
 
   const loading = document.getElementById("loading");
   // ?project=URL opens a project; without it the demo home is shown.
-  const url = new URLSearchParams(location.search).get("project") ?? "../demo.newera";
+  // A project kept in the cloud comes from the account's service, with the
+  // person's cookie; anything else is fetched as a plain file.
+  const params = new URLSearchParams(location.search);
+  const url = params.get("project") ?? "../demo.newera";
+  const service = params.get("relay") ?? "https://mcp.3dneweraai.com";
   let name = null, bytes = null;
   try {
-    const response = await fetch(url);
+    const own = url.startsWith(service + "/account/projects/");
+    const response = await fetch(url, { credentials: own ? "include" : "same-origin" });
     if (response.ok) {
       bytes = new Uint8Array(await response.arrayBuffer());
-      name = decodeURIComponent(url.split("/").pop());
+      const saved = /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "");
+      name = saved ? saved[1] : decodeURIComponent(url.split("/").pop());
     }
   } catch (_) { /* start empty */ }
   try {

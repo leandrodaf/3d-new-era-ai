@@ -235,6 +235,7 @@ async fn answer(
                 .call(
                     &app.db,
                     &app.config.public_url,
+                    &app.config.editor_url,
                     &account.id,
                     &plan,
                     name,

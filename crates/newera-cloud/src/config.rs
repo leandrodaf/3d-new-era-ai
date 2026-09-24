@@ -57,6 +57,8 @@ pub struct Config {
     pub site_origins: Vec<String>,
     pub mail: Mail,
     pub google: Option<Google>,
+    /// The browser editor, where "open in the editor" goes.
+    pub editor_url: String,
     /// The port to listen on, on every interface of the container; the
     /// Cloudflare tunnel in front is what reaches it.
     pub port: u16,
@@ -70,6 +72,7 @@ impl std::fmt::Debug for Config {
             .field("site_origins", &self.site_origins)
             .field("mail", &self.mail)
             .field("google", &self.google)
+            .field("editor_url", &self.editor_url)
             .field("port", &self.port)
             .finish()
     }
@@ -115,6 +118,8 @@ impl Config {
             }),
             _ => None,
         };
+        let editor_url =
+            var("NEWERA_EDITOR_URL").unwrap_or_else(|| "https://3dneweraai.com/app/".to_owned());
         let port = var("PORT")
             .map(|p| p.parse().context("PORT"))
             .transpose()?
@@ -125,6 +130,7 @@ impl Config {
             site_origins,
             mail,
             google,
+            editor_url,
             port,
         })
     }
