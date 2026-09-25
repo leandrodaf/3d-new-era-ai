@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-09-24
+
+### Changed
+
+- mcp.3dneweraai.com, opened in a browser, goes to 3dneweraai.com instead of a blank
+  "not found".
+
 ## [1.9.1] - 2026-09-24
 
 ### Changed
@@ -600,7 +607,8 @@ MCP server, with everything below.
 - `scripts/mcp.sh` / `make mcp` to call MCP tools from the shell.
 - CI for formatting, clippy, tests on Linux/macOS/Windows, MCP smoke test, MSRV and cargo-deny; release builds.
 
-[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.9.1...HEAD
+[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.9.2...HEAD
+[1.9.2]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.9.1...v1.9.2
 [1.9.1]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.7.0...v1.8.0

@@ -3,7 +3,7 @@
   "name": "com.3dneweraai/newera",
   "title": "3D New Era AI",
   "description": "Design homes with your AI: floor plans, furniture, joinery, lighting and photos, live.",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "websiteUrl": "https://3dneweraai.com",
   "repository": {
     "url": "https://github.com/leandrodaf/3d-new-era-ai",
@@ -21,8 +21,8 @@
   "packages": [
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/leandrodaf/3d-new-era-ai/releases/download/v1.9.1/newera-mcp.mcpb",
-      "version": "1.9.1",
+      "identifier": "https://github.com/leandrodaf/3d-new-era-ai/releases/download/v1.9.2/newera-mcp.mcpb",
+      "version": "1.9.2",
       "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "transport": {
         "type": "stdio"
