@@ -693,3 +693,61 @@ fn outliner(app: &mut NewEraApp, ui: &mut egui::Ui) {
         app.open_modify(&[id]);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The note that started it: a label long enough to make the panel as wide
+    /// as itself, after which the drag handle could not bring it back.
+    const LONG: &str = "AÉREOS: 80 geladeira + 106 cozinha + 94 coifa; lavanderia 70,75 \
+        + 70,75. Envoltória e fixação da coifa: estudo sujeito ao manual específico.";
+
+    /// How wide a 260 px panel ends up after drawing one row with this name in
+    /// it. A panel is as wide as what it draws, which is the whole of the bug:
+    /// a name drawn in full pushed it open and held it there. The frame is
+    /// drawn twice because the first one loads the fonts.
+    fn panel_width(text: &str) -> f32 {
+        let ctx = egui::Context::default();
+        let mut width = 0.0;
+        for _ in 0..2 {
+            let mut frame = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1280.0, 800.0),
+                    )),
+                    ..Default::default()
+                },
+                |ctx| {
+                    let panel = egui::Panel::left("test")
+                        .resizable(true)
+                        .default_size(260.0)
+                        .show(ctx, |ui| {
+                            ui.horizontal(|ui| {
+                                name(ui, text, RichText::new(text), 40.0);
+                            });
+                        });
+                    width = panel.response.rect.width();
+                },
+            );
+            // Nobody is drawing, so nobody applies them; unapplied deltas
+            // panic on their way out.
+            frame.textures_delta.clear();
+        }
+        width
+    }
+
+    /// Drawn in full this name takes about 810 px, and the panel went with it.
+    #[test]
+    fn a_long_name_never_pushes_the_panel_wider_than_it_is() {
+        let width = panel_width(LONG);
+        assert!(width <= 261.0, "260 px of panel went to {width}");
+    }
+
+    #[test]
+    fn a_short_name_asks_for_no_room_at_all() {
+        let width = panel_width("Sofá");
+        assert!(width <= 261.0, "260 px of panel went to {width}");
+    }
+}
