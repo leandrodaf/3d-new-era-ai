@@ -5,7 +5,7 @@ no hand-drawn geometry, no external 3D tools. The agent started from a real floo
 plan, traced it at real scale, furnished and lit every room with the parametric
 tools, and took the photos with the built-in path tracer.
 
-![Aerial cutaway of the finished apartment](images/showcase/12-aerea.jpg)
+![Aerial cutaway of the finished apartment](images/showcase/12-aerial.jpg)
 
 ## The reference
 
@@ -19,7 +19,7 @@ The drawing has no dimensions, so the scale came from things with known sizes
 
 | Reference (CC BY-SA 4.0) | Traced in 3D New Era AI |
 |---|---|
-| ![FOCSA typical apartment plan](images/showcase/00-referencia-focsa.jpg) | ![Rendered plan with real finishes](images/showcase/13-planta-humanizada.jpg) |
+| ![FOCSA typical apartment plan](images/showcase/00-reference-focsa.jpg) | ![Rendered plan with real finishes](images/showcase/13-rendered-plan.jpg) |
 
 The layout keeps the original walls, doors and windows. The program was brought up
 to date: bedroom 1 became the master bedroom, bedroom 2 a home office / guest room,
@@ -51,12 +51,12 @@ All photos: `render_photo`, quality `good`, 1280 × 800, sun from the compass at
 
 | | |
 |---|---|
-| ![Living room toward the dining table](images/showcase/01-estar-janela.jpg) | ![Dining and living toward the window](images/showcase/02-jantar-estar.jpg) |
-| ![Slatted TV wall](images/showcase/03-painel-tv.jpg) | ![L-shaped kitchen](images/showcase/04-cozinha.jpg) |
-| ![Home office](images/showcase/05-escritorio.jpg) | ![Kid's room](images/showcase/06-quarto-infantil.jpg) |
-| ![Master bedroom](images/showcase/07-suite.jpg) | ![Bathroom](images/showcase/08-banheiro.jpg) |
-| ![Dining at dusk, pendants on](images/showcase/09-jantar-noite.jpg) | ![Kitchen at night](images/showcase/10-cozinha-noite.jpg) |
-| ![Master bedroom at night](images/showcase/11-suite-noite.jpg) | |
+| ![Living room toward the dining table](images/showcase/01-living-window.jpg) | ![Dining and living toward the window](images/showcase/02-dining-living.jpg) |
+| ![Slatted TV wall](images/showcase/03-tv-wall.jpg) | ![L-shaped kitchen](images/showcase/04-kitchen.jpg) |
+| ![Home office](images/showcase/05-office.jpg) | ![Kid's room](images/showcase/06-kids-room.jpg) |
+| ![Master bedroom](images/showcase/07-master-bedroom.jpg) | ![Bathroom](images/showcase/08-bathroom.jpg) |
+| ![Dining at dusk, pendants on](images/showcase/09-dining-night.jpg) | ![Kitchen at night](images/showcase/10-kitchen-night.jpg) |
+| ![Master bedroom at night](images/showcase/11-master-bedroom-night.jpg) | |
 
 ## How the agent built it
 

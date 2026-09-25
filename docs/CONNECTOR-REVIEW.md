@@ -83,7 +83,7 @@ the review address given in the form; the sign-in link arrives at that inbox. Pa
 - [x] Example prompts and test cases (above)
 - [x] Images come from deterministic rendering of the project, said on the connector page
 - [x] The widget declares its CSP: it loads nothing from the network
-- [x] Screenshots of the widget (docs/images/connector/)
+- [x] Screenshots of the widget ([images/connector/](images/connector/))
 - [ ] Review account on the paid plan
 - [ ] Claude Team organization (to submit to the Connectors Directory)
 - [ ] Verified identity on the OpenAI Platform

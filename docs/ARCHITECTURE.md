@@ -39,6 +39,9 @@ That is what makes these properties hold everywhere, for free:
 |-------|-----------|----------------|
 | `newera-core` | serde, schemars, geo | Model (`Home`, `Element`: walls, rooms, dimensions, labels), geometry (joins, triangulation, room detection), `Command`, `Document`, project format, the standards registry. No UI, no async, no I/O. |
 | `newera-catalog` | core, tobj, gltf | Parametric furniture: procedural 3D meshes and plan symbols at any size; model import. |
+| `newera-sh3d` | core, zip, image | Sweet Home 3D (`.sh3d`) import: its Java serialization read directly, embedded models and textures extracted. |
+| `newera-ergonomics` | core, geo | Ergonomics and habitability review: clearances, occupancy, kitchens and accessibility, each finding tied to a source in the standards registry. |
+| `newera-joinery` | core | Parametric joinery and interiors: cabinets, slatted panels, countertops, ceiling coves, sofas and cut lists. |
 | `newera-draw` | core, catalog, tiny-skia | Plan scene (styled primitives in cm) and its PNG/SVG backends. |
 | `newera-mcp` | core, draw, rmcp | MCP tools and their token-efficient wire format. One module per domain under `src/tools/`, each with its own router; `src/tools/mod.rs` maps them. |
 | `newera-render` | core, catalog | 3D meshes, software renderer, photos, videos, GLB/OBJ export. |
@@ -47,10 +50,12 @@ That is what makes these properties hold everywhere, for free:
 | `newera-app` | core, eframe | Desktop editor (also built for the browser). Never talks to the network: what it knows about the AI side it reads from the document, beside the collaborators (`src/ai.rs`). |
 | `newera-web`, `newera-editor-web` | core / app | WebAssembly viewer and the full editor in the browser. |
 | `newera-relay` | axum | Lets an AI reach the editor in a browser tab: a room is two secrets, tool calls go down the tab's socket and answers come back. No database, no disk, no project data — it passes messages and forgets. |
+| `newera-cloud` | mcp, relay, sh3d, axum, sqlx | The hosted service: accounts and OAuth 2.1, cloud projects in Postgres, a headless engine and render queue, and billing. Mounts `newera-relay` as a library. See [DISTRIBUTION.md](DISTRIBUTION.md). |
+| `newera-telemetry` | tracing | Crash reports and usage notes sent to Sentry, off with one switch. |
 | `newera` | all | CLI entry point and process wiring. |
 
-Dependencies only point downwards. `newera-core` must stay free of heavy
-dependencies so it can later compile to WebAssembly and power a web client.
+Dependencies only point downwards. `newera-core` stays free of heavy
+dependencies so it compiles to WebAssembly for the browser editor and viewer.
 
 ## Standards are data, not prose
 
@@ -62,7 +67,7 @@ only the short code. The tier is the ceiling on what a finding may claim, and
 figures we could not confirm at the source may warn but never accuse. The
 `ergonomics` reply resolves the codes it used once in `sources`, so an agent pays
 for a title once instead of once per sentence, and the editor shows the same
-citation as a clickable chip. See [NORMAS.md](NORMAS.md).
+citation as a clickable chip. See [STANDARDS.md](STANDARDS.md).
 
 ## Units and coordinates
 
@@ -177,5 +182,6 @@ plain Python.
 
 The server binds to `127.0.0.1` by default. The MCP endpoint validates the `Host`
 header against loopback names to block DNS rebinding from web pages. Exposing it on
-a network interface is an explicit choice (`--addr`) and should come with auth
-(tracked in the roadmap).
+a network interface is an explicit choice (`--addr`) and requires a token
+(`--token` or `NEWERA_TOKEN`, sent as a Bearer header or `?token=`); the binary
+refuses to start without one.

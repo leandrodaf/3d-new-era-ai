@@ -70,18 +70,18 @@ Every image below came out of the editor itself.
 
 | Floor plan with real finishes | Aerial cutaway |
 |---|---|
-| ![Rendered floor plan with real finishes](docs/images/showcase/13-planta-humanizada.jpg) | ![Aerial cutaway of the apartment](docs/images/showcase/12-aerea.jpg) |
+| ![Rendered floor plan with real finishes](docs/images/showcase/13-rendered-plan.jpg) | ![Aerial cutaway of the apartment](docs/images/showcase/12-aerial.jpg) |
 
 | Daylight | At dusk, lamps on |
 |---|---|
-| ![Living room with slatted TV wall](docs/images/showcase/01-estar-janela.jpg) | ![Dining table under the pendant at dusk](docs/images/showcase/09-jantar-noite.jpg) |
-| ![Dining and living toward the window](docs/images/showcase/02-jantar-estar.jpg) | ![L-shaped kitchen at night](docs/images/showcase/10-cozinha-noite.jpg) |
-| ![L-shaped kitchen with terrazzo floor](docs/images/showcase/04-cozinha.jpg) | ![Master bedroom at night](docs/images/showcase/11-suite-noite.jpg) |
+| ![Living room with slatted TV wall](docs/images/showcase/01-living-window.jpg) | ![Dining table under the pendant at dusk](docs/images/showcase/09-dining-night.jpg) |
+| ![Dining and living toward the window](docs/images/showcase/02-dining-living.jpg) | ![L-shaped kitchen at night](docs/images/showcase/10-kitchen-night.jpg) |
+| ![L-shaped kitchen with terrazzo floor](docs/images/showcase/04-kitchen.jpg) | ![Master bedroom at night](docs/images/showcase/11-master-bedroom-night.jpg) |
 
 | Joinery and rooms | |
 |---|---|
-| ![Slatted TV wall with the TV embedded](docs/images/showcase/03-painel-tv.jpg) | ![Home office with desk and bookcase](docs/images/showcase/05-escritorio.jpg) |
-| ![Master bedroom with tall wardrobe run](docs/images/showcase/07-suite.jpg) | ![Bathroom with Nero marble wall](docs/images/showcase/08-banheiro.jpg) |
+| ![Slatted TV wall with the TV embedded](docs/images/showcase/03-tv-wall.jpg) | ![Home office with desk and bookcase](docs/images/showcase/05-office.jpg) |
+| ![Master bedroom with tall wardrobe run](docs/images/showcase/07-master-bedroom.jpg) | ![Bathroom with Nero marble wall](docs/images/showcase/08-bathroom.jpg) |
 
 ## Why
 
@@ -368,11 +368,11 @@ crates/
   newera             the binary that wires everything together
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it fits together,
-[docs/SHOWCASE.md](docs/SHOWCASE.md) for a full project built by an agent,
-[docs/NORMAS.md](docs/NORMAS.md) for the standards the review leans on — with
-edition, tier and link, in Portuguese because the sources are Brazilian — and
-[docs/ROADMAP.md](docs/ROADMAP.md) for what comes next.
+More in [docs/](docs/README.md): [architecture](docs/ARCHITECTURE.md), a
+[full project built by an agent](docs/SHOWCASE.md), the
+[standards the review leans on](docs/STANDARDS.md), with edition, tier and
+source, [how it is distributed](docs/DISTRIBUTION.md) and the
+[roadmap](docs/ROADMAP.md).
 
 ## Telemetry
 

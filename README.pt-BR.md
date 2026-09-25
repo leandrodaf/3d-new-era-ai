@@ -70,13 +70,13 @@ path tracing. Todas as imagens abaixo saíram do próprio editor.
 
 | Planta humanizada com os acabamentos reais | Vista aérea em corte |
 |---|---|
-| ![Planta humanizada com acabamentos reais](docs/images/showcase/13-planta-humanizada.jpg) | ![Vista aérea em corte do apartamento](docs/images/showcase/12-aerea.jpg) |
+| ![Planta humanizada com acabamentos reais](docs/images/showcase/13-rendered-plan.jpg) | ![Vista aérea em corte do apartamento](docs/images/showcase/12-aerial.jpg) |
 
 | De dia | Ao anoitecer, luzes acesas |
 |---|---|
-| ![Sala com painel ripado da TV](docs/images/showcase/01-estar-janela.jpg) | ![Mesa de jantar sob o pendente ao anoitecer](docs/images/showcase/09-jantar-noite.jpg) |
-| ![Jantar e estar olhando para a janela](docs/images/showcase/02-jantar-estar.jpg) | ![Cozinha em L à noite](docs/images/showcase/10-cozinha-noite.jpg) |
-| ![Cozinha em L com piso de granilite](docs/images/showcase/04-cozinha.jpg) | ![Suíte do casal à noite](docs/images/showcase/11-suite-noite.jpg) |
+| ![Sala com painel ripado da TV](docs/images/showcase/01-living-window.jpg) | ![Mesa de jantar sob o pendente ao anoitecer](docs/images/showcase/09-dining-night.jpg) |
+| ![Jantar e estar olhando para a janela](docs/images/showcase/02-dining-living.jpg) | ![Cozinha em L à noite](docs/images/showcase/10-kitchen-night.jpg) |
+| ![Cozinha em L com piso de granilite](docs/images/showcase/04-kitchen.jpg) | ![Suíte do casal à noite](docs/images/showcase/11-master-bedroom-night.jpg) |
 
 ## Conecte sua IA
 
@@ -177,7 +177,7 @@ sistema e modo — mesma chave de liga/desliga, um id sorteado para a instalaç�
 projeto.
 
 De onde vêm os números quando o editor diz que uma cozinha está errada — as normas, a
-doutrina e a pesquisa por trás de cada regra, com edição e link: [docs/NORMAS.md](docs/NORMAS.md).
+doutrina e a pesquisa por trás de cada regra, com edição e link: [docs/STANDARDS.md](docs/STANDARDS.md) (em inglês).
 
 Documentação técnica completa (ferramentas MCP, modos, compilação e arquitetura) no
 [README em inglês](README.md). Licença MIT ou Apache 2.0.

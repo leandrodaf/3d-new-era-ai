@@ -179,6 +179,31 @@ renderer, separate user home) and compared with this project's output:
   headless plans show furniture icons, ours draw symbols or top views; ceiling lights
   and other pieces above door heads are dashed on our plans.
 
+## ✅ M5 — Wherever the AI is
+
+- [x] One tool surface for every transport: `title` and read/write annotations on
+      every tool, reads split from writes, errors that say what to do next, enforced
+      by tests in CI
+- [x] The plan inside the chat as an MCP App (`show_plan`, `ui://newera/plan-viewer.html`)
+- [x] `newera mcp` (stdio) attaches to the open window, or runs headless
+- [x] Hosted connector at `https://mcp.3dneweraai.com/mcp`: accounts, OAuth 2.1,
+      cloud projects, a headless engine when no editor tab is open, quotas and a
+      render queue
+- [x] Packages and listings: `.mcpb`, Official MCP Registry, Claude Code / Codex /
+      Cursor plugins, Gemini CLI extension, winget, Homebrew — see
+      [DISTRIBUTION.md](DISTRIBUTION.md)
+
+## Next
+
+- [ ] Interactive 3D inside the chat, once MCP App hosts allow WebAssembly
+      (ext-apps #605); today the widget shows the plan SVG and a server-rendered view
+- [ ] Browser editor parity with the desktop: importing loose model and image
+      files, and video rendering
+- [ ] More municipal building codes in the standards registry (São Paulo only
+      today) — see [STANDARDS.md](STANDARDS.md)
+- [ ] Store packages: Microsoft Store (MSIX), Flathub, Docker MCP Catalog
+- [ ] Listing in the ChatGPT apps directory
+
 ## Sweet Home 3D is a reference, not a source
 
 Sweet Home 3D (Java, GPL) is the benchmark for **what** a home design tool should

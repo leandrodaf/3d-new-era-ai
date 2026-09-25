@@ -665,9 +665,9 @@
 
   // ---- Day / night ----
   const SCENES = {
-    jantar: ["02-jantar-estar", "09-jantar-noite", "19:30"],
-    cozinha: ["04-cozinha", "10-cozinha-noite", "19:30"],
-    suite: ["07-suite", "11-suite-noite", "20:00"]
+    jantar: ["02-dining-living", "09-dining-night", "19:30"],
+    cozinha: ["04-kitchen", "10-kitchen-night", "19:30"],
+    suite: ["07-master-bedroom", "11-master-bedroom-night", "20:00"]
   };
   const compare = $(".compare");
   const range = $(".compare__range");
