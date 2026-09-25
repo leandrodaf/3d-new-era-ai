@@ -84,6 +84,26 @@ fn thumbnail(ui: &mut egui::Ui, item: &CatalogItem, size: f32) {
     }
 }
 
+/// A name in a row, cut short with an ellipsis rather than drawn in full.
+///
+/// A panel is as wide as what it draws, and a plan may well carry a note a
+/// paragraph long ("AÉREOS: 80 geladeira + 106 cozinha…"). Drawn whole, such a
+/// name pins the panel open: the drag handle gives way and the next frame
+/// pushes it back out. `beside` is the room to leave for whatever the row puts
+/// after the name — its size, its count. The full name is a hover away.
+fn name(ui: &mut egui::Ui, text: &str, styled: RichText, beside: f32) {
+    let room = (ui.available_width() - beside).max(48.0);
+    let response = ui
+        .scope(|ui| {
+            ui.set_max_width(room);
+            ui.add(egui::Label::new(styled).truncate())
+        })
+        .inner;
+    if response.rect.width() >= room - 0.5 {
+        response.on_hover_text(text); // Only what did not fit is worth a tooltip.
+    }
+}
+
 /// A panel's title: the icon in the accent, the name, and the number that
 /// says how much is in there set as a note in the margin.
 fn header(ui: &mut egui::Ui, glyph: &str, title: &str, note: &str) {
@@ -92,7 +112,7 @@ fn header(ui: &mut egui::Ui, glyph: &str, title: &str, note: &str) {
     ui.horizontal(|ui| {
         ui.add_space(2.0);
         ui.label(RichText::new(glyph).size(15.0).color(t.accent));
-        ui.label(RichText::new(title).heading().color(t.ink));
+        name(ui, title, RichText::new(title).heading().color(t.ink), 90.0);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.label(crate::theme::fig(ui.visuals(), note));
         });
@@ -238,7 +258,7 @@ fn band<R>(ui: &mut egui::Ui, band: Band<'_>, body: impl FnOnce(&mut egui::Ui) -
             .color(t.ink_faint),
         );
         ui.label(RichText::new(glyph).color(if is_open { t.accent } else { t.ink_dim }));
-        ui.label(RichText::new(title).color(t.ink));
+        name(ui, title, RichText::new(title).color(t.ink), 40.0);
         count(ui, total);
     });
     if response.clicked() {
@@ -280,7 +300,12 @@ fn catalog_row(app: &mut NewEraApp, ui: &mut egui::Ui, item: &'static CatalogIte
         thumbnail(ui, item, 30.0);
         ui.vertical(|ui| {
             ui.add_space(1.0);
-            ui.label(RichText::new(name).color(if selected { t.accent } else { t.ink }));
+            self::name(
+                ui,
+                name,
+                RichText::new(name).color(if selected { t.accent } else { t.ink }),
+                0.0,
+            );
             ui.label(crate::theme::fig(
                 ui.visuals(),
                 &unit.format_size(item.size),
@@ -298,6 +323,9 @@ fn catalog_row(app: &mut NewEraApp, ui: &mut egui::Ui, item: &'static CatalogIte
 }
 
 pub(crate) fn left(app: &mut NewEraApp, ui: &mut egui::Ui) {
+    // Every name here names a row. Left selectable, egui hands the click to
+    // the text — it comes out as a text selection and the row never hears it.
+    ui.style_mut().interaction.selectable_labels = false;
     egui::Panel::top("catalog")
         .resizable(true)
         .default_size(ui.available_height() * 0.55)
@@ -517,11 +545,13 @@ fn outliner(app: &mut NewEraApp, ui: &mut egui::Ui) {
                         for (id, name, note) in rows {
                             let selected = app.selection.contains(&id);
                             let (response, ()) = row(ui, selected, &name, |ui| {
-                                ui.label(RichText::new(name.clone()).color(if selected {
-                                    t.ink
-                                } else {
-                                    t.ink_dim
-                                }));
+                                self::name(
+                                    ui,
+                                    &name,
+                                    RichText::new(name.clone())
+                                        .color(if selected { t.ink } else { t.ink_dim }),
+                                    if note.is_empty() { 0.0 } else { 130.0 },
+                                );
                                 if !note.is_empty() {
                                     ui.with_layout(
                                         egui::Layout::right_to_left(egui::Align::Center),

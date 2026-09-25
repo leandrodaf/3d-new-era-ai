@@ -20,6 +20,19 @@ All notable changes to this project are documented here. The format follows
   and the `packaging/` snapshots of 1.7.0; releases generate the winget and Homebrew
   files themselves.
 
+### Fixed
+
+- The ground no longer shows through a doorway. A floor stopped at the inner face of the
+  walls around it, so the band under a wall belonged to no room and the grass showed
+  through wherever a door or a passage cut the wall away. Floors now run under the walls
+  they touch: to the middle of a wall with another room behind it, where the two floors
+  meet as they do at a real threshold, and through to the far face of a wall with nothing
+  behind it.
+- A long name no longer pins the side panel open. A plan note a paragraph long
+  ("AÉREOS: 80 geladeira + 106 cozinha…") made the panel as wide as itself and the drag
+  handle could not bring it back. Names are cut short with an ellipsis and shown in full
+  on hover, and a click on a name now selects its row instead of selecting the text.
+
 ## [1.9.2] - 2026-09-24
 
 ### Changed
