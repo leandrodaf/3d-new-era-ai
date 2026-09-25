@@ -1,11 +1,11 @@
-"""Plugin de exemplo: quadro de áreas dos cômodos.
+"""Example plugin: a table of room areas.
 
-Lê a casa em GET /api/home e insere um texto à direita da planta com uma
-linha por cômodo e o total, numa única edição (desfazível) via
-POST /api/commands. Só usa a biblioteca padrão do Python.
+Reads the home from GET /api/home and inserts a text to the right of the plan
+with one line per room and the total, as a single undoable edit through
+POST /api/commands. Uses only the Python standard library.
 
-Argumentos (JSON na entrada padrão, todos opcionais):
-  {"size": 20}   altura do texto em cm
+Arguments (JSON on standard input, all optional):
+  {"size": 20}   text height in cm
 """
 
 import json
@@ -30,7 +30,7 @@ def call(path, body=None):
 
 
 def area(points):
-    """Área do polígono em cm² (fórmula do laço)."""
+    """Polygon area in cm² (shoelace formula)."""
     total = 0.0
     for (x1, y1), (x2, y2) in zip(points, points[1:] + points[:1]):
         total += x1 * y2 - x2 * y1
@@ -38,7 +38,7 @@ def area(points):
 
 
 def next_id(home):
-    """Ids compartilham um contador: o próximo é o maior sufixo + 1."""
+    """Ids share one counter: the next one is the largest suffix + 1."""
     largest = 0
     for value in home.values():
         if isinstance(value, list):
@@ -58,10 +58,10 @@ def main():
     home = state["home"]
     rooms = [r for r in home.get("rooms", []) if len(r.get("points", [])) >= 3]
     if not rooms:
-        print("nenhum cômodo na planta")
+        print("no rooms on the plan")
         return
 
-    lines = [f"{r.get('name') or 'Cômodo'}: {area(r['points']) / 10_000:.2f} m²" for r in rooms]
+    lines = [f"{r.get('name') or 'Room'}: {area(r['points']) / 10_000:.2f} m²" for r in rooms]
     total = sum(area(r["points"]) for r in rooms) / 10_000
     lines.append(f"Total: {total:.2f} m²")
 
@@ -70,7 +70,7 @@ def main():
     label = {
         "kind": "label",
         "id": f"t{next_id(home)}",
-        "text": "Quadro de áreas\n" + "\n".join(lines),
+        "text": "Room areas\n" + "\n".join(lines),
         "position": [max(xs) + 150, (min(ys) + max(ys)) / 2],
         "size": size,
         "align": "left",
@@ -85,7 +85,7 @@ def main():
     except urllib.error.HTTPError as error:
         print(error.read().decode(), file=sys.stderr)
         sys.exit(1)
-    print(f"quadro com {len(rooms)} cômodos ({total:.2f} m²), revisão {result['revision']}")
+    print(f"table with {len(rooms)} rooms ({total:.2f} m²), revision {result['revision']}")
 
 
 if __name__ == "__main__":

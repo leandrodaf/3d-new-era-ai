@@ -175,7 +175,7 @@ in `NEWERA_PLUGINS` or `<config>/3d-new-era-ai/plugins`. Running it (Plugins men
 `POST /api/plugins/{name}/run`, MCP `plugins`) starts the command with
 `NEWERA_URL`, `NEWERA_TOKEN` and `NEWERA_SESSION`, arguments as JSON on stdin; the
 program reads and edits through the public API like any other client, under its
-own session, and its output is returned. `plugins/quadro-areas` is an example in
+own session, and its output is returned. `plugins/room-areas` is an example in
 plain Python.
 
 ## Security

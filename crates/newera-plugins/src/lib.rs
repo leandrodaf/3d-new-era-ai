@@ -5,8 +5,8 @@
 //!
 //! ```json
 //! {
-//!   "name": "quadro-areas",
-//!   "title": "Quadro de áreas",
+//!   "name": "room-areas",
+//!   "title": "Room areas",
 //!   "description": "Adds a text with the area of every room.",
 //!   "command": ["python3", "main.py"]
 //! }

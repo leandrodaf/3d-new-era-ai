@@ -1,0 +1,6 @@
+{
+  "name": "room-areas",
+  "title": "Room areas",
+  "description": "Writes a table with the area of every room and the total beside the plan.",
+  "command": ["python3", "main.py"]
+}

@@ -1,5 +1,5 @@
-# 3D New Era AI — atalhos de desenvolvimento.
-# `make` sozinho lista tudo.
+# 3D New Era AI — development shortcuts.
+# `make` on its own lists everything.
 
 SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
@@ -24,117 +24,117 @@ CYAN  := \033[36m
 DIM   := \033[2m
 RESET := \033[0m
 
-##@ Rodar
+##@ Run
 
 .PHONY: run
-run: ## Abre o editor com a casa demo + HTTP + MCP (o "rodar e tudo funciona")
+run: ## Opens the editor with the demo house + HTTP + MCP
 	$(CARGO) run -p newera -- --demo
 
 .PHONY: run-empty
-run-empty: ## Abre o editor com um projeto vazio
+run-empty: ## Opens the editor with an empty project
 	$(CARGO) run -p newera
 
 .PHONY: run-release
-run-release: ## Abre o editor em modo release (renderização bem mais fluida)
+run-release: ## Opens the editor in release mode (much smoother rendering)
 	$(CARGO) run -p newera --release -- --demo
 
 .PHONY: dev
-dev: ## Recompila e reabre o editor a cada alteração (usa cargo-watch)
+dev: ## Rebuilds and reopens the editor on every change (cargo-watch)
 	@command -v cargo-watch >/dev/null || { echo "cargo-watch ausente: rode 'make setup'"; exit 1; }
 	cargo watch -c -w crates -x "run -p newera -- --demo"
 
 .PHONY: serve
-serve: ## Só o servidor HTTP + MCP, sem janela (headless)
+serve: ## Only the HTTP + MCP server, no window (headless)
 	$(CARGO) run -p newera -- serve --demo
 
 .PHONY: mcp-stdio
-mcp-stdio: ## MCP via stdin/stdout (para clientes que iniciam o processo)
+mcp-stdio: ## MCP over stdin/stdout (for clients that start the process)
 	$(CARGO) run -q -p newera -- mcp --demo
 
 .PHONY: icons
-icons: ## Regera os ícones (app, documento, macOS, Windows e Linux) a partir da marca
+icons: ## Regenerates every icon (app, document, macOS, Windows, Linux) from the mark
 	python3 scripts/make-icons.py
 
 .PHONY: logo
-logo: ## Mostra a marca em ANSI (a mesma que os instaladores imprimem)
+logo: ## Prints the mark in ANSI (the one the installers show)
 	@cat assets/logo.ansi
 
 .PHONY: web
-web: ## Compila o visualizador web (WebAssembly) em web/
+web: ## Builds the web viewer (WebAssembly) into web/
 	@rustup target list --installed | grep -q wasm32-unknown-unknown || rustup target add wasm32-unknown-unknown
 	$(CARGO) build -p newera-web --release --target wasm32-unknown-unknown
 	cp target/wasm32-unknown-unknown/release/newera_web.wasm web/
 
 .PHONY: web-editor
-web-editor: ## Compila o editor completo para o navegador em web/editor/
+web-editor: ## Builds the full browser editor into web/editor/
 	@rustup target list --installed | grep -q wasm32-unknown-unknown || rustup target add wasm32-unknown-unknown
 	@command -v wasm-bindgen >/dev/null || cargo install wasm-bindgen-cli --version 0.2.128 --locked
 	$(CARGO) build -p newera-editor-web --release --target wasm32-unknown-unknown
 	wasm-bindgen --target web --no-typescript --out-dir web/editor/pkg target/wasm32-unknown-unknown/release/newera_editor_web.wasm
 
 .PHONY: web-serve
-web-serve: web web-editor ## Serve o visualizador (/) e o editor (/editor/) em http://127.0.0.1:8790
+web-serve: web web-editor ## Serves the viewer (/) and the editor (/editor/) at http://127.0.0.1:8790
 	python3 -m http.server 8790 --bind 127.0.0.1 --directory web
 
-##@ Qualidade
+##@ Quality
 
 .PHONY: check
-check: fmt-check lint test smoke ## Tudo que o CI roda: fmt, clippy, testes e smoke do MCP
+check: fmt-check lint test smoke ## Everything CI runs: fmt, clippy, tests and the MCP smoke test
 
 .PHONY: fmt
-fmt: ## Formata o código
+fmt: ## Formats the code
 	$(CARGO) fmt --all
 
 .PHONY: fmt-check
-fmt-check: ## Verifica formatação sem alterar arquivos
+fmt-check: ## Checks formatting without changing files
 	$(CARGO) fmt --all -- --check
 
 .PHONY: lint
-lint: ## Clippy pedantic, warnings viram erro
+lint: ## Clippy pedantic, warnings as errors
 	$(CARGO) clippy --workspace --all-targets --locked -- -D warnings
 
 .PHONY: test
-test: ## Testes unitários e de integração
+test: ## Unit and integration tests
 	$(CARGO) test --workspace --locked
 
 .PHONY: smoke
-smoke: build ## Sobe o servidor e conversa com o MCP como uma IA faria
+smoke: build ## Starts the server and talks MCP the way an AI would
 	scripts/mcp-smoke.sh $(BIN)
 
 .PHONY: deny
-deny: ## Audita licenças e vulnerabilidades das dependências (cargo-deny)
+deny: ## Audits dependency licenses and advisories (cargo-deny)
 	cargo deny check
 
 .PHONY: fix
-fix: ## Aplica sugestões automáticas do clippy e formata
+fix: ## Applies clippy's automatic fixes and formats
 	$(CARGO) clippy --workspace --all-targets --fix --allow-dirty --allow-staged
 	$(CARGO) fmt --all
 
 ##@ Build
 
 .PHONY: build
-build: ## Build de debug
+build: ## Debug build
 	$(CARGO) build -p newera
 
 .PHONY: release
-release: ## Build otimizado em target/release/newera
+release: ## Optimized build at target/release/newera
 	$(CARGO) build -p newera --release
 	@ls -lh $(RELEASE)
 
 .PHONY: doc
-doc: ## Gera e abre a documentação das crates
+doc: ## Builds and opens the crate documentation
 	$(CARGO) doc --workspace --no-deps --open
 
 .PHONY: clean
-clean: ## Remove artefatos de build
+clean: ## Removes build artifacts
 	$(CARGO) clean
 
-##@ Instalar no sistema
+##@ Install on this system
 
 APPS ?= $(HOME)/Applications
 
 .PHONY: install
-install: ## Instala o app deste código aqui (macOS: ~/Applications; Linux: menu, ícones e .newera)
+install: ## Installs the app from this checkout (macOS: ~/Applications; Linux: menu, icons and .newera)
 	@set -e; \
 	case "$$(uname -s)" in \
 	Darwin) \
@@ -162,7 +162,7 @@ install: ## Instala o app deste código aqui (macOS: ~/Applications; Linux: menu
 	esac
 
 .PHONY: uninstall
-uninstall: ## Remove o que o `make install` colocou no sistema
+uninstall: ## Removes what `make install` put on the system
 	@case "$$(uname -s)" in \
 	Darwin) \
 	  rm -rf "$(APPS)/3D New Era AI.app"; \
@@ -173,14 +173,14 @@ uninstall: ## Remove o que o `make install` colocou no sistema
 	*) echo "no Windows: scripts/install-windows.ps1 -Uninstall"; exit 1;; \
 	esac
 
-##@ IA / MCP
+##@ AI / MCP
 
 .PHONY: mcp-add-claude
-mcp-add-claude: ## Registra o MCP do editor no Claude Code (com o editor aberto)
+mcp-add-claude: ## Registers the editor's MCP in Claude Code (with the editor open)
 	claude mcp add --transport http newera http://$(ADDR)/mcp
 
 .PHONY: mcp-tools
-mcp-tools: ## Lista as ferramentas MCP expostas (precisa do editor/servidor rodando)
+mcp-tools: ## Lists the MCP tools (needs the editor or server running)
 	@H=(-H "Content-Type: application/json" -H "Accept: application/json, text/event-stream"); \
 	curl -s "$${H[@]}" -D /tmp/newera-mcp.h http://$(ADDR)/mcp \
 	  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"make","version":"1"}}}' >/dev/null; \
@@ -192,17 +192,17 @@ mcp-tools: ## Lista as ferramentas MCP expostas (precisa do editor/servidor roda
 	  | python3 -c 'import json,sys; [print("  " + t["name"] + " — " + t.get("description", "")) for t in json.load(sys.stdin)["result"]["tools"]]'
 
 .PHONY: mcp
-mcp: ## Chama uma ferramenta MCP: make mcp TOOL=get_home ARGS='{}'
+mcp: ## Calls an MCP tool: make mcp TOOL=get_home ARGS='{}'
 	@scripts/mcp.sh $(TOOL) '$(or $(ARGS),{})'
 
 .PHONY: home
-home: ## Mostra o JSON da casa aberta (GET /api/home)
+home: ## Prints the open home as JSON (GET /api/home)
 	@curl -s http://$(ADDR)/api/home | python3 -m json.tool
 
-##@ Ambiente
+##@ Environment
 
 .PHONY: setup
-setup: ## Instala componentes e ferramentas de desenvolvimento
+setup: ## Installs the development components and tools
 	rustup component add rustfmt clippy
 	$(CARGO) install --locked cargo-watch cargo-deny
 	@if [ "$$(uname)" = "Linux" ]; then \
@@ -211,8 +211,8 @@ setup: ## Instala componentes e ferramentas de desenvolvimento
 	fi
 
 .PHONY: help
-help: ## Lista os comandos
-	@awk 'BEGIN {FS = ":.*##"; printf "\n$(BOLD)3D New Era AI$(RESET)  $(DIM)make <alvo> [ADDR=127.0.0.1:7878]$(RESET)\n"} \
+help: ## Lists the commands
+	@awk 'BEGIN {FS = ":.*##"; printf "\n$(BOLD)3D New Era AI$(RESET)  $(DIM)make <target> [ADDR=127.0.0.1:7878]$(RESET)\n"} \
 	  /^[a-zA-Z_-]+:.*?##/ { printf "  $(CYAN)%-16s$(RESET) %s\n", $$1, $$2 } \
 	  /^##@/ { printf "\n$(BOLD)%s$(RESET)\n", substr($$0, 5) }' $(MAKEFILE_LIST)
 	@echo
