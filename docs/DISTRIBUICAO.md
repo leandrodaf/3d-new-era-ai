@@ -531,17 +531,21 @@ e testado; falta a conta.
 - [x] Tópicos do repositório: `mcp`, `mcp-server`, `gemini-cli-extension` (no lugar de
       `desktop-app`: o GitHub aceita 20) — eu
 - [x] mcp.so: https://github.com/chatmcp/mcpso/issues/4361 — eu
-- [x] PR no awesome-mcp-servers: https://github.com/punkpeye/awesome-mcp-servers/pull/15045 — eu
+- [x] PR no awesome-mcp-servers: https://github.com/punkpeye/awesome-mcp-servers/pull/15045,
+      com o selo de nota do Glama que o bot pediu — eu
 - [x] Smithery: `leandro-daf4/new-era-3d` publicado (https://smithery.ai/servers/leandro-daf4/new-era-3d),
       apontando para `https://mcp.3dneweraai.com/mcp`; o OAuth com CIMD passou de ponta a
       ponta e o Smithery leu 57 tools e 1 resource — eu
-- [x] Glama: servidor publicado em https://glama.ai/mcp/servers/leandrodaf/3d-new-era-ai;
+- [x] Glama: servidor publicado em https://glama.ai/mcp/servers/leandrodaf/3d-new-era-ai,
+      nota A (definições das tools A, manutenção A, 59 tools), Dockerfile que baixa a
+      release e roda `newera mcp --standalone` testado e passando;
       o conector hospedado (`https://mcp.3dneweraai.com/mcp`) segue em revisão; o Glama
       manda por e-mail as instruções dos checks (Dockerfile e health check)
 - [x] Secret `WINGET_TOKEN` (classic, `public_repo`, vence em 24/09/2027), também no
       1Password
 - [x] winget: primeiro PR aberto em 24/09/2026, https://github.com/microsoft/winget-pkgs/pull/440827;
-      falta **você** assinar o CLA da Microsoft (o bot pede no PR) e os revisores aprovarem;
+      CLA assinado e a validação automática inteira passou (instalação no Windows
+      inclusa); falta a aprovação de um revisor;
       as versões seguintes o release envia sozinho
 - [x] Homebrew: repositório `leandrodaf/homebrew-tap` com o cask da 1.8.0
       (`brew install --cask leandrodaf/tap/3d-new-era-ai`) — eu
