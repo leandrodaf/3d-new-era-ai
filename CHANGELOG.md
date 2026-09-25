@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Documentation for contributors, in English: a rewritten README, a docs index,
+  `docs/STANDARDS.md` (was `NORMAS.md`), `docs/DISTRIBUTION.md`, and `SECURITY.md` and
+  `CODE_OF_CONDUCT.md` at the root. `make` lists its targets in English.
+- The example plugin is `examples/plugins/room-areas` (was `plugins/quadro-areas`), in
+  English. Showcase images have English file names.
+
+### Removed
+
+- Internal planning notes and launch material from `docs/`, personal helper scripts,
+  and the `packaging/` snapshots of 1.7.0; releases generate the winget and Homebrew
+  files themselves.
+
 ## [1.9.2] - 2026-09-24
 
 ### Changed

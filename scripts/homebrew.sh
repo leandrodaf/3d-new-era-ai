@@ -9,7 +9,7 @@ set -euo pipefail
 version="${1:?version}"
 arm="${2:?sha256 of newera-macos-apple-silicon.zip}"
 intel="${3:?sha256 of newera-macos-intel.zip}"
-out="${4:-packaging/homebrew/Casks/3d-new-era-ai.rb}"
+out="${4:-target/packaging/homebrew/Casks/3d-new-era-ai.rb}"
 mkdir -p "$(dirname "$out")"
 
 cat > "$out" <<RUBY

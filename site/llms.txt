@@ -3,15 +3,27 @@
 > An open-source architecture and interior design editor with a Model Context
 > Protocol (MCP) server built in. An AI agent draws walls, doors and windows,
 > furnishes rooms, builds joinery, checks lighting and ergonomics against
-> standards, and renders photos and videos — on the user's own computer, in
-> centimeters, with undo. Free, MIT or Apache 2.0, for Windows, macOS and Linux.
+> standards, and renders photos and videos, in centimeters, with undo. Free and
+> open source, for Windows, macOS, Linux and the browser, with an optional hosted
+> connector for Claude and ChatGPT.
 
-3D New Era AI is a desktop program (Rust, ~30 MB, no account, no cloud). Opening
-it starts an MCP server on `http://127.0.0.1:7878/mcp`, bound to loopback, so any
-MCP client — Claude Code, Claude Desktop, Codex, Gemini CLI, Cursor, VS Code,
-Windsurf, Cline, Cherry Studio — edits the same project the person has on screen.
-Every call is a document command: it shows up in the window immediately and is
-undone with Ctrl+Z. The interface speaks Portuguese, English, Spanish and French.
+There are three ways to use it:
+
+- **Desktop app** (Rust, no account, nothing leaves the machine). Opening it
+  starts an MCP server on `http://127.0.0.1:7878/mcp`, bound to loopback, so any
+  MCP client (Claude Code, Claude Desktop, Codex, Gemini CLI, Cursor, VS Code,
+  Windsurf, Cline, Cherry Studio) edits the same project the person has on
+  screen. Every call is a document command: it shows up in the window
+  immediately and is undone with Ctrl+Z.
+- **Browser editor** at https://3dneweraai.com/app/: the same editor as
+  WebAssembly. Switching on its MCP gives the tab an address an AI client can
+  reach through a relay that stores nothing.
+- **Hosted connector** at `https://mcp.3dneweraai.com/mcp` (OAuth, email sign-in):
+  Claude, ChatGPT and other clients design from the chat, with projects kept in
+  the person's account. Free within a quota; a paid plan raises it. Setup:
+  https://3dneweraai.com/connector/
+
+The interface speaks Portuguese, English, Spanish and French.
 
 ## What an agent can do over MCP
 
@@ -33,7 +45,7 @@ undone with Ctrl+Z. The interface speaks Portuguese, English, Spanish and French
 ## Install
 
 - Windows: `irm https://raw.githubusercontent.com/leandrodaf/3d-new-era-ai/main/scripts/install-windows.ps1 | iex`
-- macOS: `curl -fsSL https://raw.githubusercontent.com/leandrodaf/3d-new-era-ai/main/scripts/install-macos.sh | bash`
+- macOS: `curl -fsSL https://raw.githubusercontent.com/leandrodaf/3d-new-era-ai/main/scripts/install-macos.sh | bash`, or `brew install --cask leandrodaf/tap/3d-new-era-ai`
 - Linux: download `newera-linux-x64.tar.gz` from the releases page and run `./newera/newera`
 
 The Windows and macOS installers register the MCP server with Claude Code and
@@ -43,7 +55,9 @@ Codex when they are installed. For other clients:
 ## Links
 
 - [Site](https://3dneweraai.com/): what it is, gallery, how to connect an AI.
-- [Editor in the browser](https://3dneweraai.com/app/): the full editor as WebAssembly, no install, nothing sent anywhere.
+- [Editor in the browser](https://3dneweraai.com/app/): the full editor as WebAssembly, no install.
+- [Hosted connector](https://3dneweraai.com/connector/): connect Claude or ChatGPT without installing anything.
+- [Pricing](https://3dneweraai.com/pricing/): free, and the optional Supporter plan.
 - [Repository](https://github.com/leandrodaf/3d-new-era-ai): source, issues, releases.
 - [README](https://github.com/leandrodaf/3d-new-era-ai#readme): install, MCP tools, architecture.
 - [Roadmap](https://github.com/leandrodaf/3d-new-era-ai/blob/main/docs/ROADMAP.md): what is done and what is next.

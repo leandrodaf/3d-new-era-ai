@@ -1,40 +1,58 @@
 # 3D New Era AI
 
-[English](README.md) · **Português (Brasil)** · **[Site](https://3dneweraai.com/)**
+[English](README.md) · **Português (Brasil)** · **[Site](https://3dneweraai.com/)** · **[Usar no navegador](https://3dneweraai.com/app/)**
 
 [![CI](https://github.com/leandrodaf/3d-new-era-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/leandrodaf/3d-new-era-ai/actions/workflows/ci.yml)
-[![Licença: MIT OU Apache-2.0](https://img.shields.io/badge/licen%C3%A7a-MIT%20OU%20Apache--2.0-blue.svg)](LICENSE-MIT)
 [![Última versão](https://img.shields.io/github/v/release/leandrodaf/3d-new-era-ai?label=vers%C3%A3o)](https://github.com/leandrodaf/3d-new-era-ai/releases/latest)
+[![Licença: MIT OU Apache-2.0](https://img.shields.io/badge/licen%C3%A7a-MIT%20OU%20Apache--2.0-blue.svg)](#licença)
 
 Um editor de **projetos de casa, planta baixa e interiores** de código aberto, feito em
-Rust e inspirado no Sweet Home 3D — para Windows, macOS e Linux — que já nasceu **nativo
-para IA**: o editor vem com um servidor
-[Model Context Protocol](https://modelcontextprotocol.io) embutido, então um agente de IA
-desenha paredes, mobilia cômodos, projeta a marcenaria, confere iluminação e ergonomia
-pelas normas e renderiza as fotos junto com você, com cada alteração aparecendo na tela na
-hora e a um Ctrl+Z de distância. Tudo roda na sua máquina: sem conta, sem assinatura, sem
-nuvem. A interface fala português, inglês, espanhol e francês.
+Rust para que **a sua IA projete junto com você**. Ele vem com um servidor
+[Model Context Protocol](https://modelcontextprotocol.io): o Claude, o ChatGPT, o Codex, o
+Gemini, o Cursor ou qualquer outro cliente MCP desenha as paredes, mobilia os cômodos,
+projeta a marcenaria, confere iluminação e ergonomia pelas normas e renderiza as fotos,
+com cada alteração aparecendo na tela na hora e a um Ctrl+Z de distância.
+
+Uma alternativa ao Sweet Home 3D para Windows, macOS, Linux e navegador, em português,
+inglês, espanhol e francês.
 
 ![Editor com um apartamento de 105 m² mobiliado: catálogo, planta humanizada e vista 3D ao vivo](docs/images/editor.png)
 
-## Baixar
+## Três jeitos de usar
 
-**Windows** — abra o PowerShell e cole:
+| | O que você tem | Conta |
+|---|---|---|
+| **[App para computador](#instalar)** | O editor completo na sua máquina, com um servidor MCP local em `127.0.0.1:7878`. Nada sai do seu computador. | não precisa |
+| **[Editor no navegador](https://3dneweraai.com/app/)** | O mesmo editor numa aba (WebGPU ou WebGL). Ligue o MCP dele e a sua IA edita o projeto da aba. | não precisa |
+| **[Conector na nuvem](https://3dneweraai.com/connector/)** | Adicione `https://mcp.3dneweraai.com/mcp` no Claude ou no ChatGPT e projete pela conversa, com os projetos guardados na sua conta. | entrar com e-mail |
+
+O app e o editor no navegador são gratuitos, de código aberto e não pedem conta. O
+conector na nuvem é gratuito dentro de uma cota; veja os [preços](https://3dneweraai.com/pricing/).
+
+## Instalar
+
+**Windows** — no PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/leandrodaf/3d-new-era-ai/main/scripts/install-windows.ps1 | iex
 ```
 
-**macOS** (Apple Silicon e Intel) — abra o Terminal e cole:
+**macOS** (Apple Silicon e Intel) — no Terminal:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/leandrodaf/3d-new-era-ai/main/scripts/install-macos.sh | bash
 ```
 
-Pronto: o app aparece no Menu Iniciar / Launchpad, sem senha de administrador, e o mesmo
-comando atualiza. Prefere baixar o arquivo?
+ou com o Homebrew: `brew install --cask leandrodaf/tap/3d-new-era-ai`.
 
-| [Windows (64 bits)](https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-windows-x64.zip) | [Mac Apple Silicon](https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-macos-apple-silicon.zip) | [Mac Intel](https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-macos-intel.zip) | [Linux (x64)](https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-linux-x64.tar.gz) |
+Os instaladores valem só para o seu usuário, sem senha de administrador: o app aparece no
+Menu Iniciar ou no Launchpad, o `newera` entra no `PATH`, o servidor MCP é registrado no
+Claude Code e no Codex se você os tiver, e o mesmo comando atualiza. Para desinstalar, use
+`install-macos.sh --uninstall` ou *Configurações → Aplicativos* no Windows.
+
+Prefere baixar o arquivo?
+
+| [Windows (x64)](https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-windows-x64.zip) | [macOS Apple Silicon](https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-macos-apple-silicon.zip) | [macOS Intel](https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-macos-intel.zip) | [Linux (x64)](https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-linux-x64.tar.gz) |
 |:---:|:---:|:---:|:---:|
 
 <details>
@@ -45,68 +63,65 @@ sistema pergunta uma vez:
 
 - **Windows:** descompacte e abra o `newera-gui.exe`; se aparecer o SmartScreen, clique em
   *Mais informações* → *Executar assim mesmo*.
-- **macOS:** descompacte e mova o *3D New Era AI* para Aplicativos. Clique com o botão
-  direito → *Abrir* → *Abrir*. No macOS 15 ou mais novo, tente abrir uma vez e depois vá em
-  *Ajustes do Sistema* → *Privacidade e Segurança* → *Abrir Mesmo Assim*. Ou rode
+- **macOS:** descompacte e mova o *3D New Era AI* para Aplicativos, depois clique com o
+  botão direito → *Abrir* → *Abrir*. No macOS 15 ou mais novo, tente abrir uma vez e vá em
+  *Ajustes do Sistema* → *Privacidade e Segurança* → *Abrir Mesmo Assim*, ou rode
   `xattr -dr com.apple.quarantine "/Applications/3D New Era AI.app"`.
 - **Linux:** `tar xzf newera-linux-x64.tar.gz && ./newera/newera`. Rode
-  `./newera/install-desktop.sh` para pôr o app no menu com ícone e dar aos
-  arquivos `.newera` ícone e duplo clique (`--uninstall` desfaz).
+  `./newera/install-desktop.sh` para pôr o app no menu, com ícone, e dar aos arquivos
+  `.newera` ícone e duplo clique (`--uninstall` desfaz).
 
-Os instaladores de uma linha acima já evitam esses avisos.
+Os instaladores de uma linha evitam esses avisos.
 </details>
-
-Depois: **[conecte sua IA](#conecte-sua-ia)** — Claude, Codex, Gemini, Cursor, VS Code,
-DeepSeek e outras.
-
-## Vitrine
-
-Um apartamento real de 105 m², redesenhado a partir de uma planta com licença aberta,
-mobiliado, iluminado e fotografado por um agente de IA só pelo MCP — paredes tiradas da
-imagem, portas abrindo para o lado certo, painel ripado da TV, cozinha em L e armário feitos
-com `cabinet_run`, spots dimensionados por fotometria pela NBR ISO/CIE 8995-1 e fotos com
-path tracing. Todas as imagens abaixo saíram do próprio editor.
-**[Veja como foi feito →](docs/SHOWCASE.md)**
-
-| Planta humanizada com os acabamentos reais | Vista aérea em corte |
-|---|---|
-| ![Planta humanizada com acabamentos reais](docs/images/showcase/13-rendered-plan.jpg) | ![Vista aérea em corte do apartamento](docs/images/showcase/12-aerial.jpg) |
-
-| De dia | Ao anoitecer, luzes acesas |
-|---|---|
-| ![Sala com painel ripado da TV](docs/images/showcase/01-living-window.jpg) | ![Mesa de jantar sob o pendente ao anoitecer](docs/images/showcase/09-dining-night.jpg) |
-| ![Jantar e estar olhando para a janela](docs/images/showcase/02-dining-living.jpg) | ![Cozinha em L à noite](docs/images/showcase/10-kitchen-night.jpg) |
-| ![Cozinha em L com piso de granilite](docs/images/showcase/04-kitchen.jpg) | ![Suíte do casal à noite](docs/images/showcase/11-master-bedroom-night.jpg) |
 
 ## Conecte sua IA
 
-Abra o editor (ou rode `newera serve` para ficar sem janela). Ele serve o MCP em
-**`http://127.0.0.1:7878/mcp`** — aponte sua IA para esse endereço e ela edita a planta que
-você está vendo, ao vivo.
+**Na nuvem, sem instalar nada.** No Claude ou no ChatGPT, adicione um conector
+personalizado com o endereço `https://mcp.3dneweraai.com/mcp` e entre com o seu e-mail.
+Passo a passo: <https://3dneweraai.com/connector/>.
 
-**Um clique** — com o app instalado (os instaladores põem `newera` no PATH), estes botões o
-adicionam pelo stdio: com o editor aberto a IA edita a planta na tela; sem ele, um projeto
-próprio.
+**Com o app.** Enquanto o editor está aberto, ele serve o MCP em
+`http://127.0.0.1:7878/mcp` (ou rode `newera serve` para ficar sem janela). O menu **IA**,
+ou o indicador de MCP na barra de status, mostra a configuração do seu cliente, pode
+registrá-lo para você e lista as ferramentas que o agente chama, na hora em que chama.
+
+**Numa aba do navegador.** Abra <https://3dneweraai.com/app/> e ligue o MCP no painel
+**IA** (Ctrl+Shift+M). A aba ganha um endereço que a sua IA alcança por um pequeno relay,
+porque uma aba não consegue abrir uma porta. O relay só repassa as mensagens e não guarda
+nada; o projeto fica na aba, e o endereço para de responder quando você desliga ou fecha a
+aba. Trate esse endereço como uma senha. Vídeo não é oferecido ali, porque travaria a aba
+por minutos.
+
+Depois é só pedir, por exemplo: *"Desenhe um quarto de 4 × 5 m com porta e janela,
+mobilie e gere uma foto."*
+
+### Configurar o cliente
+
+Um clique, com o app instalado:
 
 [![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=newera&config=eyJjb21tYW5kIjoibmV3ZXJhIiwiYXJncyI6WyJtY3AiXX0%3D)
 [![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_newera-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=newera&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22newera%22%2C%22args%22%3A%5B%22mcp%22%5D%7D)
 [![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_newera-24bfa5?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=newera&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22newera%22%2C%22args%22%3A%5B%22mcp%22%5D%7D&quality=insiders)
 
-**Plugin com skills** — Claude Code: `/plugin marketplace add leandrodaf/3d-new-era-ai`,
-depois `/plugin install 3d-new-era-ai@3d-new-era-ai`. Codex:
-`codex plugin marketplace add leandrodaf/3d-new-era-ai`. Gemini CLI:
-`gemini extensions install https://github.com/leandrodaf/3d-new-era-ai`.
-
-**Claude Desktop, um clique** — baixe o `newera-mcp.mcpb` da
+**Claude Desktop:** baixe o `newera-mcp.mcpb` da
 [última versão](https://github.com/leandrodaf/3d-new-era-ai/releases/latest) e abra.
 
-**Claude Code**
+**Plugins com skills:**
+
+| Cliente | Comando |
+|---|---|
+| Claude Code | `/plugin marketplace add leandrodaf/3d-new-era-ai`, depois `/plugin install 3d-new-era-ai-desktop@3d-new-era-ai` (o app na sua tela) ou `/plugin install 3d-new-era-ai@3d-new-era-ai` (na nuvem) |
+| Codex | `codex plugin marketplace add leandrodaf/3d-new-era-ai` |
+| Gemini CLI | `gemini extensions install https://github.com/leandrodaf/3d-new-era-ai` |
+
+<details>
+<summary>Configuração manual de cada cliente</summary>
+
+**Claude Code** (dentro de um clone deste repositório, o `.mcp.json` já configura)
 
 ```sh
 claude mcp add --transport http newera http://127.0.0.1:7878/mcp
 ```
-
-Dentro de um clone deste repositório já vem configurado pelo `.mcp.json` (aprove o `newera` uma vez).
 
 **Codex CLI**
 
@@ -138,46 +153,96 @@ code --add-mcp '{"name":"newera","type":"http","url":"http://127.0.0.1:7878/mcp"
 { "mcpServers": { "newera": { "serverUrl": "http://127.0.0.1:7878/mcp" } } }
 ```
 
-**Claude Desktop** — *Configurações → Desenvolvedor → Editar configuração* (precisa do
-[Node.js](https://nodejs.org) para a ponte `mcp-remote`)
+**Claude Desktop sem o pacote** — *Configurações → Desenvolvedor → Editar configuração*
+(precisa do [Node.js](https://nodejs.org) para a ponte `mcp-remote`)
 
 ```json
 { "mcpServers": { "newera": { "command": "npx", "args": ["-y", "mcp-remote", "http://127.0.0.1:7878/mcp"] } } }
 ```
 
-**DeepSeek, Qwen, Llama e outros modelos** — o que importa não é o modelo, e sim o app em que
-você conversa. Use um que suporte MCP e adicione o endereço acima: [Cline](https://cline.bot)
-ou [Roo Code](https://roocode.com) no VS Code, [Cherry Studio](https://cherry-ai.com),
+**DeepSeek, Qwen, Llama e outros modelos** — o que importa não é o modelo, e sim o app em
+que você conversa. Use um que suporte MCP: [Cline](https://cline.bot) ou
+[Roo Code](https://roocode.com) no VS Code, [Cherry Studio](https://cherry-ai.com),
 [LM Studio](https://lmstudio.ai) ou [opencode](https://opencode.ai) (`opencode.json`):
 
 ```json
 { "mcp": { "newera": { "type": "remote", "url": "http://127.0.0.1:7878/mcp" } } }
 ```
 
-**Qualquer outro cliente** — HTTP (streamable) em `http://127.0.0.1:7878/mcp` ou, para
-clientes que só iniciam um processo, stdio com `newera mcp`:
+**Qualquer outro cliente** — HTTP (Streamable) em `http://127.0.0.1:7878/mcp` ou, para
+clientes que só iniciam um processo, stdio:
 
 ```json
 { "mcpServers": { "newera": { "command": "newera", "args": ["mcp"] } } }
 ```
 
-Com o editor aberto, o stdio edita a planta dessa janela, como o endereço HTTP; sem
-janela (ou com `newera mcp --standalone`) o agente trabalha num projeto próprio em
-segundo plano. Depois é só pedir, por exemplo: *"Desenhe
-um quarto de 4 × 5 m com porta e janela, mobilie e gere uma foto."*
+Pelo stdio, com o editor aberto o agente edita a planta dessa janela; sem janela (ou com
+`newera mcp --standalone`) ele trabalha num projeto próprio.
+</details>
 
----
+## Vitrine
 
-**Telemetria.** As versões publicadas enviam relatórios de erro aos desenvolvedores pelo
-Sentry, junto com as notas que os agentes deixam pela ferramenta `feedback` do MCP. Vem
-**ligada por padrão** e desliga com um clique em **Ajuda → Enviar relatórios de erro** ou com
-`newera telemetry off`. Nada do projeto é enviado, nem o IP nem o nome da máquina. As
-versões publicadas também contam no Google Analytics que o app foi aberto, com versão,
-sistema e modo — mesma chave de liga/desliga, um id sorteado para a instalação e nada do
-projeto.
+Um apartamento real de 105 m², redesenhado a partir de uma planta com licença aberta,
+mobiliado, iluminado e fotografado por um agente de IA só pelo MCP: paredes tiradas da
+imagem, portas abrindo para o lado certo, painel ripado da TV, cozinha em L e armários
+feitos com `cabinet_run`, spots dimensionados por fotometria pela NBR ISO/CIE 8995-1 e
+fotos com path tracing. Todas as imagens saíram do próprio editor.
+**[Veja como foi feito →](docs/SHOWCASE.md)** (em inglês)
 
-De onde vêm os números quando o editor diz que uma cozinha está errada — as normas, a
-doutrina e a pesquisa por trás de cada regra, com edição e link: [docs/STANDARDS.md](docs/STANDARDS.md) (em inglês).
+| Planta humanizada com os acabamentos reais | Vista aérea em corte |
+|---|---|
+| ![Planta humanizada com acabamentos reais](docs/images/showcase/13-rendered-plan.jpg) | ![Vista aérea em corte do apartamento](docs/images/showcase/12-aerial.jpg) |
 
-Documentação técnica completa (ferramentas MCP, modos, compilação e arquitetura) no
-[README em inglês](README.md). Licença MIT ou Apache 2.0.
+| De dia | Ao anoitecer, luzes acesas |
+|---|---|
+| ![Sala com painel ripado da TV](docs/images/showcase/01-living-window.jpg) | ![Mesa de jantar sob o pendente ao anoitecer](docs/images/showcase/09-dining-night.jpg) |
+| ![Jantar e estar olhando para a janela](docs/images/showcase/02-dining-living.jpg) | ![Cozinha em L à noite](docs/images/showcase/10-kitchen-night.jpg) |
+| ![Cozinha em L com piso de granilite](docs/images/showcase/04-kitchen.jpg) | ![Suíte do casal à noite](docs/images/showcase/11-master-bedroom-night.jpg) |
+
+## O que ele faz
+
+- **Planta a partir de qualquer coisa.** Desenhe paredes retas, curvas e inclinadas, ou
+  coloque uma planta escaneada em escala real e deixe o `trace_background` achar as
+  paredes. Abre projetos do Sweet Home 3D (`.sh3d`) como estão.
+- **Marcenaria que a oficina consegue fazer.** Armários, guarda-roupas, painéis ripados,
+  bancadas com recortes exatos de cuba e cooktop, sancas com LED e sofás modulares, com
+  lista de corte em CSV ou DXF/SVG.
+- **Conferido para quem vai morar.** Revisão de ergonomia (circulação, camas e banheiros
+  por pessoa, triângulo da cozinha, giro de cadeira de rodas) e lux por cômodo por
+  fotometria, cada achado ligado à [norma de origem](docs/STANDARDS.md) e com a correção
+  pronta para aplicar.
+- **Projetos elétrico e hidráulico** sobre a mesma planta, pela NBR 5410, NBR 5626 e
+  NBR 8160.
+- **Imagens que vendem o projeto.** Planta humanizada, elevações e cortes, vista aérea em
+  corte, fotos com o sol da bússola e as luzes que você colocou, e vídeos por um caminho de
+  câmera. Tudo renderiza na CPU, até num servidor sem tela.
+- **Alternativas sem medo.** Duplique a planta numa aba nova, mude e compare lado a lado.
+
+A lista completa de ferramentas MCP, os modos de linha de comando e como compilar estão no
+[README em inglês](README.md).
+
+## Privacidade e telemetria
+
+As versões publicadas enviam relatórios de erro pelo Sentry, junto com as notas que os
+agentes deixam pela ferramenta `feedback` do MCP. Vem **ligada por padrão** e desliga com um
+clique em **Ajuda → Enviar relatórios de erro** ou com `newera telemetry off`. Nada do
+projeto é enviado, nem o IP nem o nome da máquina. As versões publicadas também contam no
+Google Analytics que o app foi aberto, com versão, sistema e modo, pela mesma chave e com
+um id sorteado para a instalação. O conector na nuvem guarda só o necessário: e-mail,
+projetos e uso, nunca a conversa. Veja a [política de privacidade](https://3dneweraai.com/privacy/).
+
+## Apoie o projeto
+
+Tudo acima é gratuito e continua gratuito. Se o projeto te poupa tempo, o
+[plano Supporter](https://3dneweraai.com/pricing/) (US$ 5 por mês ou US$ 48 por ano)
+amplia as cotas da nuvem na sua conta e paga o servidor.
+
+## Contribuir
+
+Contribuições são bem-vindas. O guia está em [CONTRIBUTING.md](CONTRIBUTING.md) (em
+inglês); `make check` roda as mesmas verificações do CI.
+
+## Licença
+
+Licenciado sob a [Apache License 2.0](LICENSE-APACHE) ou a [licença MIT](LICENSE-MIT), à
+sua escolha.

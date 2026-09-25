@@ -25,7 +25,7 @@ Other files here:
   [3dneweraai.com/app](https://3dneweraai.com/app/).
 
 Elsewhere in the repository: [`scripts/`](../scripts/README.md) lists the build,
-test, install and release helpers, and [`plugins/room-areas`](../plugins/room-areas)
+test, install and release helpers, and [`examples/plugins/room-areas`](../examples/plugins/room-areas)
 is a minimal plugin to copy when writing your own (see "Collaboration and plugins"
 in [ARCHITECTURE.md](ARCHITECTURE.md)). The changelog is at the repository root:
 [CHANGELOG.md](../CHANGELOG.md).

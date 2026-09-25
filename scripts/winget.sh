@@ -11,7 +11,7 @@ set -euo pipefail
 version="${1:?version}"
 sha="$(printf '%s' "${2:?sha256 of newera-windows-x64.zip}" | tr 'a-f' 'A-F')"
 id="LeandroFerreira.3DNewEraAI"
-out="${3:-packaging/winget}/manifests/l/LeandroFerreira/3DNewEraAI/$version"
+out="${3:-target/packaging/winget}/manifests/l/LeandroFerreira/3DNewEraAI/$version"
 url="https://github.com/leandrodaf/3d-new-era-ai/releases/download/v$version/newera-windows-x64.zip"
 mkdir -p "$out"
 

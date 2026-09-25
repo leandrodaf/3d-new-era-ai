@@ -10,7 +10,8 @@ make run     # editor + HTTP + MCP with a sample house
 make dev     # same, rebuilding on every change
 ```
 
-Run `make` to list every command.
+Run `make` to list every command. [docs/README.md](docs/README.md) maps the
+documentation and [scripts/README.md](scripts/README.md) the helper scripts.
 
 Builds report to Sentry only with `NEWERA_SENTRY_DSN` set at build time. Released
 binaries get it from the repository secret; to test reporting locally, put
@@ -41,6 +42,12 @@ CI runs the same checks on Linux, macOS and Windows.
   only. Every asset needs a known, redistributable license.
 - Commit messages: [Conventional Commits](https://www.conventionalcommits.org)
   (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `ci:`, `chore:`).
+
+## Community
+
+Be kind and constructive: this project follows its [code of conduct](CODE_OF_CONDUCT.md).
+Report security issues privately, as described in [SECURITY.md](SECURITY.md), not in a
+public issue.
 
 ## License
 

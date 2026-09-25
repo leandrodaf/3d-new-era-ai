@@ -62,8 +62,8 @@ apart.
 | [Glama](https://glama.ai/mcp/servers/leandrodaf/3d-new-era-ai) | [`glama.json`](../glama.json), [`Dockerfile`](../Dockerfile) | Glama rebuilds from the repository |
 | [Smithery](https://smithery.ai/servers/leandro-daf4/new-era-3d) | the hosted URL | nothing to update |
 | mcp.so, awesome-mcp-servers | listing | nothing to update |
-| winget (`LeandroFerreira.3DNewEraAI`) | [`packaging/winget/`](../packaging/winget) | `release.yml` job `winget` ([`scripts/winget.sh`](../scripts/winget.sh)) |
-| Homebrew (`leandrodaf/tap/3d-new-era-ai`) | [`packaging/homebrew/`](../packaging/homebrew) | `release.yml` job `homebrew` ([`scripts/homebrew.sh`](../scripts/homebrew.sh)) |
+| winget (`LeandroFerreira.3DNewEraAI`) | manifests in [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) | `release.yml` job `winget` (winget-releaser); [`scripts/winget.sh`](../scripts/winget.sh) wrote the first submission |
+| Homebrew (`leandrodaf/tap/3d-new-era-ai`) | cask in [leandrodaf/homebrew-tap](https://github.com/leandrodaf/homebrew-tap) | `release.yml` job `homebrew` ([`scripts/homebrew.sh`](../scripts/homebrew.sh)) |
 | One-click install buttons (Cursor, VS Code, LM Studio) | links in the README and on the site | by hand when the URL changes |
 | Claude and ChatGPT custom connectors | `https://mcp.3dneweraai.com/mcp` | `deploy-vps.yml` on a release tag |
 
@@ -116,6 +116,12 @@ docker compose -f crates/newera-cloud/local/docker-compose.yml up --build
 
 Sign-in links are printed to the log. Every setting is documented in
 [`crates/newera-cloud/local/app.env.example`](../crates/newera-cloud/local/app.env.example).
+
+Production runs on the maintainer's VPS. [`app.onboard`](../app.onboard) describes it
+to the provisioning tool, which generates [`deploy/`](../deploy) and
+[`.github/workflows/deploy-vps.yml`](../.github/workflows/deploy-vps.yml). Those files are
+rewritten on every provisioning run, so change the manifest or the tool's templates rather
+than editing them by hand.
 
 - **Accounts:** our own account id; identity is a verified email (magic link or
   Google).

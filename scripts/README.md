@@ -46,6 +46,6 @@ See [docs/DISTRIBUTION.md](../docs/DISTRIBUTION.md) for how these fit together.
 | `mcpb.sh` | Packs the MCP Bundle (`.mcpb`) for Claude Desktop and the MCP Registry. | `release.yml` |
 | `registry-publish.sh` | Publishes the release to the Official MCP Registry. | `release.yml` |
 | `registry-key.sh` | Once per domain: creates the key that proves ownership of `3dneweraai.com` to the registry. | by hand |
-| `winget.sh` | Writes the winget manifests of a release. | `release.yml` |
-| `homebrew.sh` | Writes the Homebrew cask of a release. | `release.yml` |
+| `winget.sh` | Writes the winget manifests of a release into `target/packaging/`, for a manual submission; releases go through winget-releaser. | by hand |
+| `homebrew.sh` | Writes the Homebrew cask of a release (to `target/packaging/` unless given a path). | `release.yml` |
 | `site-build.sh` | Builds the website, the browser editor and the viewer into `_site/`. | `publish.yml` |
