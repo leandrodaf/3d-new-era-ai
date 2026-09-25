@@ -116,6 +116,7 @@ pub fn router(state: &AppState) -> Router {
                 .expose_headers([header::CONTENT_DISPOSITION]),
         );
     let cloud = Router::new()
+        .route("/", get(home))
         .route("/cloud/health", get(health))
         .route(
             "/.well-known/oauth-protected-resource",
@@ -156,6 +157,19 @@ pub fn router(state: &AppState) -> Router {
         .merge(site)
         .with_state(state.clone());
     newera_relay::router_with(state.rooms.clone()).merge(cloud)
+}
+
+/// The service's own address, opened in a browser: the site, which says
+/// what this is, its prices and its terms.
+async fn home(
+    axum::extract::State(app): axum::extract::State<AppState>,
+) -> axum::response::Redirect {
+    let site = app
+        .config
+        .site_origins
+        .first()
+        .map_or("https://3dneweraai.com", String::as_str);
+    axum::response::Redirect::permanent(&format!("{site}/"))
 }
 
 /// Healthy means the database answers: the deploy checks this, and rolls

@@ -934,6 +934,11 @@ async fn the_account_page_sells_manages_and_cancels_through_paddle() {
     };
     let http = client();
     // Signed out, the checkout asks for the account first.
+    // The bare address sends a browser to the site.
+    let home = http.get(format!("{base}/")).send().await.unwrap();
+    assert_eq!(home.status(), 308);
+    assert_eq!(location(&home), format!("{SITE}/"));
+
     let away = http
         .get(format!("{base}/billing/checkout"))
         .send()
