@@ -507,10 +507,15 @@ e testado; falta a conta.
       - token do lado do cliente `live_81a46817fcb8b4814230f74ca95` (público);
       - chave de API "newera-cloud server" (clientes: ler; portal: escrever; assinaturas:
         ler e escrever), válida até 24/09/2031
-- [ ] `PADDLE_CLIENT_TOKEN`, `PADDLE_WEBHOOK_SECRET`, `PADDLE_PRICE_MONTHLY`,
-      `PADDLE_PRICE_YEARLY` e `PADDLE_API_KEY` no `app.env` da VPS, container recriado
-      — você, com o comando sem eco; as variáveis `POLAR_*` de lá podem sair
-- [ ] Testar uma assinatura de verdade e o reembolso — eu
+- [x] `PADDLE_CLIENT_TOKEN`, `PADDLE_WEBHOOK_SECRET`, `PADDLE_PRICE_MONTHLY`,
+      `PADDLE_PRICE_YEARLY`, `PADDLE_API_KEY` e `PADDLE_ENVIRONMENT=production` no
+      `app.env` da VPS (as `POLAR_*` saíram), container recriado; os segredos também no
+      1Password — você, com os comandos sem eco (24/09/2026)
+- [x] Verificado em produção: `POST /billing/paddle` sem assinatura → 401; o checkout
+      mostra os preços que o Paddle devolve (US$ 5,00 e US$ 48,00); o simulador do
+      Paddle (`subscription.activated`, assinado com o segredo real) → 202 — eu
+- [ ] Testar uma assinatura de verdade e o reembolso, depois da verificação da conta e
+      da aprovação dos domínios — eu
 - [x] Código, testes, páginas de preço e reembolso, termos — eu
 
 **3. Registries e diretórios (Etapa 2)**
