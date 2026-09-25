@@ -5,7 +5,10 @@ runs:
   steps:
     - shell: bash
       run: |
-        sudo apt-get update -qq
+        # A runner reads no man pages: rebuilding their index after the
+        # install was a good part of this step's time.
+        sudo rm -f /var/lib/man-db/auto-update
+        sudo apt-get update -qq -o Acquire::Languages=none
         sudo apt-get install -y --no-install-recommends \
           libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev \
           libxrandr-dev libxi-dev libvulkan-dev

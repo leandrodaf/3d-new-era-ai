@@ -9,7 +9,7 @@
 # v1.0.0 e v10.2.3, e NÃO casa v1.0.0-rc1 — pré-release não vai pra
 # produção sem alguém decidir promover.
 #
-# Fluxo: testa -> builda a imagem -> publica no ghcr.io -> entra na VPS
+# Fluxo: testa e builda a imagem em paralelo -> publica no ghcr.io -> entra na VPS
 # pelo Cloudflare Tunnel e troca o container.
 #
 # A VPS não tem NENHUMA porta aberta pra internet (ufw default deny, e o
@@ -33,16 +33,28 @@ env:
   IMAGE: ghcr.io/leandrodaf/3d-new-era-ai
 
 jobs:
-  # Portão: `docker compose up` só roda com a suíte inteira verde. A app
-  # aplica o schema no próprio boot (AutoMigrate + Bootstrap*), então um
-  # deploy quebrado não é "endpoint fora do ar" — é migração rodando contra
-  # o banco de produção.
   # Portão: a imagem só é publicada com a suíte inteira verde. Muita app
   # aplica o schema no próprio boot, então um deploy quebrado não é
   # "endpoint fora do ar" — é migração rodando contra o banco de produção.
   # This app is Rust: the template's Go steps are replaced by what guards
   # it — the relay's and the hosted service's suites, the latter against the
   # Postgres below.
+  #
+  # Clippy, the tests and the image build run side by side; only `publish`,
+  # which pushes, waits for all three. The Rust caches are the ones CI saves
+  # on main (same shared-key): a tag can read main's caches but never another
+  # tag's, so a cache saved here would never be read again — hence no save.
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: clippy
+          save-if: false
+      - run: cargo clippy -p newera-relay -p newera-cloud --all-targets --locked -- -D warnings
+
   test:
     runs-on: ubuntu-latest
     env:
@@ -62,11 +74,38 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy -p newera-relay -p newera-cloud --all-targets --locked -- -D warnings
+        with:
+          shared-key: test
+          save-if: false
       - run: cargo test -p newera-relay -p newera-cloud --locked
 
-  build:
-    needs: test
+  # Builds the image while the suites run, pushing no tag: what it leaves is
+  # the layer cache in the registry, which `publish` then reads back whole.
+  # The cache lives in ghcr and not in GitHub's cache because a tag cannot
+  # read what an earlier tag saved there — every release built from zero.
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # o cache de camadas mora no ghcr.io
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64          # a VPS é x86_64
+          push: false
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max,image-manifest=true,oci-mediatypes=true
+
+  publish:
+    needs: [clippy, test, image]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -84,24 +123,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Every layer comes from the cache `image` just wrote: this is a push,
+      # not a second build.
       - id: push
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64          # a VPS é x86_64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.IMAGE }}:${{ github.ref_name }}
             ${{ env.IMAGE }}:latest
-          # Cache no próprio registry: o `go mod download` e o build ficam
-          # cacheados entre releases, sem inflar a imagem final.
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
           provenance: true
           sbom: true
 
   deploy:
-    needs: build
+    needs: publish
     runs-on: ubuntu-latest
     # ssh.agendocerto.com.br é protegido por Cloudflare Access: sem estas
     # duas variáveis o `cloudflared access ssh` tenta abrir um navegador

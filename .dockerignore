@@ -1,0 +1,8 @@
+# The image is built from the workspace manifests and crates/ only; without
+# this the context would carry target/ (gigabytes) to the daemon on every
+# local build.
+*
+!Cargo.toml
+!Cargo.lock
+!crates
+crates/**/target

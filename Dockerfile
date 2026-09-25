@@ -9,8 +9,23 @@
 # nothing to pivot to if the process is ever taken.
 # Bookworm, like the runtime below: a newer build base links against a newer
 # glibc than distroless debian12 carries, and the binary would not start.
-FROM rust:1.95-slim-bookworm AS build
+#
+# cargo-chef splits the build in two layers: the dependencies, rebuilt only
+# when Cargo.lock or a manifest changes, and our crates on top. The deploy
+# workflow keeps those layers in the registry, so a release compiles only
+# what changed in this repository.
+FROM rust:1.95-slim-bookworm AS chef
+RUN cargo install cargo-chef --locked --version 0.1.78
 WORKDIR /src
+
+FROM chef AS plan
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS build
+COPY --from=plan /src/recipe.json recipe.json
+RUN cargo chef cook --release -p newera-cloud --locked --recipe-path recipe.json
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 RUN cargo build --release -p newera-cloud --locked

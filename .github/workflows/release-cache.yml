@@ -1,0 +1,58 @@
+name: Release cache
+
+# Keeps the dependencies of the release builds compiled on main, where the
+# Release workflow can read them. Its runs are on tags, and a tag sees only
+# its own caches and main's: before this, every release built the whole
+# dependency tree from zero (10 to 16 minutes a platform with thin LTO).
+#
+# The steps mirror release.yml's build job — same toolchain, targets, env and
+# command — so the cache key comes out the same. Change one, change both.
+on:
+  push:
+    branches: [main]
+    paths:
+      - Cargo.lock
+      - rust-toolchain.toml
+      - .github/workflows/release-cache.yml
+  # A new stable Rust (every six weeks, on a Thursday) changes the key.
+  schedule:
+    - cron: "0 6 * * 5"
+  workflow_dispatch:
+
+concurrency:
+  group: release-cache
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  warm:
+    name: Warm ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - if: runner.os == 'Linux'
+        uses: ./.github/actions/linux-deps
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-${{ matrix.target }}
+      - run: cargo build -p newera --release --locked --target ${{ matrix.target }}

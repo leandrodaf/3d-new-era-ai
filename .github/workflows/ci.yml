@@ -42,6 +42,9 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: clippy
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
   test:
@@ -57,20 +60,17 @@ jobs:
         uses: ./.github/actions/linux-deps
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: test
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo test --workspace --locked
       - name: Build binary
         run: cargo build -p newera --locked
-
-  smoke:
-    name: MCP smoke test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/linux-deps
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo build -p newera --locked
-      - run: scripts/mcp-smoke.sh target/debug/newera
+      # The binary just built, talked to over MCP like an AI client would. It
+      # was a job of its own that compiled this same binary again.
+      - name: MCP smoke test
+        if: runner.os == 'Linux'
+        run: scripts/mcp-smoke.sh target/debug/newera
 
   cloud:
     name: Hosted service (Postgres)
@@ -91,6 +91,8 @@ jobs:
       - uses: ./.github/actions/linux-deps
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo test -p newera-cloud --locked
 
   msrv:
@@ -101,18 +103,29 @@ jobs:
       - uses: ./.github/actions/linux-deps
       - uses: dtolnay/rust-toolchain@1.95
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # `+1.95` overrides rust-toolchain.toml, which pins `stable`.
       - run: cargo +1.95 check --workspace --locked
 
   web:
     name: Web viewer and editor (wasm32)
     runs-on: ubuntu-latest
+    # What is checked here is that the wasm runs, not how small it is: thin LTO
+    # with one codegen unit was most of this job's compile time. publish.yml
+    # builds with the full release profile and runs these same browser tests
+    # before anything reaches the site.
+    env:
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo build -p newera-web --release --target wasm32-unknown-unknown --locked
       - run: cargo clippy -p newera-app -p newera-editor-web --target wasm32-unknown-unknown --locked -- -D warnings
       # Building it proves nothing about it running: this draws a wall with the
