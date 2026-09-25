@@ -79,6 +79,21 @@ lto = "thin"
 codegen-units = 1
 strip = true
 
+# The build to develop on. What `release` costs is the link — one codegen unit
+# and thin LTO over the whole tree — and what `dev` costs is a frontend that
+# barely parallelizes: measured on one changed constant in the core, the editor
+# comes back in 23 s here against 50 s on `dev` and 5 min 27 s on `release`,
+# and it is as fast to use as the one that ships. Debug assertions and overflow
+# checks stay on, as in `dev`. Ship `release`.
+[profile.quick]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
+debug-assertions = true
+overflow-checks = true
+strip = "debuginfo"
+
 # Keep debug builds lean: full debug info only for our crates, and optimized
 # dependencies so the 3D view and geometry stay fluid while developing.
 [profile.dev]

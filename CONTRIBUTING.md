@@ -13,9 +13,10 @@ make dev     # same, rebuilding on every change
 ### The short loop
 
 A change in `newera-core` rebuilds every crate above it and relinks the editor —
-about a minute and a half, and `--release` several times that. For anything you
+about 40 seconds (15 for a change in the UI alone), and `--release` minutes,
+because of the single codegen unit and the LTO it links with. For anything you
 have to *look* at, the picture is the answer and the window is not: `make shot`
-stops at `newera-render` and writes a PNG (about 20 seconds from a change in the
+stops at `newera-render` and writes a PNG (about 15 seconds from a change in the
 core), and `make watch` redraws it on every save.
 
 ```sh
@@ -25,8 +26,18 @@ make shot SHOT_VIEW='top' SHOT_OUT=/tmp/p.png
 make shot SHOT_FILE=my-plan.newera SHOT_VIEW='aerial yaw=45 pitch=35 walls=down'
 ```
 
-Keep `--release` for measuring speed and for what you ship; it is not the build
-to iterate on.
+When the editor has to be fast to *use* while you work on it — a photo render,
+a big plan, a smooth 3D view — `make run-quick` is the same optimized code
+without LTO. Keep `--release` for what you ship; it is not the build to iterate
+on.
+
+`FILE=` opens the plan you are chasing a bug in, and `make dev` reopens it after
+every rebuild:
+
+```sh
+make dev FILE=plans/kitchen.newera
+make shot FILE=plans/kitchen.newera SHOT_VIEW='cam=0'
+```
 
 Run `make` to list every command. [docs/README.md](docs/README.md) maps the
 documentation and [scripts/README.md](scripts/README.md) the helper scripts.
