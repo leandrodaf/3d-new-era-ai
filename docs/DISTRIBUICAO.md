@@ -491,17 +491,22 @@ sua confirmação a cada envio** (formulário, publicação, configuração em p
 
 **2. Pagamento (Paddle)** — o Polar saiu: não paga vendedor no Brasil. O código está pronto
 e testado; falta a conta.
-- [ ] Criar a conta no Paddle (https://www.paddle.com, "Get started"), como pessoa física,
-      com os dados de recebimento (wire em dólar ou Payoneer) — **você**
-- [ ] Pedir a aprovação do domínio `3dneweraai.com` (o checkout abre em
-      `mcp.3dneweraai.com`) — **você** pede; o site já tem o que a revisão exige
-- [ ] No painel do Paddle — eu, com ele aberto:
-      - produto "Supporter" com dois preços: US$ 5/mês e US$ 48/ano;
-      - destino de notificação `https://mcp.3dneweraai.com/billing/paddle`, eventos
-        `subscription.*`;
-      - token do lado do cliente e uma chave de API (clientes: ler; sessões do portal e
-        assinaturas: escrever);
-      - link de pagamento padrão: `https://mcp.3dneweraai.com/billing/checkout`
+- [x] Conta Live no Paddle, pessoa física, Brasil (24/09/2026) — você
+- [ ] Verificação da conta no Paddle (documento e dados de recebimento: wire em dólar ou
+      Payoneer), em Get started → "Verify your account" — **você**
+- [x] Aprovação de domínio pedida: `3dneweraai.com` e `mcp.3dneweraai.com` (Pending);
+      a raiz de `mcp.3dneweraai.com` leva ao site desde a 1.9.2 — eu
+- [ ] Link de pagamento padrão `https://mcp.3dneweraai.com/billing/checkout` (Checkout
+      settings), depois que os domínios forem aprovados — eu
+- [x] No painel do Paddle — eu:
+      - produto "3D New Era AI Supporter" (SaaS) `pro_01m3ay90qxy6f1nm9v3hadk4vt`, preços
+        US$ 5/mês `pri_01m3ayb1gxxv5q97tbvft1eb8p` e US$ 48/ano
+        `pri_01m3ayfgv7b4n1931qy70bdqec` (o painel usa formato brasileiro: "5.00" vira 500);
+      - destino de notificação `https://mcp.3dneweraai.com/billing/paddle`, 9 eventos
+        `subscription.*`, plataforma e simulação;
+      - token do lado do cliente `live_81a46817fcb8b4814230f74ca95` (público);
+      - chave de API "newera-cloud server" (clientes: ler; portal: escrever; assinaturas:
+        ler e escrever), válida até 24/09/2031
 - [ ] `PADDLE_CLIENT_TOKEN`, `PADDLE_WEBHOOK_SECRET`, `PADDLE_PRICE_MONTHLY`,
       `PADDLE_PRICE_YEARLY` e `PADDLE_API_KEY` no `app.env` da VPS, container recriado
       — você, com o comando sem eco; as variáveis `POLAR_*` de lá podem sair
