@@ -51,3 +51,33 @@ body {
 .legal hr { border: 0; border-top: 1px solid var(--rule); margin: 56px 0; }
 .legal__back,
 .legal__meta { color: var(--graphite); font-size: 0.9rem; }
+
+/* The PT/EN switch. Without JavaScript both sections stay on the page, one
+   after the other, and the switch is just two inert letters — so it only
+   appears once `legal.js` has taken charge of showing one section. */
+.legal__lang { display: none; }
+.js .legal__lang { display: inline-flex; gap: 2px; vertical-align: middle; }
+
+.legal__lang button {
+  font: inherit;
+  font-size: 0.85rem;
+  line-height: 1;
+  color: var(--graphite);
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 7px 9px;
+  cursor: pointer;
+}
+
+.legal__lang button:hover { color: var(--ink); }
+
+.legal__lang button[aria-pressed="true"] {
+  color: var(--paper);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+/* A section hidden by the switch: `hidden` alone loses to `display: block`
+   further up in some browsers' default sheets. */
+.legal [hidden] { display: none !important; }

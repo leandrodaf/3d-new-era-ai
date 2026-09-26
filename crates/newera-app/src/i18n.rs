@@ -491,6 +491,11 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
             "Acercar (Ctrl +)",
             "Zoom avant (Ctrl +)",
         ],
+        "Apoiar o projeto" => [
+            "Support the project",
+            "Apoyar el proyecto",
+            "Soutenir le projet",
+        ],
         "Arco" => ["Arc", "Arco", "Arc"],
         "Arquitetura" => ["Architecture", "Arquitectura", "Architecture"],
         "Arquivo" => ["File", "Archivo", "Fichier"],
@@ -880,6 +885,7 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
             "Conserver les proportions",
         ],
         "Marca" => ["Brand", "Marca", "Marque"],
+        "Me paga um café" => ["Buy me a coffee", "Invítame un café", "Offre-moi un café"],
         "Medida" => ["Measure", "Medida", "Mesure"],
         "Modelo" => ["Model", "Modelo", "Modèle"],
         "Modelo importado. Ajuste medidas com Enter ou pelas alças." => [

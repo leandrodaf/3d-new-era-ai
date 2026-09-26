@@ -8,6 +8,30 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The paid plan is supported through Buy Me a Coffee instead of Paddle, whose
+  verification a seller in Brazil could not get through. The account page sends people to
+  the Buy Me a Coffee membership page and the webhook (`/billing/buymeacoffee`) follows
+  the `membership.*` and `recurring_donation.*` events. A cancelled membership keeps the
+  plan until the end of the period already paid for, as before.
+- What ties a payment to an account is the address it was paid with, not an id carried
+  through the checkout: Buy Me a Coffee's page takes nothing of ours along. The support
+  page shows the account's address and asks for it, and an address with no account yet
+  gets the one a sign-in link would have made.
+- Closing an account no longer stops the charges: Buy Me a Coffee gives a seller no way
+  to cancel a membership. The account page says so before and after closing, and the
+  plan stops here either way. The warning counts the subscriptions left from Paddle too,
+  which used to be cancelled through an API this no longer holds a key for.
+- A support button, in Buy Me a Coffee's yellow, at the left of the bar on the site, in
+  the editor's command bar — desktop and browser — and on the account pages. It follows
+  the language around it; the membership is charged in US dollars wherever it is pressed.
+- The pricing, terms, refund and privacy pages show one language instead of stacking two.
+  They pick it the way the home page does — `?lang=`, then what was last chosen, then the
+  browser — and carry a PT/EN switch. Both texts stay in the page for a reader without
+  JavaScript and for a crawler, and the tab's title follows the language too.
+- Those four pages name the project's maintainer rather than a company, and no longer
+  claim a merchant of record: Buy Me a Coffee is a platform, not a reseller, so the
+  seller is whoever maintains the project and the tax is theirs. Prices are stated in US
+  dollars, the currency actually charged — Paddle's localised checkout is gone.
 - Documentation for contributors, in English: a rewritten README, a docs index,
   `docs/STANDARDS.md` (was `NORMAS.md`), `docs/DISTRIBUTION.md`, and `SECURITY.md` and
   `CODE_OF_CONDUCT.md` at the root. `make` lists its targets in English.

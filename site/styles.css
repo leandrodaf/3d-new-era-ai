@@ -474,3 +474,100 @@ button { font: inherit; color: inherit; }
 .oneclick__lead { margin: 18px 0 8px; color: var(--graphite); font-size: 14px; }
 .oneclick { display: flex; flex-wrap: wrap; gap: 8px; }
 .oneclick .btn { height: 44px; }
+
+/* THE SUPPORT BUTTON
+   Buy Me a Coffee's own button, drawn here rather than loaded from their CDN:
+   no third-party request, no layout shift, and it follows the site's language.
+   The charge is always in US dollars, so the button carries no price — the
+   membership page states it.
+
+   It is never hidden: no breakpoint below turns it off, only shrinks it. */
+.bmc {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin-left: 14px;
+  padding: 7px 15px 8px;
+  border-radius: 9px;
+  background: #ffdd00;
+  color: #0d0c0c;
+  text-decoration: none;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.16);
+  transition: transform 0.13s ease, box-shadow 0.13s ease;
+}
+
+.bmc:hover,
+.bmc:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+  color: #0d0c0c;
+}
+
+.bmc:active { transform: translateY(0); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.16); }
+
+.bmc__cup {
+  width: 18px;
+  height: 22px;
+  flex: none;
+  fill: #fff;
+  stroke: #0d0c0c;
+  stroke-width: 2.1;
+  stroke-linejoin: round;
+}
+
+/* Cookie is a script face: it sits high on the line and reads small for its
+   size, so it is set larger than the bar's type and nudged onto the baseline
+   of the cup. The fallbacks are the ones a machine actually has. */
+.bmc__text {
+  font-family: "Cookie", "Snell Roundhand", "Segoe Script", cursive;
+  font-size: 23px;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translateY(1px);
+}
+
+/* The bar gives its space to the button before the section links. */
+@media (max-width: 1000px) {
+  .bmc { margin-left: 10px; }
+}
+
+@media (max-width: 640px) {
+  .bmc { margin-left: 8px; padding: 6px 11px 7px; gap: 6px; }
+  .bmc__cup { width: 15px; height: 18px; }
+  .bmc__text { font-size: 19px; }
+}
+
+/* Narrow enough that the words would push the bar wide: the cup alone still
+   says it, and the label stays for a screen reader. */
+@media (max-width: 400px) {
+  .bmc { padding: 6px 9px; }
+  .bmc__text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* A finger needs a target, and at 400px the button is only its cup: the box
+   keeps the height and width a tap wants even when the words are gone. */
+@media (pointer: coarse) {
+  .bmc { min-height: 44px; min-width: 44px; justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bmc, .bmc:hover, .bmc:focus-visible, .bmc:active { transform: none; transition: none; }
+}
+
+/* The support button takes room the section links used to have. No link may
+   wrap onto a second line, and the bar folds them into the menu a little
+   earlier than it used to — the button is never what gives way. */
+.nav__links a { white-space: nowrap; }
+
+@media (max-width: 1180px) {
+  .nav__links { display: none; }
+  .nav__toggle { display: inline-flex; }
+}

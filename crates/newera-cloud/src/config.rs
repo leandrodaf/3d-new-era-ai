@@ -45,43 +45,33 @@ impl std::fmt::Debug for Google {
     }
 }
 
-/// Paddle, the merchant of record that sells the paid plan: it charges,
-/// handles the tax and the invoice, and pays out in dollars to Brazil. This
-/// service only opens its checkout and listens to what it says.
+/// Buy Me a Coffee, where the paid plan is supported: it sells the
+/// membership on a page of its own and pays out through the Stripe account
+/// connected to it. This service only points people at that page and listens
+/// to what it says afterwards.
 #[derive(Clone)]
-pub struct Paddle {
-    /// `sandbox` or `production`, as the keys were made in.
-    pub sandbox: bool,
-    /// The client-side token (`live_…` or `test_…`) the checkout page opens
-    /// Paddle.js with. Public by design.
-    pub client_token: String,
-    /// The notification destination's secret (`pdl_ntfset_…`): only
-    /// deliveries signed with it change a plan.
+pub struct BuyMeACoffee {
+    /// The page's name, the part after `buymeacoffee.com/`.
+    pub page: String,
+    /// The webhook's signing secret: only deliveries signed with it change a
+    /// plan.
     pub webhook_secret: String,
-    /// The monthly and the yearly price of the paid plan (`pri_…`).
-    pub monthly_price: String,
-    pub yearly_price: String,
-    /// A server-side API key, for "manage my subscription", cancelling with a
-    /// closed account and finding who paid when the checkout left no account
-    /// id. Everything else works without it.
-    pub api_key: Option<String>,
-    /// Paddle's API, by environment; tests point it elsewhere.
-    pub api_url: String,
+    /// The membership levels that pay for the plan, by id. Empty means every
+    /// level does, which is right for a page that sells only this.
+    pub levels: Vec<i64>,
+    /// Whether a test event from the dashboard (`live_mode: false`) may
+    /// change a plan. Off in production, where only real money should.
+    pub test_events: bool,
 }
 
-impl Paddle {
-    /// Reads `PADDLE_*`: all of the client token, the webhook secret and both
-    /// prices, or none (the paid plan off).
+impl BuyMeACoffee {
+    /// Reads `BUYMEACOFFEE_*`: both the page and the webhook secret, or
+    /// neither (the paid plan off).
     fn from_env(var: &dyn Fn(&str) -> Option<String>) -> anyhow::Result<Option<Self>> {
-        let required = [
-            "PADDLE_CLIENT_TOKEN",
-            "PADDLE_WEBHOOK_SECRET",
-            "PADDLE_PRICE_MONTHLY",
-            "PADDLE_PRICE_YEARLY",
-        ];
+        let required = ["BUYMEACOFFEE_PAGE", "BUYMEACOFFEE_WEBHOOK_SECRET"];
         let values: Vec<Option<String>> = required.iter().map(|name| var(name)).collect();
         if values.iter().all(Option::is_none) {
-            tracing::warn!("no PADDLE_* settings: the paid plan is off");
+            tracing::warn!("no BUYMEACOFFEE_* settings: the paid plan is off");
             return Ok(None);
         }
         let missing: Vec<&str> = required
@@ -91,42 +81,45 @@ impl Paddle {
             .map(|(name, _)| *name)
             .collect();
         anyhow::ensure!(missing.is_empty(), "missing {}", missing.join(", "));
-        let sandbox = match var("PADDLE_ENVIRONMENT").as_deref() {
-            None | Some("production") => false,
-            Some("sandbox") => true,
-            Some(other) => {
-                anyhow::bail!("PADDLE_ENVIRONMENT is sandbox or production, not {other}")
-            }
-        };
         let mut values = values.into_iter().map(Option::unwrap_or_default);
         let mut next = || values.next().unwrap_or_default();
+        // A whole URL where a name was asked for is the easy mistake to make.
+        let page = next()
+            .trim()
+            .trim_start_matches("https://")
+            .trim_start_matches("http://")
+            .trim_start_matches("www.")
+            .trim_start_matches("buymeacoffee.com/")
+            .trim_matches('/')
+            .to_owned();
+        anyhow::ensure!(!page.is_empty(), "BUYMEACOFFEE_PAGE is empty");
+        let webhook_secret = next();
+        let levels = var("BUYMEACOFFEE_LEVELS")
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(|l| l.parse::<i64>().context("BUYMEACOFFEE_LEVELS"))
+            .collect::<anyhow::Result<Vec<_>>>()?;
         Ok(Some(Self {
-            sandbox,
-            client_token: next(),
-            webhook_secret: next(),
-            monthly_price: next(),
-            yearly_price: next(),
-            api_key: var("PADDLE_API_KEY"),
-            api_url: if sandbox {
-                "https://sandbox-api.paddle.com"
-            } else {
-                "https://api.paddle.com"
-            }
-            .to_owned(),
+            page,
+            webhook_secret,
+            levels,
+            test_events: matches!(
+                var("BUYMEACOFFEE_TEST_EVENTS").as_deref(),
+                Some("1" | "true")
+            ),
         }))
     }
 }
 
-impl std::fmt::Debug for Paddle {
+impl std::fmt::Debug for BuyMeACoffee {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Paddle")
-            .field("sandbox", &self.sandbox)
-            .field("client_token", &self.client_token)
+        f.debug_struct("BuyMeACoffee")
+            .field("page", &self.page)
             .field("webhook_secret", &"<hidden>")
-            .field("monthly_price", &self.monthly_price)
-            .field("yearly_price", &self.yearly_price)
-            .field("api_key", &self.api_key.as_ref().map(|_| "<hidden>"))
-            .field("api_url", &self.api_url)
+            .field("levels", &self.levels)
+            .field("test_events", &self.test_events)
             .finish()
     }
 }
@@ -145,9 +138,9 @@ pub struct Config {
     pub google: Option<Google>,
     /// The browser editor, where "open in the editor" goes.
     pub editor_url: String,
-    /// The paid plan, sold through Paddle; `None` leaves every account on
-    /// the free plan and the account page without a way to pay.
-    pub paddle: Option<Paddle>,
+    /// The paid plan, supported through Buy Me a Coffee; `None` leaves every
+    /// account on the free plan and the account page without a way to pay.
+    pub buymeacoffee: Option<BuyMeACoffee>,
     /// The port to listen on, on every interface of the container; the
     /// Cloudflare tunnel in front is what reaches it.
     pub port: u16,
@@ -162,7 +155,7 @@ impl std::fmt::Debug for Config {
             .field("mail", &self.mail)
             .field("google", &self.google)
             .field("editor_url", &self.editor_url)
-            .field("paddle", &self.paddle)
+            .field("buymeacoffee", &self.buymeacoffee)
             .field("port", &self.port)
             .finish()
     }
@@ -210,7 +203,7 @@ impl Config {
         };
         let editor_url =
             var("NEWERA_EDITOR_URL").unwrap_or_else(|| "https://3dneweraai.com/app/".to_owned());
-        let paddle = Paddle::from_env(&var)?;
+        let buymeacoffee = BuyMeACoffee::from_env(&var)?;
         let port = var("PORT")
             .map(|p| p.parse().context("PORT"))
             .transpose()?
@@ -222,7 +215,7 @@ impl Config {
             mail,
             google,
             editor_url,
-            paddle,
+            buymeacoffee,
             port,
         })
     }
