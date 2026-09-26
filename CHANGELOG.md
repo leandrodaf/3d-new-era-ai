@@ -25,6 +25,12 @@ All notable changes to this project are documented here. The format follows
   runs the same three locally. A licence file runs nothing at all, having nothing any of
   the three can check. The plugin's own Markdown is exempt from the exemption: the Format
   job validates every `SKILL.md`.
+- `main` is protected: a pull request with its checks green is the only way in, force
+  pushes and deletion are refused, and history stays linear. The path filtering that
+  skipped prose moved out of the workflow triggers and into a `Changed paths` job, because
+  a required check that never reports blocks a pull request forever while a skipped one
+  counts as a pass. `scripts/changed-kind.sh` decides, and proves itself against a table
+  of cases on every run.
 
 ### Removed
 
