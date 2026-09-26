@@ -1339,37 +1339,41 @@ impl NewEraApp {
 
     // --- Layout ----------------------------------------------------------------
 
-    /// Buy Me a Coffee's button, at the left of the command bar, in the same
-    /// yellow it has on the site. It is the one thing here that is not about
-    /// the drawing, so it says what it is and goes nowhere near a menu that
-    /// could swallow it: the app is free, and this is how it stays paid for.
-    fn support_button(ui: &mut egui::Ui) {
+    /// Buy Me a Coffee's button, at the right end of the tool bar, in the same
+    /// yellow it has on the site. It is the one thing in this bar that is not
+    /// about the drawing, so it sits apart from the tools rather than among
+    /// them: the app is free, and this is how it stays paid for.
+    ///
+    /// Where there is no room for words it becomes one more button the size of
+    /// the others, with the cup and nothing else — the name still reaches a
+    /// screen reader and a hover.
+    fn support_button(ui: &mut egui::Ui, narrow: bool) {
         // The brand's yellow and its near-black, both fixed: the button reads
         // the same in the light theme and the dark one, as it does on the site.
         let yellow = egui::Color32::from_rgb(0xff, 0xdd, 0x00);
         let ink = egui::Color32::from_rgb(0x0d, 0x0c, 0x0c);
-        let label = egui::RichText::new(format!(
-            "{} {}",
-            icon::COFFEE,
-            crate::i18n::tr("Me paga um café")
-        ))
-        .color(ink);
-        let button = egui::Button::new(label)
+        let words = crate::i18n::tr("Me paga um café");
+        let label = if narrow {
+            // The size the tools beside it are drawn at.
+            RichText::new(icon::COFFEE).size(17.0)
+        } else {
+            RichText::new(format!("{} {}", icon::COFFEE, words))
+        };
+        let button = egui::Button::new(label.color(ink))
             .fill(yellow)
             .corner_radius(egui::CornerRadius::same(7));
-        if ui
-            .add(button)
-            .on_hover_text(crate::i18n::tr("Apoiar o projeto"))
-            .clicked()
-        {
+        let response = ui.add(button);
+        // Narrowed to the cup, the button's own text is one glyph of an icon
+        // font, which is what a screen reader would otherwise be handed. The
+        // hover text is a picture; this is the name.
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, words));
+        if response.on_hover_text(words).clicked() {
             ui.ctx().open_url(egui::OpenUrl::new_tab(SUPPORT_URL));
         }
-        ui.add_space(6.0);
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
         egui::MenuBar::new().ui(ui, |ui| {
-            Self::support_button(ui);
             ui.menu_button(crate::i18n::tr("Arquivo"), |ui| {
                 if menu_item(ui, icon::FILE_PLUS, crate::i18n::tr("Novo"), "Ctrl+N", true) {
                     self.request(Pending::New);
@@ -1900,15 +1904,27 @@ impl NewEraApp {
     }
 
     fn toolbar(&mut self, ui: &mut egui::Ui) {
-        // Narrow enough and the tools do not fit on one line: they scroll
-        // sideways rather than falling off the edge.
-        if ui.ctx().content_rect().width() < NARROW {
-            egui::ScrollArea::horizontal()
-                .id_salt("toolbar_scroll")
-                .show(ui, |ui| self.toolbar_row(ui));
-            return;
-        }
-        self.toolbar_row(ui);
+        let narrow = ui.ctx().content_rect().width() < NARROW;
+        ui.horizontal(|ui| {
+            // The bar is laid out from its right end, so the support button
+            // keeps that end and the tools take whatever is left. On a narrow
+            // window they scroll underneath it rather than pushing it off the
+            // edge, which is the one thing that must not happen to it.
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                Self::support_button(ui, narrow);
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    // Narrow enough and the tools do not fit on one line: they
+                    // scroll sideways rather than falling off the edge.
+                    if narrow {
+                        egui::ScrollArea::horizontal()
+                            .id_salt("toolbar_scroll")
+                            .show(ui, |ui| self.toolbar_row(ui));
+                    } else {
+                        self.toolbar_row(ui);
+                    }
+                });
+            });
+        });
     }
 
     fn toolbar_row(&mut self, ui: &mut egui::Ui) {

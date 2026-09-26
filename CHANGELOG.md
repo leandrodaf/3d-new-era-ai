@@ -21,9 +21,12 @@ All notable changes to this project are documented here. The format follows
   to cancel a membership. The account page says so before and after closing, and the
   plan stops here either way. The warning counts the subscriptions left from Paddle too,
   which used to be cancelled through an API this no longer holds a key for.
-- A support button, in Buy Me a Coffee's yellow, at the left of the bar on the site, in
-  the editor's command bar — desktop and browser — and on the account pages. It follows
-  the language around it; the membership is charged in US dollars wherever it is pressed.
+- A support button, in Buy Me a Coffee's yellow, at the left of the bar on the site, at
+  the right end of the editor's tool bar — desktop and browser — and on the account
+  pages. It follows the language around it; the membership is charged in US dollars
+  wherever it is pressed. Too narrow for words, the editor's becomes one more button the
+  size of the tools beside it, with the cup alone, and the tools scroll underneath rather
+  than pushing it off the edge.
 - The pricing, terms, refund and privacy pages show one language instead of stacking two.
   They pick it the way the home page does — `?lang=`, then what was last chosen, then the
   browser — and carry a PT/EN switch. Both texts stay in the page for a reader without
