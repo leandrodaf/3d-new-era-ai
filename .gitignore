@@ -1,4 +1,6 @@
 /target
+# Claude Code's local settings and scratch worktrees
+.claude/
 # Local secrets (Sentry DSN), read by the Makefile
 .env.local
 *.swp
