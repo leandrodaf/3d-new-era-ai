@@ -122,11 +122,24 @@ fmt-check: ## Checks formatting without changing files
 lint: ## Clippy pedantic, warnings as errors
 	$(CARGO) clippy --workspace --all-targets --locked -- -D warnings
 
+# The pages the spell checker reads, named rather than globbed: a path given on
+# the command line is checked whether _typos.toml excludes it or not, and
+# README.pt-BR.md is Portuguese. Keep in step with .github/workflows/docs.yml.
+DOCS_PATHS := README.md CHANGELOG.md CONTRIBUTING.md CODE_OF_CONDUCT.md SECURITY.md docs .github plugin plugin-desktop
+
 .PHONY: docs-lint
 docs-lint: ## What the Docs workflow runs: Markdown rules, spelling and relative links
 	npx --yes markdownlint-cli2
-	@command -v typos >/dev/null && typos *.md docs .github plugin plugin-desktop || echo "typos not installed, skipping (brew install typos-cli)"
-	@command -v lychee >/dev/null && lychee --offline --no-progress "**/*.md" || echo "lychee not installed, skipping (brew install lychee)"
+	@if command -v typos >/dev/null; then \
+		typos $(DOCS_PATHS); \
+	else \
+		echo "typos not installed, skipping (brew install typos-cli)"; \
+	fi
+	@if command -v lychee >/dev/null; then \
+		lychee --offline --no-progress "**/*.md"; \
+	else \
+		echo "lychee not installed, skipping (brew install lychee)"; \
+	fi
 
 .PHONY: test
 test: ## Unit and integration tests

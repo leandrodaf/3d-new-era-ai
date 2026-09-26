@@ -47,10 +47,12 @@ jobs:
       - uses: actions/checkout@v7
       # The documentation, not the Rust tree: the UI strings there are
       # translated inline, and an English dictionary reads "Duplicar versão
-      # atual" as three mistakes.
+      # atual" as three mistakes. README.pt-BR.md is named out rather than
+      # excluded in _typos.toml, because a path passed on the command line is
+      # checked whether it is excluded or not. Add a new root page here.
       - uses: crate-ci/typos@v1.50.3
         with:
-          files: "*.md docs .github plugin plugin-desktop"
+          files: "README.md CHANGELOG.md CONTRIBUTING.md CODE_OF_CONDUCT.md SECURITY.md docs .github plugin plugin-desktop"
 
   links:
     name: Links

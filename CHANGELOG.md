@@ -17,13 +17,14 @@ All notable changes to this project are documented here. The format follows
   dashboard nobody outside the org can see: clippy treated as a build failure, the
   `newera-mcp` tool shapes treated as a public contract, and outside contributors
   allowed to talk to the reviewer on their own pull request.
-- A prose-only change no longer runs the whole CI. Editing a README, `docs/`, a licence
-  or an issue template used to spend eighteen minutes across seven jobs to prove that
-  Markdown still compiles. It runs a Docs workflow instead — markdownlint against rules
-  the repository carries in `.markdownlint-cli2.jsonc`, spelling, and the relative links
+- A prose-only change no longer runs the whole CI. Editing a README, `docs/` or an issue
+  template used to spend eighteen minutes across seven jobs to prove that Markdown still
+  compiles. Markdown runs a Docs workflow instead — markdownlint against rules the
+  repository carries in `.markdownlint-cli2.jsonc`, spelling, and the relative links
   between pages, so a renamed page cannot quietly orphan the link to it. `make docs-lint`
-  runs the same three locally. The plugin's own Markdown is exempt from the exemption:
-  the Format job validates every `SKILL.md`.
+  runs the same three locally. A licence file runs nothing at all, having nothing any of
+  the three can check. The plugin's own Markdown is exempt from the exemption: the Format
+  job validates every `SKILL.md`.
 
 ### Removed
 

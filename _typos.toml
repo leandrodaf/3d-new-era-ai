@@ -2,10 +2,8 @@
 #
 # The Rust tree is out of scope on purpose: the UI strings are translated
 # inline, so a spell checker carrying an English dictionary reads "Duplicar
-# versão atual" as three mistakes. The Docs workflow passes it the documentation
-# instead.
+# versão atual" as three mistakes. The Docs workflow names the documentation
+# instead, and leaves README.pt-BR.md out of that list for the same reason —
+# this exclude only covers a directory walk that reaches it.
 [files]
-extend-exclude = [
-  # English dictionary, Portuguese page.
-  "README.pt-BR.md",
-]
+extend-exclude = ["README.pt-BR.md"]
