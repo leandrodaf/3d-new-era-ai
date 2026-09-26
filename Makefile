@@ -26,28 +26,38 @@ RESET := \033[0m
 
 ##@ Run
 
+# The project to open: the sample house, or FILE=plan.newera — the one with the
+# bug you are chasing, reopened by `make dev` after every rebuild.
+FILE ?=
+OPEN := $(if $(FILE),$(FILE),--demo)
+
+# The build to iterate on: optimized without LTO, so the editor is both quick to
+# rebuild and quick to use (Cargo.toml says what it measures). `PROFILE=dev` for
+# a debugger, full debug info and an unoptimized build.
+PROFILE ?= quick
+
 .PHONY: run
-run: ## Opens the editor with the demo house + HTTP + MCP
-	$(CARGO) run -p newera -- --demo
+run: ## Opens the editor with the demo house (or FILE=plan.newera) + HTTP + MCP
+	$(CARGO) run -p newera --profile $(PROFILE) -- $(OPEN)
 
 .PHONY: run-empty
 run-empty: ## Opens the editor with an empty project
-	$(CARGO) run -p newera
+	$(CARGO) run -p newera --profile $(PROFILE)
 
 .PHONY: run-release
-run-release: ## Opens the editor in release mode (much smoother rendering)
-	$(CARGO) run -p newera --release -- --demo
+run-release: ## Opens the editor exactly as it ships (thin LTO; slowest to build)
+	$(CARGO) run -p newera --release -- $(OPEN)
 
 .PHONY: dev
 dev: ## Rebuilds and reopens the editor on every change (cargo-watch)
-	@command -v cargo-watch >/dev/null || { echo "cargo-watch ausente: rode 'make setup'"; exit 1; }
-	cargo watch -c -w crates -x "run -p newera -- --demo"
+	@command -v cargo-watch >/dev/null || { echo "cargo-watch missing: run 'make setup'"; exit 1; }
+	cargo watch -c -w crates -x "run -p newera --profile $(PROFILE) -- $(OPEN)"
 
 # A change in the core rebuilds every crate above it and relinks the editor:
-# about a minute and a half. Stopping at newera-render is a quarter of that,
-# and for anything you have to *look* at — floors, walls, joins, materials —
-# the picture is the answer, not the window.
-SHOT_FILE ?= web/demo.newera
+# about forty seconds. Stopping at newera-render is a third of that, and for
+# anything you have to *look* at — floors, walls, joins, materials — the
+# picture is the answer, not the window.
+SHOT_FILE ?= $(if $(FILE),$(FILE),web/demo.newera)
 SHOT_OUT  ?= target/shot.png
 SHOT_VIEW ?= aerial
 
