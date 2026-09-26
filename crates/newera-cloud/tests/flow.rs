@@ -941,6 +941,40 @@ async fn a_membership_raises_the_plan_and_its_end_lowers_it() {
     );
     assert_eq!(plan("dan@example.com").await, "free");
 
+    // Moved down to a level that does not pay for the plan: the plan goes
+    // with it. Left alone, the row would keep saying the account pays, and
+    // every later event for that membership — the cancellation included —
+    // would be dropped for having the wrong level.
+    assert_eq!(
+        bmc(
+            &base,
+            "membership.started",
+            membership(5, "edu@example.com", "active", false, 7),
+            true,
+            true
+        )
+        .await,
+        200
+    );
+    assert_eq!(plan("edu@example.com").await, "supporter");
+    assert_eq!(
+        bmc_at(
+            &base,
+            "membership.updated",
+            membership(5, "edu@example.com", "active", false, 99),
+            true,
+            true,
+            1_800_000_400,
+        )
+        .await,
+        200
+    );
+    assert_eq!(
+        plan("edu@example.com").await,
+        "free",
+        "the plan does not outlive the level that bought it"
+    );
+
     // A test event from the dashboard never gives the plan away.
     assert_eq!(
         bmc(

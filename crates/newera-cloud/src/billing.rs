@@ -129,7 +129,14 @@ pub async fn webhook(State(app): State<AppState>, headers: HeaderMap, body: Byte
         // One-off coffees, extras, commissions: thank you, but no plan.
         return StatusCode::ACCEPTED;
     }
-    let created = event["created"].as_i64().unwrap_or_default();
+    // Every envelope carries when it was made, and that is the only thing
+    // ordering one delivery against another. A delivery without it would sit
+    // at the epoch, where it could neither be told from a replay of itself
+    // nor be overtaken in the right direction.
+    let Some(created) = event["created"].as_i64().filter(|at| *at > 0) else {
+        tracing::warn!("buymeacoffee {kind}: no created timestamp, ignored");
+        return StatusCode::ACCEPTED;
+    };
     match subscription(&app, bmc, kind, &event["data"], created).await {
         Ok(()) => StatusCode::OK,
         Err(err) => {
@@ -191,6 +198,25 @@ async fn subscription(
         let level = data["membership_level_id"].as_i64();
         if !level.is_some_and(|l| bmc.levels.contains(&l)) {
             tracing::info!("buymeacoffee {kind}: {level:?} is not a level of the paid plan");
+            // A membership that used to be one of them and was moved down is
+            // not simply none of our business: its row is still here saying
+            // the account pays. Leaving it be would keep the plan running on a
+            // level that no longer buys it — and every later event for that
+            // membership, its cancellation included, would be dropped by this
+            // same test. So the row follows the membership down.
+            if let Some(id) = data["id"].as_i64().map(|id| id.to_string()) {
+                sqlx::query(
+                    "update subscriptions set status = 'canceled',
+                         provider_event_at = to_timestamp($2::double precision), updated_at = now()
+                     where provider = 'buymeacoffee' and provider_subscription = $1
+                       and (provider_event_at is null
+                            or provider_event_at <= to_timestamp($2::double precision))",
+                )
+                .bind(&id)
+                .bind(created)
+                .execute(&app.db)
+                .await?;
+            }
             return Ok(());
         }
     }

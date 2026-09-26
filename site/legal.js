@@ -87,9 +87,13 @@
   // `#en` is how the pages linked to each other before there was a switch;
   // those links still land on English.
   const hash = location.hash === "#en" ? "en" : null;
-  const initial =
-    normalize(params.get("lang")) || hash || normalize(read(KEY)) || fromBrowser();
-  show(initial, false);
+  // Asking for a language in the address is a choice, the same as pressing the
+  // switch: remember it, or the next legal page — linked without a `?lang=` —
+  // would come back in whatever was stored before, and the reader would watch
+  // the language flip underneath them.
+  const asked = normalize(params.get("lang")) || hash;
+  const initial = asked || normalize(read(KEY)) || fromBrowser();
+  show(initial, Boolean(asked));
 
   document.addEventListener("click", (event) => {
     const button = event.target.closest(".legal__lang button");
