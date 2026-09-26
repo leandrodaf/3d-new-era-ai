@@ -1,27 +1,13 @@
 name: Docs
 
-# The other half of ci.yml's paths-ignore: prose leaves the heavy workflow, and
-# lands here instead. Every Markdown file in the repository is checked, the
-# plugin's skills included — those also go through ci.yml, which validates them
-# as plugin manifests rather than as prose.
+# The other half of the Rust CI: prose leaves that workflow and lands here.
+# Every Markdown file in the repository is checked, the plugin's skills
+# included — those also go through ci.yml, which validates them as plugin
+# manifests rather than as prose.
 on:
   push:
     branches: [main]
-    paths:
-      - "**/*.md"
-      - ".markdownlint-cli2.jsonc"
-      - ".github/.markdownlint-cli2.jsonc"
-      - "_typos.toml"
-      - "lychee.toml"
-      - ".github/workflows/docs.yml"
   pull_request:
-    paths:
-      - "**/*.md"
-      - ".markdownlint-cli2.jsonc"
-      - ".github/.markdownlint-cli2.jsonc"
-      - "_typos.toml"
-      - "lychee.toml"
-      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 concurrency:
@@ -32,8 +18,28 @@ permissions:
   contents: read
 
 jobs:
+  # Whether anything here reads the change at all. Same reason as ci.yml: a
+  # skipped job reports a status, a workflow that never starts does not.
+  changes:
+    name: Changed prose
+    runs-on: ubuntu-latest
+    outputs:
+      docs: ${{ steps.kind.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # The gate proves itself before it decides anything.
+      - run: scripts/changed-kind.sh --self-test
+      - id: kind
+        env:
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+        run: scripts/changed-kind.sh >> "$GITHUB_OUTPUT"
+
   markdown:
     name: Markdown
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -42,6 +48,8 @@ jobs:
 
   spelling:
     name: Spelling
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -57,6 +65,8 @@ jobs:
 
   links:
     name: Links
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

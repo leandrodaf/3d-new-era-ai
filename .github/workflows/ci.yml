@@ -1,41 +1,9 @@
 name: CI
 
-# Prose-only changes skip the whole run: nothing in the list below reaches a
-# compiler or a linter. The plugin's own markdown is deliberately absent — the
-# Format job runs `plugin validate`, which reads every SKILL.md. GitHub Actions
-# does not expand YAML anchors, so the list is spelled out twice.
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "*.md"
-      - "docs/**"
-      - "LICENSE-*"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/pull_request_template.md"
-      - ".coderabbit.yaml"
-      # The Docs workflow and what configures it. Nothing here reaches a
-      # compiler either, and that workflow runs on all of it.
-      - ".github/workflows/docs.yml"
-      - ".markdownlint-cli2.jsonc"
-      - ".github/.markdownlint-cli2.jsonc"
-      - "_typos.toml"
-      - "lychee.toml"
   pull_request:
-    paths-ignore:
-      - "*.md"
-      - "docs/**"
-      - "LICENSE-*"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/pull_request_template.md"
-      - ".coderabbit.yaml"
-      # The Docs workflow and what configures it. Nothing here reaches a
-      # compiler either, and that workflow runs on all of it.
-      - ".github/workflows/docs.yml"
-      - ".markdownlint-cli2.jsonc"
-      - ".github/.markdownlint-cli2.jsonc"
-      - "_typos.toml"
-      - "lychee.toml"
   workflow_dispatch:
 
 concurrency:
@@ -50,8 +18,29 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
+  # Which half of the repository changed. A prose-only change skips every job
+  # below, and each reports "skipped" rather than nothing at all — a required
+  # check that never reports would block the pull request forever.
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.kind.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # The gate proves itself before it decides anything.
+      - run: scripts/changed-kind.sh --self-test
+      - id: kind
+        env:
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+        run: scripts/changed-kind.sh >> "$GITHUB_OUTPUT"
+
   fmt:
     name: Format
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -66,6 +55,8 @@ jobs:
 
   clippy:
     name: Clippy
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -81,6 +72,8 @@ jobs:
 
   test:
     name: Test (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -106,6 +99,8 @@ jobs:
 
   cloud:
     name: Hosted service (Postgres)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -129,6 +124,8 @@ jobs:
 
   msrv:
     name: MSRV (1.95)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -142,6 +139,8 @@ jobs:
 
   web:
     name: Web viewer and editor (wasm32)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     # What is checked here is that the wasm runs, not how small it is: thin LTO
     # with one codegen unit was most of this job's compile time. publish.yml
@@ -220,6 +219,8 @@ jobs:
 
   deny:
     name: Licenses & advisories
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
