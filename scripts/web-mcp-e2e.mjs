@@ -347,8 +347,11 @@ try {
       await frames(2);
     };
     await frames(2);
-    await click(169,16); // View menu
-    await click(250,137); // Create video
+    // The menus sit to the right of the support button that opens the command
+    // bar, so these two follow it; the dialog below is anchored to the window
+    // and does not move.
+    await click(304,16); // View menu
+    await click(385,137); // Create video
     await click(105,104); // add current visitor camera
     await click(105,104); // repeat: a bounded 0.2-second, five-frame clip
     await click(122,194); // 320 x 240
