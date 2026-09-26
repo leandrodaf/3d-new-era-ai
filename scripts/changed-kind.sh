@@ -26,6 +26,9 @@ prose='^([^/]+\.md|docs/.+|LICENSE-[^/]+|\.github/ISSUE_TEMPLATE/.+|\.github/pul
 # configuration of the three checks that read it.
 docs='^(.+\.md|\.markdownlint-cli2\.jsonc|\.github/\.markdownlint-cli2\.jsonc|_typos\.toml|lychee\.toml|\.github/workflows/docs\.yml)$'
 
+# Reads changed paths and prints the two answers. A path that is not prose
+# needs the compiler; a path the docs checks read needs them. A file can be
+# both, and most files are neither prose nor docs, which is the common case.
 classify() {
   local files=("$@") code=false has_docs=false f
   for f in "${files[@]}"; do
@@ -44,9 +47,13 @@ unknown() {
   echo "docs=true"
 }
 
+# Runs classify over a table of paths whose answers are known, so a change to
+# either pattern above has to admit what it broke. Runs in CI ahead of the
+# decision it guards.
 self_test() {
   local failed=0
-  check() { # check <expected code=/docs=> <paths...>
+  # Asserts one case: the expected `code=… docs=…` line, then the paths.
+  check() {
     local want="$1"; shift
     local got
     got="$(classify "$@" | tr '\n' ' ')"
