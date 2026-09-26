@@ -80,3 +80,22 @@ jobs:
         with:
           args: --offline --no-progress "**/*.md"
           fail: true
+
+  # The one check to require here, for the same reason as ci.yml.
+  docs:
+    name: Docs
+    needs: [changes, markdown, spelling, links]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job succeeded, or had nothing to do
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          for result in $RESULTS; do
+            case "$result" in
+              success | skipped) ;;
+              *) echo "::error::a job reported '$result'"; exit 1 ;;
+            esac
+          done
