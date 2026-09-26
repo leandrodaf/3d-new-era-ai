@@ -2,7 +2,9 @@
 // this on a change to any of them; `make docs` runs the same thing here.
 {
   "globs": ["**/*.md"],
-  "ignores": ["target/**", "_site/**", "node_modules/**", "web/editor/pkg/**"],
+  // .claude/ holds scratch worktrees, which are checkouts of this repository:
+  // without this the local run lints every page twice.
+  "ignores": ["target/**", "_site/**", "node_modules/**", "web/editor/pkg/**", ".claude/**"],
   "config": {
     "default": true,
 
