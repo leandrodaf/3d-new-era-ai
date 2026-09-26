@@ -125,7 +125,7 @@ lint: ## Clippy pedantic, warnings as errors
 .PHONY: docs-lint
 docs-lint: ## What the Docs workflow runs: Markdown rules, spelling and relative links
 	npx --yes markdownlint-cli2
-	@command -v typos >/dev/null && typos || echo "typos not installed, skipping (brew install typos-cli)"
+	@command -v typos >/dev/null && typos *.md docs .github plugin plugin-desktop || echo "typos not installed, skipping (brew install typos-cli)"
 	@command -v lychee >/dev/null && lychee --offline --no-progress "**/*.md" || echo "lychee not installed, skipping (brew install lychee)"
 
 .PHONY: test

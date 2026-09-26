@@ -1,15 +1,11 @@
 # Spelling for the prose. https://github.com/crate-ci/typos
+#
+# The Rust tree is out of scope on purpose: the UI strings are translated
+# inline, so a spell checker carrying an English dictionary reads "Duplicar
+# versão atual" as three mistakes. The Docs workflow passes it the documentation
+# instead.
 [files]
 extend-exclude = [
-  "target/",
-  "_site/",
-  "web/editor/pkg/",
-  "Cargo.lock",
-  # typos carries an English dictionary; the Portuguese README would be all
-  # false positives.
+  # English dictionary, Portuguese page.
   "README.pt-BR.md",
 ]
-
-[default.extend-words]
-# The program's own name, and the file extension that carries it.
-newera = "newera"

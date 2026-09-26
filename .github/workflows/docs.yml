@@ -45,7 +45,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # The documentation, not the Rust tree: the UI strings there are
+      # translated inline, and an English dictionary reads "Duplicar versão
+      # atual" as three mistakes.
       - uses: crate-ci/typos@v1.50.3
+        with:
+          files: "*.md docs .github plugin plugin-desktop"
 
   links:
     name: Links
