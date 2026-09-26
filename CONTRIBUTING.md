@@ -52,7 +52,7 @@ Makefile reads it — and run `newera telemetry test`.
 ```sh
 make check       # fmt, clippy (pedantic, -D warnings), tests, MCP smoke test
 make deny        # license and advisory audit
-make docs-lint   # only if you touched Markdown: rules, spelling, links
+make docs-lint   # Markdown, or what checks it: rules, spelling, links
 ```
 
 CI runs the same checks on Linux, macOS and Windows.
