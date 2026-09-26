@@ -65,8 +65,8 @@ pub async fn show(
             format!(
                 r#"<p class="muted"><b>{}</b></p>"#,
                 lang.pick(
-                    "Cancele a assinatura no Buy Me a Coffee antes: apagar a conta aqui não para a cobrança de lá.",
-                    "Cancel the membership on Buy Me a Coffee first: closing the account here does not stop the charge there."
+                    "Cancele a assinatura antes, onde ela é cobrada: apagar a conta aqui não para a cobrança.",
+                    "Cancel the subscription first, where it is charged: closing the account here does not stop the charge."
                 )
             )
         } else {
@@ -189,8 +189,8 @@ pub async fn close(
         format!(
             "<p class=\"muted\"><b>{}</b></p>",
             lang.pick(
-                "A assinatura no Buy Me a Coffee continua ativa: cancele lá para não ser cobrado de novo.",
-                "The Buy Me a Coffee membership is still active: cancel it there so you are not charged again."
+                "A assinatura continua ativa onde é cobrada: cancele lá para não ser cobrado de novo.",
+                "The subscription is still active where it is charged: cancel it there so you are not charged again."
             )
         )
     } else {

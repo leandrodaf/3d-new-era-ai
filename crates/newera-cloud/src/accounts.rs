@@ -57,6 +57,30 @@ pub async fn find_or_create(db: &PgPool, email: &str) -> sqlx::Result<Account> {
     .await
 }
 
+/// Whether this address had an account here and closed it, and has not
+/// opened another since.
+///
+/// What it guards: an address is free again the moment its account closes, so
+/// anything that would make an account for an address — a payment arriving
+/// for one, above all — has to ask first, or a deletion someone asked for
+/// quietly comes back as a new account.
+///
+/// # Errors
+///
+/// When the database fails.
+pub async fn only_closed(db: &PgPool, email: &str) -> sqlx::Result<bool> {
+    sqlx::query_scalar(
+        "select not exists (
+             select 1 from accounts where lower(email) = lower($1) and deleted_at is null
+         ) and exists (
+             select 1 from accounts where lower(email) = lower($1) and deleted_at is not null
+         )",
+    )
+    .bind(email.trim())
+    .fetch_one(db)
+    .await
+}
+
 /// A live account by id.
 ///
 /// # Errors

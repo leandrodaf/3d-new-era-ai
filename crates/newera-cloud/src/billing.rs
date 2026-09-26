@@ -184,19 +184,29 @@ async fn subscription(
     created: i64,
 ) -> anyhow::Result<()> {
     // A page that sells more than this plan: only the levels named here pay
-    // for it, and another level leaves the plan alone.
-    if !bmc.levels.is_empty()
-        && let Some(level) = data["membership_level_id"].as_i64()
-        && !bmc.levels.contains(&level)
-    {
-        tracing::info!("buymeacoffee {kind}: membership level {level} is not the paid plan");
-        return Ok(());
+    // for it. Naming any of them narrows the plan to memberships at those
+    // levels — a monthly support with no level behind it is not one of them,
+    // and would otherwise buy the plan for whatever the payer chose.
+    if !bmc.levels.is_empty() {
+        let level = data["membership_level_id"].as_i64();
+        if !level.is_some_and(|l| bmc.levels.contains(&l)) {
+            tracing::info!("buymeacoffee {kind}: {level:?} is not a level of the paid plan");
+            return Ok(());
+        }
     }
     let email = data["supporter_email"]
         .as_str()
         .map(str::trim)
         .filter(|e| !e.is_empty())
         .ok_or_else(|| anyhow::anyhow!("a membership with no supporter_email"))?;
+    // An address whose only account here was closed. Making a new one would
+    // undo a deletion the person asked for — and hand the paid plan to an
+    // account they never opened — so the event is dropped. They still hold
+    // the membership, and cancelling it is theirs to do.
+    if accounts::only_closed(&app.db, email).await? {
+        tracing::warn!("buymeacoffee {kind}: the address's account was closed; no plan given");
+        return Ok(());
+    }
     let account = accounts::find_or_create(&app.db, email).await?;
     let status = status_of(kind, data);
     let period_end = data["current_period_end"].as_i64();
@@ -236,19 +246,17 @@ async fn subscription(
     Ok(())
 }
 
-/// The account's Buy Me a Coffee membership, if it ever had one:
-/// `(subscription, status)`.
-async fn membership(
-    app: &AppState,
-    account: &str,
-) -> sqlx::Result<Option<(Option<String>, String)>> {
-    sqlx::query_as(
-        "select provider_subscription, status from subscriptions
-         where account_id = $1 and provider = 'buymeacoffee'",
-    )
-    .bind(account)
-    .fetch_optional(&app.db)
-    .await
+/// What the account pays with, if it ever paid: `(provider, status)`.
+///
+/// Not only Buy Me a Coffee's. Accounts that subscribed through Paddle still
+/// have their row, and still get charged by Paddle — whoever asks "is this
+/// account being charged?" has to hear about those too, or someone closes an
+/// account believing that stopped it.
+async fn membership(app: &AppState, account: &str) -> sqlx::Result<Option<(String, String)>> {
+    sqlx::query_as("select provider, status from subscriptions where account_id = $1")
+        .bind(account)
+        .fetch_optional(&app.db)
+        .await
 }
 
 /// Where the membership is bought and managed.
@@ -264,6 +272,15 @@ pub async fn account_links(app: &AppState, account: &accounts::Account, lang: La
     };
     let current = membership(app, &account.id).await.ok().flatten();
     match current {
+        // An account still on Paddle: there is no page of ours for it and no
+        // key left to call, so the receipt is the only way in.
+        Some((provider, status)) if provider != "buymeacoffee" && status != "canceled" => format!(
+            r#"<p class="muted">{}</p>"#,
+            lang.pick(
+                "A sua assinatura ainda é a antiga, cobrada pelo Paddle. Para trocar o cartão ou cancelar, use o link do recibo que o Paddle mandou por e-mail.",
+                "Your subscription is still the old one, charged by Paddle. To change the card or cancel, use the link in the receipt Paddle emailed you."
+            )
+        ),
         Some((_, status)) if status == "active" || status == "paused" => format!(
             r#"<p class="muted">{}</p><a class="button ghost" href="{}" target="_blank" rel="noopener">{}</a>"#,
             lang.pick(
@@ -344,30 +361,28 @@ pub async fn checkout(State(app): State<AppState>, headers: HeaderMap) -> Respon
 /// honest thing to do is say where it is cancelled — and stop the plan here,
 /// so a closed account leaves nothing behind that still counts as paid.
 pub async fn cancel_for_closed(app: &AppState, account: &str) {
-    if app.config.buymeacoffee.is_none() {
-        return;
-    }
-    let Ok(Some((_, status))) = membership(app, account).await else {
+    let Ok(Some((provider, status))) = membership(app, account).await else {
         return;
     };
     if status == "canceled" {
         return;
     }
     if let Err(err) = sqlx::query(
-        "update subscriptions set status = 'canceled', updated_at = now()
-         where account_id = $1 and provider = 'buymeacoffee'",
+        "update subscriptions set status = 'canceled', updated_at = now() where account_id = $1",
     )
     .bind(account)
     .execute(&app.db)
     .await
     {
-        tracing::error!("closing an account with a membership: {err:#}");
+        tracing::error!("closing an account that was paying: {err:#}");
     }
-    tracing::warn!("an account was closed with a membership still charging on Buy Me a Coffee");
+    tracing::warn!("an account was closed while {provider} was still charging it");
 }
 
-/// Whether the account still has a membership that Buy Me a Coffee would go
-/// on charging — what the closing page has to warn about.
+/// Whether something is still charging the account — what the closing page
+/// has to warn about, because nothing here can stop it any more. Paddle
+/// counts: those subscriptions outlived the move and used to be cancelled
+/// through an API this no longer holds a key for.
 pub async fn still_charging(app: &AppState, account: &str) -> bool {
     matches!(
         membership(app, account).await,

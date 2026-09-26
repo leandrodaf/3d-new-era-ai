@@ -912,7 +912,9 @@ async fn a_membership_raises_the_plan_and_its_end_lowers_it() {
     );
     assert_eq!(plan("bia@example.com").await, "supporter", "same address");
 
-    // Monthly support with no level behind it pays for the plan too.
+    // Monthly support carries no level. While the page names the levels that
+    // pay for the plan, that is not one of them — otherwise any amount at all
+    // would buy the plan the levels were meant to fence off.
     let mut monthly = membership(3, "caio@example.com", "active", false, 7);
     monthly["object"] = json!("recurring_donation");
     monthly
@@ -923,7 +925,7 @@ async fn a_membership_raises_the_plan_and_its_end_lowers_it() {
         bmc(&base, "recurring_donation.started", monthly, true, true).await,
         200
     );
-    assert_eq!(plan("caio@example.com").await, "supporter");
+    assert_eq!(plan("caio@example.com").await, "free");
 
     // A level this page does not sell the plan for changes nothing.
     assert_eq!(
@@ -1049,8 +1051,8 @@ async fn the_account_page_sends_people_to_buy_me_a_coffee_and_back() {
         "there is no portal of ours to open"
     );
     assert!(
-        page.contains("Cancel the membership on Buy Me a Coffee first")
-            || page.contains("Cancele a assinatura no Buy Me a Coffee antes"),
+        page.contains("Cancel the subscription first, where it is charged")
+            || page.contains("Cancele a assinatura antes, onde ela é cobrada"),
         "closing the account cannot stop the charge"
     );
 
@@ -1077,4 +1079,27 @@ async fn the_account_page_sends_people_to_buy_me_a_coffee_and_back() {
     .await
     .unwrap();
     assert_eq!(status.as_deref(), Some("canceled"), "no longer paid here");
+
+    // Buy Me a Coffee goes on charging a membership nobody here can cancel,
+    // so another event for the closed address arrives sooner or later. It
+    // must not undo the deletion by making the account again.
+    assert_eq!(
+        bmc(
+            &base,
+            "membership.updated",
+            membership(9, "cid@example.com", "active", false, 7),
+            true,
+            true
+        )
+        .await,
+        200
+    );
+    let live: i64 = sqlx::query_scalar(
+        "select count(*) from accounts where lower(email) = lower($1) and deleted_at is null",
+    )
+    .bind("cid@example.com")
+    .fetch_one(&state.db)
+    .await
+    .unwrap();
+    assert_eq!(live, 0, "a closed account is not reopened by a payment");
 }

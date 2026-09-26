@@ -66,17 +66,35 @@ pub fn page(lang: Lang, title: &str, body: &str) -> Html<String> {
 </head>
 <body>
 <main class="card">
-<p class="brand">3D New Era <em>AI</em></p>
+<div class="top"><p class="brand">3D New Era <em>AI</em></p>{coffee}</div>
 {body}
 </main>
 <p class="foot"><a href="https://3dneweraai.com/privacy/">{privacy}</a> · <a href="https://3dneweraai.com/terms/">{terms}</a> · <a href="https://3dneweraai.com/refund/">{refund}</a></p>
 </body>
 </html>"#,
         title = escape(title),
+        coffee = coffee(lang),
         privacy = lang.pick("Privacidade", "Privacy"),
         terms = lang.pick("Termos", "Terms"),
         refund = lang.pick("Reembolso", "Refunds"),
     ))
+}
+
+/// Where the support button goes. Charged in US dollars, wherever from.
+const SUPPORT_URL: &str = "https://buymeacoffee.com/leandrodaf/membership";
+
+/// Buy Me a Coffee's button, on every page here.
+///
+/// The site draws it in Buy Me a Coffee's own script face; these pages ask
+/// for no font, no script and no third-party anything — a page someone is
+/// signed into should not start making requests elsewhere — so it keeps the
+/// yellow and the cup and sets the words in the face the page already uses.
+fn coffee(lang: Lang) -> String {
+    let cup = r#"<svg viewBox="0 0 26 32" aria-hidden="true"><rect x="2.6" y="1.6" width="20.8" height="5.6" rx="2.6"/><path d="M4.9 10.2h16.2l-1.9 17.3a2.7 2.7 0 0 1-2.7 2.4H9.5a2.7 2.7 0 0 1-2.7-2.4z"/></svg>"#;
+    format!(
+        r#"<a class="bmc" href="{SUPPORT_URL}" target="_blank" rel="noopener">{cup}<span>{label}</span></a>"#,
+        label = lang.pick("Me paga um café", "Buy me a coffee"),
+    )
 }
 
 const STYLE: &str = "
@@ -95,6 +113,11 @@ button,.button{display:inline-flex;align-items:center;justify-content:center;wid
 .row{display:flex;gap:10px}.row>*{flex:1}
 code{font:.9em ui-monospace,Menlo,Consolas,monospace;overflow-wrap:anywhere}
 .foot{margin-top:18px;font-size:.85rem;color:var(--graphite)}a{color:var(--accent)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 18px}
+.top .brand{margin:0}
+.bmc{display:inline-flex;align-items:center;gap:7px;flex:none;padding:6px 11px 7px;border-radius:9px;background:#ffdd00;color:#0d0c0c;font-size:.88rem;font-weight:600;text-decoration:none;box-shadow:0 1px 0 rgba(0,0,0,.16)}
+.bmc svg{width:14px;height:17px;flex:none;fill:#fff;stroke:#0d0c0c;stroke-width:2.1;stroke-linejoin:round}
+@media (max-width:360px){.bmc span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}}
 ";
 
 #[cfg(test)]
