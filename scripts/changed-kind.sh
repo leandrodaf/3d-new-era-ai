@@ -79,6 +79,9 @@ self_test() {
   check "code=true docs=true" crates/newera-mcp/README.md
   # A mixed change runs both halves.
   check "code=true docs=true" README.md crates/newera-core/src/levels.rs
+  # Both sides of a rename, which is what --no-renames reports: a source file
+  # moved into docs/ still has to build.
+  check "code=true docs=true" crates/newera-core/src/levels.rs docs/levels.md
   # An empty change touches neither half.
   check "code=false docs=false" ""
 
@@ -124,5 +127,8 @@ if ! git rev-parse --verify --quiet "$base" >/dev/null; then
   exit 0
 fi
 
-mapfile -t changed < <(git diff --name-only "$base"...HEAD)
+# --no-renames: with detection on, a rename reports only where the file
+# landed, so moving a .rs into docs/ would read as prose and skip the
+# build. Off, it reports both sides.
+mapfile -t changed < <(git diff --no-renames --name-only "$base"...HEAD)
 classify "${changed[@]:-}"
