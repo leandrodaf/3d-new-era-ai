@@ -1,0 +1,79 @@
+# yaml-language-server: $schema=https://storage.googleapis.com/coderabbit_public_assets/schema.v2.json
+# This repository is public, so CodeRabbit costs nothing here: there is no
+# application and no plan to pick, every public repo gets the full review
+# feature set on install. https://www.coderabbit.ai/oss
+language: en-US
+enable_free_tier: true
+
+reviews:
+  # Balanced feedback: a drive-by contributor should not be met with nitpicks.
+  profile: chill
+  high_level_summary: true
+  sequence_diagrams: true
+  # This project's PR threads stay on the code.
+  poem: false
+  in_progress_fortune: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches: [main]
+  # The tax on being public: PRs a model wrote and nobody read.
+  slop_detection:
+    enabled: true
+    label: slop
+  path_filters:
+    # Built output and a lockfile nobody reviews line by line.
+    - "!target/**"
+    - "!_site/**"
+    - "!Cargo.lock"
+    - "!web/editor/pkg/**"
+  path_instructions:
+    - path: "crates/**/*.rs"
+      instructions: >-
+        Rust 2024 edition, MSRV 1.95: flag anything that needs a newer
+        toolchain. The CI gate is `cargo clippy --all-targets --all-features
+        -- -D warnings`, so treat a clippy lint as a build failure, not a
+        suggestion. Prefer returning errors over `unwrap`/`expect` and
+        panicking outside tests; geometry and units are millimetres unless a
+        name says otherwise.
+    - path: "crates/newera-mcp/**/*.rs"
+      instructions: >-
+        This crate is the MCP server an AI agent drives. Tool names, their
+        parameters and their JSON shapes are a public contract: call out any
+        rename, removed field or changed default as a breaking change that
+        needs a CHANGELOG entry.
+    - path: "crates/newera-server/**/*.rs"
+      instructions: >-
+        Hosted service code. Watch for unvalidated input reaching SQL or the
+        filesystem, secrets or tokens in logs and error bodies, and endpoints
+        that skip the auth layer used by their neighbours.
+    - path: ".github/workflows/**"
+      instructions: >-
+        Pin actions and keep `GITHUB_TOKEN` permissions least-privilege. Flag
+        any step that would run code from a fork's PR with repository secrets
+        in scope.
+    - path: "**/*.md"
+      instructions: >-
+        README.md and README.pt-BR.md are translations of each other: a change
+        to one usually belongs in the other. Documented commands and flags
+        should match what the code actually accepts.
+  tools:
+    clippy: { enabled: true }
+    actionlint: { enabled: true }
+    zizmor: { enabled: true }
+    yamllint: { enabled: true }
+    markdownlint: { enabled: true }
+    shellcheck: { enabled: true }
+    checkmake: { enabled: true }
+    hadolint: { enabled: true }
+    gitleaks: { enabled: true }
+    osvScanner: { enabled: true }
+
+chat:
+  # Outside contributors can talk to the reviewer on their own PR.
+  allow_non_org_members: true
+  auto_reply: true
+
+knowledge_base:
+  web_search:
+    enabled: true

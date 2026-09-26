@@ -13,6 +13,10 @@ All notable changes to this project are documented here. The format follows
   `CODE_OF_CONDUCT.md` at the root. `make` lists its targets in English.
 - The example plugin is `examples/plugins/room-areas` (was `plugins/quadro-areas`), in
   English. Showcase images have English file names.
+- The review bot reads its rules from `.coderabbit.yaml` in the repository instead of a
+  dashboard nobody outside the org can see: clippy treated as a build failure, the
+  `newera-mcp` tool shapes treated as a public contract, and outside contributors
+  allowed to talk to the reviewer on their own pull request.
 
 ### Removed
 
