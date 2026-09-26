@@ -14,6 +14,13 @@ on:
       - ".github/ISSUE_TEMPLATE/**"
       - ".github/pull_request_template.md"
       - ".coderabbit.yaml"
+      # The Docs workflow and what configures it. Nothing here reaches a
+      # compiler either, and that workflow runs on all of it.
+      - ".github/workflows/docs.yml"
+      - ".markdownlint-cli2.jsonc"
+      - ".github/.markdownlint-cli2.jsonc"
+      - "_typos.toml"
+      - "lychee.toml"
   pull_request:
     paths-ignore:
       - "*.md"
@@ -22,6 +29,13 @@ on:
       - ".github/ISSUE_TEMPLATE/**"
       - ".github/pull_request_template.md"
       - ".coderabbit.yaml"
+      # The Docs workflow and what configures it. Nothing here reaches a
+      # compiler either, and that workflow runs on all of it.
+      - ".github/workflows/docs.yml"
+      - ".markdownlint-cli2.jsonc"
+      - ".github/.markdownlint-cli2.jsonc"
+      - "_typos.toml"
+      - "lychee.toml"
   workflow_dispatch:
 
 concurrency:

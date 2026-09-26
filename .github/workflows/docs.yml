@@ -45,14 +45,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # The documentation, not the Rust tree: the UI strings there are
-      # translated inline, and an English dictionary reads "Duplicar versão
-      # atual" as three mistakes. README.pt-BR.md is named out rather than
-      # excluded in _typos.toml, because a path passed on the command line is
-      # checked whether it is excluded or not. Add a new root page here.
+      # The documentation, not the code and not the automation. The UI strings
+      # in the Rust tree are translated inline, and the deploy workflow is
+      # commented in Portuguese; an English dictionary has nothing useful to say
+      # about either. README.pt-BR.md is named out rather than excluded in
+      # _typos.toml, because a path given on the command line is checked whether
+      # it is excluded or not. Add a new root page here.
       - uses: crate-ci/typos@v1.50.3
         with:
-          files: "README.md CHANGELOG.md CONTRIBUTING.md CODE_OF_CONDUCT.md SECURITY.md docs .github plugin plugin-desktop"
+          files: "README.md CHANGELOG.md CONTRIBUTING.md CODE_OF_CONDUCT.md SECURITY.md docs .github/ISSUE_TEMPLATE .github/pull_request_template.md plugin plugin-desktop"
 
   links:
     name: Links
