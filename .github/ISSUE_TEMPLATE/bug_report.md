@@ -13,6 +13,7 @@ labels: bug
 2.
 
 **Environment**
+
 - OS / GPU:
 - `newera --version`:
 - Mode (editor, `serve`, `mcp`) and MCP client, if any:

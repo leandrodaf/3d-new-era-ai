@@ -315,7 +315,7 @@ message pointing at the download.
 
 ### Project layout
 
-```
+```text
 crates/
   newera-core        domain model, commands, undo/redo, geometry, standards — no UI, no I/O
   newera-catalog     parametric furniture and fixtures at exact sizes; OBJ/glTF import

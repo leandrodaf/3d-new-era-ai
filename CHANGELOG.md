@@ -17,9 +17,12 @@ All notable changes to this project are documented here. The format follows
   dashboard nobody outside the org can see: clippy treated as a build failure, the
   `newera-mcp` tool shapes treated as a public contract, and outside contributors
   allowed to talk to the reviewer on their own pull request.
-- A prose-only change no longer runs CI. Editing a README, `docs/`, a licence or an
-  issue template used to spend eighteen minutes across seven jobs to prove that
-  Markdown still compiles. The plugin's own Markdown is exempt from the exemption:
+- A prose-only change no longer runs the whole CI. Editing a README, `docs/`, a licence
+  or an issue template used to spend eighteen minutes across seven jobs to prove that
+  Markdown still compiles. It runs a Docs workflow instead — markdownlint against rules
+  the repository carries in `.markdownlint-cli2.jsonc`, spelling, and the relative links
+  between pages, so a renamed page cannot quietly orphan the link to it. `make docs-lint`
+  runs the same three locally. The plugin's own Markdown is exempt from the exemption:
   the Format job validates every `SKILL.md`.
 
 ### Removed
@@ -228,6 +231,12 @@ All notable changes to this project are documented here. The format follows
   should not ask for a switch to be found first: a window wide enough to be somebody's
   desk is reachable the moment it opens, at the address it had last time. A phone is left
   alone — the address is of no use where there is nowhere to paste it.
+- The browser opens on a home worth looking at: a corner classic seven of the kind the
+  Upper West Side is full of — 164 m² with the gallery running the length of it, living
+  and dining to the north, the bedrooms and the service wing to the south, furnished
+  down to the lamps, with every room lit to the lux its use asks for and five points of
+  view saved to walk through. It was drawn with the program's own tools over MCP, and
+  the layout check passes on it.
 
 ### Fixed
 
@@ -241,15 +250,6 @@ All notable changes to this project are documented here. The format follows
 - The panel is one screen again: the state and its address, the clients as tabs with the
   line to copy under them, and the calls as they land — no numbered steps between
   somebody and the thing they came for.
-
-### Added
-
-- The browser opens on a home worth looking at: a corner classic seven of the kind the
-  Upper West Side is full of — 164 m² with the gallery running the length of it, living
-  and dining to the north, the bedrooms and the service wing to the south, furnished
-  down to the lamps, with every room lit to the lux its use asks for and five points of
-  view saved to walk through. It was drawn with the program's own tools over MCP, and
-  the layout check passes on it.
 
 ## [1.4.2] - 2026-09-18
 
@@ -359,7 +359,7 @@ usable on a phone.
   browser's own storage a moment after every change and opened again on the next visit,
   so closing a tab is no longer the same as throwing the drawing away. A test draws a
   wall, reloads the page and fails if it does not come back.
-- The site, the editor and the viewer are published at https://3dneweraai.com — landing
+- The site, the editor and the viewer are published at <https://3dneweraai.com> — landing
   page at the root, editor at `/app/`, viewer at `/viewer/` — from one build script, with
   a workflow that puts them on Cloudflare Pages on every push.
 

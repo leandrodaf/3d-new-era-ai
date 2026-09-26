@@ -9,7 +9,7 @@ Every path calls the same `newera-mcp` crate: the same tools, the same
 annotations and the same in-chat plan viewer. The AI client cannot tell them
 apart.
 
-```
+```text
  AI clients: Claude · ChatGPT · Codex · Cursor · VS Code · Gemini CLI · LM Studio · Zed ...
         │                                           │
         │ local: .mcpb, stdio, 127.0.0.1:7878       │ hosted: https://mcp.3dneweraai.com/mcp

@@ -1,0 +1,15 @@
+# Spelling for the prose. https://github.com/crate-ci/typos
+[files]
+extend-exclude = [
+  "target/",
+  "_site/",
+  "web/editor/pkg/",
+  "Cargo.lock",
+  # typos carries an English dictionary; the Portuguese README would be all
+  # false positives.
+  "README.pt-BR.md",
+]
+
+[default.extend-words]
+# The program's own name, and the file extension that carries it.
+newera = "newera"

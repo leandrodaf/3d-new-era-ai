@@ -6,6 +6,6 @@ In short: be respectful, assume good intent, keep discussions about the work, an
 room for people of every background and level of experience. Harassment, insults and
 personal attacks are not accepted in issues, pull requests or any other project space.
 
-Report unacceptable behavior to **contato@3dneweraai.com**. Reports are handled
+Report unacceptable behavior to **<contato@3dneweraai.com>**. Reports are handled
 privately, and the maintainer may remove content or block participants who break these
 rules.

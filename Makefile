@@ -122,6 +122,12 @@ fmt-check: ## Checks formatting without changing files
 lint: ## Clippy pedantic, warnings as errors
 	$(CARGO) clippy --workspace --all-targets --locked -- -D warnings
 
+.PHONY: docs-lint
+docs-lint: ## What the Docs workflow runs: Markdown rules, spelling and relative links
+	npx --yes markdownlint-cli2
+	@command -v typos >/dev/null && typos || echo "typos not installed, skipping (brew install typos-cli)"
+	@command -v lychee >/dev/null && lychee --offline --no-progress "**/*.md" || echo "lychee not installed, skipping (brew install lychee)"
+
 .PHONY: test
 test: ## Unit and integration tests
 	$(CARGO) test --workspace --locked
