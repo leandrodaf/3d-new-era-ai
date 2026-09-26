@@ -552,6 +552,12 @@ button { font: inherit; color: inherit; }
   }
 }
 
+/* A finger needs a target, and at 400px the button is only its cup: the box
+   keeps the height and width a tap wants even when the words are gone. */
+@media (pointer: coarse) {
+  .bmc { min-height: 44px; min-width: 44px; justify-content: center; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bmc, .bmc:hover, .bmc:focus-visible, .bmc:active { transform: none; transition: none; }
 }
