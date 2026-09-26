@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The paid plan is supported through Buy Me a Coffee instead of Paddle, whose
+  verification a seller in Brazil could not get through. The account page sends people to
+  the Buy Me a Coffee membership page and the webhook (`/billing/buymeacoffee`) follows
+  the `membership.*` and `recurring_donation.*` events. A cancelled membership keeps the
+  plan until the end of the period already paid for, as before.
+- What ties a payment to an account is the address it was paid with, not an id carried
+  through the checkout: Buy Me a Coffee's page takes nothing of ours along. The support
+  page shows the account's address and asks for it, and an address with no account yet
+  gets the one a sign-in link would have made.
+- Closing an account no longer stops the charges: Buy Me a Coffee gives a seller no way
+  to cancel a membership. The account page says so before and after closing, and the
+  plan stops here either way.
 - Documentation for contributors, in English: a rewritten README, a docs index,
   `docs/STANDARDS.md` (was `NORMAS.md`), `docs/DISTRIBUTION.md`, and `SECURITY.md` and
   `CODE_OF_CONDUCT.md` at the root. `make` lists its targets in English.

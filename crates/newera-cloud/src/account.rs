@@ -40,6 +40,7 @@ pub async fn show(
 <details><summary class="muted">{close}</summary>
 <form method="post" action="/account/close">
 <p class="muted">{close_text}</p>
+{charging}
 <input type="hidden" name="csrf" value="{csrf}">
 <button class="ghost" type="submit">{close_button}</button>
 </form>
@@ -55,11 +56,22 @@ pub async fn show(
         out = lang.pick("Sair", "Sign out"),
         close = lang.pick("Apagar a conta", "Close the account"),
         close_text = lang.pick(
-            "Encerra o acesso na hora, desconecta as IAs ligadas a ela e apaga tudo em até 30 dias. Uma assinatura ativa deixa de ser cobrada no fim do período pago.",
-            "Ends access at once, disconnects the AIs linked to it and deletes everything within 30 days. An active subscription stops being charged at the end of the paid period."
+            "Encerra o acesso na hora, desconecta as IAs ligadas a ela e apaga tudo em até 30 dias.",
+            "Ends access at once, disconnects the AIs linked to it and deletes everything within 30 days."
         ),
         csrf = close_token(&session),
         close_button = lang.pick("Apagar minha conta", "Close my account"),
+        charging = if crate::billing::still_charging(&app, &account.id).await {
+            format!(
+                r#"<p class="muted"><b>{}</b></p>"#,
+                lang.pick(
+                    "Cancele a assinatura no Buy Me a Coffee antes: apagar a conta aqui não para a cobrança de lá.",
+                    "Cancel the membership on Buy Me a Coffee first: closing the account here does not stop the charge there."
+                )
+            )
+        } else {
+            String::new()
+        },
     );
     page(lang, lang.pick("Sua conta", "Your account"), &body).into_response()
 }
@@ -160,6 +172,7 @@ pub async fn close(
     if !secret::same(&f.csrf, &close_token(&session)) {
         return (StatusCode::BAD_REQUEST, "the form expired").into_response();
     }
+    let charging = crate::billing::still_charging(&app, &account.id).await;
     crate::billing::cancel_for_closed(&app, &account.id).await;
     if let Err(err) = accounts::close(&app.db, &account.id).await {
         tracing::error!("closing an account: {err}");
@@ -172,7 +185,17 @@ pub async fn close(
             "Tudo o que era dela some em até 30 dias.",
             "Everything that was in it goes within 30 days."
         )
-    );
+    ) + &if charging {
+        format!(
+            "<p class=\"muted\"><b>{}</b></p>",
+            lang.pick(
+                "A assinatura no Buy Me a Coffee continua ativa: cancele lá para não ser cobrado de novo.",
+                "The Buy Me a Coffee membership is still active: cancel it there so you are not charged again."
+            )
+        )
+    } else {
+        String::new()
+    };
     let mut response = page(lang, "Account", &body).into_response();
     response.headers_mut().append(
         header::SET_COOKIE,

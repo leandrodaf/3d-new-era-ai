@@ -1,15 +1,24 @@
-//! Paid plans, sold through Paddle.
+//! Paid plans, supported through Buy Me a Coffee.
 //!
-//! Paddle is the merchant of record: it charges, handles the tax and the
-//! invoice, and pays the money out in dollars to a seller in Brazil. This
-//! service does three things around it:
+//! Buy Me a Coffee sells the membership on a page of its own and pays out
+//! through the Stripe account connected to it. This service does two things
+//! around that:
 //!
-//! - the checkout page (`/billing/checkout`) opens Paddle's checkout for the
-//!   signed-in account, carrying the account id in `custom_data`;
-//! - the webhook (`/billing/paddle`) hears each subscription event and makes
-//!   the account's plan follow it;
-//! - "manage my subscription" (`/billing/manage`) opens Paddle's customer
-//!   portal, where the person changes the card or cancels.
+//! - the support page (`/billing/checkout`) says what the plan gives and
+//!   sends the person to the Buy Me a Coffee membership page;
+//! - the webhook (`/billing/buymeacoffee`) hears each membership event and
+//!   makes the account's plan follow it.
+//!
+//! What the person pays with is an address, not an account id: Buy Me a
+//! Coffee's page carries nothing of ours through the checkout, so the
+//! `supporter_email` of the event is the only thing tying a payment to an
+//! account. The support page asks for the account's own address, and an
+//! address that has no account yet gets one, the same one the sign-in link
+//! would make.
+//!
+//! Two things Paddle did and Buy Me a Coffee cannot: there is no customer
+//! portal to open, and no way for us to cancel a membership — the member
+//! cancels it on Buy Me a Coffee. The account page says so.
 //!
 //! The tools never ask "does this account pay?": they read the plan's
 //! limits, and this is what changes the plan. Nothing here is shown inside an
@@ -20,20 +29,32 @@ use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 use sha2::Sha256;
 
-use crate::config::Paddle;
+use crate::config::BuyMeACoffee;
 use crate::login;
-use crate::pages::{Lang, page};
+use crate::pages::{Lang, escape, page};
 use crate::{AppState, accounts, secret};
 
-/// The one paid plan; every Paddle price of this service gives it.
+/// The one paid plan; every membership of this page gives it.
 pub const PAID_PLAN: &str = "supporter";
 
-/// How old a delivery may be, in seconds, before it is refused as a replay.
-/// Paddle signs every attempt afresh, so a retry is never this old.
-const TOLERANCE_SECS: i64 = 300;
+/// The events that say something about a plan: a membership, and the
+/// "monthly support" that has no level behind it. Both carry the same
+/// subscription fields.
+const SUBSCRIPTION_EVENTS: &[&str] = &[
+    "membership.started",
+    "membership.updated",
+    "membership.cancelled",
+    "membership.paused",
+    "recurring_donation.started",
+    "recurring_donation.updated",
+    "recurring_donation.cancelled",
+    // Not in Buy Me a Coffee's own list of event types, but the dashboard
+    // offers "Monthly support paused" and the webhook is subscribed to it.
+    "recurring_donation.paused",
+];
 
 /// HMAC-SHA256, by the book (RFC 2104), on the hash the crate already uses.
 fn hmac(key: &[u8], message: &[u8]) -> [u8; 32] {
@@ -65,75 +86,57 @@ fn hex(bytes: &[u8]) -> String {
     })
 }
 
-/// Paddle's `h1`: HMAC-SHA256 of `ts:body` under the destination's secret.
-fn h1(secret: &str, ts: &str, body: &[u8]) -> String {
-    let mut message = format!("{ts}:").into_bytes();
-    message.extend_from_slice(body);
-    hex(&hmac(secret.as_bytes(), &message))
+/// The `x-signature-sha256` a delivery of `body` carries: HMAC-SHA256 of the
+/// body as it arrived, under the webhook's signing secret, in hex. Here for
+/// tests and for trying the endpoint by hand.
+pub fn signature(secret: &str, body: &[u8]) -> String {
+    hex(&hmac(secret.as_bytes(), body))
 }
 
-/// The `Paddle-Signature` a delivery of `body` at `ts` would carry: what
-/// Paddle computes, here for tests and for trying the endpoint by hand.
-pub fn signature(secret: &str, ts: i64, body: &[u8]) -> String {
-    format!("ts={ts};h1={}", h1(secret, &ts.to_string(), body))
+/// Whether a delivery is Buy Me a Coffee's.
+///
+/// Buy Me a Coffee signs the body and nothing else — no timestamp, so a
+/// delivery cannot be told from a replay of itself. What guards against a
+/// replay is the event's own `created`: an event older than the one already
+/// written leaves the row alone.
+pub fn verified(secret: &str, header: &str, body: &[u8]) -> bool {
+    secret::same(header.trim(), &signature(secret, body))
 }
 
-/// Whether a delivery is Paddle's: `Paddle-Signature: ts=…;h1=…` over
-/// `ts:body`, recent enough not to be a replay. While a secret is being
-/// rotated Paddle sends one `h1` per secret; any of them may match.
-pub fn verified(secret: &str, header: &str, body: &[u8], now: i64) -> bool {
-    let mut ts = None;
-    let mut signatures = Vec::new();
-    for part in header.split(';') {
-        match part.trim().split_once('=') {
-            Some(("ts", value)) => ts = Some(value.trim()),
-            Some(("h1", value)) => signatures.push(value.trim()),
-            _ => {}
-        }
-    }
-    let Some(ts) = ts else { return false };
-    let Ok(at) = ts.parse::<i64>() else {
-        return false;
-    };
-    if (now - at).abs() > TOLERANCE_SECS {
-        return false;
-    }
-    let expected = h1(secret, ts, body);
-    signatures.iter().any(|s| secret::same(s, &expected))
-}
-
-fn now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0))
-}
-
-/// Paddle's webhook endpoint.
+/// Buy Me a Coffee's webhook endpoint.
 pub async fn webhook(State(app): State<AppState>, headers: HeaderMap, body: Bytes) -> StatusCode {
-    let Some(paddle) = app.config.paddle.as_ref() else {
+    let Some(bmc) = app.config.buymeacoffee.as_ref() else {
         return StatusCode::NOT_FOUND;
     };
     let header = headers
-        .get("paddle-signature")
+        .get("x-signature-sha256")
         .and_then(|v| v.to_str().ok())
         .unwrap_or_default();
-    if !verified(&paddle.webhook_secret, header, &body, now()) {
+    if !verified(&bmc.webhook_secret, header, &body) {
         return StatusCode::UNAUTHORIZED;
     }
     let Ok(event) = serde_json::from_slice::<Value>(&body) else {
         return StatusCode::BAD_REQUEST;
     };
-    let kind = event["event_type"].as_str().unwrap_or_default();
-    if !kind.starts_with("subscription.") {
-        // Transactions, customers, payouts: not what the plan depends on.
+    let kind = event["type"].as_str().unwrap_or_default();
+    // A test event from the dashboard arrives signed like any other. Only a
+    // service told to take them lets one change a plan.
+    if !event["live_mode"].as_bool().unwrap_or(true) && !bmc.test_events {
+        tracing::info!("buymeacoffee {kind}: a test event, ignored");
         return StatusCode::ACCEPTED;
     }
-    match subscription(&app, paddle, &event["data"]).await {
+    if !SUBSCRIPTION_EVENTS.contains(&kind) {
+        // One-off coffees, extras, commissions: thank you, but no plan.
+        return StatusCode::ACCEPTED;
+    }
+    let created = event["created"].as_i64().unwrap_or_default();
+    match subscription(&app, bmc, kind, &event["data"], created).await {
         Ok(()) => StatusCode::OK,
         Err(err) => {
-            tracing::error!("paddle {kind}: {err:#}");
-            // Paddle retries a failure; a shape this does not know would fail
-            // forever, so only the database's own failures ask for a retry.
+            tracing::error!("buymeacoffee {kind}: {err:#}");
+            // Buy Me a Coffee retries a failure four more times and gives up
+            // on a destination that keeps failing, so a shape this does not
+            // know is accepted; only the database's own failures ask again.
             if err.downcast_ref::<sqlx::Error>().is_some() {
                 StatusCode::INTERNAL_SERVER_ERROR
             } else {
@@ -143,146 +146,133 @@ pub async fn webhook(State(app): State<AppState>, headers: HeaderMap, body: Byte
     }
 }
 
-/// Makes the account's plan what the subscription says.
-async fn subscription(app: &AppState, paddle: &Paddle, data: &Value) -> anyhow::Result<()> {
-    let customer = data["customer_id"].as_str().unwrap_or_default();
-    let account = account_for(app, paddle, data, customer).await?;
-    // Paddle's statuses already mean what the plan needs: `active` and
-    // `trialing` pay; `past_due`, `paused` and `canceled` do not.
-    let status = data["status"].as_str().unwrap_or("active");
-    let period_end = data["current_billing_period"]["ends_at"].as_str();
-    sqlx::query(
-        "insert into subscriptions (account_id, plan, status, provider, provider_customer, provider_subscription, current_period_end, updated_at)
-         values ($1, $2, $3, 'paddle', $4, $5, $6::timestamptz, now())
-         on conflict (account_id) do update set plan = $2, status = $3, provider = 'paddle',
-             provider_customer = $4, provider_subscription = $5, current_period_end = $6::timestamptz,
-             updated_at = now()",
+/// What the plan should be while this subscription is in this state.
+///
+/// A cancelled membership that is still inside the period the member paid
+/// for stays `active` until `current_period_end` passes, which is what the
+/// support page promises. `plan_of` reads both, so nothing has to run at the
+/// end of the period for the plan to lapse.
+fn status_of(kind: &str, data: &Value) -> &'static str {
+    let flag = |name: &str| match &data[name] {
+        Value::Bool(yes) => *yes,
+        Value::String(text) => text == "true",
+        _ => false,
+    };
+    if kind.ends_with(".paused") || flag("paused") {
+        return "paused";
+    }
+    if kind.ends_with(".cancelled") || flag("canceled") {
+        // Cancelled for the end of the period: paid for until then.
+        if flag("cancel_at_period_end") {
+            return "active";
+        }
+        return "canceled";
+    }
+    match data["status"].as_str() {
+        Some("canceled") => "canceled",
+        Some("paused") => "paused",
+        _ => "active",
+    }
+}
+
+/// Makes the account's plan what the membership says.
+async fn subscription(
+    app: &AppState,
+    bmc: &BuyMeACoffee,
+    kind: &str,
+    data: &Value,
+    created: i64,
+) -> anyhow::Result<()> {
+    // A page that sells more than this plan: only the levels named here pay
+    // for it, and another level leaves the plan alone.
+    if !bmc.levels.is_empty()
+        && let Some(level) = data["membership_level_id"].as_i64()
+        && !bmc.levels.contains(&level)
+    {
+        tracing::info!("buymeacoffee {kind}: membership level {level} is not the paid plan");
+        return Ok(());
+    }
+    let email = data["supporter_email"]
+        .as_str()
+        .map(str::trim)
+        .filter(|e| !e.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("a membership with no supporter_email"))?;
+    let account = accounts::find_or_create(&app.db, email).await?;
+    let status = status_of(kind, data);
+    let period_end = data["current_period_end"].as_i64();
+    let supporter = data["supporter_id"].as_i64().map(|id| id.to_string());
+    let subscription = data["id"].as_i64().map(|id| id.to_string());
+    // An event older than the one already written is a replay, or a delivery
+    // that arrived out of order: either way it must not undo the newer one.
+    let applied = sqlx::query(
+        "insert into subscriptions (account_id, plan, status, provider, provider_customer,
+             provider_subscription, current_period_end, provider_event_at, updated_at)
+         values ($1, $2, $3, 'buymeacoffee', $4, $5,
+             to_timestamp($6::double precision), to_timestamp($7::double precision), now())
+         on conflict (account_id) do update set
+             plan = excluded.plan, status = excluded.status, provider = excluded.provider,
+             provider_customer = excluded.provider_customer,
+             provider_subscription = excluded.provider_subscription,
+             current_period_end = excluded.current_period_end,
+             provider_event_at = excluded.provider_event_at, updated_at = now()
+         where subscriptions.provider_event_at is null
+            or subscriptions.provider_event_at <= excluded.provider_event_at",
     )
     .bind(&account.id)
     .bind(PAID_PLAN)
     .bind(status)
-    .bind(Some(customer).filter(|c| !c.is_empty()))
-    .bind(data["id"].as_str())
+    .bind(supporter)
+    .bind(subscription)
     .bind(period_end)
+    .bind(created)
     .execute(&app.db)
-    .await?;
-    tracing::info!("plan {PAID_PLAN} ({status}) for an account");
+    .await?
+    .rows_affected();
+    if applied == 0 {
+        tracing::info!("buymeacoffee {kind}: an older event than the one already written");
+    } else {
+        tracing::info!("plan {PAID_PLAN} ({status}) for an account");
+    }
     Ok(())
 }
 
-/// Whose subscription this is: the account id the checkout carried; else
-/// the account this Paddle customer already paid for; else, with an API key,
-/// the customer's email (a checkout opened from elsewhere).
-async fn account_for(
-    app: &AppState,
-    paddle: &Paddle,
-    data: &Value,
-    customer: &str,
-) -> anyhow::Result<accounts::Account> {
-    if let Some(id) = data["custom_data"]["account_id"].as_str()
-        && let Some(account) = accounts::get(&app.db, id).await?
-    {
-        return Ok(account);
-    }
-    if !customer.is_empty() {
-        let known: Option<String> = sqlx::query_scalar(
-            "select account_id from subscriptions where provider = 'paddle' and provider_customer = $1",
-        )
-        .bind(customer)
-        .fetch_optional(&app.db)
-        .await?;
-        if let Some(id) = known
-            && let Some(account) = accounts::get(&app.db, &id).await?
-        {
-            return Ok(account);
-        }
-        if paddle.api_key.is_some() {
-            let found = api(
-                app,
-                paddle,
-                reqwest::Method::GET,
-                &format!("/customers/{customer}"),
-                None,
-            )
-            .await?;
-            if let Some(email) = found["data"]["email"].as_str() {
-                return Ok(accounts::find_or_create(&app.db, email).await?);
-            }
-        }
-    }
-    anyhow::bail!("a subscription with no account to give it to")
-}
-
-/// A call to Paddle's API with the server-side key.
-async fn api(
-    app: &AppState,
-    paddle: &Paddle,
-    method: reqwest::Method,
-    path: &str,
-    body: Option<Value>,
-) -> anyhow::Result<Value> {
-    let key = paddle
-        .api_key
-        .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("no PADDLE_API_KEY"))?;
-    let mut request = app
-        .http
-        .request(method, format!("{}{path}", paddle.api_url))
-        .bearer_auth(key)
-        .timeout(std::time::Duration::from_secs(15));
-    if let Some(body) = body {
-        request = request.json(&body);
-    }
-    let response = request.send().await?;
-    let status = response.status();
-    let answer: Value = response.json().await.unwrap_or(Value::Null);
-    anyhow::ensure!(
-        status.is_success(),
-        "paddle {path}: {status} {}",
-        answer["error"]["detail"].as_str().unwrap_or_default()
-    );
-    Ok(answer)
-}
-
-/// The account's Paddle subscription, if it ever had one:
-/// `(customer, subscription, status)`.
-async fn paddle_subscription(
+/// The account's Buy Me a Coffee membership, if it ever had one:
+/// `(subscription, status)`.
+async fn membership(
     app: &AppState,
     account: &str,
-) -> sqlx::Result<Option<(Option<String>, Option<String>, String)>> {
+) -> sqlx::Result<Option<(Option<String>, String)>> {
     sqlx::query_as(
-        "select provider_customer, provider_subscription, status from subscriptions
-         where account_id = $1 and provider = 'paddle'",
+        "select provider_subscription, status from subscriptions
+         where account_id = $1 and provider = 'buymeacoffee'",
     )
     .bind(account)
     .fetch_optional(&app.db)
     .await
 }
 
-/// What the account page offers about paying: subscribe, or manage the
-/// subscription the account has. Empty when the paid plan is off.
+/// Where the membership is bought and managed.
+fn membership_url(bmc: &BuyMeACoffee) -> String {
+    format!("https://buymeacoffee.com/{}/membership", bmc.page)
+}
+
+/// What the account page offers about paying: support, or where to manage
+/// the membership the account has. Empty when the paid plan is off.
 pub async fn account_links(app: &AppState, account: &accounts::Account, lang: Lang) -> String {
-    let Some(paddle) = app.config.paddle.as_ref() else {
+    let Some(bmc) = app.config.buymeacoffee.as_ref() else {
         return String::new();
     };
-    let current = paddle_subscription(app, &account.id).await.ok().flatten();
+    let current = membership(app, &account.id).await.ok().flatten();
     match current {
-        Some((Some(_), _, status)) if status != "canceled" => {
-            if paddle.api_key.is_some() {
-                format!(
-                    r#"<a class="button ghost" href="/billing/manage">{}</a>"#,
-                    lang.pick("Gerenciar assinatura", "Manage subscription")
-                )
-            } else {
-                format!(
-                    r#"<p class="muted">{}</p>"#,
-                    lang.pick(
-                        "Para trocar o cartão ou cancelar, use o link do recibo que o Paddle mandou por e-mail.",
-                        "To change the card or cancel, use the link in the receipt Paddle emailed you."
-                    )
-                )
-            }
-        }
+        Some((_, status)) if status == "active" || status == "paused" => format!(
+            r#"<p class="muted">{}</p><a class="button ghost" href="{}" target="_blank" rel="noopener">{}</a>"#,
+            lang.pick(
+                "A assinatura é gerenciada no Buy Me a Coffee: é lá que você troca o cartão, pausa ou cancela.",
+                "The membership is managed on Buy Me a Coffee: that is where you change the card, pause or cancel."
+            ),
+            escape(&membership_url(bmc)),
+            lang.pick("Gerenciar no Buy Me a Coffee", "Manage on Buy Me a Coffee"),
+        ),
         _ => format!(
             r#"<a class="button ghost" href="/billing/checkout">{}</a>"#,
             lang.pick(
@@ -293,18 +283,13 @@ pub async fn account_links(app: &AppState, account: &accounts::Account, lang: La
     }
 }
 
-/// A JavaScript string literal for `text`, safe inside a `<script>`.
-fn js(text: &str) -> String {
-    serde_json::to_string(text)
-        .unwrap_or_else(|_| "\"\"".to_owned())
-        .replace("</", "<\\/")
-}
-
-/// The checkout page: the plan, its two prices as Paddle shows them to this
-/// buyer (currency and tax of their country), and Paddle's checkout on top.
+/// The support page: what the plan gives, and the way to Buy Me a Coffee.
+///
+/// The address matters more here than anywhere else: it is all that ties the
+/// payment to this account, so the page shows it and asks for it.
 pub async fn checkout(State(app): State<AppState>, headers: HeaderMap) -> Response {
     let lang = Lang::of(&headers);
-    let Some(paddle) = app.config.paddle.as_ref() else {
+    let Some(bmc) = app.config.buymeacoffee.as_ref() else {
         return StatusCode::NOT_FOUND.into_response();
     };
     let Some(account) = login::signed_in(&app, &headers).await else {
@@ -318,40 +303,11 @@ pub async fn checkout(State(app): State<AppState>, headers: HeaderMap) -> Respon
 <li>{projects}</li>
 <li>{drafts}</li>
 </ul>
-<button id="monthly" type="button">{monthly}&nbsp;<span data-price="monthly">· US$ 5</span></button>
-<button id="yearly" class="ghost" type="button">{yearly}&nbsp;<span data-price="yearly">· US$ 48</span></button>
+<p><b>{email_label}</b><br><code>{email}</code></p>
+<p class="muted">{email_text}</p>
+<a class="button" href="{url}" target="_blank" rel="noopener">{go}</a>
 <p class="muted" style="margin-top:14px">{fine}</p>
-<p id="failed" class="muted" hidden>{failed}</p>
-<a class="button ghost" href="/account">{back}</a>
-<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
-<script>
-(function () {{
-  var prices = {{ monthly: {monthly_id}, yearly: {yearly_id} }};
-  var failed = function () {{ document.getElementById("failed").hidden = false; }};
-  if (!window.Paddle) {{ failed(); return; }}
-  if ({sandbox}) Paddle.Environment.set("sandbox");
-  Paddle.Initialize({{ token: {token} }});
-  Object.keys(prices).forEach(function (kind) {{
-    document.getElementById(kind).onclick = function () {{
-      Paddle.Checkout.open({{
-        items: [{{ priceId: prices[kind], quantity: 1 }}],
-        customer: {{ email: {email} }},
-        customData: {{ account_id: {account_id} }},
-        settings: {{ displayMode: "overlay", locale: {locale}, successUrl: {success} }}
-      }});
-    }};
-  }});
-  Paddle.PricePreview({{ items: [
-    {{ priceId: prices.monthly, quantity: 1 }}, {{ priceId: prices.yearly, quantity: 1 }}
-  ] }}).then(function (preview) {{
-    var lines = preview.data.details.lineItems;
-    ["monthly", "yearly"].forEach(function (kind, i) {{
-      var total = lines[i] && lines[i].formattedTotals && lines[i].formattedTotals.total;
-      if (total) document.querySelector('[data-price="' + kind + '"]').textContent = "· " + total;
-    }});
-  }}).catch(function () {{}});
-}})();
-</script>"#,
+<a class="button ghost" href="/account">{back}</a>"#,
         title = lang.pick("Plano Supporter", "Supporter plan"),
         intro = lang.pick(
             "O plano gratuito continua valendo. O Supporter ajuda a manter o servidor e amplia o que custa processamento:",
@@ -366,104 +322,57 @@ pub async fn checkout(State(app): State<AppState>, headers: HeaderMap) -> Respon
             "100 projects and 2 GB in the cloud"
         ),
         drafts = lang.pick("200 fotos rascunho por dia", "200 draft photos a day"),
-        monthly = lang.pick("Mensal", "Monthly"),
-        yearly = lang.pick("Anual", "Yearly"),
-        fine = lang.pick(
-            "O pagamento é feito pelo Paddle, nosso revendedor e vendedor oficial (merchant of record), que cuida da cobrança, dos impostos e do recibo. Cancele quando quiser: o plano vale até o fim do período pago.",
-            "Payment is handled by Paddle, our reseller and merchant of record, which takes care of billing, tax and the receipt. Cancel any time: the plan lasts until the end of the paid period."
+        email_label = lang.pick("Use este e-mail no pagamento:", "Use this email when you pay:"),
+        email = escape(&account.email),
+        email_text = lang.pick(
+            "É por ele que o plano encontra esta conta. Pagando com outro endereço, o plano vai para a conta daquele endereço.",
+            "It is how the plan finds this account. Paying with another address puts the plan on that address's account."
         ),
-        failed = lang.pick(
-            "O checkout não carregou. Desative o bloqueador de anúncios para esta página e recarregue.",
-            "The checkout did not load. Turn off the ad blocker for this page and reload."
+        url = escape(&membership_url(bmc)),
+        go = lang.pick("Continuar no Buy Me a Coffee", "Continue on Buy Me a Coffee"),
+        fine = lang.pick(
+            "O pagamento é feito no Buy Me a Coffee, que cuida da cobrança e do recibo. O plano vale enquanto a assinatura estiver ativa; cancelando, ele vale até o fim do período já pago. Pausar ou cancelar é feito lá.",
+            "Payment happens on Buy Me a Coffee, which takes care of the charge and the receipt. The plan lasts while the membership is active; cancel and it lasts until the end of the period already paid for. Pausing and cancelling are done there."
         ),
         back = lang.pick("Voltar para a conta", "Back to the account"),
-        monthly_id = js(&paddle.monthly_price),
-        yearly_id = js(&paddle.yearly_price),
-        sandbox = if paddle.sandbox { "true" } else { "false" },
-        token = js(&paddle.client_token),
-        email = js(&account.email),
-        account_id = js(&account.id),
-        locale = js(lang.pick("pt", "en")),
-        success = js(&format!("{}/account?paid=1", app.config.public_url)),
     );
     page(lang, lang.pick("Plano Supporter", "Supporter plan"), &body).into_response()
 }
 
-/// Paddle's customer portal for the account's subscription: change the card,
-/// see receipts, cancel.
-pub async fn manage(State(app): State<AppState>, headers: HeaderMap) -> Response {
-    let lang = Lang::of(&headers);
-    let Some(paddle) = app.config.paddle.as_ref() else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
-    let Some(account) = login::signed_in(&app, &headers).await else {
-        return Redirect::to("/login?return_to=/billing/manage").into_response();
-    };
-    let Ok(Some((Some(customer), subscription, _))) = paddle_subscription(&app, &account.id).await
-    else {
-        return Redirect::to("/account").into_response();
-    };
-    let body = json!({ "subscription_ids": subscription.into_iter().collect::<Vec<_>>() });
-    match api(
-        &app,
-        paddle,
-        reqwest::Method::POST,
-        &format!("/customers/{customer}/portal-sessions"),
-        Some(body),
-    )
-    .await
-    {
-        Ok(session) => match session["data"]["urls"]["general"]["overview"].as_str() {
-            Some(url) if url.starts_with("https://") => Redirect::to(url).into_response(),
-            _ => unavailable(lang),
-        },
-        Err(err) => {
-            tracing::error!("paddle portal: {err:#}");
-            unavailable(lang)
-        }
-    }
-}
-
-fn unavailable(lang: Lang) -> Response {
-    let body = format!(
-        "<h1>{}</h1><p class=\"muted\">{}</p><a class=\"button ghost\" href=\"/account\">{}</a>",
-        lang.pick("Não deu agora", "Not right now"),
-        lang.pick(
-            "O portal de assinatura não abriu. Tente de novo em instantes, ou use o link do recibo que o Paddle mandou por e-mail.",
-            "The subscription portal did not open. Try again in a moment, or use the link in the receipt Paddle emailed you."
-        ),
-        lang.pick("Voltar para a conta", "Back to the account"),
-    );
-    (StatusCode::BAD_GATEWAY, page(lang, "Subscription", &body)).into_response()
-}
-
-/// Cancels the account's subscription at the end of the paid period, when
-/// the account is closed: nobody is charged for an account that is gone.
-/// Without an API key there is nothing to call; the page says how.
+/// What an account being closed should be told about a membership it still
+/// has. Buy Me a Coffee gives a seller no way to cancel one, so the only
+/// honest thing to do is say where it is cancelled — and stop the plan here,
+/// so a closed account leaves nothing behind that still counts as paid.
 pub async fn cancel_for_closed(app: &AppState, account: &str) {
-    let Some(paddle) = app.config.paddle.as_ref() else {
-        return;
-    };
-    if paddle.api_key.is_none() {
+    if app.config.buymeacoffee.is_none() {
         return;
     }
-    let Ok(Some((_, Some(subscription), status))) = paddle_subscription(app, account).await else {
+    let Ok(Some((_, status))) = membership(app, account).await else {
         return;
     };
     if status == "canceled" {
         return;
     }
-    if let Err(err) = api(
-        app,
-        paddle,
-        reqwest::Method::POST,
-        &format!("/subscriptions/{subscription}/cancel"),
-        Some(json!({ "effective_from": "next_billing_period" })),
+    if let Err(err) = sqlx::query(
+        "update subscriptions set status = 'canceled', updated_at = now()
+         where account_id = $1 and provider = 'buymeacoffee'",
     )
+    .bind(account)
+    .execute(&app.db)
     .await
     {
-        tracing::error!("cancelling a closed account's subscription: {err:#}");
+        tracing::error!("closing an account with a membership: {err:#}");
     }
+    tracing::warn!("an account was closed with a membership still charging on Buy Me a Coffee");
+}
+
+/// Whether the account still has a membership that Buy Me a Coffee would go
+/// on charging — what the closing page has to warn about.
+pub async fn still_charging(app: &AppState, account: &str) -> bool {
+    matches!(
+        membership(app, account).await,
+        Ok(Some((_, status))) if status == "active" || status == "paused"
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -471,8 +380,8 @@ pub struct Paid {
     paid: Option<String>,
 }
 
-/// The note the account page shows right after the checkout: the webhook
-/// may take a few seconds to change the plan.
+/// The note the account page shows on the way back from Buy Me a Coffee: the
+/// webhook may take a few seconds to change the plan.
 pub fn thanks(lang: Lang, query: &Query<Paid>) -> String {
     if query.paid.is_none() {
         return String::new();
@@ -490,6 +399,7 @@ pub fn thanks(lang: Lang, query: &Query<Paid>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     /// RFC 4231 test case 2.
     #[test]
@@ -501,38 +411,39 @@ mod tests {
     }
 
     #[test]
-    fn only_paddles_recent_deliveries_pass() {
-        // Made up here, in the shape of a Paddle secret: nothing real is
-        // written in the code, and a secret scanner has nothing to flag.
-        let secret = &format!("pdl_ntfset_{}", "test-key-not-a-secret");
-        let body = br#"{"event_type":"subscription.activated"}"#;
-        let header = signature(secret, 1_000_000, body);
-        assert!(verified(secret, &header, body, 1_000_010));
+    fn only_buy_me_a_coffees_deliveries_pass() {
+        // Made up here: nothing real is written in the code, and a secret
+        // scanner has nothing to flag.
+        let secret = &format!("whsec_{}", "test-key-not-a-secret");
+        let body = br#"{"type":"membership.started"}"#;
+        let header = signature(secret, body);
+        assert!(verified(secret, &header, body));
         assert!(
-            !verified(secret, &header, br#"{"event_type":"other"}"#, 1_000_010),
+            verified(secret, &format!(" {header} "), body),
+            "spacing around the header"
+        );
+        assert!(
+            !verified(secret, &header, br#"{"type":"membership.cancelled"}"#),
             "the body is signed"
         );
-        assert!(
-            !verified("pdl_ntfset_another", &header, body, 1_000_010),
-            "another secret"
-        );
-        assert!(
-            !verified(secret, &header, body, 1_000_000 + 3600),
-            "an old delivery is a replay"
-        );
-        assert!(!verified(secret, "", body, 1_000_000), "no header");
-        assert!(!verified(secret, "h1=abc", body, 1_000_000), "no timestamp");
-        // While the secret rotates, one of several h1 values matches.
-        let rotating = format!(
-            "ts=1000000;h1=deadbeef;{}",
-            header.split_once(';').unwrap().1
-        );
-        assert!(verified(secret, &rotating, body, 1_000_000));
+        assert!(!verified("whsec_another", &header, body), "another secret");
+        assert!(!verified(secret, "", body), "no header");
+        assert!(!verified(secret, "not hex", body), "nonsense");
     }
 
     #[test]
-    fn a_script_string_cannot_close_the_script() {
-        assert_eq!(js("a</script>b"), r#""a<\/script>b""#);
-        assert_eq!(js("x\"y"), r#""x\"y""#);
+    fn a_cancelled_membership_lasts_until_the_period_ends() {
+        let ending = json!({ "status": "active", "cancel_at_period_end": "true" });
+        assert_eq!(status_of("membership.cancelled", &ending), "active");
+        let over = json!({ "status": "canceled", "cancel_at_period_end": "false" });
+        assert_eq!(status_of("membership.cancelled", &over), "canceled");
+        let paused = json!({ "status": "paused" });
+        assert_eq!(status_of("membership.paused", &paused), "paused");
+        let started = json!({ "status": "active" });
+        assert_eq!(status_of("membership.started", &started), "active");
+        // The flags arrive as strings of "true"/"false", and booleans read
+        // the same way in case that ever changes.
+        let boolean = json!({ "status": "active", "canceled": true });
+        assert_eq!(status_of("membership.updated", &boolean), "canceled");
     }
 }
