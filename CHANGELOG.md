@@ -17,6 +17,10 @@ All notable changes to this project are documented here. The format follows
   dashboard nobody outside the org can see: clippy treated as a build failure, the
   `newera-mcp` tool shapes treated as a public contract, and outside contributors
   allowed to talk to the reviewer on their own pull request.
+- A prose-only change no longer runs CI. Editing a README, `docs/`, a licence or an
+  issue template used to spend eighteen minutes across seven jobs to prove that
+  Markdown still compiles. The plugin's own Markdown is exempt from the exemption:
+  the Format job validates every `SKILL.md`.
 
 ### Removed
 

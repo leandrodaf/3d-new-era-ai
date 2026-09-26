@@ -1,9 +1,27 @@
 name: CI
 
+# Prose-only changes skip the whole run: nothing in the list below reaches a
+# compiler or a linter. The plugin's own markdown is deliberately absent — the
+# Format job runs `plugin validate`, which reads every SKILL.md. GitHub Actions
+# does not expand YAML anchors, so the list is spelled out twice.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "*.md"
+      - "docs/**"
+      - "LICENSE-*"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
+      - ".coderabbit.yaml"
   pull_request:
+    paths-ignore:
+      - "*.md"
+      - "docs/**"
+      - "LICENSE-*"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
+      - ".coderabbit.yaml"
   workflow_dispatch:
 
 concurrency:
