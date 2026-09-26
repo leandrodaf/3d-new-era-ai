@@ -5,10 +5,10 @@ Copy from here into their forms.
 
 - **Server URL:** `https://mcp.3dneweraai.com/mcp` (Streamable HTTP, OAuth 2.1 with
   dynamic client registration and client ID metadata documents, PKCE S256)
-- **Public documentation:** https://3dneweraai.com/connector/
-- **Privacy policy:** https://3dneweraai.com/privacy/
-- **Terms:** https://3dneweraai.com/terms/
-- **Support:** contato@3dneweraai.com
+- **Public documentation:** <https://3dneweraai.com/connector/>
+- **Privacy policy:** <https://3dneweraai.com/privacy/>
+- **Terms:** <https://3dneweraai.com/terms/>
+- **Support:** <contato@3dneweraai.com>
 - **Sign-in:** a one-time link sent by email; no password, no MFA
 
 ## Short description
@@ -64,7 +64,7 @@ Each starts in a new conversation, signed in with the review account.
 
 ## Review account
 
-A full account on the paid plan, no MFA: sign in at https://mcp.3dneweraai.com/login with
+A full account on the paid plan, no MFA: sign in at <https://mcp.3dneweraai.com/login> with
 the review address given in the form; the sign-in link arrives at that inbox. Paid features
 (high-quality photos, higher limits) are enabled on it.
 

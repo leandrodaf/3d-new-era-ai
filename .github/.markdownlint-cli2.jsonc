@@ -1,0 +1,7 @@
+// GitHub renders these as forms, not as documents: an issue or pull request
+// template opens on its first field, not on a title.
+{
+  "config": {
+    "MD041": false
+  }
+}

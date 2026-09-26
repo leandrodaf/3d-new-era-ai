@@ -1,0 +1,17 @@
+# Spelling for the prose. https://github.com/crate-ci/typos
+#
+# Scope is the documentation, not the code and not the automation: the UI
+# strings in the Rust tree are translated inline and the deploy workflow is
+# commented in Portuguese, so an English dictionary reads correct Portuguese as
+# mistakes. The Docs workflow names the documentation it checks, and leaves
+# README.pt-BR.md off that list — this exclude only covers a directory walk
+# that reaches it.
+[files]
+extend-exclude = ["README.pt-BR.md"]
+
+# The product speaks Portuguese, and English prose quotes it: a menu path, a
+# severity label, the title on a window. These are names, not misspellings.
+[default.extend-words]
+tema = "tema"
+erro = "erro"
+foto = "foto"

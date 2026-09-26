@@ -1,0 +1,5 @@
+# Link checking for the Markdown. https://lychee.cli.rs
+# Only relative links are checked, so a rename that orphaned a docs/ page fails
+# here; somebody else's server going down does not.
+exclude_all_private = true
+no_progress = true

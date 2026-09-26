@@ -6,7 +6,7 @@ Please report security issues privately, not in a public issue:
 
 - through GitHub: **Security → Report a vulnerability** on this repository
   ([private vulnerability reporting](https://github.com/leandrodaf/3d-new-era-ai/security/advisories/new)), or
-- by email to **contato@3dneweraai.com**.
+- by email to **<contato@3dneweraai.com>**.
 
 Include what is affected (desktop app, browser editor, relay or the hosted service at
 `mcp.3dneweraai.com`), the version, and the steps to reproduce. You will get an answer

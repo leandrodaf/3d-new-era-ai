@@ -49,9 +49,14 @@ reviews:
         that skip the auth layer used by their neighbours.
     - path: ".github/workflows/**"
       instructions: >-
-        Pin actions and keep `GITHUB_TOKEN` permissions least-privilege. Flag
-        any step that would run code from a fork's PR with repository secrets
-        in scope.
+        Every third-party `uses:` names a released version tag, the way the
+        rest of the workflows do — not a moving branch, and not an unpinned
+        default. `dtolnay/rust-toolchain@stable` is the deliberate exception,
+        because the job exists to track current stable Rust. Do not ask for
+        commit-SHA pinning; the repository has settled on version tags and
+        Dependabot moves them. Keep `GITHUB_TOKEN` permissions
+        least-privilege, and flag any step that would run code from a fork's
+        PR with repository secrets in scope.
     - path: "**/*.md"
       instructions: >-
         README.md and README.pt-BR.md are translations of each other: a change

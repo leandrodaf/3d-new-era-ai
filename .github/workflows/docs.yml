@@ -1,0 +1,69 @@
+name: Docs
+
+# The other half of ci.yml's paths-ignore: prose leaves the heavy workflow, and
+# lands here instead. Every Markdown file in the repository is checked, the
+# plugin's skills included — those also go through ci.yml, which validates them
+# as plugin manifests rather than as prose.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.md"
+      - ".markdownlint-cli2.jsonc"
+      - ".github/.markdownlint-cli2.jsonc"
+      - "_typos.toml"
+      - "lychee.toml"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "**/*.md"
+      - ".markdownlint-cli2.jsonc"
+      - ".github/.markdownlint-cli2.jsonc"
+      - "_typos.toml"
+      - "lychee.toml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  markdown:
+    name: Markdown
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Rules live in .markdownlint-cli2.jsonc, so `make docs` runs the same set.
+      - uses: DavidAnson/markdownlint-cli2-action@v24.2.0
+
+  spelling:
+    name: Spelling
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # The documentation, not the code and not the automation. The UI strings
+      # in the Rust tree are translated inline, and the deploy workflow is
+      # commented in Portuguese; an English dictionary has nothing useful to say
+      # about either. README.pt-BR.md is named out rather than excluded in
+      # _typos.toml, because a path given on the command line is checked whether
+      # it is excluded or not. Add a new root page here.
+      - uses: crate-ci/typos@v1.50.3
+        with:
+          files: "README.md CHANGELOG.md CONTRIBUTING.md CODE_OF_CONDUCT.md SECURITY.md docs .github/ISSUE_TEMPLATE .github/pull_request_template.md plugin plugin-desktop"
+
+  links:
+    name: Links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Offline: a relative link into docs/ that a rename broke is a bug in the
+      # repository. A dead link on somebody else's server is not, and checking
+      # them on every pull request buys flakes and rate limits.
+      - uses: lycheeverse/lychee-action@v2.9.0
+        with:
+          args: --offline --no-progress "**/*.md"
+          fail: true

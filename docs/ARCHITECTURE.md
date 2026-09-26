@@ -11,7 +11,7 @@ That is what makes these properties hold everywhere, for free:
 - batches are atomic: if one step fails, nothing is applied;
 - every client sees changes from every other client, because they share one document.
 
-```
+```text
                     ┌───────────────────────────────┐
                     │          newera-core          │
                     │  Home ─ Command ─ Document    │
@@ -87,7 +87,7 @@ editor and MCP.
 `Command::apply(self, &mut Home) -> Result<Command>` applies a change and returns
 its inverse. `Document` keeps two stacks of inverses:
 
-```
+```text
 execute(c): inverse = c.apply(home); undo.push(inverse); redo.clear()
 undo():     c = undo.pop(); redo.push(c.apply(home))
 redo():     c = redo.pop(); undo.push(c.apply(home))
