@@ -50,11 +50,28 @@ Makefile reads it — and run `newera telemetry test`.
 ## Before opening a PR
 
 ```sh
-make check   # fmt, clippy (pedantic, -D warnings), tests, MCP smoke test
-make deny    # license and advisory audit
+make check       # fmt, clippy (pedantic, -D warnings), tests, MCP smoke test
+make deny        # license and advisory audit
+make docs-lint   # only if you touched Markdown: rules, spelling, links
 ```
 
 CI runs the same checks on Linux, macOS and Windows.
+
+### How a change lands
+
+`main` takes no direct pushes: a pull request with green checks is the way in, and it
+arrives as a single squashed commit. Force pushes to `main` and deleting it are refused,
+and a review thread has to be resolved before the merge button turns green. No approval
+from anyone else is required.
+
+A change that touches only prose skips the seven Rust jobs and runs three quick ones
+instead — Markdown, spelling and links. Nothing is needed from you to get that: a job
+that has nothing to do reports itself as skipped. `scripts/changed-kind.sh` decides which
+half a change belongs to, and you can ask it directly:
+
+```sh
+scripts/changed-kind.sh README.md   # code=false docs=true
+```
 
 ## Guidelines
 
