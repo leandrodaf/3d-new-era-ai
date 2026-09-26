@@ -1362,7 +1362,12 @@ impl NewEraApp {
         let button = egui::Button::new(label.color(ink))
             .fill(yellow)
             .corner_radius(egui::CornerRadius::same(7));
-        if ui.add(button).on_hover_text(words).clicked() {
+        let response = ui.add(button);
+        // Narrowed to the cup, the button's own text is one glyph of an icon
+        // font, which is what a screen reader would otherwise be handed. The
+        // hover text is a picture; this is the name.
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, words));
+        if response.on_hover_text(words).clicked() {
             ui.ctx().open_url(egui::OpenUrl::new_tab(SUPPORT_URL));
         }
     }
