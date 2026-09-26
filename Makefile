@@ -43,6 +43,25 @@ dev: ## Rebuilds and reopens the editor on every change (cargo-watch)
 	@command -v cargo-watch >/dev/null || { echo "cargo-watch ausente: rode 'make setup'"; exit 1; }
 	cargo watch -c -w crates -x "run -p newera -- --demo"
 
+# A change in the core rebuilds every crate above it and relinks the editor:
+# about a minute and a half. Stopping at newera-render is a quarter of that,
+# and for anything you have to *look* at — floors, walls, joins, materials —
+# the picture is the answer, not the window.
+SHOT_FILE ?= web/demo.newera
+SHOT_OUT  ?= target/shot.png
+SHOT_VIEW ?= aerial
+
+.PHONY: shot
+shot: ## Renders a project to a PNG, no window: make shot SHOT_VIEW='cam=2'
+	@cargo run -q -p newera-render --example shot -- \
+	  $(SHOT_FILE) $(SHOT_OUT) $(SHOT_VIEW)
+
+.PHONY: watch
+watch: ## Re-renders that PNG on every change (cargo-watch)
+	@command -v cargo-watch >/dev/null || { echo "cargo-watch missing: run 'make setup'"; exit 1; }
+	cargo watch -c -w crates -x "run -q -p newera-render --example shot -- \
+	  $(SHOT_FILE) $(SHOT_OUT) $(SHOT_VIEW)"
+
 .PHONY: serve
 serve: ## Only the HTTP + MCP server, no window (headless)
 	$(CARGO) run -p newera -- serve --demo

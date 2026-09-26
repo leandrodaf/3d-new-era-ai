@@ -10,6 +10,24 @@ make run     # editor + HTTP + MCP with a sample house
 make dev     # same, rebuilding on every change
 ```
 
+### The short loop
+
+A change in `newera-core` rebuilds every crate above it and relinks the editor —
+about a minute and a half, and `--release` several times that. For anything you
+have to *look* at, the picture is the answer and the window is not: `make shot`
+stops at `newera-render` and writes a PNG (about 20 seconds from a change in the
+core), and `make watch` redraws it on every save.
+
+```sh
+make shot                                    # aerial view of the sample house
+make shot SHOT_VIEW='cam=2'                  # a stored point of view
+make shot SHOT_VIEW='top' SHOT_OUT=/tmp/p.png
+make shot SHOT_FILE=my-plan.newera SHOT_VIEW='aerial yaw=45 pitch=35 walls=down'
+```
+
+Keep `--release` for measuring speed and for what you ship; it is not the build
+to iterate on.
+
 Run `make` to list every command. [docs/README.md](docs/README.md) maps the
 documentation and [scripts/README.md](scripts/README.md) the helper scripts.
 
