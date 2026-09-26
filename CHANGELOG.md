@@ -31,6 +31,9 @@ All notable changes to this project are documented here. The format follows
   a required check that never reports blocks a pull request forever while a skipped one
   counts as a pass. `scripts/changed-kind.sh` decides, and proves itself against a table
   of cases on every run.
+  A single `CI` and `Docs` check speaks for the jobs behind it, because a matrix job that
+  is skipped reports once under its unexpanded name and the per-OS names would never
+  arrive on a prose-only run.
 
 ### Removed
 

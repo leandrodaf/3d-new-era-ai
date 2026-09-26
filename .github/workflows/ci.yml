@@ -228,3 +228,27 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
+
+  # The one check for branch protection to require, rather than ten that change
+  # name whenever a job does. It also covers a trap: when a matrix job is
+  # skipped, GitHub reports it once under the job's unexpanded name, so
+  # Test (ubuntu-latest) and its siblings never arrive on a prose-only run and
+  # a required check waiting on them would block the pull request forever.
+  # This job runs either way and speaks for all of them.
+  ci:
+    name: CI
+    needs: [changes, fmt, clippy, test, cloud, msrv, web, deny]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job succeeded, or had nothing to do
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          for result in $RESULTS; do
+            case "$result" in
+              success | skipped) ;;
+              *) echo "::error::a job reported '$result'"; exit 1 ;;
+            esac
+          done
