@@ -229,6 +229,12 @@ pub struct Report {
     pub findings: Vec<Finding>,
     /// The sources the findings stand on, each one once.
     pub refs: Vec<&'static Standard>,
+    /// Where this review was conducted, which is what decides how much each
+    /// source in `refs` obliges. It travels with the report because the letter
+    /// is not a property of the source: whoever shows a citation has to know
+    /// the place it was weighed at, or an ABNT standard reads as an obligation
+    /// in Florida.
+    pub place: newera_core::Place,
 }
 
 /// Wardrobe front per adult, cm: NBR 15575-1 annex F gives 1,60 m for a
@@ -2521,10 +2527,16 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
         city: profile.city.clone().or_else(|| home.compass.city.clone()),
         ..profile.clone()
     };
+    // The place is the project's, so every caller weighs the same law; a city
+    // named in the call still wins, for asking "and under this code?".
+    let place = match profile.city.as_deref() {
+        Some(city) => newera_core::Place::from_city(Some(city)),
+        None => home.compass.place(),
+    };
     let mut review = Review {
         glass: glass_by_room(&scene),
         scene: &scene,
-        place: newera_core::Place::from_city(profile.city.as_deref()),
+        place: place.clone(),
         profile,
         findings: Vec::new(),
     };
@@ -2671,6 +2683,7 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
         capacity,
         findings,
         refs,
+        place,
     }
 }
 

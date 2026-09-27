@@ -593,6 +593,17 @@ pub struct Compass {
     /// the number it moves is guesswork.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub city: Option<String>,
+    /// Country whose standards apply, normally ISO 3166-1 alpha-2: `br`,
+    /// `us`, `de`. Left unsaid, the review assumes the home jurisdiction —
+    /// see [`crate::Place::HOME_COUNTRY`] — because a project with no address
+    /// still has to be weighed against the standards that oblige somewhere.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub country: Option<String>,
+    /// State or province whose code applies: `sp`, `fl`. It matters as much as
+    /// the country in the United States, where it is the state that adopts a
+    /// building code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
 }
 
 impl Default for Compass {
@@ -606,11 +617,29 @@ impl Default for Compass {
             longitude: None,
             time_zone: None,
             city: None,
+            country: None,
+            region: None,
         }
     }
 }
 
 impl Compass {
+    /// Where the project stands, as the standards registry weighs it.
+    ///
+    /// A city we hold brings its state and country with it, so a project that
+    /// only ever picked a building code is placed correctly without anybody
+    /// filling in two more fields. What the compass says itself wins over
+    /// what the city implies: somebody who names the country meant it.
+    #[must_use]
+    pub fn place(&self) -> crate::Place {
+        let implied = crate::Place::from_city(self.city.as_deref());
+        crate::Place {
+            country: crate::standards::part(self.country.as_deref()).or(implied.country),
+            region: crate::standards::part(self.region.as_deref()).or(implied.region),
+            city: implied.city,
+        }
+    }
+
     pub(crate) fn validate(&self) -> CoreResult<()> {
         if !(self.center.is_finite() && self.diameter > 0.0 && self.north_degrees.is_finite()) {
             return invalid("compass needs a finite center and angle and a positive diameter");

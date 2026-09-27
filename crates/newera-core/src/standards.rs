@@ -190,13 +190,6 @@ pub struct Standard {
     /// What it is, which is how far it can go.
     pub kind: Kind,
     pub status: Status,
-    /// The letter this source is worth in Brazil, recorded when the registry
-    /// was written by hand.
-    ///
-    /// It is kept only as the cross-check that [`Standard::force`] reproduces
-    /// it — see the test that holds every entry to it — and goes away once the
-    /// interface and the tool replies take a [`Place`] of their own.
-    pub tier: Tier,
     /// What it governs, in one line.
     pub scope: &'static str,
     /// A legitimate public version: official PDF, sector guide or booklet.
@@ -252,13 +245,18 @@ impl Standard {
 
 use Confidence::{ConfirmBeforeUse, Verified};
 
+// Eight of the ten fields of one table row, written out once per entry and
+// nowhere else; the two that are almost always the same — status and the
+// override — are set by `withdrawn` and `held_at` on the few entries that need
+// them. A struct to carry the rest would be the same eight names with a type
+// wrapped around them, and several hundred call sites longer.
+#[allow(clippy::too_many_arguments)]
 const fn s(
     code: &'static str,
     title: &'static str,
     edition: &'static str,
     authority: Authority,
     kind: Kind,
-    tier: Tier,
     scope: &'static str,
     url: Option<&'static str>,
     confidence: Confidence,
@@ -270,7 +268,6 @@ const fn s(
         authority,
         kind,
         status: Status::InForce,
-        tier,
         scope,
         url,
         confidence,
@@ -308,7 +305,6 @@ pub static STANDARDS: &[Standard] = &[
         "2013 + Emenda 1:2021",
         BR,
         Kind::Standard,
-        Tier::A,
         "Mobiliário mínimo por cômodo e circulação: 0,85 m diante de pia, fogão e geladeira; 0,50 m entre móveis e paredes e diante de assentos; 0,40 m diante de vaso e lavatório; 0,75 m da mesa; guarda-roupa de 1,60 m no casal.",
         Some(
             "https://www.ufsb.edu.br/propa/images/dinfra/coman/Legisla%C3%A7%C3%B5es/NBR15575-1.pdf",
@@ -321,7 +317,6 @@ pub static STANDARDS: &[Standard] = &[
         "2021",
         BR,
         Kind::Standard,
-        Tier::A,
         "Pé-direito mínimo de 2,50 m, e 2,30 m em halls, corredores, banheiros e despensas (16.1.1).",
         Some("https://cbic.org.br/wp-content/uploads/2017/11/Guia_da_Norma_de_Desempenho_2013.pdf"),
         Verified,
@@ -332,7 +327,6 @@ pub static STANDARDS: &[Standard] = &[
         "2020",
         BR,
         Kind::Standard,
-        Tier::A,
         "Área de aproximação e uso, alcances manuais, alturas de comando e giro de cadeira de rodas.",
         Some("https://www.confea.org.br/midias/acessibilidade_abnt_2022.pdf"),
         Verified,
@@ -343,7 +337,6 @@ pub static STANDARDS: &[Standard] = &[
         "2024",
         BR,
         Kind::Standard,
-        Tier::A,
         "Volume, ventilação e exaustão por tipo de aparelho (A, B, C), até 75 kW por ambiente; banheiros e ambientes de permanência prolongada só admitem tipo C.",
         Some(
             "https://gasescombustiveis.com.br/seminario/169/palestras/ABNT%20NBR%2013103%20BELO%20HORIZONTE%202025.pdf",
@@ -356,7 +349,6 @@ pub static STANDARDS: &[Standard] = &[
         "2004 (versão corrigida 2008)",
         BR,
         Kind::Standard,
-        Tier::A,
         "Cozinhas e copas: uma tomada a cada 3,5 m de perímetro ou fração, e duas sobre a bancada da pia, no mesmo ponto ou em pontos distintos (9.5.2.2.1 b).",
         Some("https://www.saladaeletrica.com.br/pontos-de-tomada-por-comodo/"),
         Verified,
@@ -367,7 +359,6 @@ pub static STANDARDS: &[Standard] = &[
         "2019",
         BR,
         Kind::Standard,
-        Tier::A,
         "Altura mínima de 1,10 m do piso ao corrimão (0,90 m sobre mureta), vão entre barras de até 11 cm, nada escalável até 0,45 m, vidro laminado classe 1.",
         Some("https://pdfcoffee.com/gramnbr147182019guarda-corpopdf-3-pdf-free.html"),
         Verified,
@@ -378,7 +369,6 @@ pub static STANDARDS: &[Standard] = &[
         "2014",
         BR,
         Kind::Standard,
-        Tier::A,
         "O envidraçamento não exerce a função de guarda-corpo (3.11); vidro temperado ou laminado de segurança; montado sobre o guarda-corpo, o conjunto atende também a NBR 14718.",
         Some("http://sistemaking.com.br/wp-content/uploads/2021/03/NBR-16259-1.pdf"),
         Verified,
@@ -389,7 +379,6 @@ pub static STANDARDS: &[Standard] = &[
         "2016",
         BR,
         Kind::Standard,
-        Tier::A,
         "Guarda-corpos de sacadas, escadas e desníveis só com vidro laminado, aramado ou insulado feito deles (tabela 8).",
         Some("https://files.comunidades.net/doutorvidros/NBR_7199_.pdf"),
         Verified,
@@ -400,7 +389,6 @@ pub static STANDARDS: &[Standard] = &[
         "1996",
         BR,
         Kind::Standard,
-        Tier::A,
         "Caimento do piso para o ralo: 0,5 % em áreas molhadas, 1,5 % a 2,5 % dentro do box, 1 % a 1,5 % em áreas externas.",
         Some(
             "https://normadedesempenho.com.br/a-execucao-em-conformidade-dos-revestimentos-de-pisos-com-placas-ceramicas/",
@@ -413,7 +401,6 @@ pub static STANDARDS: &[Standard] = &[
         "1989",
         BR,
         Kind::Standard,
-        Tier::A,
         "Água de chuva de terraços e áreas descobertas vai ao sistema pluvial, sem ligação com o esgoto.",
         Some(
             "https://ecivilufes.files.wordpress.com/2013/06/nbr-10844-1989-instalac3a7c3b5es-prediais-de-c3a1guas-pluviais.pdf",
@@ -426,7 +413,6 @@ pub static STANDARDS: &[Standard] = &[
         "2020",
         BR,
         Kind::Standard,
-        Tier::A,
         "Substitui a NBR 7198 (água quente): pressão estática até 400 kPa no ponto, dinâmica mínima de 10 kPa, registro antes dos sub-ramais de ao menos um ambiente sanitário.",
         None,
         Verified,
@@ -437,7 +423,6 @@ pub static STANDARDS: &[Standard] = &[
         "1999",
         BR,
         Kind::Standard,
-        Tier::A,
         "Ramais de descarga por aparelho (tabela 3), caimento recomendado de 2 % até 75 mm e 1 % a partir de 100, ventilação (tabela 1), caixas sifonadas, de gordura e de inspeção.",
         None,
         Verified,
@@ -448,7 +433,6 @@ pub static STANDARDS: &[Standard] = &[
         "2025",
         BR,
         Kind::Standard,
-        Tier::A,
         "Cabeamento de telecomunicações de edifícios comerciais: enlace permanente até 90 m, canal até 100 m.",
         None,
         ConfirmBeforeUse,
@@ -459,7 +443,6 @@ pub static STANDARDS: &[Standard] = &[
         "2004",
         BR,
         Kind::Standard,
-        Tier::A,
         "Correntes nominais preferenciais, capacidade de interrupção (1,5 a 10 kA) e faixas de disparo instantâneo B (3–5 In), C (5–10 In), D (10–20 In).",
         None,
         Verified,
@@ -470,7 +453,6 @@ pub static STANDARDS: &[Standard] = &[
         "v02, 06/03/2025",
         Authority::Region { country: "br", region: "sp" },
         Kind::Contract,
-        Tier::A,
         "127/220 V: monofásico até 12 kW, bifásico até 20 kW, trifásico até 75 kW; disjuntores de entrada fixos (50, 63, 80, 100… A) e 10 kA até 63 A.",
         Some("https://www.enel.com.br/pt-saopaulo/normas-tecnicas.html"),
         Verified,
@@ -481,7 +463,6 @@ pub static STANDARDS: &[Standard] = &[
         "fichas técnicas",
         Authority::Global,
         Kind::Manufacturer,
-        Tier::D,
         "Dimmer LED 10 W a 1,1 A, consumo em espera até 1–1,2 W, sensor de teto a cerca de 2,4 m cobrindo Ø 7 m.",
         None,
         ConfirmBeforeUse,
@@ -492,7 +473,6 @@ pub static STANDARDS: &[Standard] = &[
         "2016 (confirmada em 2025)",
         BR,
         Kind::Standard,
-        Tier::A,
         "Tomadas de telecomunicações por cômodo (tabela 1), cabo de 4 pares até o distribuidor de residência, canal até 100 m, tomada de energia junto a cada ponto e ao distribuidor.",
         None,
         ConfirmBeforeUse,
@@ -503,7 +483,6 @@ pub static STANDARDS: &[Standard] = &[
         "2021",
         BR,
         Kind::Standard,
-        Tier::A,
         "Eletrodutos e caminhos dos cabos de telecomunicações, separados dos de energia.",
         None,
         ConfirmBeforeUse,
@@ -514,7 +493,6 @@ pub static STANDARDS: &[Standard] = &[
         "1989 (cancelada em 2014, ainda a convenção de desenho)",
         BR,
         Kind::Standard,
-        Tier::C,
         "Símbolos dos pontos de luz, tomadas, interruptores e quadros na planta.",
         None,
         ConfirmBeforeUse,
@@ -526,7 +504,6 @@ pub static STANDARDS: &[Standard] = &[
         "1992 (cancelada em 2013)",
         BR,
         Kind::Standard,
-        Tier::C,
         "A única tabela residencial: sala e dormitório 150 lx (leitura 500), cozinha e banheiro 150 lx com 300 na bancada e no espelho, circulação e garagem 100 lx.",
         Some("http://ftp.demec.ufpr.br/disciplinas/TM802/NBR5413.pdf"),
         Verified,
@@ -538,7 +515,6 @@ pub static STANDARDS: &[Standard] = &[
         "2013",
         BR,
         Kind::Standard,
-        Tier::B,
         "Locais de trabalho, não residências: de 20 lx a 2.000 lx conforme a tarefa; circulação 100 lx, escrever e ler 500 lx. Os valores residenciais vêm da NBR 5413:1992 (cancelada): sala e dormitório 150, cozinha e banheiro 150 com 300 na bancada e no espelho.",
         None,
         Verified,
@@ -553,7 +529,6 @@ pub static STANDARDS: &[Standard] = &[
         "2020",
         BR,
         Kind::Standard,
-        Tier::A,
         "Reforma em condomínio exige plano com cronograma, segurança e responsável técnico.",
         None,
         Verified,
@@ -564,7 +539,6 @@ pub static STANDARDS: &[Standard] = &[
         "2011 / 2012",
         BR,
         Kind::Standard,
-        Tier::A,
         "O que a construtora entrega: manual de uso, sistemas instalados e programa de manutenção.",
         None,
         Verified,
@@ -575,7 +549,6 @@ pub static STANDARDS: &[Standard] = &[
         "2018",
         BR,
         Kind::Standard,
-        Tier::A,
         "Define o MDP: painel de partículas com densidade entre 551 e 750 kg/m³, bom em arranque de parafuso.",
         Some("https://iba.org/psq-paineis"),
         Verified,
@@ -586,7 +559,6 @@ pub static STANDARDS: &[Standard] = &[
         "2021",
         BR,
         Kind::Standard,
-        Tier::A,
         "Define o MDF: painel de fibras de processo seco, com usinabilidade de face e de topo.",
         None,
         Verified,
@@ -597,7 +569,6 @@ pub static STANDARDS: &[Standard] = &[
         "2023",
         BR,
         Kind::Contract,
-        Tier::A,
         "Cozinha de 1,80 m de largura mínima, com previsão de pia 120×50, fogão 55×60 e geladeira 70×70 cm.",
         Some("https://www.legisweb.com.br/legislacao/?id=446563"),
         ConfirmBeforeUse,
@@ -608,7 +579,6 @@ pub static STANDARDS: &[Standard] = &[
         "varia por município",
         BR,
         Kind::Law,
-        Tier::A,
         "São Paulo (Decreto 57.776, 5.A.6): permanência 5 m² e círculo de 2,00 m, cozinha 1,50 m e pé-direito 2,50 m, sanitário, lavanderia e circulação 0,90 m; o estadual, subsidiário: iluminação 1/8 do piso (1/5 trabalho, 1/10 demais), ralo no piso de áreas molhadas. Contra norma, prevalece o mais restritivo.",
         Some("https://www.saopaulo.sp.leg.br/iah/fulltext/decretos/D57776.pdf"),
         Verified,
@@ -619,7 +589,6 @@ pub static STANDARDS: &[Standard] = &[
         "2004",
         BR,
         Kind::Law,
-        Tier::A,
         "Cozinha profissional: estrutura física, revestimentos, higienização, resíduos e pragas.",
         None,
         Verified,
@@ -631,7 +600,6 @@ pub static STANDARDS: &[Standard] = &[
         "atual",
         BR,
         Kind::Research,
-        Tier::D,
         "Acima de três moradores por dormitório o domicílio é considerado adensado.",
         None,
         Verified,
@@ -643,7 +611,6 @@ pub static STANDARDS: &[Standard] = &[
         "2018",
         Authority::Bloc("eu"),
         Kind::Standard,
-        Tier::B,
         "Larguras nominais de 400, 500, 600 e 900 mm para módulos inferiores, e os nichos de embutir.",
         Some("https://standards.cencenelec.eu/dyn/www/f?p=CEN:110:0::::FSP_PROJECT:41638&cs=1"),
         ConfirmBeforeUse,
@@ -654,7 +621,6 @@ pub static STANDARDS: &[Standard] = &[
         "5ª edição",
         Authority::Country("us"),
         Kind::Guideline,
-        Tier::B,
         "31 diretrizes de cozinha, cada uma com projeto, exigência de código e Access Standards.",
         Some("https://nkba.org/professional-resources/kitchen-bath-planning-guidelines/"),
         ConfirmBeforeUse,
@@ -665,7 +631,6 @@ pub static STANDARDS: &[Standard] = &[
         "2024 / 2023",
         Authority::Country("us"),
         Kind::Law,
-        Tier::B,
         "Bancada a partir de 305 mm exige tomada, e ela não fica a mais de 20 in acima da bancada.",
         None,
         Verified,
@@ -677,7 +642,6 @@ pub static STANDARDS: &[Standard] = &[
         "1977",
         Authority::Global,
         Kind::Doctrine,
-        Tier::C,
         "Bancada total ≥ 366 cm fora de pia, fogão e geladeira; nenhum trecho < 122 cm; nenhum par > 305 cm.",
         None,
         Verified,
@@ -688,7 +652,6 @@ pub static STANDARDS: &[Standard] = &[
         "atual",
         Authority::Global,
         Kind::Doctrine,
-        Tier::C,
         "Mantimentos, armazenagem, lavagem, preparo e cocção na ordem do fluxo; bancada 10–15 cm abaixo do cotovelo.",
         Some("https://www.blum.com/br/pt/company/dynamic-space/"),
         Verified,
@@ -699,7 +662,6 @@ pub static STANDARDS: &[Standard] = &[
         "1929 / anos 1940",
         Authority::Global,
         Kind::Doctrine,
-        Tier::C,
         "Pia, fogão e geladeira próximos; calibrado para cozinha de uma pessoa, sem micro-ondas nem lava-louças.",
         None,
         Verified,
@@ -710,7 +672,6 @@ pub static STANDARDS: &[Standard] = &[
         "atual",
         Authority::Global,
         Kind::Doctrine,
-        Tier::C,
         "Ilha, linha de parede e bloco de torres: uma tipologia limpa de layout. Material de marca, sem método publicado.",
         None,
         ConfirmBeforeUse,
@@ -721,7 +682,6 @@ pub static STANDARDS: &[Standard] = &[
         "desde 1936",
         Authority::Global,
         Kind::Doctrine,
-        Tier::C,
         "Dimensões antropométricas de referência para cozinha e mobiliário.",
         None,
         ConfirmBeforeUse,
@@ -732,7 +692,6 @@ pub static STANDARDS: &[Standard] = &[
         "1979",
         Authority::Global,
         Kind::Doctrine,
-        Tier::C,
         "Alcances, folgas e zonas de trabalho derivados de percentis populacionais.",
         None,
         Verified,
@@ -744,7 +703,6 @@ pub static STANDARDS: &[Standard] = &[
         "2012",
         Authority::Global,
         Kind::Research,
-        Tier::D,
         "Captura de menos de 15 % a mais de 98 % entre modelos de US$ 40 a 650; as que atendem a vazão capturam ≥80 % nas bocas traseiras e ≥50 % nas frontais.",
         Some(
             "https://newscenter.lbl.gov/2012/05/30/berkeley-lab-study-assesses-residential-cooking-exhaust-hoods-ability-to-vent-pollutants/",
@@ -758,7 +716,6 @@ pub static STANDARDS: &[Standard] = &[
         "2026",
         Authority::Country("us"),
         Kind::Survey,
-        Tier::E,
         "1.780 respondentes americanos em reforma de cozinha, campo em julho de 2025. Não transferível ao Brasil.",
         Some(
             "https://www.houzz.com/magazine/2026-u-s-houzz-kitchen-trends-study-stsetivw-vs~184213864",
@@ -771,7 +728,6 @@ pub static STANDARDS: &[Standard] = &[
         "2025",
         BR,
         Kind::Survey,
-        Tier::E,
         "A indústria moveleira nacional: 22 mil empresas e receita acima de R$ 91,5 bilhões em 2024.",
         None,
         Verified,
@@ -884,7 +840,7 @@ impl Place {
 }
 
 /// One part of a place, folded, with the blank treated as unsaid.
-fn part(raw: Option<&str>) -> Option<String> {
+pub(crate) fn part(raw: Option<&str>) -> Option<String> {
     let text = crate::fold(raw?.trim());
     (!text.is_empty()).then_some(text)
 }
@@ -1012,7 +968,10 @@ mod tests {
         assert_eq!(Place::default().depth(), 0);
         assert_eq!(Place::new(Some("us"), None, None).depth(), 1);
         assert_eq!(Place::new(Some("us"), Some("fl"), None).depth(), 2);
-        assert_eq!(Place::new(Some("br"), Some("sp"), Some("sao-paulo")).depth(), 3);
+        assert_eq!(
+            Place::new(Some("br"), Some("sp"), Some("sao-paulo")).depth(),
+            3
+        );
         // A city with no state behind it cannot be matched through the hole:
         // the state is what adopts a code in the United States.
         assert_eq!(Place::new(Some("us"), None, Some("miami")).depth(), 1);
@@ -1045,13 +1004,66 @@ mod tests {
         }
     }
 
+    /// What every source is worth in Brazil, written by hand.
+    ///
+    /// This is the letter the registry carried on each entry before force was
+    /// computed, kept here as the thing the computation answers to. It lives
+    /// in the test and not on the entry so that a source has one authority,
+    /// one nature and one status — and no second opinion to drift from.
+    const IN_BRAZIL: &[(&str, Tier)] = &[
+        ("nbr15575g", Tier::A),
+        ("nbr15575", Tier::A),
+        ("nbr9050", Tier::A),
+        ("nbr13103", Tier::A),
+        ("nbr5410", Tier::A),
+        ("nbr14718", Tier::A),
+        ("nbr16259", Tier::A),
+        ("nbr7199", Tier::A),
+        ("nbr13753", Tier::A),
+        ("nbr10844", Tier::A),
+        ("nbr5626", Tier::A),
+        ("nbr8160", Tier::A),
+        ("nbr14565", Tier::A),
+        ("nm60898", Tier::A),
+        ("enel-sp", Tier::A),
+        ("fabricantes", Tier::D),
+        ("nbr16264", Tier::A),
+        ("nbr16415", Tier::A),
+        ("nbr5444", Tier::C),
+        ("nbr5413", Tier::C),
+        ("nbr8995", Tier::B),
+        ("nbr16280", Tier::A),
+        ("nbr14037", Tier::A),
+        ("nbr14810", Tier::A),
+        ("nbr15316", Tier::A),
+        ("caixa-mcmv", Tier::A),
+        ("coe-municipal", Tier::A),
+        ("rdc216", Tier::A),
+        ("ibge-adensamento", Tier::D),
+        ("en1116", Tier::B),
+        ("nkba", Tier::B),
+        ("irc2024", Tier::B),
+        ("alexander184", Tier::C),
+        ("blum-zonas", Tier::C),
+        ("gilbreth-triangulo", Tier::C),
+        ("bulthaup-b1", Tier::C),
+        ("neufert", Tier::C),
+        ("panero-zelnik", Tier::C),
+        ("lbnl-coifa", Tier::D),
+        ("houzz2026", Tier::E),
+        ("abimovel", Tier::E),
+    ];
+
     #[test]
-    fn force_is_a_relation_with_the_place_and_today_agrees_with_every_entry() {
-        // The seam: until the authorities land, force answers with the tier
-        // recorded for Brazil. This test is what stops the computation behind
-        // it from quietly moving a single letter when it does land — and the
-        // empty place is in the list because it is the common case, the one
-        // where a silent demotion would turn an error into a warning.
+    fn every_source_is_worth_in_brazil_what_it_was_worth_before_force_was_computed() {
+        assert_eq!(
+            IN_BRAZIL.len(),
+            STANDARDS.len(),
+            "a source was added or removed without saying what it is worth here"
+        );
+        // Every Brazilian way of saying where the project is, including saying
+        // nothing — which is the common case, and the one where a silent
+        // demotion would turn an error into a warning.
         for at in [
             Place::from_city(Some("sao-paulo")),
             Place::from_city(Some("estado-sp")),
@@ -1059,13 +1071,9 @@ mod tests {
             Place::from_city(None),
             Place::default(),
         ] {
-            for source in STANDARDS {
-                assert_eq!(
-                    source.force(&at),
-                    source.tier,
-                    "{} at {at:?}",
-                    source.code
-                );
+            for &(code, expected) in IN_BRAZIL {
+                let source = standard(code).unwrap_or_else(|| panic!("{code} is in the registry"));
+                assert_eq!(source.force(&at), expected, "{code} at {at:?}");
             }
         }
     }
@@ -1105,7 +1113,10 @@ mod tests {
         // the country, and is contradicted by another state.
         let enel = at("enel-sp");
         assert_eq!(enel.force(&Place::new(Some("br"), None, None)), Tier::A);
-        assert_eq!(enel.force(&Place::new(Some("br"), Some("rj"), None)), Tier::B);
+        assert_eq!(
+            enel.force(&Place::new(Some("br"), Some("rj"), None)),
+            Tier::B
+        );
     }
 
     #[test]

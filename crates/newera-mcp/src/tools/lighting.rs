@@ -142,7 +142,7 @@ impl NewEraMcp {
                 "fixtures": lights.len(),
                 "lm": lumens.round(),
                 "W": watts.round(),
-                "sources": super::sources(&["nbr5413", "nbr8995"]),
+                "sources": super::sources(&["nbr5413", "nbr8995"], &home.compass.place()),
             })
             .to_string());
         };
