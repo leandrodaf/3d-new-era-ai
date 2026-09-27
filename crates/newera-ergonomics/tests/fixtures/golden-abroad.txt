@@ -328,8 +328,7 @@ Cozinha #0 / casal
   -  refs coe-municipal=A nbr15575g=A nbr15575=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
   -  Erro gas_without_vent:r105 ref=coe-municipal w=12 | Aparelho a gás em ambiente sem janela nem abertura permanente: a ventilação permanente para o exterior é obrigatória (em São Paulo, Decreto 57.776, 3.M), e aqui é segurança, não conforto.
   -  Dica room_area:r105 ref=coe-municipal w=0 | 2,97 m² para cozinha: códigos de obras costumam pedir ao menos 4,00 m² (confira o do seu município).
-  -  Dica room_narrow_side:r105 ref=nbr15575g w=0 | Menor lado de 135 cm; para cozinha a referência é pelo menos 150 cm.
-  +  score=1 [architecture=9 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 1, living_seats: 0, wardrobe_cm: 0.0 }
+  +  score=1 [architecture=8 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 1, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr15575=B coe-municipal=B lbnl-coifa=D nbr5410=B nbr5626=B nbr8160=B alexander184=C blum-zonas=C caixa-mcmv=B nbr16264=B
   +  Alerta gas_without_vent:r105 ref=coe-municipal w=1 | Aparelho a gás em ambiente sem janela nem abertura permanente: a ventilação permanente para o exterior é obrigatória (em São Paulo, Decreto 57.776, 3.M), e aqui é segurança, não conforto.
 Cozinha #0 / cadeirante
@@ -338,8 +337,7 @@ Cozinha #0 / cadeirante
   -  refs coe-municipal=A nbr9050=A nbr15575=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A nbr15575g=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
   -  Erro gas_without_vent:r105 ref=coe-municipal w=12 | Aparelho a gás em ambiente sem janela nem abertura permanente: a ventilação permanente para o exterior é obrigatória (em São Paulo, Decreto 57.776, 3.M), e aqui é segurança, não conforto.
   -  Dica room_area:r105 ref=coe-municipal w=0 | 2,97 m² para cozinha: códigos de obras costumam pedir ao menos 4,00 m² (confira o do seu município).
-  -  Dica room_narrow_side:r105 ref=nbr15575g w=0 | Menor lado de 135 cm; para cozinha a referência é pelo menos 150 cm.
-  +  score=0 [architecture=6 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 1, living_seats: 0, wardrobe_cm: 0.0 }
+  +  score=0 [architecture=5 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 1, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr9050=B nbr15575=B coe-municipal=B lbnl-coifa=D nbr5410=B nbr5626=B nbr8160=B nbr15575g=B alexander184=C blum-zonas=C caixa-mcmv=B nbr16264=B
   +  Alerta gas_without_vent:r105 ref=coe-municipal w=1 | Aparelho a gás em ambiente sem janela nem abertura permanente: a ventilação permanente para o exterior é obrigatória (em São Paulo, Decreto 57.776, 3.M), e aqui é segurança, não conforto.
 Cozinha #0 / família
@@ -348,7 +346,6 @@ Cozinha #0 / família
   -  refs coe-municipal=A nbr15575g=A nbr15575=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C caixa-mcmv=A nbr16264=A
   -  Erro gas_without_vent:r105 ref=coe-municipal w=12 | Aparelho a gás em ambiente sem janela nem abertura permanente: a ventilação permanente para o exterior é obrigatória (em São Paulo, Decreto 57.776, 3.M), e aqui é segurança, não conforto.
   -  Dica room_area:r105 ref=coe-municipal w=0 | 2,97 m² para cozinha: códigos de obras costumam pedir ao menos 4,00 m² (confira o do seu município).
-  -  Dica room_narrow_side:r105 ref=nbr15575g w=0 | Menor lado de 135 cm; para cozinha a referência é pelo menos 150 cm.
   +  score=1 [architecture=7 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 1, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr15575=B coe-municipal=B lbnl-coifa=D nbr5410=B nbr5626=B nbr8160=B blum-zonas=C panero-zelnik=C alexander184=C caixa-mcmv=B nbr16264=B
   +  Alerta gas_without_vent:r105 ref=coe-municipal w=1 | Aparelho a gás em ambiente sem janela nem abertura permanente: a ventilação permanente para o exterior é obrigatória (em São Paulo, Decreto 57.776, 3.M), e aqui é segurança, não conforto.
@@ -477,24 +474,15 @@ Cozinha #5 / família
   +  refs nbr15575g=B nbr5410=B nbr5626=B nbr8160=B blum-zonas=C panero-zelnik=C alexander184=C coe-municipal=B nbr16264=B
 Banheiro #0 / casal
  @ lisboa
-  -  score=23 [architecture=44 electrical=88 plumbing=79] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr5410=A nbr5626=A nbr8160=A nbr15575g=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=nbr15575g w=1 | Menor lado de 85 cm; para banheiro a referência é pelo menos 110 cm.
-  +  score=24 [architecture=45 electrical=88 plumbing=79] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr5410=B nbr5626=B nbr8160=B nbr15575g=B nbr16264=B
 Banheiro #0 / cadeirante
  @ lisboa
-  -  score=22 [architecture=39 electrical=88 plumbing=79] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr9050=A nbr5410=A nbr5626=A nbr8160=A nbr15575g=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=nbr15575g w=1 | Menor lado de 85 cm; para banheiro a referência é pelo menos 110 cm.
-  +  score=23 [architecture=40 electrical=88 plumbing=79] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr9050=B nbr5410=B nbr5626=B nbr8160=B nbr15575g=B nbr16264=B
 Banheiro #0 / família
  @ lisboa
-  -  score=22 [architecture=43 electrical=88 plumbing=79] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr5410=A nbr5626=A nbr8160=A nbr15575g=A nbr9050=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=nbr15575g w=1 | Menor lado de 85 cm; para banheiro a referência é pelo menos 110 cm.
-  +  score=23 [architecture=44 electrical=88 plumbing=79] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr5410=B nbr5626=B nbr8160=B nbr15575g=B nbr9050=B nbr16264=B
 Banheiro #1 / casal
  @ lisboa
@@ -522,24 +510,15 @@ Banheiro #2 / família
   +  refs nbr5410=B nbr5626=B nbr8160=B nbr15575g=B nbr9050=B nbr16264=B
 Banheiro #3 / casal
  @ lisboa
-  -  score=35 [architecture=57 electrical=83 plumbing=79] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr5410=A nbr5626=A nbr8160=A nbr15575g=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=nbr15575g w=1 | Menor lado de 101 cm; para banheiro a referência é pelo menos 110 cm.
-  +  score=36 [architecture=58 electrical=83 plumbing=79] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr5410=B nbr5626=B nbr8160=B nbr15575g=B nbr16264=B
 Banheiro #3 / cadeirante
  @ lisboa
-  -  score=32 [architecture=42 electrical=83 plumbing=79] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr9050=A nbr5410=A nbr5626=A nbr8160=A nbr15575g=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=nbr15575g w=1 | Menor lado de 101 cm; para banheiro a referência é pelo menos 110 cm.
-  +  score=33 [architecture=43 electrical=83 plumbing=79] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr9050=B nbr5410=B nbr5626=B nbr8160=B nbr15575g=B nbr16264=B
 Banheiro #3 / família
  @ lisboa
-  -  score=34 [architecture=56 electrical=83 plumbing=79] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr5410=A nbr5626=A nbr8160=A nbr15575g=A nbr9050=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=nbr15575g w=1 | Menor lado de 101 cm; para banheiro a referência é pelo menos 110 cm.
-  +  score=35 [architecture=57 electrical=83 plumbing=79] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr5410=B nbr5626=B nbr8160=B nbr15575g=B nbr9050=B nbr16264=B
 Banheiro #4 / casal
  @ lisboa
@@ -567,24 +546,15 @@ Banheiro #5 / família
   +  refs nbr5410=B nbr5626=B nbr8160=B nbr15575g=B nbr9050=B nbr16264=B
 Sala #0 / casal
  @ lisboa
-  -  score=14 [architecture=18 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 6, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr15575=A nbr5410=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=nbr15575g w=1 | Menor lado de 215 cm; para sala a referência é pelo menos 240 cm.
-  +  score=15 [architecture=19 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 6, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr15575=B nbr5410=B nbr16264=B
 Sala #0 / cadeirante
  @ lisboa
-  -  score=14 [architecture=18 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 6, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr15575=A nbr5410=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=nbr15575g w=1 | Menor lado de 215 cm; para sala a referência é pelo menos 240 cm.
-  +  score=15 [architecture=19 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 6, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr15575=B nbr5410=B nbr16264=B
 Sala #0 / família
  @ lisboa
-  -  score=12 [architecture=16 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 6, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr15575=A nbr5410=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=nbr15575g w=1 | Menor lado de 215 cm; para sala a referência é pelo menos 240 cm.
-  +  score=13 [architecture=17 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 6, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr15575=B nbr5410=B nbr16264=B
 Sala #1 / casal
  @ lisboa
@@ -624,24 +594,15 @@ Sala #3 / família
   +  refs nbr15575g=B nbr5410=B nbr16264=B
 Sala #4 / casal
  @ lisboa
-  -  score=27 [architecture=39 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr5410=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=nbr15575g w=1 | Menor lado de 220 cm; para sala a referência é pelo menos 240 cm.
-  +  score=28 [architecture=40 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr5410=B nbr16264=B
 Sala #4 / cadeirante
  @ lisboa
-  -  score=27 [architecture=39 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr5410=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=nbr15575g w=1 | Menor lado de 220 cm; para sala a referência é pelo menos 240 cm.
-  +  score=28 [architecture=40 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr5410=B nbr16264=B
 Sala #4 / família
  @ lisboa
-  -  score=25 [architecture=33 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr5410=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=nbr15575g w=1 | Menor lado de 220 cm; para sala a referência é pelo menos 240 cm.
-  +  score=26 [architecture=34 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr5410=B nbr16264=B
 Sala #5 / casal
  @ lisboa
@@ -838,11 +799,8 @@ Corredor #0 / casal
   +  refs 
 Corredor #0 / cadeirante
  @ lisboa
-  -  score=54 [architecture=54 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr9050=A
-  -  Alerta room_narrow_side:r105 ref=nbr9050 w=5 | Menor lado de 55 cm; para circulação a referência é pelo menos 90 cm.
-  +  score=59 [architecture=59 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
-  +  refs 
+  +  refs nbr9050=B
 Corredor #0 / família
  @ miami
   -  score=54 [architecture=54 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
@@ -865,10 +823,7 @@ Corredor #0 / família
 Corredor #1 / casal
 Corredor #1 / cadeirante
  @ lisboa
-  -  score=54 [architecture=54 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr9050=A
-  -  Alerta room_narrow_side:r105 ref=nbr9050 w=5 | Menor lado de 91 cm; para circulação a referência é pelo menos 120 cm.
-  +  score=59 [architecture=59 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr9050=B
 Corredor #1 / família
 Corredor #2 / casal
@@ -898,10 +853,7 @@ Corredor #3 / casal
   +  refs 
 Corredor #3 / cadeirante
  @ lisboa
-  -  score=49 [architecture=49 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr9050=A
-  -  Alerta room_narrow_side:r105 ref=nbr9050 w=5 | Menor lado de 61 cm; para circulação a referência é pelo menos 120 cm.
-  +  score=54 [architecture=54 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr9050=B
 Corredor #3 / família
  @ miami
@@ -943,11 +895,8 @@ Corredor #4 / casal
   +  refs 
 Corredor #4 / cadeirante
  @ lisboa
-  -  score=59 [architecture=59 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr9050=A
-  -  Alerta room_narrow_side:r105 ref=nbr9050 w=5 | Menor lado de 76 cm; para circulação a referência é pelo menos 90 cm.
-  +  score=64 [architecture=64 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
-  +  refs 
+  +  refs nbr9050=B
 Corredor #4 / família
  @ miami
   -  score=59 [architecture=59 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
@@ -1048,10 +997,7 @@ Apartamento #0 / casal
   +  refs nbr5410=B nbr5626=B nbr8160=B coe-municipal=B nbr16264=B
 Apartamento #0 / cadeirante
  @ lisboa
-  -  score=0 [architecture=16 electrical=53 plumbing=66] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 1, dining_seats: 0, living_seats: 0, wardrobe_cm: 360.0 }
   -  refs nbr9050=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=nbr9050 w=1 | Menor lado de 95 cm; para circulação a referência é pelo menos 120 cm.
-  +  score=0 [architecture=17 electrical=53 plumbing=66] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 1, dining_seats: 0, living_seats: 0, wardrobe_cm: 360.0 }
   +  refs nbr9050=B nbr5410=B nbr5626=B nbr8160=B coe-municipal=B nbr16264=B
 Apartamento #0 / família
  @ lisboa
@@ -1079,7 +1025,6 @@ Apartamento #1 / casal
 Apartamento #1 / cadeirante
  @ lisboa
   -  refs nbr9050=A nbr5410=A coe-municipal=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=nbr9050 w=1 | Menor lado de 76 cm; para circulação a referência é pelo menos 120 cm.
   +  refs nbr9050=B nbr5410=B coe-municipal=B nbr16264=B
 Apartamento #1 / família
  @ miami
@@ -1111,16 +1056,11 @@ Apartamento #2 / casal
   -  score=0 [architecture=23 electrical=57 plumbing=69] capacity=Capacity { beds: 3, bedrooms: 2, bathrooms: 1, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A coe-municipal=A nbr5410=A nbr5626=A nbr8160=A nbr16264=A
   -  Alerta room_narrow_side:r106 ref=coe-municipal w=1 | Menor lado de 68 cm; para circulação a referência é pelo menos 90 cm.
-  -  Dica room_narrow_side:r134 ref=nbr15575g w=0 | Menor lado de 97 cm; para banheiro a referência é pelo menos 110 cm.
-  +  score=0 [architecture=29 electrical=57 plumbing=69] capacity=Capacity { beds: 3, bedrooms: 2, bathrooms: 1, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
+  +  score=0 [architecture=28 electrical=57 plumbing=69] capacity=Capacity { beds: 3, bedrooms: 2, bathrooms: 1, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr5410=B nbr5626=B nbr8160=B coe-municipal=B nbr16264=B
 Apartamento #2 / cadeirante
  @ lisboa
-  -  score=0 [architecture=9 electrical=57 plumbing=69] capacity=Capacity { beds: 3, bedrooms: 2, bathrooms: 1, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr9050=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=nbr9050 w=1 | Menor lado de 68 cm; para circulação a referência é pelo menos 120 cm.
-  -  Dica room_narrow_side:r134 ref=nbr15575g w=0 | Menor lado de 97 cm; para banheiro a referência é pelo menos 110 cm.
-  +  score=0 [architecture=11 electrical=57 plumbing=69] capacity=Capacity { beds: 3, bedrooms: 2, bathrooms: 1, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr9050=B nbr5410=B nbr5626=B nbr8160=B coe-municipal=B nbr16264=B
 Apartamento #2 / família
  @ miami
@@ -1134,7 +1074,6 @@ Apartamento #2 / família
  @ lisboa
   -  refs ibge-adensamento=D nbr15575g=A nbr9050=A coe-municipal=A nbr5410=A nbr5626=A nbr8160=A nbr16264=A
   -  Alerta room_narrow_side:r106 ref=coe-municipal w=1 | Menor lado de 68 cm; para circulação a referência é pelo menos 90 cm.
-  -  Dica room_narrow_side:r134 ref=nbr15575g w=0 | Menor lado de 97 cm; para banheiro a referência é pelo menos 110 cm.
   +  refs ibge-adensamento=D nbr15575g=B nbr9050=B nbr5410=B nbr5626=B nbr8160=B coe-municipal=B nbr16264=B
 Apartamento #3 / casal
  @ miami
@@ -1158,7 +1097,6 @@ Apartamento #3 / cadeirante
   -  score=0 [architecture=0 electrical=45 plumbing=66] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 1, dining_seats: 5, living_seats: 0, wardrobe_cm: 180.0 }
   -  refs nbr5410=A nbr9050=A nbr15575g=A nbr13103=A nbr5626=A nbr8160=A coe-municipal=A alexander184=C blum-zonas=C nbr16264=A
   -  Erro counter_sockets:r107 ref=nbr5410 w=12 | 1 tomada(s) acima da bancada: são exigidas pelo menos 2, no mesmo ponto (tomada dupla: elec:sockets = 2) ou em pontos distintos; forno, cooktop elétrico e lava-louças acima de 10 A pedem circuito próprio.
-  -  Alerta room_narrow_side:r106 ref=nbr9050 w=1 | Menor lado de 81 cm; para circulação a referência é pelo menos 120 cm.
   +  score=0 [architecture=0 electrical=56 plumbing=66] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 1, dining_seats: 5, living_seats: 0, wardrobe_cm: 180.0 }
   +  refs nbr9050=B nbr15575g=B nbr5410=B nbr13103=B nbr5626=B nbr8160=B coe-municipal=B alexander184=C blum-zonas=C nbr16264=B
   +  Alerta counter_sockets:r107 ref=nbr5410 w=1 | 1 tomada(s) acima da bancada: são exigidas pelo menos 2, no mesmo ponto (tomada dupla: elec:sockets = 2) ou em pontos distintos; forno, cooktop elétrico e lava-louças acima de 10 A pedem circuito próprio.
@@ -1195,7 +1133,6 @@ Apartamento #4 / casal
 Apartamento #4 / cadeirante
  @ lisboa
   -  refs nbr9050=A nbr15575g=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=nbr9050 w=1 | Menor lado de 66 cm; para circulação a referência é pelo menos 120 cm.
   +  refs nbr9050=B nbr15575g=B nbr5410=B nbr5626=B nbr8160=B coe-municipal=B nbr16264=B
 Apartamento #4 / família
  @ miami
@@ -1231,10 +1168,7 @@ Apartamento #5 / casal
   +  refs nbr15575g=B nbr5410=B nbr5626=B nbr8160=B coe-municipal=B nbr16264=B
 Apartamento #5 / cadeirante
  @ lisboa
-  -  score=0 [architecture=14 electrical=55 plumbing=68] capacity=Capacity { beds: 4, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 4, wardrobe_cm: 180.0 }
   -  refs nbr9050=A nbr5410=A nbr5626=A nbr8160=A nbr15575g=A coe-municipal=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=nbr9050 w=1 | Menor lado de 80 cm; para circulação a referência é pelo menos 120 cm.
-  +  score=0 [architecture=15 electrical=55 plumbing=68] capacity=Capacity { beds: 4, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 4, wardrobe_cm: 180.0 }
   +  refs nbr9050=B nbr5410=B nbr5626=B nbr8160=B nbr15575g=B coe-municipal=B nbr16264=B
 Apartamento #5 / família
  @ miami
@@ -1276,10 +1210,7 @@ Apartamento #6 / casal
   +  refs nbr5410=B nbr5626=B nbr8160=B coe-municipal=B nbr15575g=B nbr16264=B
 Apartamento #6 / cadeirante
  @ lisboa
-  -  score=24 [architecture=41 electrical=61 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 1, wardrobe_cm: 180.0 }
   -  refs nbr9050=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr15575g=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=nbr9050 w=1 | Menor lado de 89 cm; para circulação a referência é pelo menos 120 cm.
-  +  score=25 [architecture=42 electrical=61 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 1, wardrobe_cm: 180.0 }
   +  refs nbr9050=B nbr5410=B nbr5626=B nbr8160=B coe-municipal=B nbr15575g=B nbr16264=B
 Apartamento #6 / família
  @ miami
@@ -1306,10 +1237,7 @@ Apartamento #7 / casal
   +  refs nbr5410=B nbr5626=B nbr8160=B coe-municipal=B nbr15575g=B nbr16264=B
 Apartamento #7 / cadeirante
  @ lisboa
-  -  score=0 [architecture=21 electrical=62 plumbing=69] capacity=Capacity { beds: 0, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 1, wardrobe_cm: 0.0 }
   -  refs nbr9050=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr15575g=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=nbr9050 w=1 | Menor lado de 103 cm; para circulação a referência é pelo menos 120 cm.
-  +  score=0 [architecture=26 electrical=62 plumbing=69] capacity=Capacity { beds: 0, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 1, wardrobe_cm: 0.0 }
   +  refs nbr9050=B nbr5410=B nbr5626=B nbr8160=B coe-municipal=B nbr15575g=B nbr16264=B
 Apartamento #7 / família
  @ lisboa

@@ -887,6 +887,10 @@ pub enum Bound {
     AtLeast(f64),
     /// At most this much: the smaller value is the stricter one.
     AtMost(f64),
+    /// A value to aim at, from which a rule measures a deviation: the share
+    /// of the stature a worktop sits at, the height a transfer is made from.
+    /// Neither way is stricter, so between two of them the first one stays.
+    Target(f64),
 }
 
 impl Bound {
@@ -894,7 +898,7 @@ impl Bound {
     #[must_use]
     pub const fn value(self) -> f64 {
         match self {
-            Self::AtLeast(v) | Self::AtMost(v) => v,
+            Self::AtLeast(v) | Self::AtMost(v) | Self::Target(v) => v,
         }
     }
 
@@ -923,167 +927,719 @@ impl Bound {
 /// every municipal code, and each city's number is its own. Keeping the code
 /// as the thing a finding cites is also what keeps acceptances written under
 /// it working.
+///
+/// A rule keeps its arithmetic — a work triangle is a formula, not a number —
+/// and what it compares against lives here. So do the parameters of the
+/// formula when somebody published them. What stays in the rule is geometry
+/// and classification: which band of a face is read, what counts as "above
+/// the counter", that a double bed needs both sides — none of that changes
+/// when the project crosses a border.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Figure {
     /// What it is, as a rule asks for it: `room.bedroom.min_area`.
     pub name: &'static str,
     /// Who demands it, and therefore where it applies.
     pub authority: Authority,
-    /// The registry code a finding cites for it.
-    pub source: &'static str,
+    /// The registry code a finding cites for it. `None` is common practice
+    /// that no publication states: the finding cites nothing, and nothing
+    /// caps it, because there is no tier to cap it with. Requiring a source
+    /// here would have meant inventing one, or demoting the finding.
+    pub source: Option<&'static str>,
     pub bound: Bound,
-    /// The article or table it comes from, for the message.
+    /// How heavy a finding missing it makes, before the source's tier caps it
+    /// at the place. It belongs to the figure and not to the tier: the tier is
+    /// a ceiling, and most requirements sit well below it — a minimum area in
+    /// a municipal code is a tip here, not an error.
+    pub severity: Severity,
+    /// The article or table it comes from.
     pub note: &'static str,
 }
 
-/// Every figure that has left a rule body so far.
-///
-/// Rules keep their arithmetic — a work triangle is not a number — but the
-/// numbers they compare against belong here, one row per authority.
+// Six fields, every row: the helpers below only spare the struct noise.
+const fn fig(
+    name: &'static str,
+    authority: Authority,
+    source: Option<&'static str>,
+    bound: Bound,
+    severity: Severity,
+    note: &'static str,
+) -> Figure {
+    Figure {
+        name,
+        authority,
+        source,
+        bound,
+        severity,
+        note,
+    }
+}
+
+/// A number a Brazilian publication demands.
+const fn br(
+    name: &'static str,
+    source: &'static str,
+    bound: Bound,
+    severity: Severity,
+    note: &'static str,
+) -> Figure {
+    fig(name, BR, Some(source), bound, severity, note)
+}
+
+/// Common practice: no publication states it, so it cites nothing and is
+/// capped by nothing, wherever the project is.
+const fn practice(
+    name: &'static str,
+    bound: Bound,
+    severity: Severity,
+    note: &'static str,
+) -> Figure {
+    fig(name, Authority::Global, None, bound, severity, note)
+}
+
+/// São Paulo, the city, whose decree 57.776 we hold.
+const SAO_PAULO: Authority = Authority::City {
+    country: "br",
+    region: "sp",
+    city: "sao-paulo",
+};
+
+/// São Paulo, the state, whose sanitary code (decree 12.342/1978) we hold.
+const SP_STATE: Authority = Authority::Region {
+    country: "br",
+    region: "sp",
+};
+
+use Bound::{AtLeast, AtMost, Target};
+use Severity::{Alerta, Dica, Erro};
+
+/// Every figure a rule asks for.
 pub static FIGURES: &[Figure] = &[
-    // --- Minimum floor area, cm² ---
-    Figure {
-        name: "room.bedroom.min_area",
-        authority: Authority::City {
-            country: "br",
-            region: "sp",
-            city: "sao-paulo",
-        },
-        source: "coe-municipal",
-        bound: Bound::AtLeast(50_000.0),
-        note: "Decreto 57.776/2017, tabela 5.A.6",
-    },
-    Figure {
-        name: "room.living.min_area",
-        authority: Authority::City {
-            country: "br",
-            region: "sp",
-            city: "sao-paulo",
-        },
-        source: "coe-municipal",
-        bound: Bound::AtLeast(50_000.0),
-        note: "Decreto 57.776/2017, tabela 5.A.6",
-    },
-    Figure {
-        name: "room.kitchen.min_area",
-        authority: Authority::Region {
-            country: "br",
-            region: "sp",
-        },
-        source: "coe-municipal",
-        bound: Bound::AtLeast(40_000.0),
-        note: "Código Sanitário estadual, decreto 12.342/1978",
-    },
-    // --- Narrowest side, cm ---
-    Figure {
-        name: "room.bedroom.min_side",
-        authority: Authority::City {
-            country: "br",
-            region: "sp",
-            city: "sao-paulo",
-        },
-        source: "coe-municipal",
-        bound: Bound::AtLeast(200.0),
-        note: "Decreto 57.776/2017: círculo de 2 m inscrito",
-    },
-    Figure {
-        name: "room.living.min_side",
-        authority: BR,
-        source: "nbr15575g",
-        bound: Bound::AtLeast(240.0),
-        note: "NBR 15575-1 anexo F",
-    },
-    Figure {
-        name: "room.kitchen.min_side",
-        authority: BR,
-        source: "nbr15575g",
-        bound: Bound::AtLeast(150.0),
-        note: "NBR 15575-1 anexo F",
-    },
-    Figure {
-        name: "room.bathroom.min_side",
-        authority: BR,
-        source: "nbr15575g",
-        bound: Bound::AtLeast(110.0),
-        note: "NBR 15575-1 anexo F",
-    },
-    Figure {
-        name: "room.laundry.min_side",
-        authority: Authority::City {
-            country: "br",
-            region: "sp",
-            city: "sao-paulo",
-        },
-        source: "coe-municipal",
-        bound: Bound::AtLeast(90.0),
-        note: "Decreto 57.776/2017",
-    },
-    Figure {
-        name: "room.corridor.min_side",
-        authority: Authority::City {
-            country: "br",
-            region: "sp",
-            city: "sao-paulo",
-        },
-        source: "coe-municipal",
-        bound: Bound::AtLeast(90.0),
-        note: "Decreto 57.776/2017",
-    },
+    // ---- Who lives here ----
+    fig(
+        "occupancy.people_per_bedroom",
+        BR,
+        Some("ibge-adensamento"),
+        AtMost(3.0),
+        Alerta,
+        "IBGE: mais de 3 moradores por dormitório é adensamento excessivo",
+    ),
+    practice(
+        "occupancy.people_per_bedroom.sharing",
+        AtMost(2.0),
+        Dica,
+        "ninguém divide o dormitório com mais de uma pessoa",
+    ),
+    practice(
+        "occupancy.people_per_bathroom",
+        AtMost(5.0),
+        Alerta,
+        "acima de 5 por banheiro as filas de manhã são certas",
+    ),
+    // Annex F asks 1,60 m in a couple's bedroom and 1,20 m in a single one;
+    // per person is our average of the two, so it is not cited as the annex.
+    practice(
+        "occupancy.wardrobe_per_adult",
+        AtLeast(80.0),
+        Dica,
+        "média do anexo F da NBR 15575-1: 1,60 m no casal, 1,20 m no solteiro",
+    ),
+    // ---- Doors ----
+    practice(
+        "door.clear_width",
+        AtLeast(60.0),
+        Alerta,
+        "abaixo de 60 cm não passa um móvel nem uma pessoa com volumes",
+    ),
+    br(
+        "door.clear_width.wheelchair",
+        "nbr9050",
+        AtLeast(80.0),
+        Alerta,
+        "NBR 9050 6.11.2.4: vão livre de 0,80 m",
+    ),
+    // ---- Clearances in front of and beside pieces, cm ----
+    br(
+        "clearance.bed.side",
+        "nbr15575g",
+        AtLeast(50.0),
+        Alerta,
+        "NBR 15575-1 anexo F: 0,50 m entre móveis e paredes",
+    ),
+    br(
+        "clearance.bed.side.wheelchair",
+        "nbr9050",
+        AtLeast(90.0),
+        Alerta,
+        "NBR 9050: faixa de transferência lateral",
+    ),
+    br(
+        "clearance.bed.foot",
+        "nbr15575g",
+        AtLeast(50.0),
+        Dica,
+        "NBR 15575-1 anexo F: 0,50 m de circulação",
+    ),
+    practice(
+        "clearance.crib.front",
+        AtLeast(50.0),
+        Dica,
+        "acesso ao berço",
+    ),
+    practice(
+        "clearance.wardrobe.front",
+        AtLeast(60.0),
+        Alerta,
+        "abrir as portas e ficar diante delas",
+    ),
+    // Hinged doors swing their own width, and a person stands past the leaf.
+    practice(
+        "clearance.wardrobe.past_leaf",
+        AtLeast(10.0),
+        Alerta,
+        "folga além da folha aberta",
+    ),
+    practice(
+        "clearance.dresser.front",
+        AtLeast(70.0),
+        Dica,
+        "abrir gavetas e ficar diante delas",
+    ),
+    br(
+        "clearance.kitchen.front",
+        "nbr15575g",
+        AtLeast(85.0),
+        Alerta,
+        "NBR 15575-1 anexo F: 0,85 m diante de pia, fogão e geladeira",
+    ),
+    br(
+        "clearance.kitchen.front.wheelchair",
+        "nbr9050",
+        AtLeast(150.0),
+        Alerta,
+        "NBR 9050: giro de 1,50 m",
+    ),
+    practice(
+        "clearance.island.around",
+        AtLeast(90.0),
+        Alerta,
+        "circulação em volta da ilha",
+    ),
+    br(
+        "clearance.toilet.front",
+        "nbr15575g",
+        AtLeast(40.0),
+        Alerta,
+        "NBR 15575-1 anexo F: 0,40 m diante do vaso",
+    ),
+    br(
+        "clearance.toilet.front.wheelchair",
+        "nbr9050",
+        AtLeast(120.0),
+        Alerta,
+        "NBR 9050: módulo de transferência de 0,80 × 1,20 m",
+    ),
+    br(
+        "clearance.basin.front",
+        "nbr15575g",
+        AtLeast(40.0),
+        Alerta,
+        "NBR 15575-1 anexo F: 0,40 m diante do lavatório",
+    ),
+    br(
+        "clearance.basin.front.wheelchair",
+        "nbr9050",
+        AtLeast(120.0),
+        Alerta,
+        "NBR 9050: aproximação frontal de 0,80 × 1,20 m",
+    ),
+    practice(
+        "clearance.shower.front",
+        AtLeast(60.0),
+        Dica,
+        "entrar e sair do box",
+    ),
+    br(
+        "clearance.laundry.front",
+        "nbr15575g",
+        AtLeast(50.0),
+        Alerta,
+        "NBR 15575-1 anexo F: 0,50 m diante de tanque e máquina",
+    ),
+    practice(
+        "clearance.desk.front",
+        AtLeast(75.0),
+        Dica,
+        "cadeira e levantar-se da mesa",
+    ),
+    br(
+        "clearance.table.seat",
+        "nbr15575g",
+        AtLeast(75.0),
+        Alerta,
+        "NBR 15575-1 anexo F: 0,75 m da borda da mesa",
+    ),
+    // Annex F's 75 cm from the table edge, less the ~35 cm of chair a set
+    // already includes.
+    br(
+        "clearance.dining_set.behind",
+        "nbr15575g",
+        AtLeast(40.0),
+        Alerta,
+        "NBR 15575-1 anexo F: 0,75 m da mesa, menos a cadeira",
+    ),
+    br(
+        "clearance.seat.front",
+        "nbr15575g",
+        AtLeast(50.0),
+        Dica,
+        "NBR 15575-1 anexo F: 0,50 m diante de assentos",
+    ),
+    br(
+        "clearance.between_beds",
+        "nbr15575g",
+        AtLeast(60.0),
+        Alerta,
+        "NBR 15575-1 anexo F: 0,60 m entre camas de solteiro",
+    ),
+    // ---- The room itself: minimum floor area, cm² ----
+    fig(
+        "room.bedroom.min_area",
+        SAO_PAULO,
+        Some("coe-municipal"),
+        AtLeast(50_000.0),
+        Dica,
+        "Decreto 57.776/2017, tabela 5.A.6",
+    ),
+    fig(
+        "room.living.min_area",
+        SAO_PAULO,
+        Some("coe-municipal"),
+        AtLeast(50_000.0),
+        Dica,
+        "Decreto 57.776/2017, tabela 5.A.6",
+    ),
+    fig(
+        "room.kitchen.min_area",
+        SP_STATE,
+        Some("coe-municipal"),
+        AtLeast(40_000.0),
+        Dica,
+        "Código Sanitário estadual, decreto 12.342/1978",
+    ),
+    // ---- Narrowest side, cm ----
+    fig(
+        "room.bedroom.min_side",
+        SAO_PAULO,
+        Some("coe-municipal"),
+        AtLeast(200.0),
+        Dica,
+        "Decreto 57.776/2017: círculo de 2 m inscrito",
+    ),
+    br(
+        "room.living.min_side",
+        "nbr15575g",
+        AtLeast(240.0),
+        Dica,
+        "NBR 15575-1 anexo F",
+    ),
+    br(
+        "room.kitchen.min_side",
+        "nbr15575g",
+        AtLeast(150.0),
+        Dica,
+        "NBR 15575-1 anexo F",
+    ),
+    br(
+        "room.bathroom.min_side",
+        "nbr15575g",
+        AtLeast(110.0),
+        Dica,
+        "NBR 15575-1 anexo F",
+    ),
+    fig(
+        "room.laundry.min_side",
+        SAO_PAULO,
+        Some("coe-municipal"),
+        AtLeast(90.0),
+        Dica,
+        "Decreto 57.776/2017",
+    ),
+    fig(
+        "room.corridor.min_side",
+        SAO_PAULO,
+        Some("coe-municipal"),
+        AtLeast(90.0),
+        Alerta,
+        "Decreto 57.776/2017",
+    ),
     // A wheelchair corridor is the accessibility standard's, not the city's,
     // and it is the longer run that needs the extra width.
-    Figure {
-        name: "room.corridor.min_side.wheelchair",
-        authority: BR,
-        source: "nbr9050",
-        bound: Bound::AtLeast(90.0),
-        note: "NBR 9050 6.11.1, até 4 m de extensão",
-    },
-    Figure {
-        name: "room.corridor.min_side.wheelchair.long",
-        authority: BR,
-        source: "nbr9050",
-        bound: Bound::AtLeast(120.0),
-        note: "NBR 9050 6.11.1, até 10 m de extensão",
-    },
+    br(
+        "room.corridor.min_side.wheelchair",
+        "nbr9050",
+        AtLeast(90.0),
+        Alerta,
+        "NBR 9050 6.11.1, até 4 m de extensão",
+    ),
+    br(
+        "room.corridor.min_side.wheelchair.long",
+        "nbr9050",
+        AtLeast(120.0),
+        Alerta,
+        "NBR 9050 6.11.1, até 10 m de extensão",
+    ),
+    // ---- Ceiling height, cm ----
+    br(
+        "room.min_ceiling",
+        "nbr15575",
+        AtLeast(250.0),
+        Alerta,
+        "NBR 15575-1 16.1.1: 2,50 m",
+    ),
+    br(
+        "room.min_ceiling.short_stay",
+        "nbr15575",
+        AtLeast(230.0),
+        Alerta,
+        "NBR 15575-1 16.1.1: 2,30 m em halls, corredores, banheiros e despensas",
+    ),
+    // ---- Daylight: floor area per area of glass ----
+    // The state sanitary code's ratios, cited as they have always been. They
+    // stand on the whole country for now because nothing else says what a
+    // room outside São Paulo needs; see docs/JURISDICTIONS.md.
+    br(
+        "room.floor_per_glass.work",
+        "coe-municipal",
+        AtMost(5.0),
+        Dica,
+        "Código Sanitário de SP, decreto 12.342/1978, art. 44: 1/5 para trabalhar ou estudar",
+    ),
+    br(
+        "room.floor_per_glass",
+        "coe-municipal",
+        AtMost(8.0),
+        Dica,
+        "Código Sanitário de SP, decreto 12.342/1978, art. 44: 1/8 para dormir, estar, cozinhar e lavar",
+    ),
+    br(
+        "room.floor_per_glass.service",
+        "coe-municipal",
+        AtMost(10.0),
+        Dica,
+        "Código Sanitário de SP, decreto 12.342/1978, art. 44: 1/10 nos demais",
+    ),
+    br(
+        "room.wheelchair_turn",
+        "nbr9050",
+        AtLeast(150.0),
+        Alerta,
+        "NBR 9050 4.3.4: giro de 360° em 1,50 m",
+    ),
+    // ---- The kitchen at work ----
+    fig(
+        "kitchen.triangle.total",
+        Authority::Global,
+        Some("nkba"),
+        AtMost(792.0),
+        Dica,
+        "NKBA, diretriz 3: 26 ft somados",
+    ),
+    fig(
+        "kitchen.triangle.leg",
+        Authority::Global,
+        Some("nkba"),
+        AtMost(274.0),
+        Dica,
+        "NKBA, diretriz 3: até 9 ft por lado",
+    ),
+    fig(
+        "kitchen.triangle.leg.min",
+        Authority::Global,
+        Some("nkba"),
+        AtLeast(122.0),
+        Dica,
+        "NKBA, diretriz 3: ao menos 4 ft por lado",
+    ),
+    practice(
+        "kitchen.sink_to_stove",
+        AtLeast(60.0),
+        Alerta,
+        "bancada entre pia e fogão; a NKBA soma 90 cm de apoio entre os dois",
+    ),
+    // Worktop height: about 10 to 15 cm below the elbow, which is at 63 % of
+    // the stature.
+    fig(
+        "kitchen.counter.elbow_share",
+        Authority::Global,
+        Some("blum-zonas"),
+        Target(0.63),
+        Dica,
+        "cotovelo a 63 % da estatura",
+    ),
+    fig(
+        "kitchen.counter.below_elbow",
+        Authority::Global,
+        Some("blum-zonas"),
+        Target(12.0),
+        Dica,
+        "bancada de 10 a 15 cm abaixo do cotovelo",
+    ),
+    fig(
+        "kitchen.counter.tolerance",
+        Authority::Global,
+        Some("blum-zonas"),
+        AtMost(6.0),
+        Dica,
+        "desvio tolerado da altura ideal",
+    ),
+    practice(
+        "kitchen.wall_cabinet.min_elevation",
+        AtLeast(135.0),
+        Alerta,
+        "45 cm sobre a bancada, prática de marcenaria",
+    ),
+    // The top shelf of a wall cabinet within reach: 1,2 times the stature,
+    // or 1,20 m from a wheelchair, and a little over it is still usable.
+    fig(
+        "kitchen.wall_cabinet.reach_share",
+        Authority::Global,
+        Some("panero-zelnik"),
+        Target(1.2),
+        Dica,
+        "alcance vertical de 1,2 vez a estatura",
+    ),
+    br(
+        "kitchen.wall_cabinet.reach.wheelchair",
+        "nbr9050",
+        AtMost(120.0),
+        Dica,
+        "NBR 9050 4.6: alcance manual de quem usa cadeira de rodas",
+    ),
+    practice(
+        "kitchen.wall_cabinet.over_reach",
+        AtMost(30.0),
+        Dica,
+        "o que ainda se alcança acima do alcance confortável",
+    ),
+    fig(
+        "kitchen.counter.total",
+        Authority::Global,
+        Some("alexander184"),
+        AtLeast(366.0),
+        Dica,
+        "Alexander, padrão 184: 12 ft de bancada",
+    ),
+    fig(
+        "kitchen.counter.run",
+        Authority::Global,
+        Some("alexander184"),
+        AtLeast(122.0),
+        Dica,
+        "Alexander, padrão 184: nenhum trecho abaixo de 4 ft",
+    ),
+    fig(
+        "kitchen.spread",
+        Authority::Global,
+        Some("alexander184"),
+        AtMost(305.0),
+        Dica,
+        "Alexander, padrão 184: nenhum par a mais de 10 ft",
+    ),
+    br(
+        "kitchen.sockets.perimeter_each",
+        "nbr5410",
+        AtMost(350.0),
+        Erro,
+        "NBR 5410 9.5.2.2.1: um ponto a cada 3,5 m de perímetro ou fração",
+    ),
+    br(
+        "kitchen.sockets.over_counter",
+        "nbr5410",
+        AtLeast(2.0),
+        Erro,
+        "NBR 5410 9.5.2.2.1 b): duas tomadas sobre a bancada da pia",
+    ),
+    br(
+        "kitchen.width",
+        "caixa-mcmv",
+        AtLeast(180.0),
+        Dica,
+        "Caixa, especificação do Minha Casa Minha Vida",
+    ),
+    fig(
+        "kitchen.free_circle",
+        SAO_PAULO,
+        Some("coe-municipal"),
+        AtLeast(150.0),
+        Erro,
+        "Decreto 57.776/2017, tabela 5.A.6",
+    ),
+    // ---- Reach, sight and height, for whoever lives here ----
+    practice(
+        "screen.distance.near",
+        AtLeast(1.2),
+        Dica,
+        "1,2 vez a diagonal: perto disso a imagem não cabe no olhar",
+    ),
+    practice(
+        "screen.distance.far",
+        AtMost(2.5),
+        Dica,
+        "2,5 vezes a diagonal: longe disso o texto não se lê",
+    ),
+    br(
+        "reach.top.wheelchair",
+        "nbr9050",
+        AtMost(85.0),
+        Alerta,
+        "NBR 9050: tampo a no máximo 0,85 m, com vão livre embaixo",
+    ),
+    br(
+        "reach.bed.wheelchair",
+        "nbr9050",
+        Target(46.0),
+        Dica,
+        "NBR 9050: cama a uns 0,46 m para a transferência",
+    ),
+    br(
+        "reach.bed.wheelchair.tolerance",
+        "nbr9050",
+        AtMost(4.0),
+        Dica,
+        "desvio tolerado da altura de transferência",
+    ),
+    br(
+        "reach.switch.min",
+        "nbr9050",
+        AtLeast(60.0),
+        Alerta,
+        "NBR 9050 4.6.9, figura 26: interruptores de 0,60 a 1,00 m",
+    ),
+    br(
+        "reach.switch.max",
+        "nbr9050",
+        AtMost(100.0),
+        Alerta,
+        "NBR 9050 4.6.9, figura 26: interruptores de 0,60 a 1,00 m",
+    ),
+    br(
+        "reach.outlet.min",
+        "nbr9050",
+        AtLeast(40.0),
+        Alerta,
+        "NBR 9050 4.6.9, figura 26: tomadas de 0,40 a 1,00 m",
+    ),
+    br(
+        "reach.outlet.max",
+        "nbr9050",
+        AtMost(100.0),
+        Alerta,
+        "NBR 9050 4.6.9, figura 26: tomadas de 0,40 a 1,00 m",
+    ),
 ];
+
+/// A figure as it stands at one place.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct Resolved {
+    pub figure: &'static Figure,
+    /// The place names everything the authority names: the city of a city's
+    /// decree, the state of a state's code. A figure heard because the place
+    /// left a level unsaid is still heard — silence is not disagreement — but
+    /// a rule that must not accuse on a guess asks this first.
+    pub named: bool,
+}
+
+impl std::ops::Deref for Resolved {
+    type Target = Figure;
+
+    fn deref(&self) -> &Figure {
+        self.figure
+    }
+}
+
+/// Whether `at` names every level `authority` names.
+fn names(authority: &Authority, at: &Place) -> bool {
+    match authority {
+        Authority::Global | Authority::Bloc(_) | Authority::Country(_) => true,
+        Authority::Region { .. } => at.region.is_some(),
+        Authority::City { .. } => at.city.is_some(),
+    }
+}
 
 /// The strictest figure called `name` whose authority carries at `at`.
 ///
 /// Silence below the country is not disagreement, so a project that has not
-/// said which city it is in still hears what a city demands — it simply hears
-/// it as advice, because the tier of a source that does not certainly cover
-/// the place cannot accuse. Naming *another* city is disagreement, and that is
-/// where a figure goes quiet.
+/// said which city it is in still hears what a city demands, at the figure's
+/// own severity; [`Resolved::named`] says it was not named. Naming *another*
+/// city is disagreement, and that is where a local figure goes quiet.
+///
+/// Where no figure carries at all, what the home country's own standards say
+/// still informs, the way [`Standard::force`] keeps a foreign standard as a
+/// reference rather than silencing it: a bedroom in Miami is still measured by
+/// annex F until a code of its own is here, and the finding cites annex F at
+/// the letter it has there. Only national figures travel. A city's decree or
+/// a state's code never speaks outside its territory, and a figure a foreign
+/// country publishes never speaks at home: adding one must not move a finding
+/// in Brazil.
 #[must_use]
-pub fn figure(name: &str, at: &Place) -> Option<&'static Figure> {
+pub fn figure(name: &str, at: &Place) -> Option<Resolved> {
     let here = at.or_home();
-    FIGURES
-        .iter()
-        .filter(|f| f.name == name && f.authority.covers(&here))
-        .reduce(|best, f| {
+    let strictest = |rows: &mut dyn Iterator<Item = &'static Figure>| {
+        rows.reduce(|best, f| {
             if f.bound.stricter_than(best.bound) {
                 f
             } else {
                 best
             }
         })
+    };
+    let named = FIGURES
+        .iter()
+        .filter(|f| f.name == name && f.authority.covers(&here));
+    if let Some(figure) = strictest(&mut named.into_iter()) {
+        return Some(Resolved {
+            figure,
+            named: names(&figure.authority, &here),
+        });
+    }
+    let home = FIGURES
+        .iter()
+        .filter(|f| f.name == name && f.authority == Authority::Country(Place::HOME_COUNTRY));
+    strictest(&mut home.into_iter()).map(|figure| Resolved {
+        figure,
+        named: false,
+    })
 }
 
-/// What a municipal building code demands of a kitchen, where we hold it.
+/// Every figure, resolved once at `at`, by name.
 ///
-/// These numbers change from city to city and, against a standard, the more
-/// restrictive one wins — so they are never constants inside a rule. A city
-/// we do not hold turns every municipal finding into advice to confirm.
+/// A review is re-run for every fix it weighs and for every storey an
+/// acceptance is checked on, so the table is read once per review and the
+/// rules ask this instead.
+#[must_use]
+pub fn figures_at(at: &Place) -> std::collections::BTreeMap<&'static str, Resolved> {
+    FIGURES
+        .iter()
+        .filter_map(|f| figure(f.name, at).map(|r| (f.name, r)))
+        .collect()
+}
+
+/// A municipal or state building code we hold, for a picker and for the
+/// place it names.
+///
+/// Its numbers change from city to city and, against a standard, the more
+/// restrictive one wins — so they are never constants inside a rule, and not
+/// fields here either: they are rows of [`FIGURES`] under the authority of the
+/// place this code speaks for.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct MunicipalCode {
     /// Slug used in tool arguments, e.g. `sao-paulo`.
     pub city: &'static str,
     /// Name to show, e.g. `São Paulo — SP`.
     pub label: &'static str,
-    /// Where the figures come from.
+    /// The code itself, as it is cited. Its numbers are in [`FIGURES`],
+    /// under this place's authority.
     pub source: &'static str,
-    /// Circle that must fit on the kitchen floor, cm.
-    pub kitchen_circle_cm: Option<f64>,
     /// Country, as a [`Place`] names it.
     pub country: &'static str,
     /// State or province, as a [`Place`] names it.
@@ -1108,7 +1664,6 @@ pub static MUNICIPAL_CODES: &[MunicipalCode] = &[
         city: "sao-paulo",
         label: "São Paulo — SP",
         source: "Decreto 57.776/2017, tabela 5.A.6",
-        kitchen_circle_cm: Some(150.0),
         country: "br",
         region: "sp",
         municipality: Some("sao-paulo"),
@@ -1117,7 +1672,6 @@ pub static MUNICIPAL_CODES: &[MunicipalCode] = &[
         city: "estado-sp",
         label: "Estado de São Paulo (Código Sanitário)",
         source: "Decreto estadual 12.342/1978 (cozinha de 4 m², sem círculo)",
-        kitchen_circle_cm: None,
         country: "br",
         region: "sp",
         municipality: None,
@@ -1346,9 +1900,9 @@ mod tests {
     #[test]
     fn a_city_code_stops_following_a_project_to_another_city() {
         // The reason the model exists: São Paulo's decree must not judge a
-        // project in Curitiba. No entry is a City authority yet — the generic
-        // `coe-municipal` placeholder still stands in for all of them — so the
-        // rule is proven on the authority itself.
+        // project in Curitiba. The registry entry `coe-municipal` still
+        // stands for every municipal code, so the city is on the figures, and
+        // the rule is proven on the authority itself.
         let sp = Authority::City {
             country: "br",
             region: "sp",
@@ -1430,19 +1984,123 @@ mod tests {
             "the scan found only {cited} citations: is it reading?"
         );
         for f in FIGURES {
+            if let Some(code) = f.source {
+                assert!(
+                    standard(code).is_some(),
+                    "figure {} cites `{code}`, which is not in the registry",
+                    f.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_figure_says_whether_the_place_named_its_authority() {
+        let circle = |at: &Place| figure("kitchen.free_circle", at);
+        // Named: São Paulo's decree judges.
+        let sp = circle(&Place::from_city(Some("sao-paulo"))).unwrap();
+        assert!(sp.named);
+        assert_eq!(sp.bound, Bound::AtLeast(150.0));
+        // Unsaid: still heard, because silence is not disagreement — but a
+        // rule that must not accuse on a guess can tell.
+        for quiet in [
+            Place::from_city(None),
+            Place::from_city(Some("estado-sp")),
+            Place::default(),
+        ] {
+            let heard = circle(&quiet).unwrap_or_else(|| panic!("{quiet:?}"));
+            assert!(!heard.named, "{quiet:?}");
+        }
+        // Another city disagrees: nothing.
+        assert!(circle(&Place::from_city(Some("curitiba"))).is_none());
+    }
+
+    #[test]
+    fn a_national_figure_informs_abroad_and_a_local_one_never_travels() {
+        let miami = Place::new(Some("us"), Some("fl"), Some("miami"));
+        // Annex F still measures a kitchen in Miami, as a reference: nothing
+        // there says otherwise yet, and the finding cites annex F at the letter
+        // it has there.
+        let side = figure("room.kitchen.min_side", &miami).unwrap();
+        assert!(!side.named);
+        assert_eq!(side.source, Some("nbr15575g"));
+        assert_eq!(standard("nbr15575g").unwrap().force(&miami), Tier::B);
+        // A city's decree and a state's code stay home.
+        assert!(figure("room.bedroom.min_area", &miami).is_none());
+        assert!(figure("room.kitchen.min_area", &miami).is_none());
+        assert!(figure("kitchen.free_circle", &miami).is_none());
+        // What no one publishes travels everywhere, as what it is.
+        let crib = figure("clearance.crib.front", &miami).unwrap();
+        assert_eq!(crib.source, None);
+    }
+
+    /// Where each figure resolves, rule by rule and place by place.
+    ///
+    /// "No figure here, so the rule does not apply" is what feeds
+    /// `orphaned()`, and `accept(prune=true)` deletes what that lists. So a
+    /// figure missing at a place is a decision, and this is where it is
+    /// written down: only a city's or a state's own numbers may go quiet, and
+    /// only outside the territory they speak for.
+    #[test]
+    fn every_figure_resolves_everywhere_unless_it_is_local() {
+        let places = [
+            Place::default(),
+            Place::from_city(None),
+            Place::from_city(Some("sao-paulo")),
+            Place::from_city(Some("estado-sp")),
+            Place::from_city(Some("curitiba")),
+            Place::new(Some("br"), Some("rj"), None),
+            Place::new(Some("us"), Some("fl"), Some("miami")),
+            Place::new(Some("de"), None, None),
+            Place::new(Some("pt"), None, None),
+        ];
+        let mut names: Vec<&str> = FIGURES.iter().map(|f| f.name).collect();
+        names.sort_unstable();
+        names.dedup();
+        for name in names {
+            let local = FIGURES.iter().filter(|f| f.name == name).all(|f| {
+                matches!(
+                    f.authority,
+                    Authority::City { .. } | Authority::Region { .. }
+                )
+            });
+            for at in &places {
+                let found = figure(name, at);
+                if local {
+                    // Quiet only where another city or state was named.
+                    let rows = FIGURES.iter().filter(|f| f.name == name);
+                    let covered = rows.clone().any(|f| f.authority.covers(&at.or_home()));
+                    assert_eq!(found.is_some(), covered, "{name} at {at:?}");
+                } else {
+                    assert!(found.is_some(), "{name} goes quiet at {at:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_figure_row_is_whole() {
+        for f in FIGURES {
+            assert!(!f.note.is_empty(), "{} says where it comes from", f.name);
             assert!(
-                standard(f.source).is_some(),
-                "figure {} cites `{}`, which is not in the registry",
-                f.name,
-                f.source
+                f.bound.value().is_finite() && f.bound.value() > 0.0,
+                "{}",
+                f.name
             );
+            // Common practice is everybody's, or it is somebody's publication.
+            if f.source.is_none() {
+                assert_eq!(f.authority, Authority::Global, "{}", f.name);
+            }
         }
     }
 
     #[test]
     fn cities_are_found_by_slug_or_label() {
         let sp = municipal("sao-paulo").unwrap();
-        assert_eq!(sp.kitchen_circle_cm, Some(150.0));
+        assert_eq!(
+            sp.place(),
+            Place::new(Some("br"), Some("sp"), Some("sao-paulo"))
+        );
         assert_eq!(municipal("São Paulo — SP"), Some(sp));
         assert!(municipal("atlantis").is_none());
         assert!(!cities().is_empty());
