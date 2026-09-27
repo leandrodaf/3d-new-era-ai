@@ -845,6 +845,195 @@ pub(crate) fn part(raw: Option<&str>) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
+/// Which way a figure binds, so that "the stricter one wins" means something.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub enum Bound {
+    /// At least this much: the larger value is the stricter one.
+    AtLeast(f64),
+    /// At most this much: the smaller value is the stricter one.
+    AtMost(f64),
+}
+
+impl Bound {
+    /// The number, whichever way it binds.
+    #[must_use]
+    pub const fn value(self) -> f64 {
+        match self {
+            Self::AtLeast(v) | Self::AtMost(v) => v,
+        }
+    }
+
+    /// Whether `self` demands more than `other`. Two bounds that face
+    /// different ways are not comparable, and `false` keeps the first.
+    #[must_use]
+    pub fn stricter_than(self, other: Self) -> bool {
+        match (self, other) {
+            (Self::AtLeast(a), Self::AtLeast(b)) => a > b,
+            (Self::AtMost(a), Self::AtMost(b)) => a < b,
+            _ => false,
+        }
+    }
+}
+
+/// One number a rule leans on, with who demands it and where.
+///
+/// The registry used to say only *who* a source is; the numbers lived as
+/// literals in the rule bodies, which is why a decree written for one city
+/// judged every project. A figure names its authority, so the same rule can
+/// ask "what is the minimum here?" and get an answer that stops at the city
+/// limits.
+///
+/// The authority is on the figure and not only on its `source`, because one
+/// registry entry can stand for several authorities: `coe-municipal` covers
+/// every municipal code, and each city's number is its own. Keeping the code
+/// as the thing a finding cites is also what keeps acceptances written under
+/// it working.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct Figure {
+    /// What it is, as a rule asks for it: `room.bedroom.min_area`.
+    pub name: &'static str,
+    /// Who demands it, and therefore where it applies.
+    pub authority: Authority,
+    /// The registry code a finding cites for it.
+    pub source: &'static str,
+    pub bound: Bound,
+    /// The article or table it comes from, for the message.
+    pub note: &'static str,
+}
+
+/// Every figure that has left a rule body so far.
+///
+/// Rules keep their arithmetic — a work triangle is not a number — but the
+/// numbers they compare against belong here, one row per authority.
+pub static FIGURES: &[Figure] = &[
+    // --- Minimum floor area, cm² ---
+    Figure {
+        name: "room.bedroom.min_area",
+        authority: Authority::City {
+            country: "br",
+            region: "sp",
+            city: "sao-paulo",
+        },
+        source: "coe-municipal",
+        bound: Bound::AtLeast(50_000.0),
+        note: "Decreto 57.776/2017, tabela 5.A.6",
+    },
+    Figure {
+        name: "room.living.min_area",
+        authority: Authority::City {
+            country: "br",
+            region: "sp",
+            city: "sao-paulo",
+        },
+        source: "coe-municipal",
+        bound: Bound::AtLeast(50_000.0),
+        note: "Decreto 57.776/2017, tabela 5.A.6",
+    },
+    Figure {
+        name: "room.kitchen.min_area",
+        authority: Authority::Region {
+            country: "br",
+            region: "sp",
+        },
+        source: "coe-municipal",
+        bound: Bound::AtLeast(40_000.0),
+        note: "Código Sanitário estadual, decreto 12.342/1978",
+    },
+    // --- Narrowest side, cm ---
+    Figure {
+        name: "room.bedroom.min_side",
+        authority: Authority::City {
+            country: "br",
+            region: "sp",
+            city: "sao-paulo",
+        },
+        source: "coe-municipal",
+        bound: Bound::AtLeast(200.0),
+        note: "Decreto 57.776/2017: círculo de 2 m inscrito",
+    },
+    Figure {
+        name: "room.living.min_side",
+        authority: BR,
+        source: "nbr15575g",
+        bound: Bound::AtLeast(240.0),
+        note: "NBR 15575-1 anexo F",
+    },
+    Figure {
+        name: "room.kitchen.min_side",
+        authority: BR,
+        source: "nbr15575g",
+        bound: Bound::AtLeast(150.0),
+        note: "NBR 15575-1 anexo F",
+    },
+    Figure {
+        name: "room.bathroom.min_side",
+        authority: BR,
+        source: "nbr15575g",
+        bound: Bound::AtLeast(110.0),
+        note: "NBR 15575-1 anexo F",
+    },
+    Figure {
+        name: "room.laundry.min_side",
+        authority: Authority::City {
+            country: "br",
+            region: "sp",
+            city: "sao-paulo",
+        },
+        source: "coe-municipal",
+        bound: Bound::AtLeast(90.0),
+        note: "Decreto 57.776/2017",
+    },
+    Figure {
+        name: "room.corridor.min_side",
+        authority: Authority::City {
+            country: "br",
+            region: "sp",
+            city: "sao-paulo",
+        },
+        source: "coe-municipal",
+        bound: Bound::AtLeast(90.0),
+        note: "Decreto 57.776/2017",
+    },
+    // A wheelchair corridor is the accessibility standard's, not the city's,
+    // and it is the longer run that needs the extra width.
+    Figure {
+        name: "room.corridor.min_side.wheelchair",
+        authority: BR,
+        source: "nbr9050",
+        bound: Bound::AtLeast(90.0),
+        note: "NBR 9050 6.11.1, até 4 m de extensão",
+    },
+    Figure {
+        name: "room.corridor.min_side.wheelchair.long",
+        authority: BR,
+        source: "nbr9050",
+        bound: Bound::AtLeast(120.0),
+        note: "NBR 9050 6.11.1, até 10 m de extensão",
+    },
+];
+
+/// The strictest figure called `name` whose authority carries at `at`.
+///
+/// Silence below the country is not disagreement, so a project that has not
+/// said which city it is in still hears what a city demands — it simply hears
+/// it as advice, because the tier of a source that does not certainly cover
+/// the place cannot accuse. Naming *another* city is disagreement, and that is
+/// where a figure goes quiet.
+#[must_use]
+pub fn figure(name: &str, at: &Place) -> Option<&'static Figure> {
+    let here = at.or_home();
+    FIGURES
+        .iter()
+        .filter(|f| f.name == name && f.authority.covers(&here))
+        .reduce(|best, f| {
+            if f.bound.stricter_than(best.bound) {
+                f
+            } else {
+                best
+            }
+        })
+}
+
 /// What a municipal building code demands of a kitchen, where we hold it.
 ///
 /// These numbers change from city to city and, against a standard, the more

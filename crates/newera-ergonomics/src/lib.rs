@@ -1266,32 +1266,40 @@ impl Review<'_, '_> {
             index: k,
         } in spaces
         {
-            // Minimum areas and narrow sides: São Paulo's decree 57.776 table
-            // (rooms to stay 5 m² and a 2 m circle; kitchen 1,50 m; bathroom,
-            // laundry and circulation 0,90 m), the state sanitary code's
-            // kitchen of 4 m², and NBR 15575-1 annex F's widths (living 2,40 m,
-            // kitchen 1,50 m, bathroom 1,10 m). A wheelchair corridor: 0,90 m
-            // up to 4 m long, 1,20 m up to 10 m (NBR 9050 6.11.1).
+            // Minimum areas and narrow sides now come from the figure table,
+            // one row per authority: São Paulo's decree 57.776, the state
+            // sanitary code, NBR 15575-1 annex F, and NBR 9050 6.11.1 for a
+            // corridor somebody rolls through. A figure is asked for, not
+            // decided here, so a decree written for one city stops judging
+            // projects in the next one.
             let long_side = if short > 0.0 { area / short } else { 0.0 };
-            let minimum = match what {
-                RoomUse::Bedroom => Some((50_000.0, 200.0, "coe-municipal")),
-                RoomUse::Living => Some((50_000.0, 240.0, "nbr15575g")),
-                RoomUse::Kitchen => Some((40_000.0, 150.0, "nbr15575g")),
-                RoomUse::Bathroom => Some((0.0, 110.0, "nbr15575g")),
-                RoomUse::Laundry => Some((0.0, 90.0, "coe-municipal")),
-                RoomUse::Corridor => Some((
-                    0.0,
-                    if wheel && long_side > 400.0 {
-                        120.0
-                    } else {
-                        90.0
-                    },
-                    if wheel { "nbr9050" } else { "coe-municipal" },
-                )),
+            let slug = match what {
+                RoomUse::Bedroom => Some("bedroom"),
+                RoomUse::Living => Some("living"),
+                RoomUse::Kitchen => Some("kitchen"),
+                RoomUse::Bathroom => Some("bathroom"),
+                RoomUse::Laundry => Some("laundry"),
+                RoomUse::Corridor => Some("corridor"),
                 _ => None,
             };
-            if let Some((min_area, min_side, side_source)) = minimum {
-                if area + 1.0 < min_area {
+            if let Some(slug) = slug {
+                let ask = |what: &str| {
+                    newera_core::standards::figure(&format!("room.{slug}.{what}"), &self.place)
+                };
+                // A wheelchair asks the accessibility standard instead of the
+                // city, and it is the longer run that needs the extra width.
+                let side = if wheel && slug == "corridor" {
+                    ask(if long_side > 400.0 {
+                        "min_side.wheelchair.long"
+                    } else {
+                        "min_side.wheelchair"
+                    })
+                } else {
+                    ask("min_side")
+                };
+                if let Some(min) = ask("min_area")
+                    && area + 1.0 < min.bound.value()
+                {
                     self.push_ref(
                         Rule::RoomArea,
                         Severity::Dica,
@@ -1300,12 +1308,14 @@ impl Review<'_, '_> {
                             "{} m² para {}: códigos de obras costumam pedir ao menos {} m² (confira o do seu município).",
                             m2(area),
                             what.name(),
-                            m2(min_area)
+                            m2(min.bound.value())
                         ),
-                        "coe-municipal",
+                        min.source,
                     );
                 }
-                if short + 0.5 < min_side {
+                if let Some(min) = side
+                    && short + 0.5 < min.bound.value()
+                {
                     let severity = if what == RoomUse::Corridor {
                         Severity::Alerta
                     } else {
@@ -1319,9 +1329,9 @@ impl Review<'_, '_> {
                             "Menor lado de {} cm; para {} a referência é pelo menos {} cm.",
                             cm(short),
                             what.name(),
-                            cm(min_side)
+                            cm(min.bound.value())
                         ),
-                        side_source,
+                        min.source,
                     );
                 }
             }
