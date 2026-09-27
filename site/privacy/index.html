@@ -32,13 +32,21 @@
     <li><strong>Relatórios de falha</strong> ao Sentry: o erro, o rastro do código, o sistema
     operacional e a versão do app. Não vão endereço IP, nome da máquina, o token do MCP nem a
     planta.</li>
-    <li><strong>Uma contagem de uso</strong> ao Google Analytics quando o app abre: um
-    identificador aleatório desta instalação, a versão, o sistema, a arquitetura e o modo
-    (janela, servidor, stdio).</li>
+    <li><strong>Uma contagem de uso</strong> quando o app abre: um identificador aleatório
+    desta instalação, a versão, o sistema, a arquitetura e o modo (janela, servidor, stdio). Ela
+    passa por um endereço nosso (<code>3dneweraai.com/ping</code>) e de lá vai ao Google
+    Analytics; seu endereço IP não segue adiante — no lugar dele vai só o país, que a
+    Cloudflare já sabe da conexão.</li>
     <li><strong>Relatos da ferramenta <code>feedback</code></strong>, quando a IA a usa: o que
     ela tentou, o que recebeu e o que ajudaria. Ficam gravados na sua máquina e só são enviados
     com a telemetria ligada.</li>
   </ul>
+  <p>Os instaladores (<code>install-macos.sh</code>, <code>install-windows.ps1</code> e
+  <code>install-desktop.sh</code>) contam uma instalação e uma desinstalação pelo mesmo endereço,
+  com o mesmo identificador: o sistema, a arquitetura, a versão e se o app veio de uma versão
+  publicada ou foi compilado na sua máquina. Obedecem a mesma chave —
+  <code>NEWERA_TELEMETRY=0</code>, ou a escolha já gravada nas configurações — e não contam nada
+  de máquinas de integração contínua.</p>
 
   <h2>2. O editor no navegador (3dneweraai.com/app)</h2>
   <p>O projeto fica na sua aba e no armazenamento local do navegador (para recuperar depois de
@@ -108,9 +116,14 @@
   With telemetry on (the default; off in the menu, with <code>newera telemetry off</code>, or
   <code>NEWERA_TELEMETRY=0</code> for one run) the app sends crash reports to Sentry (the
   error, backtrace, OS and app version — never IP address, hostname, MCP token or the plan), one
-  usage ping to Google Analytics when it opens (a random install id, version, OS, architecture
-  and mode), and reports written by the <code>feedback</code> tool, which are kept on your
-  machine and sent only with telemetry on.</p>
+  usage ping when it opens (a random install id, version, OS, architecture and mode) through an
+  endpoint of ours, <code>3dneweraai.com/ping</code>, which forwards the count to Google
+  Analytics without passing your IP address on — only the country, which Cloudflare already
+  knows from the connection — and reports written by the <code>feedback</code> tool, which are
+  kept on your machine and sent only with telemetry on. The installers count an install and an
+  uninstall through the same endpoint, with the same id, saying the OS, the architecture, the
+  version and whether the app came from a published release or was compiled on your machine;
+  they obey the same switch and count nothing from continuous integration machines.</p>
   <h2>2. The editor in the browser</h2>
   <p>The project lives in your tab and in the browser's local storage, for recovery. The site
   counts visits with Google Analytics, which sets Google's cookies.</p>

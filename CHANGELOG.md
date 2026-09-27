@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Installing and uninstalling are counted, per system: the three installers post one event to
+  `3dneweraai.com/ping` saying which operating system and architecture, whether the app came
+  from a published release or was compiled on the machine, and whether this was the first
+  install. They draw the installation id the app then uses, so an install and the first run are
+  one installation in the count and not two.
+- Crash reports from builds that carry no DSN — everyone who compiles the app themselves — now
+  reach Sentry through `3dneweraai.com/ping/sentry`, which signs the envelope with the DSN the
+  site holds. Those crashes were seen by nobody before.
+
+### Changed
+
+- The usage count no longer needs a secret inside the binary: it goes to the site's own
+  endpoint, which holds the Google Analytics secret and forwards it. Releases were being built
+  without that secret, so nothing was counted at all; and a build from source counted nothing by
+  design. Both now count the same.
+- The count says the country Cloudflare already knows from the connection, and the visitor's
+  address is not passed on to Google.
+- A debug build and CI count nothing and report nothing, which is what the missing secret used
+  to accomplish by accident.
+
 ## [1.10.0] - 2026-09-26
 
 ### Changed

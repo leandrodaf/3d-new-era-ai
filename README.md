@@ -346,17 +346,22 @@ crates/
 
 ## Privacy and telemetry
 
-Released builds send crash reports through Sentry, along with the notes agents leave with
-the MCP `feedback` tool. It is **on by default** and off with one click in
+The app sends crash reports through Sentry, along with the notes agents leave with the MCP
+`feedback` tool. It is **on by default** and off with one click in
 **Help → Send error reports**, or `newera telemetry off`; `NEWERA_TELEMETRY=0` turns it off
 for a single run. Nothing of the project is sent, nor the IP address or the machine's name,
 and the MCP token is removed from every report. Notes are always kept locally in the config
 folder (`notes.jsonl`).
 
-Released builds also count, in Google Analytics, that the app was opened, with its version,
-operating system and mode, under the same switch and with a random installation id. A build
-from source reports and counts nothing. The hosted service keeps only what it needs: your
-email, your projects and usage, never the conversation. See the
+Under the same switch, opening the app counts one `app_open` — a random installation id, the
+version, the operating system, the architecture and the mode — and the installers count one
+install and one uninstall, saying which system and whether the app came from a release or was
+compiled on the machine. Both go to `3dneweraai.com/ping`, an endpoint of the site that holds
+the Google Analytics secret and forwards the count without passing the IP address on: the
+country Cloudflare already knows goes instead. A build made without the project's keys reports
+through the same endpoint, so installing from source counts like any other install;
+`cargo build` on a clone and CI count nothing. The hosted service keeps only what it needs:
+your email, your projects and usage, never the conversation. See the
 [privacy policy](https://3dneweraai.com/privacy/).
 
 ## Support the project

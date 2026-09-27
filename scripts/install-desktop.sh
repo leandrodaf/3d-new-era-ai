@@ -55,6 +55,52 @@ logo() {
 }
 # --- logo end ---
 
+# The count: one line to the project's own endpoint, so an installation that
+# never opens the app is still one installation. It says what this script just
+# did — install or uninstall, from the release tarball or from a build of your
+# own — and nothing about the machine or the person. Same switch the app obeys
+# (NEWERA_TELEMETRY=0, or the choice kept in the settings), and never from CI.
+ping_url="${NEWERA_PING_URL:-https://3dneweraai.com/ping}"
+config="${XDG_CONFIG_HOME:-$HOME/.config}/3d-new-era-ai"
+
+counting() {
+    case "$(printf '%s' "${NEWERA_TELEMETRY:-}" | tr '[:upper:]' '[:lower:]')" in
+        0 | off | false | no) return 1 ;;
+    esac
+    [ -z "${CI:-}" ] || return 1
+    ! grep -q '"telemetry"[[:space:]]*:[[:space:]]*false' "$config/telemetry.json" 2>/dev/null
+}
+
+count() { # count <install|uninstall>
+    counting || return 0
+    command -v curl >/dev/null 2>&1 || return 0
+    id_file="$config/install-id"
+    fresh=1
+    if [ -s "$id_file" ]; then
+        fresh=0
+    else
+        # The id the app will use from now on: drawn here, so an install and
+        # the first run are one installation and not two.
+        [ "$1" = install ] || return 0
+        mkdir -p "$config" 2>/dev/null || return 0
+        od -An -tx1 -N16 /dev/urandom 2>/dev/null | tr -d ' \n' > "$id_file" || return 0
+    fi
+    id=$(tr -d ' \n\r' < "$id_file" 2>/dev/null) || return 0
+    [ -n "$id" ] || return 0
+    case "$(uname -m)" in
+        aarch64 | arm64) arch=aarch64 ;;
+        x86_64) arch=x86_64 ;;
+        *) arch="" ;;
+    esac
+    # Shipped in the tarball this sits in the middle of; run out of a clone,
+    # what it is putting in the menu was built on this machine.
+    if [ -d "$here/share/applications" ]; then channel=release; else channel=source; fi
+    version=$("$bin/newera" --version 2>/dev/null | tr -cd '0-9.' ) || version=""
+    curl -fsS -m 5 -X POST -H 'content-type: application/json' -o /dev/null \
+        -d "{\"event\":\"$1\",\"client_id\":\"$id\",\"operating_system\":\"linux\",\"architecture\":\"$arch\",\"channel\":\"$channel\",\"installer\":\"script\",\"first_install\":\"$fresh\",\"app_version\":\"$version\"}" \
+        "$ping_url" 2>/dev/null || true
+}
+
 refresh() {
     command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$data/applications" || true
     command -v update-mime-database >/dev/null 2>&1 && update-mime-database "$data/mime" || true
@@ -67,6 +113,7 @@ if [ "${1:-}" = "--uninstall" ]; then
         -o -name 'application-x-newera.png' -o -name 'application-x-newera.svg' 2>/dev/null \
         | while read -r icon; do rm -f "$icon"; done
     refresh
+    count uninstall
     t "removidos: atalho, ícones, tipo .newera e $bin/newera" \
       "removed: launcher entry, icons, the .newera type and $bin/newera" \
       "eliminados: acceso directo, iconos, tipo .newera y $bin/newera" \
@@ -101,6 +148,8 @@ refresh
 
 # Make it the default opener for .newera, when the tool is around.
 command -v xdg-mime >/dev/null 2>&1 && xdg-mime default newera.desktop application/x-newera || true
+
+count install
 
 t "3D New Era AI no menu; .newera com ícone e duplo clique; comando: $bin/newera" \
   "3D New Era AI is in the menu; .newera files have their icon and open on a double click; command: $bin/newera" \

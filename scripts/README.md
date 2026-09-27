@@ -20,6 +20,7 @@ saying what it does and how to run it.
 | `web-mcp-e2e.mjs` | The browser tab as an MCP server: an AI client reaches it through the relay and edits its project. Imports `web-diagnostics-test.mjs`. | CI, `publish.yml` |
 | `web-diagnostics-test.mjs` | Unit test for the diagnostics the browser editor records when it fails to start or crashes. | `web-mcp-e2e.mjs` |
 | `mobile-audit.mjs` | Loads a page at phone sizes and reports sideways scrolling, overflow, small text and small tap targets. | CI |
+| `ping.test.mjs` | Unit test for the site's own endpoints in `functions/`: the usage count it forwards to Google Analytics and the crash reports it signs for Sentry. | CI |
 | `chrome-session.mjs` | Launches a disposable headless Chrome for the browser tests. Tested by `chrome-session.test.mjs`. | the tests above |
 | `fixtures/render-assets.py` | Builds a demo bundle with imported model and texture assets for the browser tests. | `web-mcp-e2e.mjs` |
 

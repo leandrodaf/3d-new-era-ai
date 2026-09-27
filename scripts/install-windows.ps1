@@ -72,6 +72,50 @@ function Install-NewEra {
     function Step($text) { Write-Host "`n==> $text" -ForegroundColor Cyan }
     function Info($text) { Write-Host "    $text" }
 
+    # The count: one line to the project's own endpoint, so an installation that
+    # never opens the app is still one installation. It says what this script
+    # just did and on which system, and nothing about the machine or the person.
+    # Same switch the app obeys ($env:NEWERA_TELEMETRY=0, or the choice kept in
+    # the settings), and never from CI. A failure here is never the installer's
+    # problem.
+    function Send-Count($what, $version) {
+        try {
+            if ("$env:NEWERA_TELEMETRY".ToLower() -in @('0', 'off', 'false', 'no')) { return }
+            if ($env:CI) { return }
+            $config = if ($env:XDG_CONFIG_HOME) { Join-Path $env:XDG_CONFIG_HOME '3d-new-era-ai' }
+                      else { Join-Path $env:APPDATA '3d-new-era-ai' }
+            $settings = Join-Path $config 'telemetry.json'
+            if ((Test-Path $settings) -and ((Get-Content $settings -Raw) -match '"telemetry"\s*:\s*false')) { return }
+
+            # The id the app will use from now on: drawn here, so an install and
+            # the first run are one installation and not two.
+            $idFile = Join-Path $config 'install-id'
+            $fresh = '0'
+            if (-not (Test-Path $idFile)) {
+                if ($what -ne 'install') { return }
+                New-Item -ItemType Directory -Force -Path $config | Out-Null
+                Set-Content -Path $idFile -Value ([guid]::NewGuid().ToString('N')) -Encoding ascii -NoNewline
+                $fresh = '1'
+            }
+            $id = (Get-Content $idFile -Raw).Trim()
+            if (-not $id) { return }
+            $arch = switch ($env:PROCESSOR_ARCHITECTURE) {
+                'AMD64' { 'x86_64' }
+                'ARM64' { 'aarch64' }
+                default { '' }
+            }
+            $body = @{
+                event = $what; client_id = $id; operating_system = 'windows'
+                architecture = $arch; channel = 'release'; installer = 'script'
+                first_install = $fresh; app_version = "$version"
+            } | ConvertTo-Json -Compress
+            $url = if ($env:NEWERA_PING_URL) { $env:NEWERA_PING_URL } else { 'https://3dneweraai.com/ping' }
+            Invoke-RestMethod -Uri $url -Method Post -Body $body -ContentType 'application/json' `
+                -TimeoutSec 5 -UseBasicParsing | Out-Null
+        }
+        catch { }
+    }
+
     function Refresh-Shell {
         # Explorer caches icons and associations; this makes it re-read them.
         if (-not ('Win32.Shell' -as [type])) {
@@ -108,6 +152,7 @@ function Install-NewEra {
         Remove-Item -Recurse -Force "$classes\$progId", "$classes\Applications\newera-gui.exe" -ErrorAction SilentlyContinue
         Refresh-Shell
         Remove-FromUserPath $dir
+        Send-Count 'uninstall' ''
         if (Get-Command claude -ErrorAction SilentlyContinue) {
             claude mcp remove --scope user newera 2>$null | Out-Null
         }
@@ -278,6 +323,8 @@ function Install-NewEra {
             }
         }
     }
+
+    Send-Count 'install' $version
 
     Write-Host "`n$(T 'Pronto!' 'Done!' '¡Listo!' 'Terminé !')" -ForegroundColor Green
     switch ($script:Lang) {
