@@ -19,6 +19,7 @@ use crate::geometry::Point2;
 use crate::home::Home;
 use crate::ids::{FurnitureId, RoomId};
 use crate::routing::{Route, Terminal, Via};
+use crate::say;
 use crate::style::Polyline;
 
 /// What a pipe run carries.
@@ -131,6 +132,12 @@ impl Fixture {
             Self::Dishwasher => "lava-louças",
             Self::Bidet => "bidê",
         }
+    }
+
+    /// Its name as a word of a sentence, translated with it.
+    #[must_use]
+    pub fn said(self) -> crate::text::Text {
+        crate::text::Text::from(self.name())
     }
 
     /// Whether it takes hot water where the home has it.
@@ -524,9 +531,10 @@ fn found(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Erro,
                 place: at.clone(),
-                message: format!(
-                    "Sem ponto de água fria a até {reach} cm: o {} não tem de onde ser alimentado.",
-                    fixture.name()
+                message: say!(
+                    "Sem ponto de água fria a até {} cm: o {} não tem de onde ser alimentado.",
+                    reach,
+                    fixture.said()
                 ),
                 source: "nbr5626",
             });
@@ -537,9 +545,10 @@ fn found(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Alerta,
                 place: at.clone(),
-                message: format!(
-                    "O projeto tem água quente e o {} não recebe: falta o ponto a até {reach} cm.",
-                    fixture.name()
+                message: say!(
+                    "O projeto tem água quente e o {} não recebe: falta o ponto a até {} cm.",
+                    fixture.said(),
+                    reach
                 ),
                 source: "nbr5626",
             });
@@ -551,18 +560,20 @@ fn found(home: &Home) -> Vec<Finding> {
         };
         if !near(piece, outlets) {
             let how = if fixture.drains_to_floor() {
-                "ponto de esgoto ou ralo sifonado"
+                say!("ponto de esgoto ou ralo sifonado")
             } else {
-                "ponto de esgoto próprio"
+                say!("ponto de esgoto próprio")
             };
             out.push(Finding {
                 key: format!("plumb:sewer:{}", piece.id),
                 accepted: None,
                 severity: Severity::Erro,
                 place: at,
-                message: format!(
-                    "Sem {how} a até {reach} cm: o {} não tem para onde escoar (ramal de {} mm).",
-                    fixture.name(),
+                message: say!(
+                    "Sem {} a até {} cm: o {} não tem para onde escoar (ramal de {} mm).",
+                    how,
+                    reach,
+                    fixture.said(),
                     fixture.sewer_mm()
                 ),
                 source: "nbr8160",
@@ -626,10 +637,7 @@ fn found(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Alerta,
                 place: place.clone(),
-                message: format!(
-                    "Nenhum ralo do cômodo é desconector: ralo seco, linear sem sifão ou sifonado pequeno (fecho de 9 a 20 mm) precisam desaguar numa caixa sifonada com fecho de 50 mm ({}).",
-                    specs.iter().map(|(p, _)| p.id.to_string()).collect::<Vec<_>>().join(", ")
-                ),
+                message: say!("Nenhum ralo do cômodo é desconector: ralo seco, linear sem sifão ou sifonado pequeno (fecho de 9 a 20 mm) precisam desaguar numa caixa sifonada com fecho de 50 mm ({}).", specs.iter().map(|(p, _)| p.id.to_string()).collect::<Vec<_>>().join(", ")),
                 source: "nbr8160",
             });
         }
@@ -645,9 +653,7 @@ fn found(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Alerta,
                 place: place.clone(),
-                message: format!(
-                    "{uhc} UHC vão para o ralo e ele aguenta {capacity}: a saída de 50 mm leva até 6 UHC; use a caixa sifonada 150×185×75 (até 15), divida entre duas caixas ou leve aparelhos a ramais próprios."
-                ),
+                message: say!("{} UHC vão para o ralo e ele aguenta {}: a saída de 50 mm leva até 6 UHC; use a caixa sifonada 150×185×75 (até 15), divida entre duas caixas ou leve aparelhos a ramais próprios.", uhc, capacity),
                 source: "nbr8160",
             });
         }
@@ -771,11 +777,7 @@ fn found(home: &Home) -> Vec<Finding> {
                     accepted: None,
                     severity: Severity::Dica,
                     place: format!("{} {}", trap.name, trap.id),
-                    message: format!(
-                        "A {} cm do tubo ventilador mais próximo: um ramal de {mm} mm pede ventilação a até {} cm (em linha reta; trace o ramal com route kind=vent e ele passa a contar).",
-                        nearest.round(),
-                        limit.round()
-                    ),
+                    message: say!("A {} cm do tubo ventilador mais próximo: um ramal de {} mm pede ventilação a até {} cm (em linha reta; trace o ramal com route kind=vent e ele passa a contar).", nearest.round(), mm, limit.round()),
                     source: "nbr8160",
                 });
             }
@@ -799,10 +801,7 @@ fn found(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Alerta,
                 place: format!("{} {}", b.name, b.id),
-                message: format!(
-                    "Caixa de inspeção de {} cm: a norma pede ao menos 60 cm de lado ou diâmetro, e até 1 m de profundidade (mais funda é poço de visita).",
-                    f.width.min(f.depth).round()
-                ),
+                message: say!("Caixa de inspeção de {} cm: a norma pede ao menos 60 cm de lado ou diâmetro, e até 1 m de profundidade (mais funda é poço de visita).", f.width.min(f.depth).round()),
                 source: "nbr8160",
             });
         }
@@ -822,10 +821,7 @@ fn found(home: &Home) -> Vec<Finding> {
                     accepted: None,
                     severity: Severity::Alerta,
                     place: format!("{} {}", p.name, p.id),
-                    message: format!(
-                        "A {} m da caixa de inspeção: vaso, caixa sifonada e caixa de gordura ficam a até 10 m de um dispositivo de inspeção.",
-                        crate::electrical::decimal(nearest / 100.0)
-                    ),
+                    message: say!("A {} m da caixa de inspeção: vaso, caixa sifonada e caixa de gordura ficam a até 10 m de um dispositivo de inspeção.", crate::electrical::decimal(nearest / 100.0)),
                     source: "nbr8160",
                 });
             }
@@ -874,11 +870,7 @@ fn found(home: &Home) -> Vec<Finding> {
             accepted: None,
             severity: Severity::Dica,
             place: "Hidráulica".into(),
-            message: format!(
-                "{} linha(s) desenhadas à mão sem dizer se são água fria, quente ou esgoto ({}): não entram nos metros de tubo; trace com route (que as substitui) ou apague.",
-                untyped.len(),
-                untyped.join(", ")
-            ),
+            message: say!("{} linha(s) desenhadas à mão sem dizer se são água fria, quente ou esgoto ({}): não entram nos metros de tubo; trace com route (que as substitui) ou apague.", untyped.len(), untyped.join(", ")),
             source: "nbr8160",
         });
     }
@@ -934,7 +926,7 @@ fn found(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Alerta,
                 place: pipe.name().into(),
-                message: format!("Pontos sem tubulação chegando: {}.", unreached.join(", ")),
+                message: say!("Pontos sem tubulação chegando: {}.", unreached.join(", ")),
                 source: if pipe == Pipe::Sewer {
                     "nbr8160"
                 } else {

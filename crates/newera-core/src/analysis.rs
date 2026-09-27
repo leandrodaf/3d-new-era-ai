@@ -780,7 +780,7 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
         if let Some(why) = crate::mounting::blocked(home, piece) {
             issues.push(Issue::Loose {
                 piece: piece.id,
-                why,
+                why: why.to_string(),
             });
         }
     }

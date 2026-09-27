@@ -36,11 +36,12 @@ mod rule;
 mod scene;
 
 use crate::rule::Rule;
+use newera_core::say;
 use newera_core::standards::{self, Resolved, Standard};
+use newera_core::text::Text;
 use newera_core::{Home, OpeningKind, Point2};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::fmt::Write as _;
 
 pub use scene::{RoomUse, Scene, Side, Space, Unit, Use};
 
@@ -138,8 +139,9 @@ pub struct Finding {
     pub severity: Severity,
     /// Room or piece it is about, e.g. `Quarto r5` or `Cama de casal f12`.
     pub place: String,
-    /// What is wrong, with the numbers and what to do.
-    pub message: String,
+    /// What is wrong, with the numbers and what to do: a template and its
+    /// data, Portuguese when read as a string — see [`newera_core::text::Text`].
+    pub message: newera_core::text::Text,
     /// Code of the [`newera_core::Standard`] behind it, resolved once in
     /// [`Report::refs`]. The citation lives here, not inside the sentence.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -266,7 +268,7 @@ impl Review<'_, '_> {
                 self.findings.push(Finding {
                     severity: Severity::Alerta,
                     place: space.label(),
-                    message: format!("Uso do ambiente como {} conflita com equipamentos sanitários ({}). Confirme o programa e declare room_use; o nome e as peças foram preservados.", space.what.name(), sanitary.join(", ")),
+                    message: say!("Uso do ambiente como {} conflita com equipamentos sanitários ({}). Confirme o programa e declare room_use; o nome e as peças foram preservados.", space.what.said(), sanitary.join(", ")),
                     key: rule::key(Rule::RoomUseConflict, &space.label()),
                     ..Finding::default()
                 });
@@ -278,7 +280,7 @@ impl Review<'_, '_> {
                         self.findings.push(Finding {
                             severity: Severity::Dica,
                             place: space.label(),
-                            message: format!("Pia de cozinha {} usada como lavatório: renomear não altera o equipamento. Confirme se este catálogo corresponde à peça pretendida para o banheiro.", piece.id),
+                            message: say!("Pia de cozinha {} usada como lavatório: renomear não altera o equipamento. Confirme se este catálogo corresponde à peça pretendida para o banheiro.", piece.id),
                             key: rule::key_at(
                                 Rule::BathroomFixture,
                                 &space.label(),
@@ -299,7 +301,7 @@ impl Review<'_, '_> {
         rule: Rule,
         severity: Severity,
         place: impl Into<String>,
-        message: impl Into<String>,
+        message: impl Into<Text>,
     ) {
         let place = place.into();
         self.findings.push(Finding {
@@ -321,7 +323,7 @@ impl Review<'_, '_> {
         rule: Rule,
         severity: Severity,
         place: impl Into<String>,
-        message: impl Into<String>,
+        message: impl Into<Text>,
         code: &'static str,
     ) {
         let Some(source) = standards::standard(code) else {
@@ -372,7 +374,7 @@ impl Review<'_, '_> {
         rule: Rule,
         figure: &Resolved,
         place: impl Into<String>,
-        message: impl Into<String>,
+        message: impl Into<Text>,
     ) {
         match figure.source {
             Some(code) => self.push_ref(rule, figure.severity, place, message, code),
@@ -388,7 +390,7 @@ impl Review<'_, '_> {
         about: &str,
         figure: &Resolved,
         place: impl Into<String>,
-        message: impl Into<String>,
+        message: impl Into<Text>,
     ) {
         let place = place.into();
         let key = rule::key_at(rule, &place, about);
@@ -449,12 +451,13 @@ impl Review<'_, '_> {
                 Rule::SleepingPlaces,
                 Severity::Erro,
                 home,
-                format!(
-                    "{people} moradores e {} lugares para dormir: {} (camas de casal contam 2).",
+                say!(
+                    "{} moradores e {} lugares para dormir: {} (camas de casal contam 2).",
+                    people,
                     c.beds,
                     match people - c.beds {
-                        1 => "falta 1".to_owned(),
-                        n => format!("faltam {n}"),
+                        1 => say!("falta 1"),
+                        n => say!("faltam {}", n),
                     }
                 ),
             );
@@ -471,12 +474,7 @@ impl Review<'_, '_> {
                     Rule::BedroomCrowding,
                     &most,
                     home,
-                    format!(
-                        "{} moradores por dormitório: acima de {} é adensamento excessivo; são necessários {} dormitórios.",
-                        cm(per),
-                        cm(most.bound.value()),
-                        people.div_ceil(most_people)
-                    ),
+                    say!("{} moradores por dormitório: acima de {} é adensamento excessivo; são necessários {} dormitórios.", cm(per), cm(most.bound.value()), people.div_ceil(most_people)),
                 );
             } else if let Some(most) = shared
                 && per > most.bound.value()
@@ -485,11 +483,7 @@ impl Review<'_, '_> {
                     Rule::BedroomSharing,
                     &most,
                     home,
-                    format!(
-                        "{} moradores por dormitório; com {} dormitórios ninguém divide com mais de uma pessoa.",
-                        cm(per),
-                        people.div_ceil(most.bound.value() as u32)
-                    ),
+                    say!("{} moradores por dormitório; com {} dormitórios ninguém divide com mais de uma pessoa.", cm(per), people.div_ceil(most.bound.value() as u32)),
                 );
             }
         } else if people > 1 {
@@ -514,11 +508,7 @@ impl Review<'_, '_> {
                 Rule::BathroomCount,
                 &most,
                 home,
-                format!(
-                    "{people} moradores para {} banheiro(s): acima de {} por banheiro as filas de manhã são certas; considere um lavabo ou mais um banheiro.",
-                    c.bathrooms,
-                    cm(most.bound.value())
-                ),
+                say!("{} moradores para {} banheiro(s): acima de {} por banheiro as filas de manhã são certas; considere um lavabo ou mais um banheiro.", people, c.bathrooms, cm(most.bound.value())),
             );
         }
         if c.dining_seats < people {
@@ -526,9 +516,10 @@ impl Review<'_, '_> {
                 Rule::DiningSeats,
                 Severity::Alerta,
                 home,
-                format!(
-                    "{} lugares à mesa para {people} moradores: use uma mesa de {} lugares.",
+                say!(
+                    "{} lugares à mesa para {} moradores: use uma mesa de {} lugares.",
                     c.dining_seats,
+                    people,
                     people.max(4).div_ceil(2) * 2
                 ),
             );
@@ -538,11 +529,7 @@ impl Review<'_, '_> {
                 Rule::LivingSeats,
                 Severity::Dica,
                 home,
-                format!(
-                    "{} lugares na sala para {people} moradores: todos sentam juntos com mais {} lugar(es) (poltrona ou sofá maior).",
-                    c.living_seats,
-                    people - c.living_seats
-                ),
+                say!("{} lugares na sala para {} moradores: todos sentam juntos com mais {} lugar(es) (poltrona ou sofá maior).", c.living_seats, people, people - c.living_seats),
             );
         }
         // Children count half.
@@ -557,12 +544,7 @@ impl Review<'_, '_> {
                 Rule::WardrobeCapacity,
                 &per_adult,
                 home,
-                format!(
-                    "{} cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns {} cm por adulto e metade por criança: {} cm no total.",
-                    cm(c.wardrobe_cm),
-                    cm(each),
-                    cm(needed)
-                ),
+                say!("{} cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns {} cm por adulto e metade por criança: {} cm no total.", cm(c.wardrobe_cm), cm(each), cm(needed)),
             );
         }
     }
@@ -633,9 +615,9 @@ impl Review<'_, '_> {
                 let (free, blocker, tight) = scene.free_along(i, side, min + 1.0, span, min);
                 if free + 0.5 < min {
                     let where_ = match side {
-                        Side::Front => "à frente",
-                        Side::Left => "à esquerda",
-                        Side::Right => "à direita",
+                        Side::Front => say!("à frente"),
+                        Side::Left => say!("à esquerda"),
+                        Side::Right => say!("à direita"),
                     };
                     let short = min - free;
                     // Sideways, the piece can slide over if the other side keeps its own room.
@@ -668,7 +650,7 @@ impl Review<'_, '_> {
                         }
                     };
                     let advice = if let (Side::Front, Some(f), Some(j)) = (side, &fix, blocker) {
-                        format!(
+                        say!(
                             "afaste {} {} cm",
                             scene.units[j].label(),
                             cm(f["dx"]
@@ -677,9 +659,9 @@ impl Review<'_, '_> {
                                 .hypot(f["dy"].as_f64().unwrap_or_default()))
                         )
                     } else if fix.is_some() || side == Side::Front {
-                        format!("afaste {} cm", cm(short))
+                        say!("afaste {} cm", cm(short))
                     } else {
-                        "não há espaço do outro lado: use peça menor ou reorganize".to_owned()
+                        say!("não há espaço do outro lado: use peça menor ou reorganize")
                     };
                     // How much of the side is that narrow: a corner taken by
                     // a nightstand is not a wardrobe that does not open.
@@ -689,9 +671,9 @@ impl Review<'_, '_> {
                         Side::Left | Side::Right => frame.depth,
                     } * (span.1 - span.0);
                     let stretch = if tight + 2.0 < whole - 4.0 {
-                        format!(" em {} dos {} cm", cm(tight), cm(whole))
+                        say!(" em {} dos {} cm", cm(tight), cm(whole))
                     } else {
-                        String::new()
+                        Text::default()
                     };
                     // With no fix, "afaste" means backing the piece itself away.
                     let probe = if fix.is_none() && side == Side::Front {
@@ -721,10 +703,14 @@ impl Review<'_, '_> {
                             },
                         ),
                         place: label.clone(),
-                        message: format!(
-                            "{} cm livres {where_}{stretch} ({reason}: mínimo {} cm); {advice}.",
+                        message: say!(
+                            "{} cm livres {}{} ({}: mínimo {} cm); {}.",
                             cm(free),
-                            cm(min)
+                            where_,
+                            stretch,
+                            Text::from(reason),
+                            cm(min),
+                            advice
                         ),
                         reference: figure.source,
                         fix,
@@ -982,11 +968,7 @@ impl Review<'_, '_> {
                     Rule::DoorClearWidth,
                     &min,
                     label,
-                    format!(
-                        "Vão livre de cerca de {} cm: abaixo de {} cm não passa um móvel nem uma pessoa com volumes; use porta de 70 cm ou mais.",
-                        cm(clear),
-                        cm(min.bound.value())
-                    ),
+                    say!("Vão livre de cerca de {} cm: abaixo de {} cm não passa um móvel nem uma pessoa com volumes; use porta de 70 cm ou mais.", cm(clear), cm(min.bound.value())),
                 );
             } else if let Some(min) = rolling
                 && wheel
@@ -996,11 +978,7 @@ impl Review<'_, '_> {
                     Rule::DoorWidthWheelchair,
                     &min,
                     label,
-                    format!(
-                        "Vão livre de cerca de {} cm: cadeira de rodas e andador pedem {} cm livres; use porta de 90 cm.",
-                        cm(clear),
-                        cm(min.bound.value())
-                    ),
+                    say!("Vão livre de cerca de {} cm: cadeira de rodas e andador pedem {} cm livres; use porta de 90 cm.", cm(clear), cm(min.bound.value())),
                 );
             }
         }
@@ -1035,9 +1013,9 @@ impl Review<'_, '_> {
                 })
                 .collect();
             let what = if space.what == RoomUse::Bathroom {
-                "banheiro"
+                say!("banheiro")
             } else {
-                "dormitório"
+                say!("dormitório")
             };
             // No way in at all: a sealed room. Only said once the plan has
             // doors somewhere — a sketch of rooms with no openings yet is a
@@ -1054,9 +1032,7 @@ impl Review<'_, '_> {
                         Rule::RoomWithoutAccess,
                         Severity::Erro,
                         space.label(),
-                        format!(
-                            "Sem acesso: nenhuma porta nem vão chega ao {what}; sem uma porta, ele não pode ser usado."
-                        ),
+                        say!("Sem acesso: nenhuma porta nem vão chega ao {}; sem uma porta, ele não pode ser usado.", what),
                     );
                 }
                 continue;
@@ -1077,8 +1053,9 @@ impl Review<'_, '_> {
                             .iter()
                             .any(|p| p.position.distance(f.position) <= 120.0)
                 });
-            let mut message = format!(
-                "Sem porta: o único acesso ao {what} é um vão livre ({}), que não fecha nem dá privacidade; troque por uma porta.",
+            let mut message = say!(
+                "Sem porta: o único acesso ao {} é um vão livre ({}), que não fecha nem dá privacidade; troque por uma porta.",
+                what,
                 passages
                     .iter()
                     .map(|p| p.id.to_string())
@@ -1086,11 +1063,11 @@ impl Review<'_, '_> {
                     .join(", ")
             );
             if let Some(leaf) = drawn_leaf {
-                let _ = write!(
-                    message,
-                    " {} {} parece a folha desenhada ao lado, sem ser uma abertura.",
-                    leaf.name, leaf.id
-                );
+                message = message.then(say!(
+                    "{} {} parece a folha desenhada ao lado, sem ser uma abertura.",
+                    leaf.name,
+                    leaf.id
+                ));
             }
             self.push(
                 Rule::RoomWithoutDoor,
@@ -1133,10 +1110,7 @@ impl Review<'_, '_> {
                     severity: Severity::Erro,
                     key: blocked,
                     place: door_name,
-                    message: format!(
-                        "A folha da porta bate em {by}: com a dobradiça do outro lado ela abre livre (hinge_right hoje {}, use {right}).",
-                        !right
-                    ),
+                    message: say!("A folha da porta bate em {}: com a dobradiça do outro lado ela abre livre (hinge_right hoje {}, use {}).", by, !right, right),
                     reference: None,
                     fix: Some(serde_json::json!({
                         "tool": "update",
@@ -1151,14 +1125,17 @@ impl Review<'_, '_> {
                 severity: Severity::Erro,
                 key: blocked,
                 place: door_name,
-                message: match &moved {
-                    Some(m) => format!(
-                        "A folha da porta bate em {by}: movendo a peça {} cm a porta abre livre.",
+                message: if let Some(m) = &moved {
+                    say!(
+                        "A folha da porta bate em {}: movendo a peça {} cm a porta abre livre.",
+                        by,
                         cm(m["d"].as_f64().unwrap_or_default())
-                    ),
-                    None => format!(
-                        "A folha da porta bate em {by}: mova a peça ou use porta de correr."
-                    ),
+                    )
+                } else {
+                    say!(
+                        "A folha da porta bate em {}: mova a peça ou use porta de correr.",
+                        by
+                    )
                 },
                 reference: None,
                 fix: moved.map(without_distance),
@@ -1177,17 +1154,18 @@ impl Review<'_, '_> {
                     &scene.units[b].piece.id.to_string(),
                 ),
                 place: scene.units[a].label(),
-                message: match &fix {
-                    Some(f) => format!(
+                message: if let Some(f) = &fix {
+                    say!(
                         "Ocupa o mesmo lugar que {}: movendo {} {} cm fica livre.",
                         scene.units[b].label(),
                         f["ids"][0].as_str().unwrap_or_default(),
                         cm(f["d"].as_f64().unwrap_or_default())
-                    ),
-                    None => format!(
+                    )
+                } else {
+                    say!(
                         "Ocupa o mesmo lugar que {}: não há lugar livre por perto, reorganize.",
                         scene.units[b].label()
-                    ),
+                    )
                 },
                 reference: None,
                 fix: fix.map(without_distance),
@@ -1285,12 +1263,7 @@ impl Review<'_, '_> {
                         Rule::RoomArea,
                         &min,
                         &label,
-                        format!(
-                            "{} m² para {}: códigos de obras costumam pedir ao menos {} m² (confira o do seu município).",
-                            m2(area),
-                            what.name(),
-                            m2(min.bound.value())
-                        ),
+                        say!("{} m² para {}: códigos de obras costumam pedir ao menos {} m² (confira o do seu município).", m2(area), what.said(), m2(min.bound.value())),
                     );
                 }
                 if let Some(min) = side
@@ -1300,10 +1273,10 @@ impl Review<'_, '_> {
                         Rule::RoomNarrowSide,
                         &min,
                         &label,
-                        format!(
+                        say!(
                             "Menor lado de {} cm; para {} a referência é pelo menos {} cm.",
                             cm(short),
-                            what.name(),
+                            what.said(),
                             cm(min.bound.value())
                         ),
                     );
@@ -1323,11 +1296,11 @@ impl Review<'_, '_> {
                     Rule::CeilingHeight,
                     &min,
                     &label,
-                    format!(
+                    say!(
                         "Pé-direito de {} cm; o mínimo é {} cm em {}.",
                         cm(ceiling),
                         cm(min.bound.value()),
-                        what.name()
+                        what.said()
                     ),
                 );
             }
@@ -1346,15 +1319,15 @@ impl Review<'_, '_> {
                         Severity::Dica
                     };
                     let what_to_do = if what == RoomUse::Bathroom {
-                        "use janela basculante ou ventilação mecânica"
+                        say!("use janela basculante ou ventilação mecânica")
                     } else {
-                        "precisa de janela para luz e ventilação"
+                        say!("precisa de janela para luz e ventilação")
                     };
                     self.push(
                         Rule::RoomWithoutWindow,
                         severity,
                         &label,
-                        format!("Sem janela: {what_to_do}."),
+                        say!("Sem janela: {}.", what_to_do),
                     );
                 } else if let Some(most) = per_glass
                     && glass * most.bound.value() + 1.0 < area
@@ -1364,12 +1337,7 @@ impl Review<'_, '_> {
                         Rule::WindowArea,
                         &most,
                         &label,
-                        format!(
-                            "Janelas somam {} m² para {} m² de piso; o Código Sanitário de SP pede 1/{ratio:.0} do piso: {} m², com metade abrindo para ventilar.",
-                            m2(glass),
-                            m2(area),
-                            m2(area / ratio)
-                        ),
+                        say!("Janelas somam {} m² para {} m² de piso; o Código Sanitário de SP pede 1/{} do piso: {} m², com metade abrindo para ventilar.", m2(glass), m2(area), format!("{ratio:.0}"), m2(area / ratio)),
                     );
                 }
             }
@@ -1415,10 +1383,10 @@ impl Review<'_, '_> {
                     Rule::MissingFixtures,
                     Severity::Dica,
                     &label,
-                    format!(
+                    say!(
                         "Falta {} para testar o uso de {}.",
-                        missing.join(", "),
-                        what.name()
+                        Text::joined(missing.iter().map(|&w| Text::from(w)).collect(), "{}, {}"),
+                        what.said()
                     ),
                     "nbr15575g",
                 );
@@ -1433,11 +1401,7 @@ impl Review<'_, '_> {
                         Rule::WheelchairTurn,
                         &min,
                         &label,
-                        format!(
-                            "Cabe um giro de {} cm; são necessários {} cm livres para girar a cadeira de rodas.",
-                            cm(turn),
-                            cm(min.bound.value())
-                        ),
+                        say!("Cabe um giro de {} cm; são necessários {} cm livres para girar a cadeira de rodas.", cm(turn), cm(min.bound.value())),
                     );
                 }
             }
@@ -1527,13 +1491,7 @@ impl Review<'_, '_> {
                         Rule::WorkTriangleLong,
                         &most,
                         &label,
-                        format!(
-                            "Triângulo geladeira–pia–fogão de {} cm, lado maior {} cm: a referência é até {} cm no total e {} cm por lado; aproxime os três.",
-                            cm(total),
-                            cm(long_leg),
-                            cm(most.bound.value()),
-                            cm(longest.bound.value())
-                        ),
+                        say!("Triângulo geladeira–pia–fogão de {} cm, lado maior {} cm: a referência é até {} cm no total e {} cm por lado; aproxime os três.", cm(total), cm(long_leg), cm(most.bound.value()), cm(longest.bound.value())),
                     );
                 } else if let Some(shortest) = shortest
                     && short_leg < shortest.bound.value()
@@ -1542,11 +1500,7 @@ impl Review<'_, '_> {
                         Rule::WorkTriangleShort,
                         &shortest,
                         &label,
-                        format!(
-                            "Triângulo geladeira–pia–fogão com um lado de só {} cm: a referência é ao menos {} cm, para haver bancada de apoio entre eles.",
-                            cm(short_leg),
-                            cm(shortest.bound.value())
-                        ),
+                        say!("Triângulo geladeira–pia–fogão com um lado de só {} cm: a referência é ao menos {} cm, para haver bancada de apoio entre eles.", cm(short_leg), cm(shortest.bound.value())),
                     );
                 }
                 if let Some(apart) = self.fig("kitchen.sink_to_stove")
@@ -1593,12 +1547,7 @@ impl Review<'_, '_> {
                     Rule::CounterHeight,
                     &tolerance,
                     scene.units[which].label(),
-                    format!(
-                        "Bancada a {} cm; para quem tem {} cm de altura o conforto fica perto de {} cm.",
-                        cm(top),
-                        cm(stature),
-                        cm(ideal.round())
-                    ),
+                    say!("Bancada a {} cm; para quem tem {} cm de altura o conforto fica perto de {} cm.", cm(top), cm(stature), cm(ideal.round())),
                 );
             }
             // Wall cabinets: above the head at the counter, within reach —
@@ -1626,11 +1575,7 @@ impl Review<'_, '_> {
                         Rule::WallCabinetLow,
                         &low,
                         u.label(),
-                        format!(
-                            "Aéreo a {} cm do chão: abaixo de ~{} cm (45 cm sobre a bancada, prática de marcenaria) a cabeça bate ao trabalhar.",
-                            cm(lo),
-                            cm(low.bound.value())
-                        ),
+                        say!("Aéreo a {} cm do chão: abaixo de ~{} cm (45 cm sobre a bancada, prática de marcenaria) a cabeça bate ao trabalhar.", cm(lo), cm(low.bound.value())),
                     );
                 }
                 if let Some((reach, source)) = reaching
@@ -1640,11 +1585,7 @@ impl Review<'_, '_> {
                         Rule::WallCabinetHigh,
                         &source,
                         u.label(),
-                        format!(
-                            "Topo do aéreo a {} cm: a prateleira de cima fica fora do alcance (~{} cm); guarde ali o que se usa pouco.",
-                            cm(hi),
-                            cm(reach.round())
-                        ),
+                        say!("Topo do aéreo a {} cm: a prateleira de cima fica fora do alcance (~{} cm); guarde ali o que se usa pouco.", cm(hi), cm(reach.round())),
                     );
                 }
                 break;
@@ -1660,11 +1601,7 @@ impl Review<'_, '_> {
                         Rule::CounterTotal,
                         &least,
                         &label,
-                        format!(
-                            "{} cm de bancada livre fora de pia, fogão e geladeira; abaixo de {} cm falta onde pousar as coisas do preparo (mesa solta também conta).",
-                            cm(total),
-                            cm(least.bound.value())
-                        ),
+                        say!("{} cm de bancada livre fora de pia, fogão e geladeira; abaixo de {} cm falta onde pousar as coisas do preparo (mesa solta também conta).", cm(total), cm(least.bound.value())),
                     );
                 }
                 if let Some(least) = self.fig("kitchen.counter.run")
@@ -1679,11 +1616,7 @@ impl Review<'_, '_> {
                         Rule::CounterRunShort,
                         &least,
                         &label,
-                        format!(
-                            "Um trecho de bancada de só {} cm: abaixo de {} cm o pedaço não serve para preparar nada; junte-o a outro trecho.",
-                            cm(shortest),
-                            cm(least.bound.value())
-                        ),
+                        say!("Um trecho de bancada de só {} cm: abaixo de {} cm o pedaço não serve para preparar nada; junte-o a outro trecho.", cm(shortest), cm(least.bound.value())),
                     );
                 }
             }
@@ -1714,9 +1647,11 @@ impl Review<'_, '_> {
                     Rule::KitchenSpread,
                     &most,
                     &label,
-                    format!(
-                        "{} cm entre {a} e {b}: acima de {} cm cada par vira travessia, e o preparo se desfaz em idas e vindas.",
+                    say!(
+                        "{} cm entre {} e {}: acima de {} cm cada par vira travessia, e o preparo se desfaz em idas e vindas.",
                         cm(far),
+                        Text::from(a),
+                        Text::from(b),
                         cm(most.bound.value())
                     ),
                 );
@@ -1742,9 +1677,9 @@ impl Review<'_, '_> {
                     Rule::MissingWorkZone,
                     Severity::Dica,
                     &label,
-                    format!(
+                    say!(
                         "Das cinco zonas de trabalho falta {}: sem ela o fluxo mantimentos → armazenagem → lavagem → preparo → cocção se quebra.",
-                        missing.join(" e ")
+                        Text::joined(missing.iter().map(|&w| Text::from(w)).collect(), "{} e {}")
                     ),
                     "blum-zonas",
                 );
@@ -1764,11 +1699,7 @@ impl Review<'_, '_> {
                             Rule::KitchenSockets,
                             &each,
                             &label,
-                            format!(
-                                "{sockets} ponto(s) de tomada para {} m de perímetro: são necessários {needed} (um a cada {} m ou fração).",
-                                m2(perimeter * 100.0),
-                                cm(each.bound.value() / 100.0)
-                            ),
+                            say!("{} ponto(s) de tomada para {} m de perímetro: são necessários {} (um a cada {} m ou fração).", sockets, m2(perimeter * 100.0), needed, cm(each.bound.value() / 100.0)),
                         );
                     }
                 }
@@ -1797,10 +1728,7 @@ impl Review<'_, '_> {
                         Rule::CounterSockets,
                         &least,
                         &label,
-                        format!(
-                            "{above} tomada(s) acima da bancada: são exigidas pelo menos {}, no mesmo ponto (tomada dupla: elec:sockets = 2) ou em pontos distintos; forno, cooktop elétrico e lava-louças acima de 10 A pedem circuito próprio.",
-                            cm(least.bound.value())
-                        ),
+                        say!("{} tomada(s) acima da bancada: são exigidas pelo menos {}, no mesmo ponto (tomada dupla: elec:sockets = 2) ou em pontos distintos; forno, cooktop elétrico e lava-louças acima de 10 A pedem circuito próprio.", above, cm(least.bound.value())),
                     );
                 }
             }
@@ -1866,11 +1794,7 @@ impl Review<'_, '_> {
                         Rule::HoodNarrowerThanStove,
                         Severity::Dica,
                         &label,
-                        format!(
-                            "Coifa de {} cm sobre cocção de {} cm: a captura já cai à metade nas bocas da frente, e vazão alta não compensa coifa estreita.",
-                            cm(hood.piece.width),
-                            cm(stove.piece.width)
-                        ),
+                        say!("Coifa de {} cm sobre cocção de {} cm: a captura já cai à metade nas bocas da frente, e vazão alta não compensa coifa estreita.", cm(hood.piece.width), cm(stove.piece.width)),
                         "lbnl-coifa",
                     ),
                     Some(_) => {}
@@ -1886,11 +1810,7 @@ impl Review<'_, '_> {
                         Rule::KitchenWidth,
                         &least,
                         &label,
-                        format!(
-                            "Cozinha de {} cm de largura; para comparar, a unidade do Minha Casa Minha Vida (regra só para ela) entrega {} cm, com previsão de pia 120×50, fogão 55×60 e geladeira 70×70 cm.",
-                            cm(short),
-                            cm(least.bound.value())
-                        ),
+                        say!("Cozinha de {} cm de largura; para comparar, a unidade do Minha Casa Minha Vida (regra só para ela) entrega {} cm, com previsão de pia 120×50, fogão 55×60 e geladeira 70×70 cm.", cm(short), cm(least.bound.value())),
                     );
                 }
                 // --- The city has the last word, and only where it was named:
@@ -1909,12 +1829,7 @@ impl Review<'_, '_> {
                                 Rule::FreeCircle,
                                 &circle,
                                 &label,
-                                format!(
-                                    "Cabe um círculo de {} cm no piso; {who} pede {} cm ({}). Entre norma e lei local prevalece o mais restritivo.",
-                                    cm(turn),
-                                    cm(diameter),
-                                    circle.note
-                                ),
+                                say!("Cabe um círculo de {} cm no piso; {} pede {} cm ({}). Entre norma e lei local prevalece o mais restritivo.", cm(turn), who, cm(diameter), circle.note),
                             );
                         }
                     }
@@ -1971,13 +1886,7 @@ impl Review<'_, '_> {
                         Rule::TvDistance,
                         if distance < near { &nearest } else { &farthest },
                         scene.units[tv].label(),
-                        format!(
-                            "{} a {} cm da TV de {inches:.0}\"; para essa tela o conforto fica entre {} e {} cm.",
-                            scene.units[*sofa].label(),
-                            cm(distance.round()),
-                            cm(near.round()),
-                            cm(far.round())
-                        ),
+                        say!("{} a {} cm da TV de {}\"; para essa tela o conforto fica entre {} e {} cm.", scene.units[*sofa].label(), cm(distance.round()), format!("{inches:.0}"), cm(near.round()), cm(far.round())),
                     );
                 }
             }
@@ -2014,13 +1923,7 @@ impl Review<'_, '_> {
                             &format!("{}+{}", a.piece.id, b.piece.id),
                             &least,
                             &label,
-                            format!(
-                                "{} cm entre {} e {}: entre duas camas de solteiro a referência é {} cm.",
-                                cm(gap),
-                                a.label(),
-                                b.label(),
-                                cm(least.bound.value())
-                            ),
+                            say!("{} cm entre {} e {}: entre duas camas de solteiro a referência é {} cm.", cm(gap), a.label(), b.label(), cm(least.bound.value())),
                         );
                     }
                 }
@@ -2039,11 +1942,7 @@ impl Review<'_, '_> {
                                 Rule::BasinHeightWheelchair,
                                 &most,
                                 u.label(),
-                                format!(
-                                    "Tampo a {} cm: para cadeira de rodas, até {} cm, com vão livre embaixo.",
-                                    cm(top),
-                                    cm(most.bound.value())
-                                ),
+                                say!("Tampo a {} cm: para cadeira de rodas, até {} cm, com vão livre embaixo.", cm(top), cm(most.bound.value())),
                             );
                         }
                         (Use::Bed(_), _, Some((aim, off)))
@@ -2053,11 +1952,7 @@ impl Review<'_, '_> {
                                 Rule::BedHeightWheelchair,
                                 &off,
                                 u.label(),
-                                format!(
-                                    "Cama a {} cm do chão: a transferência da cadeira pede uns {} cm.",
-                                    cm(top),
-                                    cm(aim.bound.value())
-                                ),
+                                say!("Cama a {} cm do chão: a transferência da cadeira pede uns {} cm.", cm(top), cm(aim.bound.value())),
                             );
                         }
                         _ => {}
@@ -2127,13 +2022,7 @@ impl Review<'_, '_> {
                 Rule::SwitchOutletReach,
                 &switches.1,
                 "Casa",
-                format!(
-                    "{wrong} interruptor(es)/tomada(s) fora do alcance de quem usa cadeira de rodas: interruptores entre {} e {} cm, tomadas entre {} e {} cm.",
-                    value(switches.0),
-                    value(switches.1),
-                    value(outlets.0),
-                    value(outlets.1)
-                ),
+                say!("{} interruptor(es)/tomada(s) fora do alcance de quem usa cadeira de rodas: interruptores entre {} e {} cm, tomadas entre {} e {} cm.", wrong, value(switches.0), value(switches.1), value(outlets.0), value(outlets.1)),
             );
         }
     }
@@ -2498,7 +2387,9 @@ const HEADROOM: f64 = 190.0;
 /// by [`orphaned`]. Nothing is written under this shape any more: a rewording
 /// moved it, which is the whole reason rules are named now. Kept for the
 /// projects that already have them, and read-only.
-fn legacy_key_of(finding: &Finding) -> String {
+#[doc(hidden)]
+#[must_use]
+pub fn legacy_key_of(finding: &Finding) -> String {
     let rule = finding.reference.unwrap_or("-");
     let words: String = newera_core::fold(&finding.message)
         .split(|c: char| !c.is_alphabetic())
@@ -2696,24 +2587,22 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
                     && severity_rank(other.severity) >= severity_rank(finding.severity)
                 {
                     finding.fix = None;
-                    finding.message = format!(
-                        "{} Não cabem os dois: afastar isso cria «{}» em {}; a posição atual é a melhor das duas — aceite o que ficar com o motivo.",
-                        finding.message.trim_end(),
-                        other.message.trim_end_matches('.'),
+                    finding.message = finding.message.clone().then(say!(
+                        "Não cabem os dois: afastar isso cria «{}» em {}; a posição atual é a melhor das duas — aceite o que ficar com o motivo.",
+                        other.message.quoted(),
                         other.place
-                    );
+                    ));
                 } else {
-                    finding.message = format!(
-                        "{} Isso deixa «{}» em {}{}.",
-                        finding.message.trim_end(),
-                        other.message.trim_end_matches('.'),
+                    finding.message = finding.message.clone().then(say!(
+                        "Isso deixa «{}» em {}{}.",
+                        other.message.quoted(),
                         other.place,
                         if other.accepted.is_some() {
-                            ", já aceito"
+                            say!(", já aceito")
                         } else {
-                            ", mais leve"
+                            say!(", mais leve")
                         }
-                    );
+                    ));
                 }
             }
         }
@@ -4057,6 +3946,111 @@ mod tests {
                 "a rule cites `{code}`, which is not in the registry"
             );
         }
+    }
+
+    #[test]
+    fn a_finding_is_said_in_english_and_accepted_in_portuguese() {
+        use newera_core::vocabulary::Language::English;
+        let mut home = Home::default();
+        square(&mut home, "Bedroom", 400.0, 400.0);
+        home.furniture.push(piece(
+            20,
+            "bed-double",
+            (40.0 + 80.0, 107.5),
+            (160.0, 200.0, 50.0),
+            0.0,
+        ));
+        let report = review(&home, &Profile::default());
+        let side = report
+            .findings
+            .iter()
+            .find(|f| f.key == "clearance:f20:left")
+            .unwrap_or_else(|| panic!("{report:#?}"));
+        // The canonical sentence stays Portuguese: it is what acceptances
+        // were written under before rules were named.
+        assert!(
+            side.message.contains("livres à esquerda"),
+            "{}",
+            side.message.as_str()
+        );
+        assert!(legacy_key_of(side).contains("livres-esquerda"));
+        // Said in English, every word of it is — the side, the reason and
+        // the advice passed into the sentence as well.
+        let english = side.message.in_language(English);
+        assert!(
+            english.contains("cm free on the left (circulation beside the bed: at least 50 cm)"),
+            "{english}"
+        );
+        assert!(
+            !english.contains("livres") && !english.contains("afaste"),
+            "{english}"
+        );
+        let toilet = report
+            .findings
+            .iter()
+            .find(|f| f.key == "no_toilet:casa")
+            .unwrap();
+        assert_eq!(
+            toilet.message.in_language(English),
+            "No bathroom with a toilet."
+        );
+    }
+
+    #[test]
+    fn every_sentence_the_review_says_has_its_english() {
+        // Every template the rules can say, read from the source: `say!`
+        // literals, fixed messages passed to `push`, and the reason a
+        // clearance gives, which is a sentence of its own inside another.
+        let mut said = 0;
+        for file in [
+            include_str!("lib.rs"),
+            include_str!("corners.rs"),
+            include_str!("scene.rs"),
+        ] {
+            let body = file.split("#[cfg(test)]\nmod tests").next().unwrap_or(file);
+            let mut templates: Vec<String> = Vec::new();
+            // The first string literal, escapes and all: the TV's inches are
+            // written `{}\"`.
+            let first = |text: &str| -> Option<String> {
+                let start = text.find('"')? + 1;
+                let mut out = String::new();
+                let mut chars = text[start..].chars();
+                while let Some(c) = chars.next() {
+                    match c {
+                        '\\' => out.push(chars.next()?),
+                        '"' => return Some(out),
+                        c => out.push(c),
+                    }
+                }
+                None
+            };
+            for (at, _) in body.match_indices("say!(") {
+                templates.extend(first(&body[at..]));
+            }
+            for call in ["self.push(", "self.push_ref(", "self.push_fig("] {
+                for (at, _) in body.match_indices(call) {
+                    let args = arguments(&body[at + call.len()..]);
+                    let message = args.get(3).copied().unwrap_or_default().trim();
+                    if let Some(text) = message.strip_prefix('"').and_then(|m| m.strip_suffix('"'))
+                    {
+                        templates.push(text.to_owned());
+                    }
+                }
+            }
+            for (at, _) in body.match_indices("need(") {
+                if let Some(reason) = arguments(&body[at + 5..]).get(4) {
+                    templates.extend(literals(reason).into_iter().map(str::to_owned));
+                }
+            }
+            for template in templates {
+                said += 1;
+                assert!(
+                    newera_core::text::english(&template).is_some(),
+                    "no English for: {template}"
+                );
+            }
+        }
+        assert!(said > 60, "only {said} sentences found: is it reading?");
     }
 
     /// Every figure a rule asks for by name is in the table: a name nobody

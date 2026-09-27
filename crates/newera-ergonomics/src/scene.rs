@@ -321,6 +321,12 @@ impl RoomUse {
         )
     }
 
+    /// Its name as a word of a sentence, translated with it.
+    #[must_use]
+    pub fn said(self) -> newera_core::text::Text {
+        newera_core::text::Text::from(self.name())
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             Self::Bedroom => "dormitório",

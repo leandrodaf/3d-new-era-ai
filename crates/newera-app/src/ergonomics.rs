@@ -264,7 +264,11 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                                 if !report.scope.includes(finding) {
                                     ui.weak(crate::i18n::tr("Fora do escopo da nota"));
                                 }
-                                ui.label(&finding.message);
+                                ui.label(
+                                    finding
+                                        .message
+                                        .in_language(crate::i18n::findings_language()),
+                                );
                                 if let Some(source) =
                                     finding.reference.and_then(standards::standard)
                                 {

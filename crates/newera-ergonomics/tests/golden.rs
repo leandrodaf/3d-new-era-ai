@@ -23,7 +23,7 @@ use newera_core::{
     Furniture, FurnitureId, Home, Opening, OpeningKind, Point2, Room, RoomId, Wall, WallId,
     project_from_bytes, standard,
 };
-use newera_ergonomics::{Profile, Report, review};
+use newera_ergonomics::{Profile, Report, legacy_key_of, review};
 
 /// A small deterministic generator: the corpus has to be the same on every
 /// machine and every run, or the snapshot is noise.
@@ -987,6 +987,63 @@ fn a_home_named_in_english_is_read_as_the_same_home() {
                 what(&review(&home, &profile)),
                 "{name} / {who}"
             );
+        }
+    }
+}
+
+#[test]
+#[ignore = "slow in debug: `make golden` runs it optimised"]
+fn no_legacy_key_moves() {
+    // Projects saved before rules were named carry acceptances under a key
+    // built from the cited code, the place and the first words of the
+    // sentence. Rewording a message — or translating it — would drop every
+    // one of them without a word, so the keys the corpus makes today are
+    // written down, and must not move while messages become templates.
+    let mut out = String::new();
+    for (name, home) in corpus() {
+        for (who, profile) in households() {
+            let mut keys: Vec<String> = review(&home, &profile)
+                .findings
+                .iter()
+                .map(legacy_key_of)
+                .collect();
+            keys.sort();
+            keys.dedup();
+            let _ = writeln!(out, "{name} / {who}");
+            for key in keys {
+                let _ = writeln!(out, "  {key}");
+            }
+        }
+    }
+    check("legacy-keys.txt", &out);
+}
+
+#[test]
+#[ignore = "slow in debug: `make golden` runs it optimised"]
+fn every_finding_can_be_said_in_english() {
+    // The sentence of every finding the corpus makes — the review's own and
+    // those it brings in from the disciplines — is a template with an English
+    // row, all the way down to the words passed into it.
+    for (name, home) in corpus() {
+        for &(label, country, region, city) in IN_BRAZIL.iter().chain(ABROAD) {
+            let mut home = home.clone();
+            home.compass.country = country.map(Into::into);
+            home.compass.region = region.map(Into::into);
+            home.compass.city = city.map(Into::into);
+            for (who, profile) in households() {
+                for f in review(&home, &profile).findings {
+                    assert!(
+                        f.message.translatable(),
+                        "{name} @ {label} / {who}: {} — {:?}",
+                        f.message.as_str(),
+                        f.message
+                            .templates()
+                            .into_iter()
+                            .filter(|t| newera_core::text::english(t).is_none())
+                            .collect::<Vec<_>>()
+                    );
+                }
+            }
         }
     }
 }

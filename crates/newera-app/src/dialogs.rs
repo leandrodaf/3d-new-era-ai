@@ -1124,7 +1124,7 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context, dialog: Dialog) -> 
                             };
                             ui.horizontal_wrapped(|ui| {
                                 ui.label(RichText::new(&f.place).strong().color(color));
-                                ui.label(&f.message);
+                                ui.label(f.message.in_language(crate::i18n::findings_language()));
                             });
                         }
                     });

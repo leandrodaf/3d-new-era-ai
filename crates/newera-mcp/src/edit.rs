@@ -2532,7 +2532,7 @@ pub(crate) fn place_noting(
                     free.x.round(),
                     free.y.round()
                 ),
-                None => why,
+                None => why.to_string(),
             });
         }
         placed_here.push(piece.clone());
