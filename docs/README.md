@@ -8,7 +8,7 @@ pull request.
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | The crates, the command model every change goes through, units, ids, MCP design, threads and security |
 | [STANDARDS.md](STANDARDS.md) | The standards, design doctrine and research behind every ergonomics, lighting and joinery rule, and how much each source may accuse |
-| [JURISDICTIONS.md](JURISDICTIONS.md) | Making the rules answer to the place a project is in: what already does, and what is left before a foreign building code can judge |
+| [JURISDICTIONS.md](JURISDICTIONS.md) | How the rules answer to the place a project is in, how to add a country's codes, and what is left out on purpose |
 | [SHOWCASE.md](SHOWCASE.md) | A real 105 m² apartment built end to end by an AI agent through MCP |
 | [ROADMAP.md](ROADMAP.md) | What is done, milestone by milestone, and what comes next |
 | [DISTRIBUTION.md](DISTRIBUTION.md) | Where it runs (desktop, browser, hosted), every channel it is published on, the release flow and the hosted service |

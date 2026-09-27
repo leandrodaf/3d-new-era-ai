@@ -2701,6 +2701,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_guard_acceptance_is_orphaned_when_its_finding_is_gone() {
+        // The balcony's guards come into the review, so an acceptance of one
+        // whose finding went away is listed with the review's orphans and can
+        // be pruned — no guard key is left without a check that answers for it.
+        let mut home = Home::default();
+        square(&mut home, "Varanda", 300.0, 150.0);
+        let mut rail = piece(30, "railing", (150.0, 10.0), (280.0, 5.0, 90.0), 0.0);
+        rail.name = "Gradil".into();
+        home.furniture.push(rail);
+        let live = review(&home, &Profile::default());
+        let key = live
+            .findings
+            .iter()
+            .find(|f| f.key.starts_with("guard:"))
+            .map(|f| f.key.clone())
+            .unwrap_or_else(|| panic!("{live:#?}"));
+        home.accepted.insert(key.clone(), "baixo de propósito".into());
+        assert!(orphaned(&home, &Profile::default()).is_empty());
+        home.furniture.clear();
+        assert_eq!(
+            orphaned(&home, &Profile::default()),
+            vec![(key, "baixo de propósito".to_owned())]
+        );
+    }
+
+    #[test]
     fn a_finding_is_scored_under_its_rule_not_under_the_code_it_cites() {
         let finding = |key: &str, code: &'static str| Finding {
             key: key.to_owned(),
