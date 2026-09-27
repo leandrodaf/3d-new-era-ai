@@ -201,12 +201,32 @@ jobs:
     env:
       WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
     steps:
+      # A store refusing a release is not the release failing. winget refuses
+      # a package it has never seen — the first manifests go in by hand, which
+      # has not happened yet — and that refusal used to fail the whole run.
+      # The cost was not the store: `installers.yml` only runs when this
+      # workflow succeeds, so for four releases nothing tested the install
+      # scripts against the build people were actually downloading.
       - uses: vedantmgoyal9/winget-releaser@v2
+        id: send
+        continue-on-error: true
         if: env.WINGET_TOKEN != ''
         with:
           identifier: LeandroFerreira.3DNewEraAI
           installers-regex: 'windows-x64\.zip$'
           token: ${{ secrets.WINGET_TOKEN }}
+
+      # Swallowed silently it would be worse than failing: the outcome is
+      # said out loud, as a warning that shows on the run.
+      - name: Say what winget did
+        if: always() && env.WINGET_TOKEN != ''
+        run: |
+          if [ "${{ steps.send.outcome }}" = "success" ]; then
+            echo "winget took this release."
+          else
+            echo "::warning::winget did not take this release (${{ steps.send.outcome }}). The release itself is unaffected. If the package is not in microsoft/winget-pkgs yet, scripts/winget.sh writes the manifests for the first submission."
+          fi
+        shell: bash
 
   # Homebrew: the cask in leandrodaf/homebrew-tap, rewritten with this
   # release's checksums. Needs HOMEBREW_TAP_TOKEN, allowed to push there.
