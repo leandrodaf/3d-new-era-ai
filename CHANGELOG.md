@@ -23,8 +23,8 @@ All notable changes to this project are documented here. The format follows
   from a published release or was compiled on the machine, and whether this was the first
   install. They draw the installation id the app then uses, so an install and the first run are
   one installation in the count and not two.
-- Crash reports from builds that carry no DSN — everyone who compiles the app themselves — now
-  reach Sentry through `3dneweraai.com/ping/sentry`, which signs the envelope with the DSN the
+- Crash reports from builds that carry no DSN — what compiling the app yourself gives, unless
+  `NEWERA_SENTRY_DSN` is set for the build — now reach Sentry through `3dneweraai.com/ping/sentry`, which signs the envelope with the DSN the
   site holds. Those crashes were seen by nobody before.
 
 ### Changed
