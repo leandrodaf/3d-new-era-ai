@@ -238,22 +238,25 @@ impl RoomUse {
         *self == Self::Auto
     }
 
-    /// Canonical terms used by existing discipline classifiers.
-    pub fn semantic_name(self) -> &'static str {
+    /// What a room declared this way is, in no language: the checks read
+    /// this instead of a word.
+    #[must_use]
+    pub const fn mentions(self) -> crate::vocabulary::Mentions {
+        use crate::vocabulary::{Mention, Mentions};
         match self {
-            Self::Auto | Self::Other => "ambiente",
-            Self::Bedroom => "quarto",
-            Self::Living => "sala de estar",
-            Self::Dining => "sala de jantar",
-            Self::Kitchen => "cozinha",
-            Self::Bathroom => "banheiro",
-            Self::Laundry => "lavanderia",
-            Self::Office => "escritorio",
-            Self::Corridor => "corredor",
-            Self::Closet => "closet",
-            Self::Balcony => "varanda",
-            Self::Garage => "garagem",
-            Self::Outdoor => "area externa",
+            Self::Auto | Self::Other => Mentions::NONE,
+            Self::Bedroom => Mentions::of(Mention::Bedroom),
+            Self::Living => Mentions::of(Mention::Living),
+            Self::Dining => Mentions::of(Mention::Dining),
+            Self::Kitchen => Mentions::of(Mention::Kitchen),
+            Self::Bathroom => Mentions::of(Mention::Bathroom),
+            Self::Laundry => Mentions::of(Mention::Laundry),
+            Self::Office => Mentions::of(Mention::Office),
+            Self::Corridor => Mentions::of(Mention::Corridor),
+            Self::Closet => Mentions::of(Mention::Closet),
+            Self::Balcony => Mentions::of(Mention::Balcony),
+            Self::Garage => Mentions::of(Mention::Garage),
+            Self::Outdoor => Mentions::of(Mention::Outdoor),
         }
     }
 }
@@ -306,12 +309,14 @@ pub struct Room {
 }
 
 impl Room {
-    /// Name to classify by, never the label shown to the user.
-    pub fn semantic_name(&self) -> &str {
+    /// What the room is, to the checks: its declared use, or else what its
+    /// name says in any language we hold — never the label as such.
+    #[must_use]
+    pub fn mentions(&self) -> crate::vocabulary::Mentions {
         if self.usage.is_auto() {
-            &self.name
+            crate::vocabulary::mentions(&self.name)
         } else {
-            self.usage.semantic_name()
+            self.usage.mentions()
         }
     }
 
@@ -593,6 +598,17 @@ pub struct Compass {
     /// the number it moves is guesswork.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub city: Option<String>,
+    /// Country whose standards apply, normally ISO 3166-1 alpha-2: `br`,
+    /// `us`, `de`. Left unsaid, the review assumes the home jurisdiction —
+    /// see [`crate::Place::HOME_COUNTRY`] — because a project with no address
+    /// still has to be weighed against the standards that oblige somewhere.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub country: Option<String>,
+    /// State or province whose code applies: `sp`, `fl`. It matters as much as
+    /// the country in the United States, where it is the state that adopts a
+    /// building code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
 }
 
 impl Default for Compass {
@@ -606,11 +622,29 @@ impl Default for Compass {
             longitude: None,
             time_zone: None,
             city: None,
+            country: None,
+            region: None,
         }
     }
 }
 
 impl Compass {
+    /// Where the project stands, as the standards registry weighs it.
+    ///
+    /// A city we hold brings its state and country with it, so a project that
+    /// only ever picked a building code is placed correctly without anybody
+    /// filling in two more fields. What the compass says itself wins over
+    /// what the city implies: somebody who names the country meant it.
+    #[must_use]
+    pub fn place(&self) -> crate::Place {
+        let implied = crate::Place::from_city(self.city.as_deref());
+        crate::Place {
+            country: crate::standards::part(self.country.as_deref()).or(implied.country),
+            region: crate::standards::part(self.region.as_deref()).or(implied.region),
+            city: implied.city,
+        }
+    }
+
     pub(crate) fn validate(&self) -> CoreResult<()> {
         if !(self.center.is_finite() && self.diameter > 0.0 && self.north_degrees.is_finite()) {
             return invalid("compass needs a finite center and angle and a positive diameter");

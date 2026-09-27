@@ -133,7 +133,7 @@ impl NewEraMcp {
                     "findings": rows,
                     "pending": pending,
                     "orphaned": orphaned,
-                    "sources": super::sources(&codes),
+                    "sources": super::sources(&codes, &home.compass.place()),
                 })
                 .to_string())
             }

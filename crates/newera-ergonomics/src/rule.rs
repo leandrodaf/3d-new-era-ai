@@ -144,8 +144,26 @@ impl Rule {
         }
     }
 
-    /// Every rule there is, for the tests that hold the ids to their word.
-    #[cfg(test)]
+    /// The discipline a finding of this rule is scored under.
+    ///
+    /// It belongs to the rule, never to the code it cites: a socket count
+    /// standing on NBR 5410 is electrical, and so is the same count standing
+    /// on the NEC — which a check of the code would call architecture, score
+    /// in the wrong place and keep out of reach of `ReviewScope`.
+    pub(crate) const fn discipline(self) -> &'static str {
+        match self {
+            Self::KitchenSockets | Self::CounterSockets => "electrical",
+            _ => "architecture",
+        }
+    }
+
+    /// The rule a key was written under, from the id it starts with.
+    pub(crate) fn of_key(key: &str) -> Option<Self> {
+        let id = key.split(':').next()?;
+        Self::ALL.iter().copied().find(|r| r.id() == id)
+    }
+
+    /// Every rule there is.
     pub(crate) const ALL: &'static [Self] = &[
         Self::SleepingPlaces,
         Self::BedroomCrowding,

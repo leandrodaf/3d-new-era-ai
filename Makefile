@@ -146,6 +146,10 @@ docs-lint: ## What the Docs workflow runs: Markdown rules, spelling and relative
 test: ## Unit and integration tests
 	$(CARGO) test --workspace --locked
 
+.PHONY: golden
+golden: ## Every review finding over a fixed corpus; UPDATE=1 rewrites the snapshot
+	$(if $(UPDATE),NEWERA_UPDATE_GOLDEN=1) $(CARGO) test --profile quick -p newera-ergonomics --test golden --locked -- --ignored
+
 .PHONY: smoke
 smoke: build ## Starts the server and talks MCP the way an AI would
 	scripts/mcp-smoke.sh $(BIN)

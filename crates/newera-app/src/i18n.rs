@@ -112,6 +112,15 @@ pub(crate) fn lang() -> Lang {
     Lang::from_code(LANG.load(Ordering::Relaxed))
 }
 
+/// The language a finding is said in. Findings carry Portuguese and English;
+/// where the window speaks neither, English is the one more readers share.
+pub(crate) fn findings_language() -> newera_core::vocabulary::Language {
+    match lang() {
+        Lang::Pt => newera_core::vocabulary::Language::Portuguese,
+        Lang::En | Lang::Es | Lang::Fr => newera_core::vocabulary::Language::English,
+    }
+}
+
 /// Whether numbers on screen take a comma for the decimals.
 pub(crate) fn decimal_comma() -> bool {
     lang().decimal_comma()

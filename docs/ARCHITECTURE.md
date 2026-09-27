@@ -61,13 +61,19 @@ dependencies so it compiles to WebAssembly for the browser editor and viewer.
 
 A rule that cites its source inside a sentence cannot be clicked, cannot say
 which edition it followed, and cannot tell how much it matters. So every
-reference lives once in `newera_core::standards` — code, title, edition,
-reliability tier (A obliges … E only describes) and link — and a rule carries
-only the short code. The tier is the ceiling on what a finding may claim, and
+reference lives once in `newera_core::standards` — code, title, edition, who
+publishes it and over what territory, what kind of source it is, and link — and
+a rule carries only the short code. How much a source obliges (A obliges … E
+only describes) is computed against the place the project declares, never
+stored: an ABNT standard obliges in São Paulo and informs in Miami. The numbers
+the rules compare against live there too, as figures with the authority that
+demands each one, so a city's decree stops at the city limits and a country's
+code judges only there. The tier is the ceiling on what a finding may claim, and
 figures we could not confirm at the source may warn but never accuse. The
 `ergonomics` reply resolves the codes it used once in `sources`, so an agent pays
 for a title once instead of once per sentence, and the editor shows the same
-citation as a clickable chip. See [STANDARDS.md](STANDARDS.md).
+citation as a clickable chip. See [STANDARDS.md](STANDARDS.md) and
+[JURISDICTIONS.md](JURISDICTIONS.md).
 
 ## Units and coordinates
 

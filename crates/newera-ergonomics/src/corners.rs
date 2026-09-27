@@ -5,6 +5,7 @@ use geo::{Area, BooleanOps};
 use newera_core::{OpeningKind, Point2};
 
 use crate::{Finding, RoomUse, Scene, Severity, Use, scene::polygon as to_polygon};
+use newera_core::say;
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn review(scene: &Scene<'_>) -> Vec<Finding> {
@@ -128,10 +129,7 @@ pub(crate) fn review(scene: &Scene<'_>) -> Vec<Finding> {
                         &space.label(),
                         &format!("{}+{}", ids[0], ids[1]),
                     ),
-                    message: format!(
-                        "Possível canto ocioso junto a ({:.1}, {:.1}) cm: {:.1} × {:.1} cm ({:.2} m²), entre {} e {}. Há uma sobra delimitada pelos móveis e pelas paredes, com acesso estreito. Feedback de aproveitamento, não defeito confirmado: confira se é folga de ventilação, manutenção ou abertura antes de decidir usá-la. Nenhuma alteração automática.",
-                        corner.x, corner.y, width, depth, area / 10_000.0, a.label(), b.label()
-                    ),
+                    message: say!("Possível canto ocioso junto a ({}, {}) cm: {} × {} cm ({} m²), entre {} e {}. Há uma sobra delimitada pelos móveis e pelas paredes, com acesso estreito. Feedback de aproveitamento, não defeito confirmado: confira se é folga de ventilação, manutenção ou abertura antes de decidir usá-la. Nenhuma alteração automática.", format!("{:.1}", corner.x), format!("{:.1}", corner.y), format!("{:.1}", width), format!("{:.1}", depth), format!("{:.2}", area / 10_000.0), a.label(), b.label()),
                     ..Finding::default()
                 });
             }

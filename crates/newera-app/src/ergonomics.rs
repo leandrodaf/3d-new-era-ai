@@ -98,9 +98,12 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
         .is_some_and(|(rev, _, _)| *rev != revision)
     {
         // Undo and MCP edits must also refresh an already open review panel.
+        let home = app.document.read();
         window.profile = Profile {
-            city: window.profile.city.clone(),
-            ..Profile::of(app.document.read().home())
+            // The building code belongs to the project, on the compass, so it
+            // survives saving and agrees with what `set_home(city=…)` wrote.
+            city: home.home().compass.city.clone(),
+            ..Profile::of(home.home())
         };
     }
     let original_profile = window.profile.clone();
@@ -261,7 +264,11 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                                 if !report.scope.includes(finding) {
                                     ui.weak(crate::i18n::tr("Fora do escopo da nota"));
                                 }
-                                ui.label(&finding.message);
+                                ui.label(
+                                    finding
+                                        .message
+                                        .in_language(crate::i18n::findings_language()),
+                                );
                                 if let Some(source) =
                                     finding.reference.and_then(standards::standard)
                                 {
@@ -271,15 +278,19 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                                         .title
                                         .split_once(" — ")
                                         .map_or(source.title, |(head, _)| head);
+                                    // How much it obliges depends on where the
+                                    // project is, so the letter comes from the
+                                    // place this review was conducted at.
+                                    let tier = source.force(&report.place);
                                     let chip =
-                                        RichText::new(format!("{} · {name}", source.tier.letter()))
-                                            .color(tier_look(source.tier))
+                                        RichText::new(format!("{} · {name}", tier.letter()))
+                                            .color(tier_look(tier))
                                             .size(11.0);
                                     let hint = format!(
                                         "{} ({}) · {}\n{}",
                                         source.title,
                                         source.edition,
-                                        crate::i18n::tr(source.tier.what()),
+                                        crate::i18n::tr(tier.what()),
                                         source.scope
                                     );
                                     match source.url {
@@ -311,6 +322,16 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
         });
     if original_profile != window.profile {
         let mut doc = app.document.write();
+        // The city is the project's, not the panel's: it goes on the compass,
+        // where saving keeps it and every review reads the same one. Picking a
+        // code here used to be forgotten the moment the project was saved.
+        if original_profile.city != window.profile.city {
+            let compass = newera_core::Compass {
+                city: window.profile.city.clone(),
+                ..doc.home().compass.clone()
+            };
+            let _ = doc.execute(Command::SetCompass { compass });
+        }
         let mut properties = doc.home().properties.clone();
         let kept = Profile {
             city: None,
@@ -433,7 +454,7 @@ mod tests {
             .expect("some finding stands on a published source");
         let chip = format!(
             "{} · {}",
-            cited.tier.letter(),
+            cited.force(&report.place).letter(),
             cited
                 .title
                 .split_once(" — ")

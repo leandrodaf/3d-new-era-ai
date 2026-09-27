@@ -268,14 +268,17 @@ pub(crate) fn orphan_rows(
         .collect()
 }
 
-pub(crate) fn sources(codes: &[&str]) -> serde_json::Value {
+/// The sources behind a reply, resolved once, with the letter each one is
+/// worth **at `at`** — the same standard obliges here and informs there, so a
+/// citation without its place is a citation that cannot be trusted.
+pub(crate) fn sources(codes: &[&str], at: &newera_core::Place) -> serde_json::Value {
     let map: serde_json::Map<String, serde_json::Value> = codes
         .iter()
         .filter_map(|c| newera_core::standards::standard(c))
         .map(|r| {
             (
                 r.code.to_owned(),
-                serde_json::json!([r.title, r.tier.letter(), r.url]),
+                serde_json::json!([r.title, r.force(at).letter(), r.url]),
             )
         })
         .collect();
