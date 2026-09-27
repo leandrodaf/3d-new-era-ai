@@ -2715,9 +2715,9 @@ mod tests {
             .findings
             .iter()
             .find(|f| f.key.starts_with("guard:"))
-            .map(|f| f.key.clone())
-            .unwrap_or_else(|| panic!("{live:#?}"));
-        home.accepted.insert(key.clone(), "baixo de propósito".into());
+            .map_or_else(|| panic!("{live:#?}"), |f| f.key.clone());
+        home.accepted
+            .insert(key.clone(), "baixo de propósito".into());
         assert!(orphaned(&home, &Profile::default()).is_empty());
         home.furniture.clear();
         assert_eq!(
