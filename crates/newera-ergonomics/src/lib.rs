@@ -279,6 +279,11 @@ impl From<(&'static str, &'static str)> for Why {
 struct Review<'s, 'a> {
     scene: &'s Scene<'a>,
     profile: &'s Profile,
+    /// Where the project is judged, which decides how much each source may
+    /// claim. Resolved once for the whole review: every rule has to weigh the
+    /// same law, and a review is re-run per finding that carries a fix and
+    /// per storey, so this is not a place to look anything up twice.
+    place: newera_core::Place,
     findings: Vec<Finding>,
     /// Glass that lights and airs each room, shared across rooms open to
     /// each other — see [`glass_by_room`].
@@ -368,12 +373,15 @@ impl Review<'_, '_> {
             self.push(rule, severity, place, message);
             return;
         };
-        if source.tier == Tier::E {
+        // How much the source obliges is a question about where the project
+        // is, not about the source alone.
+        let tier = source.force(&self.place);
+        if tier == Tier::E {
             return;
         }
         // A finding never claims more than its source can: the tier sets the
         // ceiling, and a figure we could not confirm may warn, never accuse.
-        let mut severity = severity.max(Severity::for_tier(source.tier));
+        let mut severity = severity.max(Severity::for_tier(tier));
         if source.confidence == Confidence::ConfirmBeforeUse {
             severity = severity.max(Severity::Alerta);
         }
@@ -2516,6 +2524,7 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
     let mut review = Review {
         glass: glass_by_room(&scene),
         scene: &scene,
+        place: newera_core::Place::from_city(profile.city.as_deref()),
         profile,
         findings: Vec::new(),
     };
@@ -3864,6 +3873,7 @@ mod tests {
         let profile = Profile::default();
         let mut review = Review {
             scene: &scene,
+            place: newera_core::Place::from_city(profile.city.as_deref()),
             profile: &profile,
             findings: Vec::new(),
             glass: std::collections::BTreeMap::new(),
