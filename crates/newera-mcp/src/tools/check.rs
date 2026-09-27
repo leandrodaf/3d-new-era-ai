@@ -1300,16 +1300,21 @@ mod tests {
                 .unwrap(),
         ))
         .unwrap();
-        assert_eq!(
-            s.document.read().home().rooms[0].semantic_name(),
-            "banheiro"
+        assert!(
+            s.document.read().home().rooms[0]
+                .mentions()
+                .has(newera_core::vocabulary::Mention::Bathroom),
+            "renamed, it is still the bathroom it was declared"
         );
         s.update(Parameters(
             serde_json::from_value(serde_json::json!({"items":[{"id":"r1","room_use":"auto"}]}))
                 .unwrap(),
         ))
         .unwrap();
-        assert_eq!(s.document.read().home().rooms[0].semantic_name(), "Azul");
+        assert!(
+            s.document.read().home().rooms[0].mentions().is_empty(),
+            "back to auto, `Azul` says nothing"
+        );
         s.document.write().undo().unwrap();
         assert_eq!(
             s.document.read().home().rooms[0].usage,

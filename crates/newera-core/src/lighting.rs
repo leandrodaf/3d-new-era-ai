@@ -399,53 +399,35 @@ fn inside(points: &[Point2], p: Point2) -> bool {
 /// residential table of the NBR 5413:1992 it replaced (middle values), and
 /// 8995-1 where 5413 has none (office, laundry, dining).
 pub fn recommended_lux(name: &str) -> (f64, &'static str) {
-    let n = name.to_lowercase();
-    let has = |words: &[&str]| words.iter().any(|w| n.contains(w));
-    if has(&[
-        "escritório",
-        "escritorio",
-        "office",
-        "estudo",
-        "home office",
-    ]) {
+    lux_for(crate::vocabulary::mentions(name))
+}
+
+/// The same, for what a room is rather than what it is called.
+#[must_use]
+pub fn lux_for(says: crate::vocabulary::Mentions) -> (f64, &'static str) {
+    use crate::vocabulary::Mention as M;
+    if says.any(&[M::Office, M::Study]) {
         (500.0, "leitura e trabalho")
-    } else if has(&["cozinha", "kitchen", "gourmet"]) {
+    } else if says.any(&[M::Kitchen, M::Gourmet]) {
         (150.0, "cozinha (bancada, fogão e pia: 300 lx localizado)")
-    } else if has(&["lavanderia", "serviço", "servico", "laundry"]) {
+    } else if says.has(M::Laundry) {
         (300.0, "lavanderia (valor de lavanderia da 8995-1)")
-    } else if has(&["banheiro", "lavabo", "wc", "bath", "suíte banho"]) {
+    } else if says.any(&[M::Bathroom, M::Lavatory]) {
         (150.0, "banheiro (espelho: 300 lx localizado)")
-    } else if has(&["jantar", "dining"]) {
+    } else if says.has(M::Dining) {
         (200.0, "jantar (valor de refeitório da 8995-1)")
-    } else if has(&[
-        "quarto",
-        "dormitório",
-        "dormitorio",
-        "suíte",
-        "suite",
-        "bed",
-    ]) {
+    } else if says.has(M::Bedroom) {
         (
             150.0,
             "dormitório (espelho, penteadeira e cama: 300 lx localizado)",
         )
-    } else if has(&["estar", "sala", "living", "tv"]) {
+    } else if says.any(&[M::Living, M::Tv]) {
         (150.0, "estar")
-    } else if has(&[
-        "corredor",
-        "circulação",
-        "circulacao",
-        "hall",
-        "escada",
-        "entrada",
-    ]) {
+    } else if says.any(&[M::Corridor, M::Stairs, M::Entrance]) {
         (100.0, "circulação")
-    } else if has(&["garagem", "garage"]) {
+    } else if says.has(M::Garage) {
         (100.0, "garagem")
-    } else if has(&[
-        "varanda", "deck", "terraço", "terraco", "quintal", "jardim", "gramado", "piscina",
-        "externa",
-    ]) {
+    } else if says.any(&[M::Balcony, M::Outdoor]) {
         (30.0, "área externa (prática; sem norma)")
     } else {
         (150.0, "uso geral residencial")
@@ -595,7 +577,7 @@ pub fn room_lighting(
     let min = values.iter().copied().fold(f64::MAX, f64::min).min(1e12);
     let max = values.iter().copied().fold(0.0, f64::max);
     let average = direct_avg + indirect;
-    let (target, target_use) = recommended_lux(room.semantic_name());
+    let (target, target_use) = lux_for(room.mentions());
     RoomLighting {
         room: room.id,
         name: room.name.clone(),

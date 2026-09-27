@@ -460,20 +460,15 @@ pub fn coverage(home: &Home, aps: &[AccessPoint]) -> Vec<RoomCoverage> {
 
 /// Rooms a Wi-Fi signal should reach well: every room but the small wet
 /// ones and the outside.
-fn wants_coverage(name: &str) -> bool {
-    let name = crate::annotations::fold(name);
-    ![
-        "banh",
-        "wc",
-        "lavabo",
-        "shaft",
-        "deposito",
-        "varanda",
-        "sacada",
-        "area tecnica",
-    ]
-    .iter()
-    .any(|w| name.contains(w))
+fn wants_coverage(says: crate::vocabulary::Mentions) -> bool {
+    use crate::vocabulary::Mention as M;
+    !says.any(&[
+        M::Bathroom,
+        M::Lavatory,
+        M::Technical,
+        M::Storage,
+        M::Balcony,
+    ])
 }
 
 /// Where to put access points so the rooms people use get a good signal at
@@ -493,7 +488,7 @@ pub fn suggest(
     let wanted: Vec<&crate::elements::Room> = rooms
         .iter()
         .copied()
-        .filter(|r| wants_coverage(r.semantic_name()))
+        .filter(|r| wants_coverage(r.mentions()))
         .collect();
     // Not in a bathroom (damp, a lowered ceiling), outside or in a shaft.
     let candidates: Vec<(AccessPoint, String)> = wanted

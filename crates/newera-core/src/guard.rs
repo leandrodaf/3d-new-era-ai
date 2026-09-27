@@ -59,15 +59,25 @@ pub fn guard_of(piece: &Furniture) -> Option<Guard> {
     }
     let name = crate::annotations::fold(&piece.name);
     let has = |words: &[&str]| words.iter().any(|w| name.contains(w));
+    // Portuguese, then English: a piece imported from an American library
+    // is a guard by the same token.
     if has(&[
         "envidracamento",
         "fechamento de vidro",
         "fechamento da varanda",
         "fechamento da sacada",
         "cortina de vidro",
+        "balcony glazing",
+        "glass enclosure",
     ]) {
         Some(Guard::Glazing)
-    } else if has(&["guarda-corpo de vidro", "guarda corpo de vidro"]) {
+    } else if has(&[
+        "guarda-corpo de vidro",
+        "guarda corpo de vidro",
+        "glass railing",
+        "glass balustrade",
+        "glass guardrail",
+    ]) {
         Some(Guard::GlassRailing)
     } else if has(&[
         "gradil",
@@ -76,6 +86,9 @@ pub fn guard_of(piece: &Furniture) -> Option<Guard> {
         "grade da sacada",
         "grade da varanda",
         "parapeito metalico",
+        "railing",
+        "guardrail",
+        "balustrade",
     ]) {
         Some(Guard::Railing)
     } else {

@@ -134,28 +134,20 @@ enum Wet {
 }
 
 fn room_class(room: &Room) -> Wet {
-    let name = crate::annotations::fold(room.semantic_name());
-    let has = |words: &[&str]| words.iter().any(|w| name.contains(w));
-    if has(&["cozinha", "copa", "lavanderia", "servico", "gourmet"]) {
+    use crate::vocabulary::Mention as M;
+    let says = room.mentions();
+    // A kitchen first: a "banheiro de serviço" is wet the way a service area is.
+    if says.any(&[M::Kitchen, M::Pantry, M::Laundry, M::Gourmet]) {
         Wet::Kitchen
-    } else if has(&["banh", "wc", "lavabo", "sanitario"]) {
+    } else if says.any(&[M::Bathroom, M::Lavatory]) {
         Wet::Bathroom
-    } else if has(&[
-        "sala",
-        "quarto",
-        "dormit",
-        "suite",
-        "escritorio",
-        "home office",
-        "estar",
-        "jantar",
-    ]) {
+    } else if says.any(&[M::Living, M::Bedroom, M::Office, M::Dining]) {
         Wet::Living
-    } else if has(&["varanda", "sacada", "terraco"]) {
+    } else if says.has(M::Balcony) {
         Wet::Balcony
-    } else if has(&["garagem"]) {
+    } else if says.has(M::Garage) {
         Wet::Garage
-    } else if has(&["quintal", "jardim", "externa", "piscina", "area de lazer"]) {
+    } else if says.has(M::Outdoor) {
         Wet::Outdoor
     } else {
         Wet::Other
@@ -214,40 +206,25 @@ fn class_in(home: &Home, room: &Room) -> Wet {
 /// laundries; 3 and 2 in a home theater; 1 and 1 in bathrooms, balconies and
 /// the rest. Circulation, closets and storage are not rooms the table counts.
 fn telecom_outlets(room: &Room, bathroom: bool) -> Option<(usize, usize)> {
-    let name = crate::annotations::fold(room.semantic_name());
+    use crate::vocabulary::Mention as M;
     if bathroom {
         return Some((1, 1));
     }
-    let has = |words: &[&str]| words.iter().any(|w| name.contains(w));
-    if has(&[
-        "hall",
-        "corredor",
-        "circulacao",
-        "closet",
-        "deposito",
-        "despensa",
-        "shaft",
-        "escada",
-        "rouparia",
-    ]) {
+    let says = room.mentions();
+    if says.any(&[M::Corridor, M::Stairs, M::Closet, M::Storage, M::Technical]) {
         None
-    } else if has(&["home theater", "cinema"]) {
+    } else if says.has(M::HomeTheater) {
         Some((3, 2))
-    } else if has(&[
-        "quarto",
-        "dormit",
-        "suite",
-        "sala",
-        "estar",
-        "jantar",
-        "escritorio",
-        "home office",
-        "gourmet",
-        "cozinha",
-        "copa",
-        "servico",
-        "lavanderia",
-    ]) && !has(&["banh"])
+    } else if says.any(&[
+        M::Bedroom,
+        M::Living,
+        M::Dining,
+        M::Office,
+        M::Gourmet,
+        M::Kitchen,
+        M::Pantry,
+        M::Laundry,
+    ]) && !says.has(M::Bathroom)
     {
         Some((2, 1))
     } else {
@@ -267,18 +244,8 @@ pub fn in_wet_room(home: &Home, point: &Point) -> bool {
 
 /// Whether a room is one people stay in, where a network point belongs.
 fn long_stay(room: &Room) -> bool {
-    let name = crate::annotations::fold(room.semantic_name());
-    [
-        "sala",
-        "quarto",
-        "dormit",
-        "suite",
-        "escritorio",
-        "home office",
-        "estar",
-    ]
-    .iter()
-    .any(|w| name.contains(w))
+    use crate::vocabulary::Mention as M;
+    room.mentions().any(&[M::Living, M::Bedroom, M::Office])
 }
 
 fn perimeter(room: &Room) -> f64 {
@@ -2049,7 +2016,8 @@ mod tests {
         assert_eq!(legacy.usage, crate::RoomUse::Auto);
         serialized["usage"] = serde_json::json!("office");
         let explicit: Room = serde_json::from_value(serialized).unwrap();
-        assert_eq!(explicit.semantic_name(), "escritorio");
+        assert!(explicit.mentions().has(crate::vocabulary::Mention::Office));
+        assert!(!explicit.mentions().has(crate::vocabulary::Mention::Pantry));
         assert_eq!(explicit.name, "Copa");
     }
 

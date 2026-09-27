@@ -1436,7 +1436,8 @@ impl Review<'_, '_> {
                     (has(&|u| matches!(u, Use::Basin)), "lavatório"),
                     (
                         // A lavabo takes no shower.
-                        label.to_lowercase().contains("lavabo")
+                        newera_core::vocabulary::mentions(&label)
+                            .has(newera_core::vocabulary::Mention::Lavatory)
                             || has(&|u| matches!(u, Use::Shower | Use::Bathtub)),
                         "box ou banheira",
                     ),

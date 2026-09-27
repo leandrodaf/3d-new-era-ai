@@ -44,6 +44,7 @@ mod style;
 pub mod tape;
 mod units;
 pub mod vfs;
+pub mod vocabulary;
 mod wallrun;
 pub mod wifi;
 

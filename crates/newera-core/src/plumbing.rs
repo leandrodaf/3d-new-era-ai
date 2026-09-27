@@ -568,19 +568,11 @@ pub fn check(home: &Home) -> Vec<Finding> {
     // (São Paulo's sanitary code, Decreto 12.342/78 art. 15 II); where there
     // is a shower or a tub it is a trap box (NBR 8160).
     for room in view.rooms.iter().filter(|r| r.points.len() >= 3) {
-        let name = crate::annotations::fold(room.semantic_name());
-        let wet_name = [
-            "banh",
-            "wc",
-            "lavabo",
-            "sanitario",
-            "cozinha",
-            "copa",
-            "lavanderia",
-            "servico",
-        ]
-        .iter()
-        .any(|w| name.contains(w));
+        let wet_name = {
+            use crate::vocabulary::Mention as M;
+            room.mentions()
+                .any(&[M::Bathroom, M::Lavatory, M::Kitchen, M::Pantry, M::Laundry])
+        };
         let in_room: Vec<Fixture> = fixtures
             .iter()
             .filter(|(_, f)| inside(&room.points, f.position))
@@ -687,9 +679,10 @@ pub fn check(home: &Home) -> Vec<Finding> {
         }
         // An open balcony or terrace is rainwater: its drain never joins the
         // sewer (NBR 8160 4.1.3.1, NBR 10844).
-        let open_air = ["terraco", "descobert", "quintal", "area externa", "jardim"]
-            .iter()
-            .any(|w| name.contains(w));
+        let open_air = {
+            use crate::vocabulary::Mention as M;
+            room.mentions().any(&[M::Uncovered, M::Outdoor])
+        };
         if open_air && !drains.is_empty() {
             out.push(Finding {
                 key: format!("plumb:rain:{}", room.id),

@@ -170,7 +170,7 @@ fn classify(piece: &Furniture, params: Option<&serde_json::Value>) -> Use {
 
 /// Imported and grouped pieces carry no catalog id: read their name and size.
 fn by_name(piece: &Furniture) -> Use {
-    let n = plain(&piece.name);
+    let n = newera_core::fold(&piece.name);
     // Designers number their modules: `10 — Pia: dois gavetões`.
     let n = n
         .split_once(" — ")
@@ -336,55 +336,34 @@ impl RoomUse {
     }
 }
 
-fn plain(text: &str) -> String {
-    text.to_lowercase()
-        .chars()
-        .map(|c| match c {
-            'á' | 'à' | 'â' | 'ã' => 'a',
-            'é' | 'ê' => 'e',
-            'í' => 'i',
-            'ó' | 'ô' | 'õ' => 'o',
-            'ú' | 'ü' => 'u',
-            'ç' => 'c',
-            c => c,
-        })
-        .collect()
-}
-
-fn closet_name(name: &str) -> bool {
-    let name = plain(name);
-    ["closet", "vestiario", "vestidor", "dressing"]
-        .iter()
-        .any(|word| name.contains(word))
-}
-
-fn room_use_by_name(name: &str) -> Option<RoomUse> {
-    let n = plain(name);
-    let has = |words: &[&str]| words.iter().any(|w| n.contains(w));
-    let living = has(&["sala", "estar", "living"]);
-    Some(
-        if has(&["banheiro", "banho", "lavabo", "wc", "bath", "sanitario"]) {
-            RoomUse::Bathroom
-        } else if closet_name(name) {
-            RoomUse::Other
-        } else if has(&["quarto", "dormitorio", "suite", "bedroom"]) {
-            RoomUse::Bedroom
-        } else if has(&["cozinha", "kitchen", "copa"]) && !living {
-            RoomUse::Kitchen
-        } else if has(&["servico", "lavanderia", "laundry"]) {
-            RoomUse::Laundry
-        } else if has(&["jantar", "dining"]) {
-            RoomUse::Dining
-        } else if has(&["sala", "estar", "living", "tv"]) {
-            RoomUse::Living
-        } else if has(&["escritorio", "office", "estudo", "home office"]) {
-            RoomUse::Office
-        } else if has(&["corredor", "circulacao", "hall", "passagem"]) {
-            RoomUse::Corridor
-        } else {
-            return None;
-        },
-    )
+/// What a room is by what it says it is — its declared use, or its name in
+/// any language we hold. `None` when it says nothing the review reads, and
+/// the pieces in it decide.
+fn room_use_by_name(room: &Room) -> Option<RoomUse> {
+    use newera_core::vocabulary::Mention as M;
+    let says = room.mentions();
+    Some(if says.any(&[M::Bathroom, M::Lavatory]) {
+        RoomUse::Bathroom
+    } else if says.has(M::Closet) {
+        RoomUse::Other
+    } else if says.has(M::Bedroom) {
+        RoomUse::Bedroom
+    } else if says.any(&[M::Kitchen, M::Pantry]) && !says.has(M::Living) {
+        // An open kitchen named with the living room is the living room.
+        RoomUse::Kitchen
+    } else if says.has(M::Laundry) {
+        RoomUse::Laundry
+    } else if says.has(M::Dining) {
+        RoomUse::Dining
+    } else if says.any(&[M::Living, M::Tv]) {
+        RoomUse::Living
+    } else if says.any(&[M::Office, M::Study]) {
+        RoomUse::Office
+    } else if says.has(M::Corridor) {
+        RoomUse::Corridor
+    } else {
+        return None;
+    })
 }
 
 pub(crate) fn polygon(points: &[Point2]) -> Polygon<f64> {
@@ -414,7 +393,11 @@ pub struct Space<'a> {
 impl Space<'_> {
     /// A dedicated clothing room, not a bedroom or a laundry linen cabinet.
     pub(crate) fn is_closet(&self) -> bool {
-        self.what == RoomUse::Other && closet_name(self.room.semantic_name())
+        self.what == RoomUse::Other
+            && self
+                .room
+                .mentions()
+                .has(newera_core::vocabulary::Mention::Closet)
     }
 
     pub fn label(&self) -> String {
@@ -602,7 +585,7 @@ impl<'a> Scene<'a> {
             .collect();
         for space in &mut spaces {
             let has = |f: &dyn Fn(Use) -> bool| space.units.iter().any(|&i| f(units[i].what));
-            space.what = room_use_by_name(space.room.semantic_name()).unwrap_or_else(|| {
+            space.what = room_use_by_name(space.room).unwrap_or_else(|| {
                 if !space.room.usage.is_auto() {
                     return RoomUse::Other;
                 }

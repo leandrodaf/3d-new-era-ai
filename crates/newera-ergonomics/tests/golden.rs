@@ -915,3 +915,50 @@ fn the_corpus_reaches_most_rules() {
         seen.len()
     );
 }
+
+/// The same room, as an American plan would call it.
+fn in_english(name: &str) -> String {
+    [
+        ("Área de serviço", "Laundry"),
+        ("Escritório", "Office"),
+        ("Corredor", "Hallway"),
+        ("Cozinha", "Kitchen"),
+        ("Banheiro", "Bathroom"),
+        ("Suíte", "Master bedroom"),
+        ("Quarto", "Bedroom"),
+        ("Sala", "Living room"),
+    ]
+    .iter()
+    .find(|(pt, _)| name == *pt)
+    .map_or_else(|| name.to_owned(), |(_, en)| (*en).to_owned())
+}
+
+#[test]
+#[ignore = "slow in debug: `make golden` runs it optimised"]
+fn a_home_named_in_english_is_read_as_the_same_home() {
+    // A room is recognised by what its name means, not by a Portuguese word:
+    // the same plan with its rooms named in English is the same review — the
+    // same rules, the same pieces, the same sources — only the labels differ.
+    let what = |report: &Report| {
+        let mut out: Vec<String> = report
+            .findings
+            .iter()
+            .map(|f| format!("{:?} {} {}", f.severity, f.key, f.reference.unwrap_or("-")))
+            .collect();
+        out.sort();
+        out
+    };
+    for (name, home) in corpus().into_iter().filter(|(n, _)| !n.contains(".newera")) {
+        let mut english = home.clone();
+        for room in &mut english.rooms {
+            room.name = in_english(&room.name);
+        }
+        for (who, profile) in households() {
+            assert_eq!(
+                what(&review(&english, &profile)),
+                what(&review(&home, &profile)),
+                "{name} / {who}"
+            );
+        }
+    }
+}

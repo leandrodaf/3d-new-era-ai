@@ -923,26 +923,15 @@ fn rooms_without_door(
     wanted: &dyn Fn(Option<LevelId>) -> bool,
 ) -> Vec<(crate::ids::RoomId, Vec<FurnitureId>)> {
     use crate::furniture::OpeningKind;
-    let private = |name: &str| {
-        let name = crate::annotations::fold(name);
-        [
-            "quarto",
-            "dormit",
-            "suite",
-            "banh",
-            "wc",
-            "lavabo",
-            "sanitario",
-        ]
-        .iter()
-        .any(|w| name.contains(w))
-            && !name.contains("closet")
+    let private = |says: crate::vocabulary::Mentions| {
+        use crate::vocabulary::Mention as M;
+        says.any(&[M::Bedroom, M::Bathroom, M::Lavatory]) && !says.has(M::Closet)
     };
     let mut out = Vec::new();
     for room in home
         .rooms
         .iter()
-        .filter(|r| r.points.len() >= 3 && wanted(r.level) && private(r.semantic_name()))
+        .filter(|r| r.points.len() >= 3 && wanted(r.level) && private(r.mentions()))
     {
         let level = home.resolve_level(room.level);
         let openings: Vec<&Furniture> = home

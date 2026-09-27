@@ -238,22 +238,25 @@ impl RoomUse {
         *self == Self::Auto
     }
 
-    /// Canonical terms used by existing discipline classifiers.
-    pub fn semantic_name(self) -> &'static str {
+    /// What a room declared this way is, in no language: the checks read
+    /// this instead of a word.
+    #[must_use]
+    pub const fn mentions(self) -> crate::vocabulary::Mentions {
+        use crate::vocabulary::{Mention, Mentions};
         match self {
-            Self::Auto | Self::Other => "ambiente",
-            Self::Bedroom => "quarto",
-            Self::Living => "sala de estar",
-            Self::Dining => "sala de jantar",
-            Self::Kitchen => "cozinha",
-            Self::Bathroom => "banheiro",
-            Self::Laundry => "lavanderia",
-            Self::Office => "escritorio",
-            Self::Corridor => "corredor",
-            Self::Closet => "closet",
-            Self::Balcony => "varanda",
-            Self::Garage => "garagem",
-            Self::Outdoor => "area externa",
+            Self::Auto | Self::Other => Mentions::NONE,
+            Self::Bedroom => Mentions::of(Mention::Bedroom),
+            Self::Living => Mentions::of(Mention::Living),
+            Self::Dining => Mentions::of(Mention::Dining),
+            Self::Kitchen => Mentions::of(Mention::Kitchen),
+            Self::Bathroom => Mentions::of(Mention::Bathroom),
+            Self::Laundry => Mentions::of(Mention::Laundry),
+            Self::Office => Mentions::of(Mention::Office),
+            Self::Corridor => Mentions::of(Mention::Corridor),
+            Self::Closet => Mentions::of(Mention::Closet),
+            Self::Balcony => Mentions::of(Mention::Balcony),
+            Self::Garage => Mentions::of(Mention::Garage),
+            Self::Outdoor => Mentions::of(Mention::Outdoor),
         }
     }
 }
@@ -306,12 +309,14 @@ pub struct Room {
 }
 
 impl Room {
-    /// Name to classify by, never the label shown to the user.
-    pub fn semantic_name(&self) -> &str {
+    /// What the room is, to the checks: its declared use, or else what its
+    /// name says in any language we hold — never the label as such.
+    #[must_use]
+    pub fn mentions(&self) -> crate::vocabulary::Mentions {
         if self.usage.is_auto() {
-            &self.name
+            crate::vocabulary::mentions(&self.name)
         } else {
-            self.usage.semantic_name()
+            self.usage.mentions()
         }
     }
 
