@@ -1,38 +1,46 @@
 //! How many people open the app, and on what.
 //!
-//! One event per run — `app_open`, with the version, the operating system and
-//! the mode the app was started in — sent to the same Google Analytics
-//! property the site reports to, through the Measurement Protocol. It rides
-//! the switch the rest of this crate rides: off means nothing leaves.
+//! One event per run — `app_open`, with the version, the operating system, the
+//! architecture and the mode the app was started in. It rides the switch the
+//! rest of this crate rides: off means nothing leaves.
 //!
 //! What is sent: an id drawn at random the first time and kept in the config
-//! directory, the app version, the OS family, the mode and the interface
-//! language. What is not: the project, its path, the plan, the MCP token, the
-//! machine's name, the user's name. The id names an installation so two runs
-//! can be told apart from two machines; it is not a person and it is thrown
-//! away with the settings directory.
+//! directory, the app version, the OS family, the architecture and the mode.
+//! What is not: the project, its path, the plan, the MCP token, the machine's
+//! name, the user's name. The id names an installation so two runs can be told
+//! apart from two machines; it is not a person and it is thrown away with the
+//! settings directory.
 //!
-//! The API secret is baked in at build time from `NEWERA_GA_API_SECRET`, the
-//! way the Sentry DSN is. A build without it sends nothing, so a clone of the
-//! repository reports to nobody.
+//! The ping goes to the project's own endpoint on the site, which holds the
+//! Google Analytics secret and forwards the count. That is why it goes there
+//! rather than to Google directly: a secret baked into a binary only reaches
+//! the builds CI makes, and then everyone who compiles the app themselves
+//! counts for nothing. The installers post the same shape from the same
+//! installation id, so an install and the first run are the same installation
+//! in the count.
+//!
+//! A build to work on, and CI, stay out of the count.
 
 use std::time::Duration;
 
-/// The property the site and the app share.
-const MEASUREMENT_ID: &str = "G-PLY5GQC6EP";
+/// The project's endpoint. What holds the Google Analytics secret is the site,
+/// not this binary.
+pub(crate) const PING: &str = "https://3dneweraai.com/ping";
 
-/// Google's collector. `debug` is a different host that answers with what it
-/// thinks of the payload; useful when adding an event, not in a release.
-const COLLECT: &str = "https://www.google-analytics.com/mp/collect";
-
-/// The secret this build sends with, if it has one.
-fn api_secret() -> Option<String> {
-    let given = |s: &String| !s.trim().is_empty();
-    std::env::var("NEWERA_GA_API_SECRET")
+/// Where a ping goes, when one goes at all.
+///
+/// `NEWERA_PING_URL` points it somewhere else — a local `wrangler pages dev`,
+/// while working on the endpoint — and asking for that is reason enough to
+/// count a build that would otherwise stay quiet.
+fn endpoint() -> Option<String> {
+    if let Some(url) = std::env::var("NEWERA_PING_URL")
         .ok()
-        .filter(given)
-        .or_else(|| option_env!("NEWERA_GA_API_SECRET").map(str::to_owned))
-        .filter(given)
+        .map(|u| u.trim().to_owned())
+        .filter(|u| !u.is_empty())
+    {
+        return Some(url);
+    }
+    super::a_keyless_build_may_report().then(|| PING.to_owned())
 }
 
 /// The id of this installation, drawn once and kept beside the settings. Not
@@ -42,7 +50,8 @@ fn client_id() -> std::io::Result<String> {
 }
 
 /// The same, in a named directory — which is what the test uses, so it never
-/// touches the settings of the machine it runs on.
+/// touches the settings of the machine it runs on. The installers write this
+/// same file before the app has ever run.
 fn client_id_in(dir: &std::path::Path) -> std::io::Result<String> {
     let path = dir.join("install-id");
     if let Ok(id) = std::fs::read_to_string(&path) {
@@ -65,8 +74,21 @@ fn client_id_in(dir: &std::path::Path) -> std::io::Result<String> {
     Ok(id)
 }
 
+/// What one run of the app looks like to the count. The endpoint accepts these
+/// names and no others.
+fn payload(client: &str, mode: &str) -> serde_json::Value {
+    serde_json::json!({
+        "event": "app_open",
+        "client_id": client,
+        "app_version": env!("CARGO_PKG_VERSION"),
+        "operating_system": std::env::consts::OS,
+        "architecture": std::env::consts::ARCH,
+        "mode": mode,
+    })
+}
+
 /// Reports that the app was opened, in the background: a run never waits on
-/// Google, and a refusal from the network is not worth a word on screen.
+/// the network, and a refusal from it is not worth a word on screen.
 ///
 /// `mode` is how it was started — `gui`, `serve`, `mcp` — so a headless
 /// server is not counted as somebody sitting in front of a window.
@@ -74,28 +96,13 @@ pub fn opened(mode: &str) {
     if !super::enabled() {
         return;
     }
-    let Some(secret) = api_secret() else {
+    let Some(url) = endpoint() else {
         return;
     };
     let Ok(client) = client_id() else {
         return;
     };
-    let body = serde_json::json!({
-        "client_id": client,
-        "non_personalized_ads": true,
-        "events": [{
-            "name": "app_open",
-            "params": {
-                "engagement_time_msec": "1",
-                "session_id": client,
-                "app_version": env!("CARGO_PKG_VERSION"),
-                "operating_system": std::env::consts::OS,
-                "architecture": std::env::consts::ARCH,
-                "mode": mode,
-            }
-        }]
-    });
-    let url = format!("{COLLECT}?measurement_id={MEASUREMENT_ID}&api_secret={secret}");
+    let body = payload(&client, mode);
     std::thread::spawn(move || {
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .timeout_global(Some(Duration::from_secs(4)))
@@ -109,17 +116,34 @@ pub fn opened(mode: &str) {
 
 #[cfg(test)]
 mod tests {
-    /// Without a secret nothing is sent, and a clone of the repository has no
-    /// secret: this is what keeps someone else's build from reporting to us.
+    /// The names the endpoint expects, and nothing else in the body: a field it
+    /// does not know is dropped there, so a typo here would count nothing.
     #[test]
-    fn a_build_without_a_secret_sends_nothing() {
-        if std::env::var("NEWERA_GA_API_SECRET").is_ok()
-            || option_env!("NEWERA_GA_API_SECRET").is_some_and(|s| !s.trim().is_empty())
-        {
-            return; // built with one: nothing to prove here
+    fn the_ping_says_what_was_opened() {
+        let body = super::payload("abc123", "gui");
+        assert_eq!(body["event"], "app_open");
+        assert_eq!(body["client_id"], "abc123");
+        assert_eq!(body["mode"], "gui");
+        assert_eq!(body["app_version"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(body["operating_system"], std::env::consts::OS);
+        assert_eq!(body["architecture"], std::env::consts::ARCH);
+        let serde_json::Value::Object(fields) = body else {
+            panic!("an object")
+        };
+        assert_eq!(fields.len(), 6, "an unknown field would be dropped anyway");
+    }
+
+    /// A build for working on, and CI, stay out of the count: what is counted
+    /// is the people who installed the app.
+    #[test]
+    fn a_build_to_work_on_counts_nothing() {
+        // Pointed at a local endpoint on purpose, or an optimised build off
+        // CI — which is what reports, and not what this is about.
+        if std::env::var_os("NEWERA_PING_URL").is_some() || crate::a_keyless_build_may_report() {
+            return;
         }
-        assert!(super::api_secret().is_none());
-        // Nothing to send to, so this returns without a thread and without a
+        assert!(super::endpoint().is_none());
+        // Nowhere to send, so this returns without a thread and without a
         // request.
         super::opened("test");
     }

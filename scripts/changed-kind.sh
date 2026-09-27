@@ -78,6 +78,8 @@ self_test() {
   check "code=true docs=false" crates/newera-core/src/levels.rs
   check "code=true docs=false" Cargo.toml Cargo.lock
   check "code=true docs=false" .github/workflows/ci.yml
+  # The site's endpoints: JavaScript with a test, not prose.
+  check "code=true docs=false" functions/ping/index.js
   check "code=true docs=false" Makefile
   check "code=true docs=false" scripts/changed-kind.sh
   # The plugin's Markdown is both: `plugin validate` reads it, and so does

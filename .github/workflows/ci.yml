@@ -169,6 +169,9 @@ jobs:
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
     steps:
       - uses: actions/checkout@v7
+      # The site's own endpoints — the usage count and the crash tunnel. Node
+      # is already here and they answer in milliseconds, so they go first.
+      - run: node --test scripts/ping.test.mjs
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown

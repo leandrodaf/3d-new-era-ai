@@ -46,10 +46,12 @@ jobs:
           save-if: false
       # The Sentry DSN is baked into released binaries only; it lives in the
       # repository's secrets, never in its files, and CI builds go without it.
+      # Nothing else is: the usage count goes through the site's own endpoint,
+      # which holds the Google Analytics secret, so a build from source counts
+      # the same as this one.
       - run: cargo build -p newera --release --locked --target ${{ matrix.target }}
         env:
           NEWERA_SENTRY_DSN: ${{ secrets.NEWERA_SENTRY_DSN }}
-          NEWERA_GA_API_SECRET: ${{ secrets.NEWERA_GA_API_SECRET }}
 
       # Asset names carry no version, so releases/latest/download/<asset>
       # always points at the newest build.

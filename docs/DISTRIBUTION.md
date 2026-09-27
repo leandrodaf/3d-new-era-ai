@@ -105,6 +105,32 @@ The tag triggers:
 The site and the browser editor (`publish.yml`, `pages.yml`) deploy from every
 push to `main` that touches them.
 
+## What the site counts
+
+Two endpoints live with the site, in [`functions/`](../functions), as Cloudflare Pages
+Functions:
+
+| Route | What it does |
+|---|---|
+| `/ping` | One usage event — `app_open` from the app, `install` and `uninstall` from the installers — forwarded to Google Analytics. |
+| `/ping/sentry` | A crash envelope from a build with no DSN, signed with the one the site holds and forwarded to Sentry. |
+
+They exist because of where a secret can live. Baked into a binary, a key only reaches the
+builds CI makes: everyone who compiles the app themselves counted for nothing, and a release
+built without the secret counted nothing at all. Here each key is one environment variable of
+the Pages project — `NEWERA_GA_API_SECRET` and `NEWERA_SENTRY_DSN` — and every build reports
+the same way.
+
+What the endpoints accept is a closed list: three event names, a handful of parameters, each
+one capped, and the payload Google sees is built on this side rather than forwarded as it
+arrived. The visitor's address is not passed on; the country Cloudflare already knows from the
+connection goes instead. A debug build and CI count nothing.
+
+The installers draw the installation id the app then uses, so an install and the first run are
+one installation in the count and not two. `node --test scripts/ping.test.mjs` tests both
+endpoints; `NEWERA_PING_URL` and `NEWERA_SENTRY_TUNNEL` point a build at a local
+`wrangler pages dev`.
+
 ## Hosted service
 
 `newera-cloud` runs as a single container with Postgres. To run it locally with

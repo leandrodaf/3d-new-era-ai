@@ -666,6 +666,33 @@
   $("[data-copy]").addEventListener("click", (e) => copy(e.currentTarget, CODE[tab]));
   $("[data-copy-os]").addEventListener("click", (e) => copy(e.currentTarget, OS_CODE[os]));
 
+  // ---- What people leave with ----
+  //
+  // The page counts a download the same way the installers count an install, so
+  // the two halves of the same visit can be read together: how many took the
+  // one-line command, how many took a file, and for which system. Nothing here
+  // is required for the page to work — no gtag, no event, no difference.
+  const counted = (name, params) => {
+    if (typeof window.gtag === "function") window.gtag("event", name, params);
+  };
+  // Which system a release file belongs to, by its name.
+  const platformOf = (href) => {
+    if (/windows/.test(href)) return "windows";
+    if (/macos-apple-silicon/.test(href)) return "macos-aarch64";
+    if (/macos-intel/.test(href)) return "macos-x86_64";
+    if (/linux/.test(href)) return "linux";
+    if (/\.mcpb$/.test(href)) return "mcpb";
+    return "other";
+  };
+  $$('a[href*="/releases/latest/download/"]').forEach((link) =>
+    link.addEventListener("click", () =>
+      counted("download", { channel: "file", platform: platformOf(link.getAttribute("href") || "") })
+    )
+  );
+  // Copying the install command is the other way out of this page, and the one
+  // the installers then report from.
+  $("[data-copy-os]").addEventListener("click", () => counted("download", { channel: "command", platform: os }));
+
   // ---- Day / night ----
   const SCENES = {
     jantar: ["02-dining-living", "09-dining-night", "19:30"],

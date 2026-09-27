@@ -5,11 +5,16 @@
 //! machines that cannot keep a setting.
 //!
 //! The DSN is baked in at build time from `NEWERA_SENTRY_DSN` (a CI secret;
-//! locally, a git-ignored `.env.local` the Makefile reads). A build without
-//! it sends nothing, so a clone of the repository reports to nobody. A DSN
-//! inside a shipped binary can be read out of it, as with every client-side
-//! Sentry key: it lets its holder *send* events, never read them, and Sentry's
-//! rate limits and inbound filters bound what that costs.
+//! locally, a git-ignored `.env.local` the Makefile reads). A DSN inside a
+//! shipped binary can be read out of it, as with every client-side Sentry key:
+//! it lets its holder *send* events, never read them, and Sentry's rate limits
+//! and inbound filters bound what that costs.
+//!
+//! A build made without one — anybody who compiles the app themselves, and the
+//! installers when there is no release for that machine — reports through
+//! `3dneweraai.com/ping/sentry`, the project's own endpoint, which holds the
+//! DSN (see `tunnel.rs`). So a crash on a machine that built its own copy is
+//! seen too. A build to work on and CI stay out of it either way.
 //!
 //! What is sent: panics with their backtrace, `error!` logs as events, and the
 //! `warn!`/`info!` before them as breadcrumbs; the OS and app version. What is
@@ -17,10 +22,13 @@
 //! and the plan itself.
 //!
 //! [`analytics`] rides the same switch and counts one thing: that the app was
-//! opened, and on what.
+//! opened, and on what. It goes through the same endpoint, for the same
+//! reason.
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod analytics;
+#[cfg(not(target_arch = "wasm32"))]
+mod tunnel;
 
 use std::io::Write as _;
 use std::path::PathBuf;
@@ -133,7 +141,66 @@ fn dsn() -> Option<String> {
         .filter(given)
 }
 
+/// Where a build without a DSN of its own sends its crash reports: the
+/// project's endpoint, which holds the DSN and signs the envelope.
+#[cfg(not(target_arch = "wasm32"))]
+const TUNNEL: &str = "https://3dneweraai.com/ping/sentry";
+
+/// A DSN standing in for the one such a build does not have. Sentry's client
+/// needs one to start at all, and the endpoint replaces it with the real one;
+/// nothing is ever sent to this host.
+#[cfg(not(target_arch = "wasm32"))]
+const TUNNEL_DSN: &str = "https://tunnel@3dneweraai.com/0";
+
+/// Whether a build made without the project's keys may report through the
+/// endpoint that holds them.
+///
+/// Yes for a release built from source — somebody installed the app and their
+/// crashes are worth seeing. No for a build to work on and no in CI: those
+/// crashes are already in front of whoever caused them, and counting them
+/// would drown the number this is for.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn a_keyless_build_may_report() -> bool {
+    !cfg!(debug_assertions) && !in_ci()
+}
+
+/// Whether this is a machine running the project's own checks rather than
+/// somebody's copy of the app.
+#[cfg(not(target_arch = "wasm32"))]
+fn in_ci() -> bool {
+    ["CI", "GITHUB_ACTIONS"].into_iter().any(|name| {
+        std::env::var(name).is_ok_and(|value| {
+            let value = value.trim().to_ascii_lowercase();
+            !value.is_empty() && value != "0" && value != "false"
+        })
+    })
+}
+
+/// The endpoint a build without a DSN reports through, when it may.
+/// `NEWERA_SENTRY_TUNNEL` points it somewhere else, for working on that
+/// endpoint, and asking for it is reason enough to report from a build that
+/// would otherwise stay quiet.
+#[cfg(not(target_arch = "wasm32"))]
+fn tunnel_url() -> Option<String> {
+    if let Some(url) = std::env::var("NEWERA_SENTRY_TUNNEL")
+        .ok()
+        .map(|url| url.trim().to_owned())
+        .filter(|url| !url.is_empty())
+    {
+        return Some(url);
+    }
+    a_keyless_build_may_report().then(|| TUNNEL.to_owned())
+}
+
+/// Whether this build can report at all: it was built with a DSN, or it may
+/// use the endpoint that has one.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn available() -> bool {
+    dsn().is_some() || tunnel_url().is_some()
+}
+
 /// Whether this build can report at all (it was built with a DSN).
+#[cfg(target_arch = "wasm32")]
 pub fn available() -> bool {
     dsn().is_some()
 }
@@ -156,8 +223,14 @@ impl std::fmt::Debug for Guard {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn init(mode: &str) -> Guard {
     load();
-    let Some(dsn) = dsn() else {
-        return Guard { _client: None };
+    // A build with a DSN posts straight to Sentry, as it always has; one
+    // without goes through the endpoint that holds ours.
+    let (dsn, through) = match dsn() {
+        Some(dsn) => (dsn, None),
+        None => match tunnel_url() {
+            Some(url) => (TUNNEL_DSN.to_owned(), Some(url)),
+            None => return Guard { _client: None },
+        },
     };
     let secret = std::env::var("NEWERA_TOKEN").ok().filter(|t| !t.is_empty());
     let mut options = sentry::ClientOptions::default();
@@ -186,6 +259,9 @@ pub fn init(mode: &str) -> Guard {
     options.before_breadcrumb = Some(std::sync::Arc::new(|crumb| {
         ENABLED.load(Ordering::Relaxed).then_some(crumb)
     }));
+    if let Some(url) = through {
+        options.transport = Some(std::sync::Arc::new(tunnel::Factory { url }));
+    }
     let client = sentry::init((dsn, options));
     sentry::configure_scope(|scope| scope.set_tag("mode", mode));
     Guard {

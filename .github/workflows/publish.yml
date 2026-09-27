@@ -6,12 +6,19 @@ name: Publish
 # Needs two repository secrets:
 #   CLOUDFLARE_API_TOKEN   token with "Cloudflare Pages: Edit" on the account
 #   CLOUDFLARE_ACCOUNT_ID  the account the project lives in
+#
+# functions/ goes up with it: /ping counts installs and runs, /ping/sentry
+# forwards crash reports from builds that hold no key. Both read their secrets
+# from the Pages project's own environment variables — NEWERA_GA_API_SECRET and
+# NEWERA_SENTRY_DSN — which is the whole reason they are here and not baked into
+# the binaries.
 on:
   push:
     branches: [main]
     paths:
       - "site/**"
       - "web/**"
+      - "functions/**"
       - "docs/images/**"
       - "crates/**"
       - "scripts/site-build.sh"

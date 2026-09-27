@@ -42,10 +42,17 @@ make shot FILE=plans/kitchen.newera SHOT_VIEW='cam=0'
 Run `make` to list every command. [docs/README.md](docs/README.md) maps the
 documentation and [scripts/README.md](scripts/README.md) the helper scripts.
 
-Builds report to Sentry only with `NEWERA_SENTRY_DSN` set at build time. Released
+Builds report to Sentry with `NEWERA_SENTRY_DSN` set at build time. Released
 binaries get it from the repository secret; to test reporting locally, put
 `NEWERA_SENTRY_DSN=…` in a `.env.local` at the root — git ignores it and the
 Makefile reads it — and run `newera telemetry test`.
+
+A build without that DSN reports through `3dneweraai.com/ping/sentry` instead, and
+the usage count always goes to `3dneweraai.com/ping`: the site holds the keys, so a
+build from source counts like a released one. Neither happens from a debug build or
+in CI. Both endpoints live in `functions/` and are tested with
+`node --test scripts/ping.test.mjs`; `NEWERA_PING_URL` and `NEWERA_SENTRY_TUNNEL`
+point a build at a local `wrangler pages dev` instead.
 
 ## Before opening a PR
 
