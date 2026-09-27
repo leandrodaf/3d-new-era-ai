@@ -228,6 +228,7 @@ install_release() {
                  'already on this version: nothing to download (NEWERA_FORCE=1 reinstalls)' \
                  'ya instalado en esta versión: nada que descargar (NEWERA_FORCE=1 reinstala)' \
                  'déjà installé dans cette version : rien à télécharger (NEWERA_FORCE=1 réinstalle)')"
+        REUSED=1
         return 0
     fi
 
@@ -287,6 +288,7 @@ build_from_source() {
                  'already on this version: nothing to download or build (NEWERA_FORCE=1 rebuilds)' \
                  'ya instalado en esta versión: nada que descargar ni compilar (NEWERA_FORCE=1 recompila)' \
                  'déjà installé dans cette version : rien à télécharger ni à compiler (NEWERA_FORCE=1 recompile)')"
+        REUSED=1
         return
     fi
     if [ -z "$src" ]; then
@@ -417,7 +419,8 @@ case "$INSTALLED_STATE" in
         INSTALLED_VERSION=""
         ;;
 esac
-count install "$INSTALLED_CHANNEL" "$INSTALLED_VERSION"
+# The same version found already there is a repeat run, not an installation.
+[ -n "${REUSED:-}" ] || count install "$INSTALLED_CHANNEL" "$INSTALLED_VERSION"
 
 printf '\n\033[1;32m%s\033[0m %s\n' "$(t 'Pronto!' 'Done!' '¡Listo!' 'Terminé !')" \
     "$(t '(arquivos temporários apagados ao sair)' '(temporary files deleted on exit)' \

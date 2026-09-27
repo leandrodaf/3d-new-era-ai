@@ -137,8 +137,10 @@ mod tests {
     /// is the people who installed the app.
     #[test]
     fn a_build_to_work_on_counts_nothing() {
-        if std::env::var_os("NEWERA_PING_URL").is_some() {
-            return; // pointed at a local endpoint on purpose
+        // Pointed at a local endpoint on purpose, or an optimised build off
+        // CI — which is what reports, and not what this is about.
+        if std::env::var_os("NEWERA_PING_URL").is_some() || crate::a_keyless_build_may_report() {
+            return;
         }
         assert!(super::endpoint().is_none());
         // Nowhere to send, so this returns without a thread and without a

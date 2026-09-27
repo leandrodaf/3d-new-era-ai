@@ -185,6 +185,9 @@ function Install-NewEra {
     $assetName = 'newera-windows-x64.zip'
     Info $tag
     $versionFile = Join-Path $dir 'version.txt'
+    # Only a run that put a version in place is an installation to count: the
+    # same version found already there is a repeat run, not a new install.
+    $installed = $false
     if (-not $Force -and (Test-Path (Join-Path $dir 'newera-gui.exe')) -and
         (Test-Path $versionFile) -and ((Get-Content $versionFile -Raw).Trim() -eq $tag)) {
         Info (T 'já instalado nesta versão: nada a baixar (use -Force para reinstalar)' `
@@ -222,6 +225,7 @@ function Install-NewEra {
             New-Item -ItemType Directory -Path (Split-Path $dir) -Force | Out-Null
             Move-Item $unpacked $dir
             Set-Content -Path $versionFile -Value $tag -Encoding ascii
+            $installed = $true
             Info 'ok'
         }
         finally {
@@ -324,7 +328,7 @@ function Install-NewEra {
         }
     }
 
-    Send-Count 'install' $version
+    if ($installed) { Send-Count 'install' $version }
 
     Write-Host "`n$(T 'Pronto!' 'Done!' '¡Listo!' 'Terminé !')" -ForegroundColor Green
     switch ($script:Lang) {
