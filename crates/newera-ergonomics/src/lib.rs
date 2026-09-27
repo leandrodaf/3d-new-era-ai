@@ -129,30 +129,8 @@ impl Profile {
     }
 }
 
-/// How much a finding matters.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Severity {
-    /// Something can't be used as drawn.
-    #[default]
-    Erro,
-    /// Below the reference: works badly.
-    Alerta,
-    /// Would be better.
-    Dica,
-}
-
-impl Severity {
-    /// The most a source of this tier may claim on its own: what obliges can
-    /// accuse, what merely describes cannot.
-    const fn for_tier(tier: Tier) -> Self {
-        match tier {
-            Tier::A => Self::Erro,
-            Tier::B | Tier::D => Self::Alerta,
-            Tier::C | Tier::E => Self::Dica,
-        }
-    }
-}
+/// How much a finding matters: the same type every discipline reports with.
+pub use newera_core::Severity;
 
 /// One thing to look at.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -387,7 +365,7 @@ impl Review<'_, '_> {
         }
         // A finding never claims more than its source can: the tier sets the
         // ceiling, and a figure we could not confirm may warn, never accuse.
-        let mut severity = severity.max(Severity::for_tier(tier));
+        let mut severity = severity.max(Severity::ceiling(tier));
         if source.confidence == Confidence::ConfirmBeforeUse {
             severity = severity.max(Severity::Alerta);
         }
@@ -595,9 +573,8 @@ impl Review<'_, '_> {
         }
         for f in newera_core::electrical::check(self.scene.home) {
             let severity = match f.severity {
-                newera_core::electrical::Severity::Erro => Severity::Alerta,
-                newera_core::electrical::Severity::Alerta
-                | newera_core::electrical::Severity::Dica => Severity::Dica,
+                Severity::Erro => Severity::Alerta,
+                Severity::Alerta | Severity::Dica => Severity::Dica,
             };
             self.findings.push(Finding {
                 severity,
@@ -618,13 +595,8 @@ impl Review<'_, '_> {
     /// guards a fall is a safety matter, and weighs as such.
     fn guards(&mut self) {
         for f in newera_core::guard::check(self.scene.home) {
-            let severity = match f.severity {
-                newera_core::electrical::Severity::Erro => Severity::Erro,
-                newera_core::electrical::Severity::Alerta => Severity::Alerta,
-                newera_core::electrical::Severity::Dica => Severity::Dica,
-            };
             self.findings.push(Finding {
-                severity,
+                severity: f.severity,
                 place: f.place,
                 message: f.message,
                 reference: Some(f.source),
@@ -637,9 +609,8 @@ impl Review<'_, '_> {
     fn plumbing(&mut self) {
         for f in newera_core::plumbing::check(self.scene.home) {
             let severity = match f.severity {
-                newera_core::electrical::Severity::Erro => Severity::Alerta,
-                newera_core::electrical::Severity::Alerta
-                | newera_core::electrical::Severity::Dica => Severity::Dica,
+                Severity::Erro => Severity::Alerta,
+                Severity::Alerta | Severity::Dica => Severity::Dica,
             };
             self.findings.push(Finding {
                 severity,
@@ -3883,6 +3854,80 @@ mod tests {
             says(&report, Severity::Erro, "0 tomada(s) acima da bancada"),
             "{report:#?}"
         );
+    }
+
+    /// Every argument of a call, split at the top-level commas, from just
+    /// after its opening parenthesis.
+    fn arguments(text: &str) -> Vec<&str> {
+        let (mut depth, mut start, mut out) = (0i32, 0, Vec::new());
+        let mut quoted = false;
+        for (i, c) in text.char_indices() {
+            match c {
+                '"' => quoted = !quoted,
+                _ if quoted => {}
+                '(' | '{' | '[' => depth += 1,
+                ')' | '}' | ']' if depth == 0 => {
+                    out.push(&text[start..i]);
+                    break;
+                }
+                ')' | '}' | ']' => depth -= 1,
+                ',' if depth == 0 => {
+                    out.push(&text[start..i]);
+                    start = i + 1;
+                }
+                _ => {}
+            }
+        }
+        out.retain(|a| !a.trim().is_empty());
+        out
+    }
+
+    fn literals(text: &str) -> Vec<&str> {
+        text.split('"').skip(1).step_by(2).collect()
+    }
+
+    #[test]
+    fn every_source_a_rule_cites_is_in_the_registry() {
+        // `push_ref` only `debug_assert!`s an unknown code, and only when the
+        // rule fires: a citation nobody's plan trips is never looked up. So
+        // the check reads what the rules wrote, wherever they cite.
+        let mut cited = Vec::new();
+        for file in [include_str!("lib.rs"), include_str!("corners.rs")] {
+            let body = file.split("#[cfg(test)]\nmod tests").next().unwrap_or(file);
+            for call in ["push_ref(", "push_ref_at("] {
+                for (at, _) in body.match_indices(call) {
+                    if body[..at].ends_with("fn ") {
+                        continue;
+                    }
+                    let args = arguments(&body[at + call.len()..]);
+                    cited.extend(literals(args.last().copied().unwrap_or_default()));
+                }
+            }
+            for (at, _) in body.match_indices("Why(") {
+                if let Some(code) = arguments(&body[at + 4..]).get(1) {
+                    cited.extend(literals(code));
+                }
+            }
+            // `("why", "code").into()`: the second of a pair turned into a Why.
+            for (at, _) in body.match_indices(").into()") {
+                let open = body[..at].rfind('(').unwrap_or(at);
+                let args = arguments(&body[open + 1..]);
+                if args.len() == 2 {
+                    cited.extend(literals(args[1]));
+                }
+            }
+        }
+        assert!(
+            cited.len() > 30,
+            "only {} citations found: {cited:?}",
+            cited.len()
+        );
+        for code in cited {
+            assert!(
+                standards::standard(code).is_some(),
+                "a rule cites `{code}`, which is not in the registry"
+            );
+        }
     }
 
     /// The severity policy is the whole point of the ladder, so it is tested

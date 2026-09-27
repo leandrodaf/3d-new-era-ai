@@ -64,6 +64,36 @@ impl Tier {
     }
 }
 
+/// How much a finding matters, in every discipline.
+///
+/// It sorts from the heaviest down, so the weaker of two severities is the
+/// larger one: `claimed.max(Severity::ceiling(tier))` is how a finding is kept
+/// from saying more than its source can.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Severity {
+    /// Something can't be used as drawn.
+    #[default]
+    Erro,
+    /// Below the reference: works badly.
+    Alerta,
+    /// Would be better.
+    Dica,
+}
+
+impl Severity {
+    /// The most a source of this tier may claim on its own: what obliges can
+    /// accuse, what merely describes cannot.
+    #[must_use]
+    pub const fn ceiling(tier: Tier) -> Self {
+        match tier {
+            Tier::A => Self::Erro,
+            Tier::B | Tier::D => Self::Alerta,
+            Tier::C | Tier::E => Self::Dica,
+        }
+    }
+}
+
 /// Who published a source, and over what territory it speaks.
 ///
 /// Force is a relation between a source and a place, so the territory has to
@@ -1331,6 +1361,82 @@ mod tests {
         );
         assert!(!sp.covers(&Place::from_city(Some("curitiba"))));
         assert!(!sp.covers(&Place::new(Some("us"), Some("fl"), Some("miami"))));
+    }
+
+    /// The string literals of an expression, from `from` up to the comma
+    /// or closing bracket that ends it.
+    fn literals_of(text: &str) -> Vec<&str> {
+        let (mut depth, mut out, mut chars) = (0i32, Vec::new(), text.char_indices());
+        while let Some((i, c)) = chars.next() {
+            match c {
+                '"' => {
+                    let rest = &text[i + 1..];
+                    let end = rest.find('"').unwrap_or(rest.len());
+                    out.push(&rest[..end]);
+                    for _ in 0..=end {
+                        chars.next();
+                    }
+                }
+                '(' | '{' | '[' => depth += 1,
+                ')' | '}' | ']' | ',' | ';' if depth == 0 => break,
+                ')' | '}' | ']' => depth -= 1,
+                _ => {}
+            }
+        }
+        out
+    }
+
+    /// The part of a source file above its tests.
+    fn body(file: &str) -> &str {
+        file.split("#[cfg(test)]\nmod tests").next().unwrap_or(file)
+    }
+
+    #[test]
+    fn every_source_a_discipline_cites_is_in_the_registry() {
+        // An unknown code resolves to nothing: the finding shows no edition
+        // and no link, and — once force is computed from the entry — no
+        // letter either. The disciplines cite free strings, so the check has
+        // to read what they wrote.
+        let files = [
+            ("electrical.rs", include_str!("electrical.rs")),
+            ("plumbing.rs", include_str!("plumbing.rs")),
+            ("guard.rs", include_str!("guard.rs")),
+            ("lighting.rs", include_str!("lighting.rs")),
+        ];
+        let mut cited = 0;
+        for (name, file) in files {
+            let text = body(file);
+            for (at, _) in text.match_indices("source:") {
+                // A field, not the middle of a key like `plumb:source:water`.
+                if !text[..at].ends_with(char::is_whitespace) {
+                    continue;
+                }
+                let after = &text[at + "source:".len()..];
+                // The field's declaration, not a value.
+                if after.trim_start().starts_with('&') {
+                    continue;
+                }
+                for code in literals_of(after) {
+                    cited += 1;
+                    assert!(
+                        standard(code).is_some(),
+                        "{name} cites `{code}`, which is not in the registry"
+                    );
+                }
+            }
+        }
+        assert!(
+            cited > 40,
+            "the scan found only {cited} citations: is it reading?"
+        );
+        for f in FIGURES {
+            assert!(
+                standard(f.source).is_some(),
+                "figure {} cites `{}`, which is not in the registry",
+                f.name,
+                f.source
+            );
+        }
     }
 
     #[test]

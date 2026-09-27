@@ -1546,14 +1546,9 @@ fn natural(name: &str) -> (String, u64) {
     (letters, digits.parse().unwrap_or(0))
 }
 
-/// How much a finding matters.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Severity {
-    Erro,
-    Alerta,
-    Dica,
-}
+/// How much a finding matters — one type for every discipline, so a finding
+/// weighs the same whichever check made it.
+pub use crate::standards::Severity;
 
 /// Something the project lacks, with the source it stands on.
 #[derive(Debug, Clone, PartialEq, Serialize)]
