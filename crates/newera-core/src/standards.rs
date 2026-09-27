@@ -94,6 +94,31 @@ impl Severity {
     }
 }
 
+/// What a finding of `severity` standing on `code` may claim at `at`, or
+/// nothing at all — the one policy every discipline weighs its findings by.
+///
+/// How much a source obliges is a question about where the project is, not
+/// about the source alone: an NBR that accuses in São Paulo warns in Texas. A
+/// tier E survey says what people do, never what they should do, so it raises
+/// nothing; the tier sets the ceiling; and a figure we could not confirm at
+/// the source may warn, never accuse. A finding that cites nothing — common
+/// practice, or geometry like two solids in one place — is capped by nothing.
+#[must_use]
+pub fn weigh(severity: Severity, code: Option<&str>, at: &Place) -> Option<Severity> {
+    let Some(source) = code.and_then(standard) else {
+        return Some(severity);
+    };
+    let tier = source.force(at);
+    if tier == Tier::E {
+        return None;
+    }
+    let mut severity = severity.max(Severity::ceiling(tier));
+    if source.confidence == Confidence::ConfirmBeforeUse {
+        severity = severity.max(Severity::Alerta);
+    }
+    Some(severity)
+}
+
 /// Who published a source, and over what territory it speaks.
 ///
 /// Force is a relation between a source and a place, so the territory has to

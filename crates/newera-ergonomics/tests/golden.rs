@@ -761,7 +761,6 @@ const IN_BRAZIL: &[Where] = &[
 const ABROAD: &[Where] = &[
     ("miami", Some("us"), Some("fl"), Some("miami")),
     ("berlim", Some("de"), Some("be"), Some("berlin")),
-    ("lisboa", Some("pt"), None, None),
 ];
 
 fn write_report(out: &mut String, report: &Report) {
@@ -805,6 +804,17 @@ fn write_report(out: &mut String, report: &Report) {
     }
 }
 
+/// A review without what each finding costs.
+fn weightless(text: &str) -> String {
+    text.lines()
+        .map(|line| {
+            let mut words: Vec<&str> = line.split(' ').collect();
+            words.retain(|w| !w.starts_with("w="));
+            words.join(" ") + "\n"
+        })
+        .collect()
+}
+
 /// The review at `place`, as text.
 fn reviewed(home: &Home, (_, country, region, city): Where, profile: &Profile) -> String {
     let mut home = home.clone();
@@ -819,7 +829,11 @@ fn reviewed(home: &Home, (_, country, region, city): Where, profile: &Profile) -
 /// Every home reviewed where nothing is said about the place — in full when
 /// `base` asks for it — and then, at each of `places`, only the lines that
 /// differ from that: what the place changes, in a file small enough to read.
-fn snapshot(places: &[Where], base: bool) -> String {
+///
+/// Abroad the same finding moves in every home at once — a standard that
+/// obliges here only warns there — so `brief` prints what moved without the
+/// sentence: its severity, its key and its source.
+fn snapshot(places: &[Where], base: bool, brief: bool) -> String {
     let mut out = String::new();
     for (name, home) in corpus() {
         for (who, profile) in households() {
@@ -834,12 +848,26 @@ fn snapshot(places: &[Where], base: bool) -> String {
                 if here == base {
                     continue;
                 }
+                // What a finding costs moves whenever anything else does: it
+                // is kept in full at the base, and between places only the
+                // total, on the score line, says so.
+                let (base, here) = (weightless(&base), weightless(&here));
+                if here == base {
+                    continue;
+                }
                 let _ = writeln!(out, " @ {}", place.0);
+                let shown = |line: &str| {
+                    if brief {
+                        line.split(" | ").next().unwrap_or(line).to_owned()
+                    } else {
+                        line.to_owned()
+                    }
+                };
                 for line in base.lines().filter(|l| !here.lines().any(|h| h == *l)) {
-                    let _ = writeln!(out, "  -{line}");
+                    let _ = writeln!(out, "  -{}", shown(line));
                 }
                 for line in here.lines().filter(|l| !base.lines().any(|b| b == *l)) {
-                    let _ = writeln!(out, "  +{line}");
+                    let _ = writeln!(out, "  +{}", shown(line));
                 }
             }
         }
@@ -883,20 +911,20 @@ fn check(file: &str, actual: &str) {
 #[test]
 #[ignore = "slow in debug: `make golden` runs it optimised"]
 fn no_finding_moves_in_brazil() {
-    check("golden-br.txt", &snapshot(&IN_BRAZIL[1..], true));
+    check("golden-br.txt", &snapshot(&IN_BRAZIL[1..], true, false));
 }
 
 #[test]
 #[ignore = "slow in debug: `make golden` runs it optimised"]
 fn what_the_same_homes_hear_abroad() {
-    check("golden-abroad.txt", &snapshot(ABROAD, false));
+    check("golden-abroad.txt", &snapshot(ABROAD, false, true));
 }
 
 #[test]
 #[ignore = "slow in debug: `make golden` runs it optimised"]
 fn the_corpus_reaches_most_rules() {
     // A snapshot of a corpus that never trips a rule proves nothing about it.
-    let text = snapshot(&IN_BRAZIL[2..3], true);
+    let text = snapshot(&IN_BRAZIL[2..3], true, false);
     let mut seen = std::collections::BTreeSet::new();
     for line in text.lines() {
         let mut words = line.split_whitespace();

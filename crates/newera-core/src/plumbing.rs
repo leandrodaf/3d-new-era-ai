@@ -496,9 +496,14 @@ fn place(room: Option<&Room>, piece: &Furniture) -> String {
     }
 }
 
-/// What each fixture and the project as a whole lack.
-#[allow(clippy::too_many_lines)]
+/// What each fixture and the project as a whole lack, weighed at the place
+/// the project is — see [`crate::electrical::weighed`].
 pub fn check(home: &Home) -> Vec<Finding> {
+    crate::electrical::weighed(home, found(home))
+}
+
+#[allow(clippy::too_many_lines)]
+fn found(home: &Home) -> Vec<Finding> {
     let view = home.level_view(home.current_level());
     let all = points(home);
     let fixtures = fixtures(home);

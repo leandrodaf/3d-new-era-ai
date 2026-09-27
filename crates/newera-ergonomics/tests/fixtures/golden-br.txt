@@ -136,8 +136,8 @@ web/demo.newera [Versão 1] / casal
   Dica plumb:drain:r23 ref=nbr8160 w=0 | Sem ralo: a área do box pede um ralo sifonado (caixa sifonada), que também recebe o lavatório.
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
-  -  Dica city_not_declared:r14 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
-  -  Dica city_not_declared:r18 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r14 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r18 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
 web/demo.newera [Versão 1] / cadeirante
   score=0 [architecture=35 electrical=6 plumbing=55] capacity=Capacity { beds: 5, bedrooms: 3, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 630.0 }
   refs nbr15575g=A nbr9050=A nbr13103=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nkba=B alexander184=C blum-zonas=C nbr16264=A
@@ -293,8 +293,8 @@ web/demo.newera [Versão 1] / cadeirante
   Dica plumb:drain:r23 ref=nbr8160 w=0 | Sem ralo: a área do box pede um ralo sifonado (caixa sifonada), que também recebe o lavatório.
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
-  -  Dica city_not_declared:r14 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
-  -  Dica city_not_declared:r18 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r14 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r18 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
 web/demo.newera [Versão 1] / família
   score=0 [architecture=30 electrical=6 plumbing=55] capacity=Capacity { beds: 5, bedrooms: 3, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 630.0 }
   refs nbr15575g=A nbr9050=A nbr13103=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nkba=B blum-zonas=C panero-zelnik=C alexander184=C nbr16264=A
@@ -446,8 +446,8 @@ web/demo.newera [Versão 1] / família
   Dica plumb:drain:r23 ref=nbr8160 w=0 | Sem ralo: a área do box pede um ralo sifonado (caixa sifonada), que também recebe o lavatório.
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
-  -  Dica city_not_declared:r14 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
-  -  Dica city_not_declared:r18 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r14 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r18 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
 docs/projects/upper-west-side-reviewed.newera [Versão 1] / casal
   score=33 [architecture=93 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   refs nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B coe-municipal=A nbr16264=A
@@ -512,7 +512,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / casal
  @ são paulo
   -  score=33 [architecture=93 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   -  refs nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B coe-municipal=A nbr16264=A
-  -  Dica city_not_declared:r14 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r14 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=33 [architecture=94 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   +  refs nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B nbr16264=A coe-municipal=A
 docs/projects/upper-west-side-reviewed.newera [Versão 1] / cadeirante
@@ -600,7 +600,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / cadeirante
  @ são paulo
   -  score=15 [architecture=52 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   -  refs nbr9050=A nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B coe-municipal=A nbr16264=A
-  -  Dica city_not_declared:r14 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r14 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=15 [architecture=53 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   +  refs nbr9050=A nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B nbr16264=A coe-municipal=A
 docs/projects/upper-west-side-reviewed.newera [Versão 1] / família
@@ -681,7 +681,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / família
  @ são paulo
   -  score=12 [architecture=48 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   -  refs ibge-adensamento=D nbr9050=A nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B blum-zonas=C panero-zelnik=C coe-municipal=A nbr16264=A
-  -  Dica city_not_declared:r14 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r14 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=12 [architecture=49 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   +  refs ibge-adensamento=D nbr9050=A nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B blum-zonas=C panero-zelnik=C nbr16264=A coe-municipal=A
 Quarto de três camas / casal
@@ -769,28 +769,8 @@ Cozinha apertada / casal
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
   -  score=0 [architecture=30 electrical=64 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
-  -  Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
-  -  Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
-  -  Dica room_without_window:r105 ref=- w=0 | Sem janela: precisa de janela para luz e ventilação.
-  -  Dica work_triangle_short:r105 ref=nkba w=0 | Triângulo geladeira–pia–fogão com um lado de só 80,1 cm: a referência é ao menos 122 cm, para haver bancada de apoio entre eles.
-  -  Dica counter_total:r105 ref=alexander184 w=0 | 40 cm de bancada livre fora de pia, fogão e geladeira; abaixo de 366 cm falta onde pousar as coisas do preparo (mesa solta também conta).
-  -  Dica hood_narrower_than_stove:r105 ref=lbnl-coifa w=0 | Coifa de 60 cm sobre cocção de 75 cm: a captura já cai à metade nas bocas da frente, e vazão alta não compensa coifa estreita.
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
-  -  Dica elec:network:r105 ref=nbr16264 w=0 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
-  -  Dica elec:tv:r105 ref=nbr16264 w=0 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
-  -  Dica plumb:drain:r105 ref=coe-municipal w=0 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
-  -  Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=0 [architecture=31 electrical=64 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
-  +  Dica living_seats:casa ref=- w=1 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
-  +  Dica wardrobe_capacity:casa ref=- w=1 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
-  +  Dica room_without_window:r105 ref=- w=1 | Sem janela: precisa de janela para luz e ventilação.
-  +  Dica work_triangle_short:r105 ref=nkba w=1 | Triângulo geladeira–pia–fogão com um lado de só 80,1 cm: a referência é ao menos 122 cm, para haver bancada de apoio entre eles.
-  +  Dica counter_total:r105 ref=alexander184 w=1 | 40 cm de bancada livre fora de pia, fogão e geladeira; abaixo de 366 cm falta onde pousar as coisas do preparo (mesa solta também conta).
-  +  Dica hood_narrower_than_stove:r105 ref=lbnl-coifa w=1 | Coifa de 60 cm sobre cocção de 75 cm: a captura já cai à metade nas bocas da frente, e vazão alta não compensa coifa estreita.
-  +  Dica elec:network:r105 ref=nbr16264 w=1 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
-  +  Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
-  +  Dica plumb:drain:r105 ref=coe-municipal w=1 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
-  +  Dica plumb:grease ref=nbr8160 w=1 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
 Cozinha apertada / cadeirante
   score=0 [architecture=19 electrical=64 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr5410=A coe-municipal=A nbr9050=A nbr5626=A nbr8160=A nkba=B alexander184=C lbnl-coifa=D nbr16264=A
@@ -823,7 +803,7 @@ Cozinha apertada / cadeirante
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
   -  score=0 [architecture=19 electrical=64 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=0 [architecture=20 electrical=64 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
 Cozinha apertada / família
   score=0 [architecture=29 electrical=64 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
@@ -855,7 +835,7 @@ Cozinha apertada / família
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
   -  score=0 [architecture=29 electrical=64 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=0 [architecture=30 electrical=64 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
 Cozinha espalhada / casal
   score=23 [architecture=41 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
@@ -884,7 +864,7 @@ Cozinha espalhada / casal
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
   -  score=23 [architecture=41 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=23 [architecture=42 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
 Cozinha espalhada / cadeirante
   score=22 [architecture=36 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
@@ -914,7 +894,7 @@ Cozinha espalhada / cadeirante
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
   -  score=22 [architecture=36 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=22 [architecture=37 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
 Cozinha espalhada / família
   score=23 [architecture=40 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
@@ -944,7 +924,7 @@ Cozinha espalhada / família
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
   -  score=23 [architecture=40 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=23 [architecture=41 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
 Banheiro com aquecedor / casal
   score=48 [architecture=69 electrical=88 plumbing=79] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 1, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
@@ -1084,9 +1064,9 @@ Cozinha estreita / casal
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
   -  score=11 [architecture=29 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=0 [architecture=18 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 106,9 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 106,9 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha estreita / cadeirante
   score=5 [architecture=11 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   refs coe-municipal=A nbr9050=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A nkba=B alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
@@ -1121,9 +1101,9 @@ Cozinha estreita / cadeirante
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
   -  score=5 [architecture=11 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=0 [architecture=0 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 106,9 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 106,9 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha estreita / família
   score=11 [architecture=28 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   refs coe-municipal=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A nkba=B blum-zonas=C alexander184=C caixa-mcmv=A nbr16264=A
@@ -1153,9 +1133,9 @@ Cozinha estreita / família
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
   -  score=11 [architecture=28 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=0 [architecture=17 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 106,9 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 106,9 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Quarto #0 / casal
   score=0 [architecture=0 electrical=88 plumbing=100] capacity=Capacity { beds: 2, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr15575g=A nbr15575=A nbr5410=A coe-municipal=A nbr16264=A
@@ -1186,8 +1166,8 @@ Quarto #0 / casal
   Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
  @ curitiba
   -  refs nbr15575g=A nbr15575=A nbr5410=A coe-municipal=A nbr16264=A
-  -  Dica room_area:r105 ref=coe-municipal w=1 | 4,83 m² para dormitório: códigos de obras costumam pedir ao menos 5,00 m² (confira o do seu município).
-  -  Dica room_narrow_side:r105 ref=coe-municipal w=1 | Menor lado de 185 cm; para dormitório a referência é pelo menos 200 cm.
+  -  Dica room_area:r105 ref=coe-municipal | 4,83 m² para dormitório: códigos de obras costumam pedir ao menos 5,00 m² (confira o do seu município).
+  -  Dica room_narrow_side:r105 ref=coe-municipal | Menor lado de 185 cm; para dormitório a referência é pelo menos 200 cm.
   +  refs nbr15575g=A nbr15575=A nbr5410=A nbr16264=A
 Quarto #0 / cadeirante
   score=0 [architecture=0 electrical=88 plumbing=100] capacity=Capacity { beds: 2, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
@@ -1219,8 +1199,8 @@ Quarto #0 / cadeirante
   Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
  @ curitiba
   -  refs nbr9050=A nbr15575=A nbr5410=A coe-municipal=A nbr15575g=A nbr16264=A
-  -  Dica room_area:r105 ref=coe-municipal w=1 | 4,83 m² para dormitório: códigos de obras costumam pedir ao menos 5,00 m² (confira o do seu município).
-  -  Dica room_narrow_side:r105 ref=coe-municipal w=1 | Menor lado de 185 cm; para dormitório a referência é pelo menos 200 cm.
+  -  Dica room_area:r105 ref=coe-municipal | 4,83 m² para dormitório: códigos de obras costumam pedir ao menos 5,00 m² (confira o do seu município).
+  -  Dica room_narrow_side:r105 ref=coe-municipal | Menor lado de 185 cm; para dormitório a referência é pelo menos 200 cm.
   +  refs nbr9050=A nbr15575=A nbr5410=A nbr15575g=A nbr16264=A
 Quarto #0 / família
   score=0 [architecture=0 electrical=88 plumbing=100] capacity=Capacity { beds: 2, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
@@ -1254,8 +1234,8 @@ Quarto #0 / família
   Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
  @ curitiba
   -  refs ibge-adensamento=D nbr15575g=A nbr15575=A nbr5410=A coe-municipal=A nbr16264=A
-  -  Dica room_area:r105 ref=coe-municipal w=1 | 4,83 m² para dormitório: códigos de obras costumam pedir ao menos 5,00 m² (confira o do seu município).
-  -  Dica room_narrow_side:r105 ref=coe-municipal w=1 | Menor lado de 185 cm; para dormitório a referência é pelo menos 200 cm.
+  -  Dica room_area:r105 ref=coe-municipal | 4,83 m² para dormitório: códigos de obras costumam pedir ao menos 5,00 m² (confira o do seu município).
+  -  Dica room_narrow_side:r105 ref=coe-municipal | Menor lado de 185 cm; para dormitório a referência é pelo menos 200 cm.
   +  refs ibge-adensamento=D nbr15575g=A nbr15575=A nbr5410=A nbr16264=A
 Quarto #1 / casal
   score=37 [architecture=49 electrical=88 plumbing=100] capacity=Capacity { beds: 3, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
@@ -1881,8 +1861,8 @@ Cozinha #0 / casal
   Dica plumb:drain:r105 ref=coe-municipal w=0 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 65 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 65 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #0 / cadeirante
   score=0 [architecture=0 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 1, living_seats: 0, wardrobe_cm: 0.0 }
   refs coe-municipal=A nbr9050=A nbr15575=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A nbr15575g=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
@@ -1925,8 +1905,8 @@ Cozinha #0 / cadeirante
   Dica plumb:drain:r105 ref=coe-municipal w=0 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 65 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 65 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #0 / família
   score=0 [architecture=0 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 1, living_seats: 0, wardrobe_cm: 0.0 }
   refs coe-municipal=A nbr15575g=A nbr15575=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C caixa-mcmv=A nbr16264=A
@@ -1968,8 +1948,8 @@ Cozinha #0 / família
   Dica plumb:drain:r105 ref=coe-municipal w=0 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 65 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 65 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #1 / casal
   score=0 [architecture=37 electrical=59 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr5410=A nbr15575g=A nbr5626=A nbr8160=A coe-municipal=A alexander184=C blum-zonas=C nbr16264=A
@@ -2000,10 +1980,10 @@ Cozinha #1 / casal
  @ são paulo
   -  score=0 [architecture=37 electrical=59 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr5410=A nbr15575g=A nbr5626=A nbr8160=A coe-municipal=A alexander184=C blum-zonas=C nbr16264=A
-  -  Dica city_not_declared:r105 ref=coe-municipal w=1 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=0 [architecture=26 electrical=59 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr5410=A coe-municipal=A nbr15575g=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C nbr16264=A
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 119 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 119 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #1 / cadeirante
   score=0 [architecture=26 electrical=59 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr5410=A nbr9050=A nbr5626=A nbr8160=A coe-municipal=A nbr15575g=A alexander184=C blum-zonas=C nbr16264=A
@@ -2037,30 +2017,10 @@ Cozinha #1 / cadeirante
  @ são paulo
   -  score=0 [architecture=26 electrical=59 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr5410=A nbr9050=A nbr5626=A nbr8160=A coe-municipal=A nbr15575g=A alexander184=C blum-zonas=C nbr16264=A
-  -  Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
-  -  Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
-  -  Dica window_area:r105 ref=coe-municipal w=0 | Janelas somam 1,14 m² para 9,47 m² de piso; o Código Sanitário de SP pede 1/8 do piso: 1,18 m², com metade abrindo para ventilar.
-  -  Dica missing_fixtures:r105 ref=nbr15575g w=0 | Falta fogão ou cooktop, pia para testar o uso de cozinha.
-  -  Dica wall_cabinet_high:f111 ref=nbr9050 w=0 | Topo do aéreo a 195 cm: a prateleira de cima fica fora do alcance (~120 cm); guarde ali o que se usa pouco.
-  -  Dica counter_total:r105 ref=alexander184 w=0 | 260 cm de bancada livre fora de pia, fogão e geladeira; abaixo de 366 cm falta onde pousar as coisas do preparo (mesa solta também conta).
-  -  Dica missing_work_zone:r105 ref=blum-zonas w=0 | Das cinco zonas de trabalho falta lavagem e cocção: sem ela o fluxo mantimentos → armazenagem → lavagem → preparo → cocção se quebra.
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
-  -  Dica elec:network:r105 ref=nbr16264 w=0 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
-  -  Dica elec:tv:r105 ref=nbr16264 w=0 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
-  -  Dica plumb:drain:r105 ref=coe-municipal w=0 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=0 [architecture=15 electrical=59 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr5410=A coe-municipal=A nbr9050=A nbr5626=A nbr8160=A nbr15575g=A alexander184=C blum-zonas=C nbr16264=A
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 119 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
-  +  Dica living_seats:casa ref=- w=1 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
-  +  Dica wardrobe_capacity:casa ref=- w=1 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
-  +  Dica window_area:r105 ref=coe-municipal w=1 | Janelas somam 1,14 m² para 9,47 m² de piso; o Código Sanitário de SP pede 1/8 do piso: 1,18 m², com metade abrindo para ventilar.
-  +  Dica missing_fixtures:r105 ref=nbr15575g w=1 | Falta fogão ou cooktop, pia para testar o uso de cozinha.
-  +  Dica wall_cabinet_high:f111 ref=nbr9050 w=1 | Topo do aéreo a 195 cm: a prateleira de cima fica fora do alcance (~120 cm); guarde ali o que se usa pouco.
-  +  Dica counter_total:r105 ref=alexander184 w=1 | 260 cm de bancada livre fora de pia, fogão e geladeira; abaixo de 366 cm falta onde pousar as coisas do preparo (mesa solta também conta).
-  +  Dica missing_work_zone:r105 ref=blum-zonas w=1 | Das cinco zonas de trabalho falta lavagem e cocção: sem ela o fluxo mantimentos → armazenagem → lavagem → preparo → cocção se quebra.
-  +  Dica elec:network:r105 ref=nbr16264 w=1 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
-  +  Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
-  +  Dica plumb:drain:r105 ref=coe-municipal w=1 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 119 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #1 / família
   score=0 [architecture=36 electrical=59 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr5410=A nbr15575g=A nbr5626=A nbr8160=A coe-municipal=A blum-zonas=C alexander184=C nbr16264=A
@@ -2092,30 +2052,10 @@ Cozinha #1 / família
  @ são paulo
   -  score=0 [architecture=36 electrical=59 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr5410=A nbr15575g=A nbr5626=A nbr8160=A coe-municipal=A blum-zonas=C alexander184=C nbr16264=A
-  -  Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 7 moradores: todos sentam juntos com mais 7 lugar(es) (poltrona ou sofá maior).
-  -  Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 480 cm no total.
-  -  Dica window_area:r105 ref=coe-municipal w=0 | Janelas somam 1,14 m² para 9,47 m² de piso; o Código Sanitário de SP pede 1/8 do piso: 1,18 m², com metade abrindo para ventilar.
-  -  Dica missing_fixtures:r105 ref=nbr15575g w=0 | Falta fogão ou cooktop, pia para testar o uso de cozinha.
-  -  Dica counter_height:f109 ref=blum-zonas w=0 | Bancada a 90 cm; para quem tem 152 cm de altura o conforto fica perto de 84 cm.
-  -  Dica counter_total:r105 ref=alexander184 w=0 | 260 cm de bancada livre fora de pia, fogão e geladeira; abaixo de 366 cm falta onde pousar as coisas do preparo (mesa solta também conta).
-  -  Dica missing_work_zone:r105 ref=blum-zonas w=0 | Das cinco zonas de trabalho falta lavagem e cocção: sem ela o fluxo mantimentos → armazenagem → lavagem → preparo → cocção se quebra.
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
-  -  Dica elec:network:r105 ref=nbr16264 w=0 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
-  -  Dica elec:tv:r105 ref=nbr16264 w=0 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
-  -  Dica plumb:drain:r105 ref=coe-municipal w=0 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=0 [architecture=25 electrical=59 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr5410=A coe-municipal=A nbr15575g=A nbr5626=A nbr8160=A blum-zonas=C alexander184=C nbr16264=A
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 119 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
-  +  Dica living_seats:casa ref=- w=1 | 0 lugares na sala para 7 moradores: todos sentam juntos com mais 7 lugar(es) (poltrona ou sofá maior).
-  +  Dica wardrobe_capacity:casa ref=- w=1 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 480 cm no total.
-  +  Dica window_area:r105 ref=coe-municipal w=1 | Janelas somam 1,14 m² para 9,47 m² de piso; o Código Sanitário de SP pede 1/8 do piso: 1,18 m², com metade abrindo para ventilar.
-  +  Dica missing_fixtures:r105 ref=nbr15575g w=1 | Falta fogão ou cooktop, pia para testar o uso de cozinha.
-  +  Dica counter_height:f109 ref=blum-zonas w=1 | Bancada a 90 cm; para quem tem 152 cm de altura o conforto fica perto de 84 cm.
-  +  Dica counter_total:r105 ref=alexander184 w=1 | 260 cm de bancada livre fora de pia, fogão e geladeira; abaixo de 366 cm falta onde pousar as coisas do preparo (mesa solta também conta).
-  +  Dica missing_work_zone:r105 ref=blum-zonas w=1 | Das cinco zonas de trabalho falta lavagem e cocção: sem ela o fluxo mantimentos → armazenagem → lavagem → preparo → cocção se quebra.
-  +  Dica elec:network:r105 ref=nbr16264 w=1 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
-  +  Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
-  +  Dica plumb:drain:r105 ref=coe-municipal w=1 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 119 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #2 / casal
   score=0 [architecture=11 electrical=64 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr5410=A nbr15575g=A nbr15575=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C coe-municipal=A nbr16264=A
@@ -2155,30 +2095,10 @@ Cozinha #2 / casal
  @ são paulo
   -  score=0 [architecture=11 electrical=64 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr5410=A nbr15575g=A nbr15575=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C coe-municipal=A nbr16264=A
-  -  Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
-  -  Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
-  -  Dica missing_fixtures:r105 ref=nbr15575g w=0 | Falta fogão ou cooktop, geladeira para testar o uso de cozinha.
-  -  Dica counter_total:r105 ref=alexander184 w=0 | 320 cm de bancada livre fora de pia, fogão e geladeira; abaixo de 366 cm falta onde pousar as coisas do preparo (mesa solta também conta).
-  -  Dica kitchen_spread:r105 ref=alexander184 w=0 | 310,4 cm entre pia e bancada: acima de 305 cm cada par vira travessia, e o preparo se desfaz em idas e vindas.
-  -  Dica missing_work_zone:r105 ref=blum-zonas w=0 | Das cinco zonas de trabalho falta mantimentos e cocção: sem ela o fluxo mantimentos → armazenagem → lavagem → preparo → cocção se quebra.
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
-  -  Dica elec:network:r105 ref=nbr16264 w=0 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
-  -  Dica elec:tv:r105 ref=nbr16264 w=0 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
-  -  Dica plumb:drain:r105 ref=coe-municipal w=0 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
-  -  Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=0 [architecture=0 electrical=64 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr5410=A coe-municipal=A nbr15575g=A nbr15575=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C nbr16264=A
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 75 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
-  +  Dica living_seats:casa ref=- w=1 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
-  +  Dica wardrobe_capacity:casa ref=- w=1 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
-  +  Dica missing_fixtures:r105 ref=nbr15575g w=1 | Falta fogão ou cooktop, geladeira para testar o uso de cozinha.
-  +  Dica counter_total:r105 ref=alexander184 w=1 | 320 cm de bancada livre fora de pia, fogão e geladeira; abaixo de 366 cm falta onde pousar as coisas do preparo (mesa solta também conta).
-  +  Dica kitchen_spread:r105 ref=alexander184 w=1 | 310,4 cm entre pia e bancada: acima de 305 cm cada par vira travessia, e o preparo se desfaz em idas e vindas.
-  +  Dica missing_work_zone:r105 ref=blum-zonas w=1 | Das cinco zonas de trabalho falta mantimentos e cocção: sem ela o fluxo mantimentos → armazenagem → lavagem → preparo → cocção se quebra.
-  +  Dica elec:network:r105 ref=nbr16264 w=1 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
-  +  Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
-  +  Dica plumb:drain:r105 ref=coe-municipal w=1 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
-  +  Dica plumb:grease ref=nbr8160 w=1 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 75 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #2 / cadeirante
   score=0 [architecture=7 electrical=64 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr5410=A nbr9050=A nbr15575g=A nbr15575=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C coe-municipal=A nbr16264=A
@@ -2222,10 +2142,10 @@ Cozinha #2 / cadeirante
  @ são paulo
   -  score=0 [architecture=7 electrical=64 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr5410=A nbr9050=A nbr15575g=A nbr15575=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C coe-municipal=A nbr16264=A
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=0 [architecture=0 electrical=64 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr5410=A coe-municipal=A nbr9050=A nbr15575g=A nbr15575=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C nbr16264=A
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 75 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 75 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #2 / família
   score=0 [architecture=8 electrical=64 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr5410=A nbr15575g=A nbr15575=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C coe-municipal=A nbr16264=A
@@ -2268,10 +2188,10 @@ Cozinha #2 / família
  @ são paulo
   -  score=0 [architecture=8 electrical=64 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr5410=A nbr15575g=A nbr15575=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C coe-municipal=A nbr16264=A
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=0 [architecture=0 electrical=64 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr5410=A coe-municipal=A nbr15575g=A nbr15575=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C nbr16264=A
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 75 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 75 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #3 / casal
   score=0 [architecture=0 electrical=64 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 1, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr5410=A nbr15575g=A nbr13103=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C caixa-mcmv=A coe-municipal=A nbr16264=A
@@ -2312,29 +2232,9 @@ Cozinha #3 / casal
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
   -  refs nbr5410=A nbr15575g=A nbr13103=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C caixa-mcmv=A coe-municipal=A nbr16264=A
-  -  Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
-  -  Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
-  -  Dica missing_fixtures:r105 ref=nbr15575g w=0 | Falta geladeira para testar o uso de cozinha.
-  -  Dica counter_total:r105 ref=alexander184 w=0 | 240 cm de bancada livre fora de pia, fogão e geladeira; abaixo de 366 cm falta onde pousar as coisas do preparo (mesa solta também conta).
-  -  Dica missing_work_zone:r105 ref=blum-zonas w=0 | Das cinco zonas de trabalho falta mantimentos: sem ela o fluxo mantimentos → armazenagem → lavagem → preparo → cocção se quebra.
-  -  Dica kitchen_width:r105 ref=caixa-mcmv w=0 | Cozinha de 161 cm de largura; para comparar, a unidade do Minha Casa Minha Vida (regra só para ela) entrega 180 cm, com previsão de pia 120×50, fogão 55×60 e geladeira 70×70 cm.
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
-  -  Dica elec:network:r105 ref=nbr16264 w=0 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
-  -  Dica elec:tv:r105 ref=nbr16264 w=0 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
-  -  Dica plumb:drain:r105 ref=coe-municipal w=0 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
-  -  Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  refs nbr5410=A coe-municipal=A nbr15575g=A nbr13103=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 37 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
-  +  Dica living_seats:casa ref=- w=1 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
-  +  Dica wardrobe_capacity:casa ref=- w=1 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
-  +  Dica missing_fixtures:r105 ref=nbr15575g w=1 | Falta geladeira para testar o uso de cozinha.
-  +  Dica counter_total:r105 ref=alexander184 w=1 | 240 cm de bancada livre fora de pia, fogão e geladeira; abaixo de 366 cm falta onde pousar as coisas do preparo (mesa solta também conta).
-  +  Dica missing_work_zone:r105 ref=blum-zonas w=1 | Das cinco zonas de trabalho falta mantimentos: sem ela o fluxo mantimentos → armazenagem → lavagem → preparo → cocção se quebra.
-  +  Dica kitchen_width:r105 ref=caixa-mcmv w=1 | Cozinha de 161 cm de largura; para comparar, a unidade do Minha Casa Minha Vida (regra só para ela) entrega 180 cm, com previsão de pia 120×50, fogão 55×60 e geladeira 70×70 cm.
-  +  Dica elec:network:r105 ref=nbr16264 w=1 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
-  +  Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
-  +  Dica plumb:drain:r105 ref=coe-municipal w=1 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
-  +  Dica plumb:grease ref=nbr8160 w=1 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 37 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #3 / cadeirante
   score=0 [architecture=0 electrical=64 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 1, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr5410=A nbr9050=A nbr13103=A nbr5626=A nbr8160=A nbr15575g=A alexander184=C blum-zonas=C caixa-mcmv=A coe-municipal=A nbr16264=A
@@ -2379,9 +2279,9 @@ Cozinha #3 / cadeirante
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
   -  refs nbr5410=A nbr9050=A nbr13103=A nbr5626=A nbr8160=A nbr15575g=A alexander184=C blum-zonas=C caixa-mcmv=A coe-municipal=A nbr16264=A
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  refs nbr5410=A coe-municipal=A nbr9050=A nbr13103=A nbr5626=A nbr8160=A nbr15575g=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 37 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 37 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #3 / família
   score=0 [architecture=0 electrical=64 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 1, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr5410=A nbr15575g=A nbr13103=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C caixa-mcmv=A coe-municipal=A nbr16264=A
@@ -2424,9 +2324,9 @@ Cozinha #3 / família
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
   -  refs nbr5410=A nbr15575g=A nbr13103=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C caixa-mcmv=A coe-municipal=A nbr16264=A
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  refs nbr5410=A coe-municipal=A nbr15575g=A nbr13103=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C caixa-mcmv=A nbr16264=A
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 37 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 37 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #4 / casal
   score=18 [architecture=24 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr15575g=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A coe-municipal=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
@@ -2460,10 +2360,10 @@ Cozinha #4 / casal
  @ são paulo
   -  score=18 [architecture=24 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A coe-municipal=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=6 [architecture=13 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs coe-municipal=A nbr15575g=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 95 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 95 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #4 / cadeirante
   score=15 [architecture=20 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr9050=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr15575g=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
@@ -2501,10 +2401,10 @@ Cozinha #4 / cadeirante
  @ são paulo
   -  score=15 [architecture=20 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr9050=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr15575g=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=3 [architecture=9 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs coe-municipal=A nbr9050=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A nbr15575g=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 95 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 95 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #4 / família
   score=18 [architecture=22 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr15575g=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A coe-municipal=A blum-zonas=C panero-zelnik=C alexander184=C caixa-mcmv=A nbr16264=A
@@ -2540,10 +2440,10 @@ Cozinha #4 / família
  @ são paulo
   -  score=18 [architecture=22 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A coe-municipal=A blum-zonas=C panero-zelnik=C alexander184=C caixa-mcmv=A nbr16264=A
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=6 [architecture=11 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs coe-municipal=A nbr15575g=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C caixa-mcmv=A nbr16264=A
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 95 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 95 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #5 / casal
   score=19 [architecture=32 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 5, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr15575g=A nbr5410=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C coe-municipal=A nbr16264=A
@@ -2575,30 +2475,10 @@ Cozinha #5 / casal
  @ são paulo
   -  score=19 [architecture=32 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 5, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr5410=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C coe-municipal=A nbr16264=A
-  -  Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
-  -  Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
-  -  Dica missing_fixtures:r105 ref=nbr15575g w=0 | Falta fogão ou cooktop para testar o uso de cozinha.
-  -  Dica counter_total:r105 ref=alexander184 w=0 | 80 cm de bancada livre fora de pia, fogão e geladeira; abaixo de 366 cm falta onde pousar as coisas do preparo (mesa solta também conta).
-  -  Dica kitchen_spread:r105 ref=alexander184 w=0 | 326 cm entre armazenagem e bancada: acima de 305 cm cada par vira travessia, e o preparo se desfaz em idas e vindas.
-  -  Dica missing_work_zone:r105 ref=blum-zonas w=0 | Das cinco zonas de trabalho falta cocção: sem ela o fluxo mantimentos → armazenagem → lavagem → preparo → cocção se quebra.
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
-  -  Dica elec:network:r105 ref=nbr16264 w=0 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
-  -  Dica elec:tv:r105 ref=nbr16264 w=0 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
-  -  Dica plumb:drain:r105 ref=coe-municipal w=0 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
-  -  Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=7 [architecture=21 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 5, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs coe-municipal=A nbr15575g=A nbr5410=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C nbr16264=A
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 91 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
-  +  Dica living_seats:casa ref=- w=1 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
-  +  Dica wardrobe_capacity:casa ref=- w=1 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
-  +  Dica missing_fixtures:r105 ref=nbr15575g w=1 | Falta fogão ou cooktop para testar o uso de cozinha.
-  +  Dica counter_total:r105 ref=alexander184 w=1 | 80 cm de bancada livre fora de pia, fogão e geladeira; abaixo de 366 cm falta onde pousar as coisas do preparo (mesa solta também conta).
-  +  Dica kitchen_spread:r105 ref=alexander184 w=1 | 326 cm entre armazenagem e bancada: acima de 305 cm cada par vira travessia, e o preparo se desfaz em idas e vindas.
-  +  Dica missing_work_zone:r105 ref=blum-zonas w=1 | Das cinco zonas de trabalho falta cocção: sem ela o fluxo mantimentos → armazenagem → lavagem → preparo → cocção se quebra.
-  +  Dica elec:network:r105 ref=nbr16264 w=1 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
-  +  Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
-  +  Dica plumb:drain:r105 ref=coe-municipal w=1 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
-  +  Dica plumb:grease ref=nbr8160 w=1 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 91 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #5 / cadeirante
   score=17 [architecture=25 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 5, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr9050=A nbr15575g=A nbr5410=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C coe-municipal=A nbr16264=A
@@ -2633,10 +2513,10 @@ Cozinha #5 / cadeirante
  @ são paulo
   -  score=17 [architecture=25 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 5, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr9050=A nbr15575g=A nbr5410=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C coe-municipal=A nbr16264=A
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=5 [architecture=14 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 5, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs coe-municipal=A nbr9050=A nbr15575g=A nbr5410=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C nbr16264=A
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 91 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 91 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Cozinha #5 / família
   score=18 [architecture=25 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 5, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr15575g=A nbr5410=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C coe-municipal=A nbr16264=A
@@ -2671,10 +2551,10 @@ Cozinha #5 / família
  @ são paulo
   -  score=18 [architecture=25 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 5, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr5410=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C coe-municipal=A nbr16264=A
-  -  Dica city_not_declared:r105 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  score=6 [architecture=14 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 5, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs coe-municipal=A nbr15575g=A nbr5410=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C nbr16264=A
-  +  Erro free_circle:r105 ref=coe-municipal w=12 | Cabe um círculo de 91 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 91 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Banheiro #0 / casal
   score=23 [architecture=44 electrical=88 plumbing=79] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr5410=A nbr5626=A nbr8160=A nbr15575g=A nbr16264=A
@@ -3455,7 +3335,7 @@ Sala #5 / família
  @ curitiba
   -  score=25 [architecture=40 electrical=88 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr15575=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=coe-municipal w=1 | Menor lado de 65 cm; para área de serviço a referência é pelo menos 90 cm.
+  -  Dica room_narrow_side:r105 ref=coe-municipal | Menor lado de 65 cm; para área de serviço a referência é pelo menos 90 cm.
   +  score=26 [architecture=41 electrical=88 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr15575=A nbr5410=A nbr5626=A nbr8160=A nbr16264=A coe-municipal=A
 Área de serviço #0 / cadeirante
@@ -3482,7 +3362,7 @@ Sala #5 / família
  @ curitiba
   -  score=25 [architecture=40 electrical=88 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr15575=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=coe-municipal w=1 | Menor lado de 65 cm; para área de serviço a referência é pelo menos 90 cm.
+  -  Dica room_narrow_side:r105 ref=coe-municipal | Menor lado de 65 cm; para área de serviço a referência é pelo menos 90 cm.
   +  score=26 [architecture=41 electrical=88 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr15575=A nbr5410=A nbr5626=A nbr8160=A nbr16264=A coe-municipal=A
 Área de serviço #0 / família
@@ -3509,7 +3389,7 @@ Sala #5 / família
  @ curitiba
   -  score=25 [architecture=40 electrical=88 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr15575=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=coe-municipal w=1 | Menor lado de 65 cm; para área de serviço a referência é pelo menos 90 cm.
+  -  Dica room_narrow_side:r105 ref=coe-municipal | Menor lado de 65 cm; para área de serviço a referência é pelo menos 90 cm.
   +  score=26 [architecture=41 electrical=88 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr15575=A nbr5410=A nbr5626=A nbr8160=A nbr16264=A coe-municipal=A
 Área de serviço #1 / casal
@@ -3641,7 +3521,7 @@ Sala #5 / família
  @ curitiba
   -  score=38 [architecture=58 electrical=83 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=coe-municipal w=1 | Menor lado de 79 cm; para área de serviço a referência é pelo menos 90 cm.
+  -  Dica room_narrow_side:r105 ref=coe-municipal | Menor lado de 79 cm; para área de serviço a referência é pelo menos 90 cm.
   +  score=39 [architecture=59 electrical=83 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr5410=A nbr5626=A nbr8160=A nbr16264=A coe-municipal=A
 Área de serviço #3 / cadeirante
@@ -3667,7 +3547,7 @@ Sala #5 / família
  @ curitiba
   -  score=37 [architecture=53 electrical=83 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr9050=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=coe-municipal w=1 | Menor lado de 79 cm; para área de serviço a referência é pelo menos 90 cm.
+  -  Dica room_narrow_side:r105 ref=coe-municipal | Menor lado de 79 cm; para área de serviço a referência é pelo menos 90 cm.
   +  score=38 [architecture=54 electrical=83 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr9050=A nbr5410=A nbr5626=A nbr8160=A nbr16264=A coe-municipal=A
 Área de serviço #3 / família
@@ -3692,7 +3572,7 @@ Sala #5 / família
  @ curitiba
   -  score=38 [architecture=58 electrical=83 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr16264=A
-  -  Dica room_narrow_side:r105 ref=coe-municipal w=1 | Menor lado de 79 cm; para área de serviço a referência é pelo menos 90 cm.
+  -  Dica room_narrow_side:r105 ref=coe-municipal | Menor lado de 79 cm; para área de serviço a referência é pelo menos 90 cm.
   +  score=39 [architecture=59 electrical=83 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs nbr5410=A nbr5626=A nbr8160=A nbr16264=A coe-municipal=A
 Área de serviço #4 / casal
@@ -3811,7 +3691,7 @@ Corredor #0 / casal
  @ curitiba
   -  score=54 [architecture=54 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs coe-municipal=A
-  -  Alerta room_narrow_side:r105 ref=coe-municipal w=5 | Menor lado de 55 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r105 ref=coe-municipal | Menor lado de 55 cm; para circulação a referência é pelo menos 90 cm.
   +  score=59 [architecture=59 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs 
 Corredor #0 / cadeirante
@@ -3839,7 +3719,7 @@ Corredor #0 / família
  @ curitiba
   -  score=54 [architecture=54 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs coe-municipal=A
-  -  Alerta room_narrow_side:r105 ref=coe-municipal w=5 | Menor lado de 55 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r105 ref=coe-municipal | Menor lado de 55 cm; para circulação a referência é pelo menos 90 cm.
   +  score=59 [architecture=59 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs 
 Corredor #1 / casal
@@ -3913,7 +3793,7 @@ Corredor #3 / casal
  @ curitiba
   -  score=54 [architecture=54 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs coe-municipal=A
-  -  Alerta room_narrow_side:r105 ref=coe-municipal w=5 | Menor lado de 61 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r105 ref=coe-municipal | Menor lado de 61 cm; para circulação a referência é pelo menos 90 cm.
   +  score=59 [architecture=59 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs 
 Corredor #3 / cadeirante
@@ -3942,7 +3822,7 @@ Corredor #3 / família
  @ curitiba
   -  score=54 [architecture=54 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs coe-municipal=A
-  -  Alerta room_narrow_side:r105 ref=coe-municipal w=5 | Menor lado de 61 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r105 ref=coe-municipal | Menor lado de 61 cm; para circulação a referência é pelo menos 90 cm.
   +  score=59 [architecture=59 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs 
 Corredor #4 / casal
@@ -3958,7 +3838,7 @@ Corredor #4 / casal
  @ curitiba
   -  score=59 [architecture=59 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs coe-municipal=A
-  -  Alerta room_narrow_side:r105 ref=coe-municipal w=5 | Menor lado de 76 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r105 ref=coe-municipal | Menor lado de 76 cm; para circulação a referência é pelo menos 90 cm.
   +  score=64 [architecture=64 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs 
 Corredor #4 / cadeirante
@@ -3984,7 +3864,7 @@ Corredor #4 / família
  @ curitiba
   -  score=59 [architecture=59 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   -  refs coe-municipal=A
-  -  Alerta room_narrow_side:r105 ref=coe-municipal w=5 | Menor lado de 76 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r105 ref=coe-municipal | Menor lado de 76 cm; para circulação a referência é pelo menos 90 cm.
   +  score=64 [architecture=64 electrical=100 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs 
 Corredor #5 / casal
@@ -4469,7 +4349,7 @@ Apartamento #1 / casal
  @ curitiba
   -  score=0 [architecture=10 electrical=61 plumbing=100] capacity=Capacity { beds: 5, bedrooms: 3, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 540.0 }
   -  refs nbr15575g=A coe-municipal=A nbr5410=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=coe-municipal w=1 | Menor lado de 76 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r106 ref=coe-municipal | Menor lado de 76 cm; para circulação a referência é pelo menos 90 cm.
   +  score=0 [architecture=15 electrical=61 plumbing=100] capacity=Capacity { beds: 5, bedrooms: 3, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 540.0 }
   +  refs nbr15575g=A nbr5410=A coe-municipal=A nbr16264=A
 Apartamento #1 / cadeirante
@@ -4545,7 +4425,7 @@ Apartamento #1 / família
   Dica elec:hidden:f141 ref=nbr5410 w=0 | switch f141 fica atrás da folha aberta de door (f132): ponha-o do lado da maçaneta.
  @ curitiba
   -  refs nbr15575g=A nbr9050=A coe-municipal=A nbr5410=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=coe-municipal w=1 | Menor lado de 76 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r106 ref=coe-municipal | Menor lado de 76 cm; para circulação a referência é pelo menos 90 cm.
   +  refs nbr15575g=A nbr9050=A nbr5410=A coe-municipal=A nbr16264=A
 Apartamento #2 / casal
   score=0 [architecture=23 electrical=57 plumbing=69] capacity=Capacity { beds: 3, bedrooms: 2, bathrooms: 1, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
@@ -4596,7 +4476,7 @@ Apartamento #2 / casal
  @ curitiba
   -  score=0 [architecture=23 electrical=57 plumbing=69] capacity=Capacity { beds: 3, bedrooms: 2, bathrooms: 1, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A coe-municipal=A nbr5410=A nbr5626=A nbr8160=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=coe-municipal w=1 | Menor lado de 68 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r106 ref=coe-municipal | Menor lado de 68 cm; para circulação a referência é pelo menos 90 cm.
   +  score=0 [architecture=28 electrical=57 plumbing=69] capacity=Capacity { beds: 3, bedrooms: 2, bathrooms: 1, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr16264=A
 Apartamento #2 / cadeirante
@@ -4708,7 +4588,7 @@ Apartamento #2 / família
   Dica plumb:drain:r134 ref=nbr8160 w=0 | Sem ralo: a área do box pede um ralo sifonado (caixa sifonada), que também recebe o lavatório.
  @ curitiba
   -  refs ibge-adensamento=D nbr15575g=A nbr9050=A coe-municipal=A nbr5410=A nbr5626=A nbr8160=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=coe-municipal w=1 | Menor lado de 68 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r106 ref=coe-municipal | Menor lado de 68 cm; para circulação a referência é pelo menos 90 cm.
   +  refs ibge-adensamento=D nbr15575g=A nbr9050=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr16264=A
 Apartamento #3 / casal
   score=0 [architecture=0 electrical=45 plumbing=66] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 1, dining_seats: 5, living_seats: 0, wardrobe_cm: 180.0 }
@@ -4772,12 +4652,12 @@ Apartamento #3 / casal
   Dica plumb:drain:r133 ref=nbr8160 w=0 | Sem ralo: a área do box pede um ralo sifonado (caixa sifonada), que também recebe o lavatório.
  @ são paulo
   -  refs nbr5410=A nbr15575g=A coe-municipal=A nbr13103=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C nbr16264=A
-  -  Dica city_not_declared:r107 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r107 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  refs nbr5410=A coe-municipal=A nbr15575g=A nbr13103=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C nbr16264=A
-  +  Erro free_circle:r107 ref=coe-municipal w=12 | Cabe um círculo de 89 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  +  Erro free_circle:r107 ref=coe-municipal | Cabe um círculo de 89 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
  @ curitiba
   -  refs nbr5410=A nbr15575g=A coe-municipal=A nbr13103=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=coe-municipal w=1 | Menor lado de 81 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r106 ref=coe-municipal | Menor lado de 81 cm; para circulação a referência é pelo menos 90 cm.
   +  refs nbr5410=A nbr15575g=A nbr13103=A nbr5626=A nbr8160=A coe-municipal=A alexander184=C blum-zonas=C nbr16264=A
 Apartamento #3 / cadeirante
   score=0 [architecture=0 electrical=45 plumbing=66] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 1, dining_seats: 5, living_seats: 0, wardrobe_cm: 180.0 }
@@ -4849,9 +4729,9 @@ Apartamento #3 / cadeirante
   Dica plumb:drain:r133 ref=nbr8160 w=0 | Sem ralo: a área do box pede um ralo sifonado (caixa sifonada), que também recebe o lavatório.
  @ são paulo
   -  refs nbr5410=A nbr9050=A nbr15575g=A nbr13103=A nbr5626=A nbr8160=A coe-municipal=A alexander184=C blum-zonas=C nbr16264=A
-  -  Dica city_not_declared:r107 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r107 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  refs nbr5410=A coe-municipal=A nbr9050=A nbr15575g=A nbr13103=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C nbr16264=A
-  +  Erro free_circle:r107 ref=coe-municipal w=12 | Cabe um círculo de 89 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  +  Erro free_circle:r107 ref=coe-municipal | Cabe um círculo de 89 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
 Apartamento #3 / família
   score=0 [architecture=0 electrical=45 plumbing=66] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 1, dining_seats: 5, living_seats: 0, wardrobe_cm: 180.0 }
   refs nbr5410=A ibge-adensamento=D nbr15575g=A nbr9050=A coe-municipal=A nbr13103=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C nbr16264=A
@@ -4925,12 +4805,12 @@ Apartamento #3 / família
   Dica plumb:drain:r133 ref=nbr8160 w=0 | Sem ralo: a área do box pede um ralo sifonado (caixa sifonada), que também recebe o lavatório.
  @ são paulo
   -  refs nbr5410=A ibge-adensamento=D nbr15575g=A nbr9050=A coe-municipal=A nbr13103=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C nbr16264=A
-  -  Dica city_not_declared:r107 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
+  -  Dica city_not_declared:r107 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  refs nbr5410=A coe-municipal=A ibge-adensamento=D nbr15575g=A nbr9050=A nbr13103=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C nbr16264=A
-  +  Erro free_circle:r107 ref=coe-municipal w=12 | Cabe um círculo de 89 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+  +  Erro free_circle:r107 ref=coe-municipal | Cabe um círculo de 89 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
  @ curitiba
   -  refs nbr5410=A ibge-adensamento=D nbr15575g=A nbr9050=A coe-municipal=A nbr13103=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=coe-municipal w=1 | Menor lado de 81 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r106 ref=coe-municipal | Menor lado de 81 cm; para circulação a referência é pelo menos 90 cm.
   +  refs nbr5410=A ibge-adensamento=D nbr15575g=A nbr9050=A nbr13103=A nbr5626=A nbr8160=A coe-municipal=A blum-zonas=C panero-zelnik=C alexander184=C nbr16264=A
 Apartamento #4 / casal
   score=0 [architecture=0 electrical=56 plumbing=79] capacity=Capacity { beds: 5, bedrooms: 2, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 360.0 }
@@ -4984,7 +4864,7 @@ Apartamento #4 / casal
   Dica plumb:drain:r131 ref=coe-municipal w=0 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
  @ curitiba
   -  refs nbr15575g=A coe-municipal=A nbr5410=A nbr5626=A nbr8160=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=coe-municipal w=1 | Menor lado de 66 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r106 ref=coe-municipal | Menor lado de 66 cm; para circulação a referência é pelo menos 90 cm.
   +  refs nbr15575g=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr16264=A
 Apartamento #4 / cadeirante
   score=0 [architecture=0 electrical=56 plumbing=79] capacity=Capacity { beds: 5, bedrooms: 2, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 360.0 }
@@ -5101,7 +4981,7 @@ Apartamento #4 / família
   Dica plumb:drain:r131 ref=coe-municipal w=0 | Sem ralo no piso: o Código Sanitário de SP obriga captação de água no piso de banheiros, cozinhas, copas e lavanderias (pode ser ralo seco).
  @ curitiba
   -  refs ibge-adensamento=D nbr15575g=A nbr9050=A coe-municipal=A nbr5410=A nbr5626=A nbr8160=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=coe-municipal w=1 | Menor lado de 66 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r106 ref=coe-municipal | Menor lado de 66 cm; para circulação a referência é pelo menos 90 cm.
   +  refs ibge-adensamento=D nbr15575g=A nbr9050=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr16264=A
 Apartamento #5 / casal
   score=0 [architecture=24 electrical=55 plumbing=68] capacity=Capacity { beds: 4, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 4, wardrobe_cm: 180.0 }
@@ -5150,7 +5030,7 @@ Apartamento #5 / casal
  @ curitiba
   -  score=0 [architecture=24 electrical=55 plumbing=68] capacity=Capacity { beds: 4, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 4, wardrobe_cm: 180.0 }
   -  refs nbr15575g=A coe-municipal=A nbr5410=A nbr5626=A nbr8160=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=coe-municipal w=1 | Menor lado de 80 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r106 ref=coe-municipal | Menor lado de 80 cm; para circulação a referência é pelo menos 90 cm.
   +  score=0 [architecture=29 electrical=55 plumbing=68] capacity=Capacity { beds: 4, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 4, wardrobe_cm: 180.0 }
   +  refs nbr15575g=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr16264=A
 Apartamento #5 / cadeirante
@@ -5259,7 +5139,7 @@ Apartamento #5 / família
  @ curitiba
   -  score=0 [architecture=0 electrical=55 plumbing=68] capacity=Capacity { beds: 4, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 4, wardrobe_cm: 180.0 }
   -  refs ibge-adensamento=D nbr15575g=A nbr9050=A coe-municipal=A nbr5410=A nbr5626=A nbr8160=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=coe-municipal w=1 | Menor lado de 80 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r106 ref=coe-municipal | Menor lado de 80 cm; para circulação a referência é pelo menos 90 cm.
   +  score=0 [architecture=1 electrical=55 plumbing=68] capacity=Capacity { beds: 4, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 4, wardrobe_cm: 180.0 }
   +  refs ibge-adensamento=D nbr15575g=A nbr9050=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr16264=A
 Apartamento #6 / casal
@@ -5296,7 +5176,7 @@ Apartamento #6 / casal
  @ curitiba
   -  score=27 [architecture=52 electrical=61 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 1, wardrobe_cm: 180.0 }
   -  refs coe-municipal=A nbr5410=A nbr5626=A nbr8160=A nbr15575g=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=coe-municipal w=1 | Menor lado de 89 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r106 ref=coe-municipal | Menor lado de 89 cm; para circulação a referência é pelo menos 90 cm.
   +  score=28 [architecture=57 electrical=61 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 1, wardrobe_cm: 180.0 }
   +  refs nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr15575g=A nbr16264=A
 Apartamento #6 / cadeirante
@@ -5371,7 +5251,7 @@ Apartamento #6 / família
  @ curitiba
   -  score=24 [architecture=40 electrical=61 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 1, wardrobe_cm: 180.0 }
   -  refs ibge-adensamento=D nbr9050=A coe-municipal=A nbr5410=A nbr5626=A nbr8160=A nbr15575g=A nbr16264=A
-  -  Alerta room_narrow_side:r106 ref=coe-municipal w=1 | Menor lado de 89 cm; para circulação a referência é pelo menos 90 cm.
+  -  Alerta room_narrow_side:r106 ref=coe-municipal | Menor lado de 89 cm; para circulação a referência é pelo menos 90 cm.
   +  score=25 [architecture=41 electrical=61 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 1, wardrobe_cm: 180.0 }
   +  refs ibge-adensamento=D nbr9050=A nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr15575g=A nbr16264=A
 Apartamento #7 / casal

@@ -399,39 +399,69 @@ fn inside(points: &[Point2], p: Point2) -> bool {
 /// residential table of the NBR 5413:1992 it replaced (middle values), and
 /// 8995-1 where 5413 has none (office, laundry, dining).
 pub fn recommended_lux(name: &str) -> (f64, &'static str) {
-    lux_for(crate::vocabulary::mentions(name))
+    let reference = lux_for(crate::vocabulary::mentions(name));
+    (reference.lux, reference.what)
+}
+
+/// The illuminance a room should reach, what for, and the standard that
+/// says so — each value cites its own table, not both of them at once.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LuxReference {
+    pub lux: f64,
+    pub what: &'static str,
+    /// Registry code of the table the value comes from; `None` where no
+    /// standard gives one and the value is practice.
+    pub source: Option<&'static str>,
 }
 
 /// The same, for what a room is rather than what it is called.
 #[must_use]
-pub fn lux_for(says: crate::vocabulary::Mentions) -> (f64, &'static str) {
+pub fn lux_for(says: crate::vocabulary::Mentions) -> LuxReference {
     use crate::vocabulary::Mention as M;
-    if says.any(&[M::Office, M::Study]) {
-        (500.0, "leitura e trabalho")
+    let (lux, what, source) = if says.any(&[M::Office, M::Study]) {
+        (500.0, "leitura e trabalho", Some("nbr8995"))
     } else if says.any(&[M::Kitchen, M::Gourmet]) {
-        (150.0, "cozinha (bancada, fogão e pia: 300 lx localizado)")
+        (
+            150.0,
+            "cozinha (bancada, fogão e pia: 300 lx localizado)",
+            Some("nbr5413"),
+        )
     } else if says.has(M::Laundry) {
-        (300.0, "lavanderia (valor de lavanderia da 8995-1)")
+        (
+            300.0,
+            "lavanderia (valor de lavanderia da 8995-1)",
+            Some("nbr8995"),
+        )
     } else if says.any(&[M::Bathroom, M::Lavatory]) {
-        (150.0, "banheiro (espelho: 300 lx localizado)")
+        (
+            150.0,
+            "banheiro (espelho: 300 lx localizado)",
+            Some("nbr5413"),
+        )
     } else if says.has(M::Dining) {
-        (200.0, "jantar (valor de refeitório da 8995-1)")
+        (
+            200.0,
+            "jantar (valor de refeitório da 8995-1)",
+            Some("nbr8995"),
+        )
     } else if says.has(M::Bedroom) {
         (
             150.0,
             "dormitório (espelho, penteadeira e cama: 300 lx localizado)",
+            Some("nbr5413"),
         )
     } else if says.any(&[M::Living, M::Tv]) {
-        (150.0, "estar")
+        (150.0, "estar", Some("nbr5413"))
     } else if says.any(&[M::Corridor, M::Stairs, M::Entrance]) {
-        (100.0, "circulação")
+        (100.0, "circulação", Some("nbr5413"))
     } else if says.has(M::Garage) {
-        (100.0, "garagem")
+        (100.0, "garagem", Some("nbr5413"))
     } else if says.any(&[M::Balcony, M::Outdoor]) {
-        (30.0, "área externa (prática; sem norma)")
+        (30.0, "área externa (prática; sem norma)", None)
     } else {
-        (150.0, "uso geral residencial")
-    }
+        (150.0, "uso geral residencial", Some("nbr5413"))
+    };
+    LuxReference { lux, what, source }
 }
 
 /// Surface reflectances used for interreflected light.
@@ -468,6 +498,8 @@ pub struct RoomLighting {
     pub indirect: f64,
     pub target: f64,
     pub target_use: &'static str,
+    /// The table `target` comes from, if any — see [`LuxReference`].
+    pub target_source: Option<&'static str>,
     /// Emitters inside the room.
     pub fixtures: usize,
     pub lumens: f64,
@@ -577,7 +609,7 @@ pub fn room_lighting(
     let min = values.iter().copied().fold(f64::MAX, f64::min).min(1e12);
     let max = values.iter().copied().fold(0.0, f64::max);
     let average = direct_avg + indirect;
-    let (target, target_use) = lux_for(room.mentions());
+    let reference = lux_for(room.mentions());
     RoomLighting {
         room: room.id,
         name: room.name.clone(),
@@ -595,8 +627,9 @@ pub fn room_lighting(
             0.0
         },
         indirect,
-        target,
-        target_use,
+        target: reference.lux,
+        target_use: reference.what,
+        target_source: reference.source,
         fixtures: own.len(),
         lumens,
         watts,

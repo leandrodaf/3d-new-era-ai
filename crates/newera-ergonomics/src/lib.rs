@@ -36,7 +36,7 @@ mod rule;
 mod scene;
 
 use crate::rule::Rule;
-use newera_core::standards::{self, Confidence, Resolved, Standard, Tier};
+use newera_core::standards::{self, Resolved, Standard};
 use newera_core::{Home, OpeningKind, Point2};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -349,18 +349,7 @@ impl Review<'_, '_> {
     /// sets the ceiling; and a figure we could not confirm may warn, never
     /// accuse. Common practice cites nothing and is capped by nothing.
     fn weigh(&self, severity: Severity, code: Option<&str>) -> Option<Severity> {
-        let Some(source) = code.and_then(standards::standard) else {
-            return Some(severity);
-        };
-        let tier = source.force(&self.place);
-        if tier == Tier::E {
-            return None;
-        }
-        let mut severity = severity.max(Severity::ceiling(tier));
-        if source.confidence == Confidence::ConfirmBeforeUse {
-            severity = severity.max(Severity::Alerta);
-        }
-        Some(severity)
+        standards::weigh(severity, code, &self.place)
     }
 
     /// The figure called `name` where this review is conducted. Asked of the
@@ -593,18 +582,7 @@ impl Review<'_, '_> {
             return;
         }
         for f in newera_core::electrical::check(self.scene.home) {
-            let severity = match f.severity {
-                Severity::Erro => Severity::Alerta,
-                Severity::Alerta | Severity::Dica => Severity::Dica,
-            };
-            self.findings.push(Finding {
-                severity,
-                place: f.place,
-                message: f.message,
-                reference: Some(f.source),
-                key: f.key,
-                ..Finding::default()
-            });
+            self.findings.push(imported(f, true));
         }
     }
 
@@ -616,31 +594,13 @@ impl Review<'_, '_> {
     /// guards a fall is a safety matter, and weighs as such.
     fn guards(&mut self) {
         for f in newera_core::guard::check(self.scene.home) {
-            self.findings.push(Finding {
-                severity: f.severity,
-                place: f.place,
-                message: f.message,
-                reference: Some(f.source),
-                key: f.key,
-                ..Finding::default()
-            });
+            self.findings.push(imported(f, false));
         }
     }
 
     fn plumbing(&mut self) {
         for f in newera_core::plumbing::check(self.scene.home) {
-            let severity = match f.severity {
-                Severity::Erro => Severity::Alerta,
-                Severity::Alerta | Severity::Dica => Severity::Dica,
-            };
-            self.findings.push(Finding {
-                severity,
-                place: f.place,
-                message: f.message,
-                reference: Some(f.source),
-                key: f.key,
-                ..Finding::default()
-            });
+            self.findings.push(imported(f, true));
         }
     }
 
@@ -2189,6 +2149,34 @@ struct RoomFacts {
     glass: f64,
     uses: Vec<Use>,
     index: usize,
+}
+
+/// A finding another discipline made, brought into the review — the one
+/// policy for all three.
+///
+/// It arrives already weighed at the project's place by the discipline
+/// itself (see [`newera_core::electrical::weighed`]), so the discipline tool
+/// and the review agree on what a source may claim there. What the review adds
+/// is how much the finding counts *here*: an electrical or plumbing project is
+/// judged by its own tool and scored as its own discipline, and in the
+/// habitability review a missing socket is one step lighter than in the
+/// installation project — an error there is a warning here. A guard is not an
+/// installation project: a fall from a balcony is habitability itself, and it
+/// comes in as heavy as it left.
+fn imported(f: newera_core::electrical::Finding, lighter: bool) -> Finding {
+    let severity = match (lighter, f.severity) {
+        (false, severity) => severity,
+        (true, Severity::Erro) => Severity::Alerta,
+        (true, Severity::Alerta | Severity::Dica) => Severity::Dica,
+    };
+    Finding {
+        severity,
+        place: f.place,
+        message: f.message,
+        reference: Some(f.source),
+        key: f.key,
+        ..Finding::default()
+    }
 }
 
 trait Midpoint {

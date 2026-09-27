@@ -111,8 +111,13 @@ fn line_of(f: &Furniture) -> (Point2, Point2) {
     )
 }
 
-/// What the guards and closures of the storey shown ask.
+/// What the guards and closures of the storey shown ask, weighed at the
+/// place the project is — see [`crate::electrical::weighed`].
 pub fn check(home: &Home) -> Vec<Finding> {
+    crate::electrical::weighed(home, found(home))
+}
+
+fn found(home: &Home) -> Vec<Finding> {
     let view = home.level_view(home.current_level());
     let pieces: Vec<(&Furniture, Guard)> = view
         .furniture

@@ -127,14 +127,21 @@ impl NewEraMcp {
         }
         let Some(cat) = &p.fill else {
             let lights = emitters(&home, &newera_catalog::light_for);
+            // The tables actually used: a lux given in the call cites none.
+            let mut codes: Vec<&str> = Vec::new();
             let rows: Vec<serde_json::Value> = rooms
                 .iter()
                 .map(|room| {
                     let r = room_lighting(&home, &lights, room, plane, Reflectance::default());
+                    if p.lux.is_none() {
+                        codes.extend(r.target_source);
+                    }
                     let wanted = p.lux.unwrap_or(r.target);
                     row(&r, wanted)
                 })
                 .collect();
+            codes.sort_unstable();
+            codes.dedup();
             let lumens: f64 = lights.iter().map(|e| e.flux).sum();
             let watts: f64 = lights.iter().map(|e| e.watts).sum();
             return Ok(serde_json::json!({
@@ -142,7 +149,7 @@ impl NewEraMcp {
                 "fixtures": lights.len(),
                 "lm": lumens.round(),
                 "W": watts.round(),
-                "sources": super::sources(&["nbr5413", "nbr8995"], &home.compass.place()),
+                "sources": super::sources(&codes, &home.compass.place()),
             })
             .to_string());
         };
@@ -269,8 +276,10 @@ mod tests {
         let dark = rate("{}");
         // A home kitchen: NBR 5413's residential 150 lx (300 at the counter).
         assert_eq!(dark["rooms"][0][6], 150.0, "{dark}");
-        // The reference lux carries the standards it comes from.
+        // The reference lux carries the standard it comes from, and only it:
+        // a kitchen's value is 5413's residential table, not 8995-1's.
         assert!(dark["sources"]["nbr5413"].is_array(), "{dark}");
+        assert!(dark["sources"].get("nbr8995").is_none(), "{dark}");
         assert!(
             dark["rooms"][0][9].as_str().unwrap().starts_with("abaixo"),
             "{dark}"

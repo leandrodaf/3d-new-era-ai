@@ -1531,8 +1531,43 @@ pub struct Finding {
     pub accepted: Option<String>,
 }
 
-/// What NBR 5410 asks of each room, and what a home's network needs.
+/// Findings as they weigh at the project's place.
+///
+/// Each discipline sets a severity with its source in mind — at home, where
+/// the source has the force it was written with. What a border takes from
+/// that force it takes from the finding: NBR 5410 accuses in São Paulo and
+/// warns in Texas, because there it is a reference. Nothing changes where the
+/// source weighs what it weighs at home, which is how a manufacturer's word on
+/// its own product, or a physical collision, keeps the severity its rule gave.
+pub fn weighed(home: &Home, found: Vec<Finding>) -> Vec<Finding> {
+    use crate::standards::{Place, Severity, Tier, standard};
+    let at = home.compass.place();
+    let home_country = Place::new(Some(Place::HOME_COUNTRY), None, None);
+    found
+        .into_iter()
+        .filter_map(|mut f| {
+            if let Some(source) = standard(f.source) {
+                let here = source.force(&at);
+                if here > source.force(&home_country) {
+                    if here == Tier::E {
+                        return None;
+                    }
+                    f.severity = f.severity.max(Severity::ceiling(here));
+                }
+            }
+            Some(f)
+        })
+        .collect()
+}
+
+/// What NBR 5410 asks of each room, and what a home's network needs, each
+/// finding weighed at the place the project is — see [`weighed`].
 pub fn check(home: &Home) -> Vec<Finding> {
+    weighed(home, found(home))
+}
+
+/// What the rules find, at the severity each one declares.
+fn found(home: &Home) -> Vec<Finding> {
     let view = home.level_view(home.current_level());
     let all = points(home);
     let mut out = Vec::new();
@@ -2467,6 +2502,27 @@ mod tests {
         assert!(!keys.contains(&"elec:short-circuit".to_owned()));
         // Enel SP asks 10 kA of breakers up to 63 A, whatever less is informed.
         assert!((super::panel(&home).unwrap().icn_ka - 10.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_border_takes_from_a_finding_what_it_takes_from_its_source() {
+        let mut home = Home::default();
+        home.rooms = vec![room(1, "Bedroom", 0.0, 400.0, 400.0)];
+        let light = |home: &Home| {
+            check(home)
+                .into_iter()
+                .find(|f| f.key == "elec:light:r1")
+                .map(|f| f.severity)
+        };
+        // At home NBR 5410 obliges: a room with no light point is an error,
+        // whatever language the room is named in.
+        assert_eq!(light(&home), Some(Severity::Erro));
+        home.compass.country = Some("br".into());
+        assert_eq!(light(&home), Some(Severity::Erro));
+        // In Texas it is a reference: still said, no longer an accusation.
+        home.compass.country = Some("us".into());
+        home.compass.region = Some("tx".into());
+        assert_eq!(light(&home), Some(Severity::Alerta));
     }
 
     #[test]
