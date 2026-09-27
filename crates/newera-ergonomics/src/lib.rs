@@ -171,14 +171,16 @@ pub struct Finding {
 }
 
 impl Finding {
+    /// The discipline it is scored under: the tool that made it, or the
+    /// rule it answers to — never the code it cites.
     #[must_use]
     pub fn discipline(&self) -> &'static str {
-        if self.key.starts_with("elec:") || self.reference == Some("nbr5410") {
+        if self.key.starts_with("elec:") {
             "electrical"
         } else if self.key.starts_with("plumb:") {
             "plumbing"
         } else {
-            "architecture"
+            Rule::of_key(&self.key).map_or("architecture", Rule::discipline)
         }
     }
 }
@@ -2782,6 +2784,38 @@ mod tests {
     use newera_core::{Furniture, FurnitureId, Room, RoomId, Wall, WallId};
 
     use super::*;
+
+    #[test]
+    fn a_finding_is_scored_under_its_rule_not_under_the_code_it_cites() {
+        let finding = |key: &str, code: &'static str| Finding {
+            key: key.to_owned(),
+            reference: Some(code),
+            ..Finding::default()
+        };
+        // A socket count is electrical whichever electrical code it stands on.
+        assert_eq!(
+            finding("kitchen_sockets:r1", "nbr5410").discipline(),
+            "electrical"
+        );
+        assert_eq!(
+            finding("counter_sockets:r1", "irc2024").discipline(),
+            "electrical"
+        );
+        // And a rule of the room stays architecture, whatever it cites.
+        assert_eq!(
+            finding("room_area:r1", "nbr5410").discipline(),
+            "architecture"
+        );
+        assert_eq!(
+            finding("elec:light:r1", "nbr5410").discipline(),
+            "electrical"
+        );
+        assert_eq!(finding("plumb:cold:f1", "nbr5626").discipline(), "plumbing");
+        assert_eq!(
+            finding("guard:height:f1", "nbr14718").discipline(),
+            "architecture"
+        );
+    }
 
     #[test]
     fn score_scope_keeps_unmodeled_installations_visible_without_penalizing_architecture() {
