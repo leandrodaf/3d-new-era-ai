@@ -352,7 +352,14 @@ build_from_source() {
     mkdir -p "$WORK/app"
     bash "$src/scripts/macos-app.sh" "$CARGO_TARGET_DIR/release/newera" "$WORK/app" "$COMMIT" >/dev/null
     place_app "$WORK/app/3D New Era AI.app"
-    [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] && remember "$COMMIT"
+    # A build we cannot name by its commit (a local tree, an unresolved ref)
+    # still replaces what was there: saying "source" keeps a stale
+    # `release:<tag>` from making the next release run think it is installed.
+    if [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+        remember "$COMMIT"
+    else
+        remember "source"
+    fi
     info "ok (${COMMIT:0:12})"
 }
 
