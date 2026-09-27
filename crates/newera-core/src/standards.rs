@@ -796,8 +796,21 @@ pub static STANDARDS: &[Standard] = &[
 
 /// The source behind `code`, if it is one we hold.
 pub fn standard(code: &str) -> Option<&'static Standard> {
-    STANDARDS.iter().find(|s| s.code == code)
+    sources().find(|s| s.code == code)
 }
+
+/// Every source we hold: the home pack and the world's, then each foreign
+/// country's own.
+pub fn sources() -> impl Iterator<Item = &'static Standard> {
+    STANDARDS.iter().chain(us::STANDARDS)
+}
+
+/// Every figure a rule can ask for, in every pack.
+pub fn figures() -> impl Iterator<Item = &'static Figure> {
+    FIGURES.iter().chain(us::FIGURES)
+}
+
+mod us;
 
 /// Where a project stands, as far as a building code cares.
 ///
@@ -1322,7 +1335,14 @@ pub static FIGURES: &[Figure] = &[
         "NBR 15575-1 16.1.1: 2,50 m",
     ),
     br(
-        "room.min_ceiling.short_stay",
+        "room.bathroom.min_ceiling",
+        "nbr15575",
+        AtLeast(230.0),
+        Alerta,
+        "NBR 15575-1 16.1.1: 2,30 m em halls, corredores, banheiros e despensas",
+    ),
+    br(
+        "room.corridor.min_ceiling",
         "nbr15575",
         AtLeast(230.0),
         Alerta,
@@ -1618,17 +1638,14 @@ pub fn figure(name: &str, at: &Place) -> Option<Resolved> {
             }
         })
     };
-    let named = FIGURES
-        .iter()
-        .filter(|f| f.name == name && f.authority.covers(&here));
+    let named = figures().filter(|f| f.name == name && f.authority.covers(&here));
     if let Some(figure) = strictest(&mut named.into_iter()) {
         return Some(Resolved {
             figure,
             named: names(&figure.authority, &here),
         });
     }
-    let home = FIGURES
-        .iter()
+    let home = figures()
         .filter(|f| f.name == name && f.authority == Authority::Country(Place::HOME_COUNTRY));
     strictest(&mut home.into_iter()).map(|figure| Resolved {
         figure,
@@ -1643,8 +1660,7 @@ pub fn figure(name: &str, at: &Place) -> Option<Resolved> {
 /// rules ask this instead.
 #[must_use]
 pub fn figures_at(at: &Place) -> std::collections::BTreeMap<&'static str, Resolved> {
-    FIGURES
-        .iter()
+    figures()
         .filter_map(|f| figure(f.name, at).map(|r| (f.name, r)))
         .collect()
 }
@@ -1722,10 +1738,10 @@ mod tests {
 
     #[test]
     fn codes_are_unique_and_resolvable() {
-        for s in STANDARDS {
+        for s in sources() {
             assert_eq!(standard(s.code), Some(s), "{} resolves to itself", s.code);
             assert_eq!(
-                STANDARDS.iter().filter(|o| o.code == s.code).count(),
+                sources().filter(|o| o.code == s.code).count(),
                 1,
                 "{} appears once",
                 s.code
@@ -1846,6 +1862,8 @@ mod tests {
         ("en1116", Tier::B),
         ("nkba", Tier::B),
         ("irc2024", Tier::B),
+        ("irc2024-planning", Tier::B),
+        ("icc-a117", Tier::B),
         ("alexander184", Tier::C),
         ("blum-zonas", Tier::C),
         ("gilbreth-triangulo", Tier::C),
@@ -1861,7 +1879,7 @@ mod tests {
     fn every_source_is_worth_in_brazil_what_it_was_worth_before_force_was_computed() {
         assert_eq!(
             IN_BRAZIL.len(),
-            STANDARDS.len(),
+            sources().count(),
             "a source was added or removed without saying what it is worth here"
         );
         // Every Brazilian way of saying where the project is, including saying
@@ -2008,7 +2026,7 @@ mod tests {
             cited > 40,
             "the scan found only {cited} citations: is it reading?"
         );
-        for f in FIGURES {
+        for f in figures() {
             if let Some(code) = f.source {
                 assert!(
                     standard(code).is_some(),
@@ -2050,8 +2068,13 @@ mod tests {
         assert!(!side.named);
         assert_eq!(side.source, Some("nbr15575g"));
         assert_eq!(standard("nbr15575g").unwrap().force(&miami), Tier::B);
-        // A city's decree and a state's code stay home.
-        assert!(figure("room.bedroom.min_area", &miami).is_none());
+        // A city's decree and a state's code stay home: Miami hears the IRC
+        // about a bedroom's area, never São Paulo's decree, and nothing about
+        // a kitchen's, which the IRC exempts.
+        assert_eq!(
+            figure("room.bedroom.min_area", &miami).map(|f| f.source),
+            Some(Some("irc2024-planning"))
+        );
         assert!(figure("room.kitchen.min_area", &miami).is_none());
         assert!(figure("kitchen.free_circle", &miami).is_none());
         // What no one publishes travels everywhere, as what it is.
@@ -2064,8 +2087,9 @@ mod tests {
     /// "No figure here, so the rule does not apply" is what feeds
     /// `orphaned()`, and `accept(prune=true)` deletes what that lists. So a
     /// figure missing at a place is a decision, and this is where it is
-    /// written down: only a city's or a state's own numbers may go quiet, and
-    /// only outside the territory they speak for.
+    /// written down: a name may go quiet only where the home pack's own rows
+    /// for it are a city's or a state's, and only outside their territory with
+    /// no row of the place's own country to answer instead.
     #[test]
     fn every_figure_resolves_everywhere_unless_it_is_local() {
         let places = [
@@ -2079,22 +2103,28 @@ mod tests {
             Place::new(Some("de"), None, None),
             Place::new(Some("pt"), None, None),
         ];
-        let mut names: Vec<&str> = FIGURES.iter().map(|f| f.name).collect();
+        let mut names: Vec<&str> = figures().map(|f| f.name).collect();
         names.sort_unstable();
         names.dedup();
         for name in names {
-            let local = FIGURES.iter().filter(|f| f.name == name).all(|f| {
-                matches!(
-                    f.authority,
-                    Authority::City { .. } | Authority::Region { .. }
-                )
-            });
+            // The home pack: everything but another country's own rows.
+            let foreign = |f: &&Figure| matches!(f.authority, Authority::Country(c) if c != Place::HOME_COUNTRY);
+            let local = figures()
+                .filter(|f| f.name == name && !foreign(f))
+                .all(|f| {
+                    matches!(
+                        f.authority,
+                        Authority::City { .. } | Authority::Region { .. }
+                    )
+                });
             for at in &places {
                 let found = figure(name, at);
                 if local {
-                    // Quiet only where another city or state was named.
-                    let rows = FIGURES.iter().filter(|f| f.name == name);
-                    let covered = rows.clone().any(|f| f.authority.covers(&at.or_home()));
+                    // Quiet only where nothing covers: another city or state
+                    // named, and no row of the country's own.
+                    let covered = figures()
+                        .filter(|f| f.name == name)
+                        .any(|f| f.authority.covers(&at.or_home()));
                     assert_eq!(found.is_some(), covered, "{name} at {at:?}");
                 } else {
                     assert!(found.is_some(), "{name} goes quiet at {at:?}");
@@ -2104,8 +2134,53 @@ mod tests {
     }
 
     #[test]
+    fn in_miami_the_irc_and_a117_judge_and_at_home_they_say_nothing() {
+        let miami = Place::new(Some("us"), Some("fl"), Some("miami"));
+        let at = |name: &str, place: &Place| {
+            let found = figure(name, place).unwrap_or_else(|| panic!("{name} at {place:?}"));
+            (found.bound.value(), found.source, found.named)
+        };
+        // IRC R304.1: 70 sq ft, and it obliges there.
+        let (area, source, named) = at("room.bedroom.min_area", &miami);
+        assert!((area - 65_032.1).abs() < 1.0, "{area}");
+        assert_eq!(source, Some("irc2024-planning"));
+        assert!(named);
+        assert_eq!(standard("irc2024-planning").unwrap().force(&miami), Tier::A);
+        // R305.1: 7 ft, 6 ft 8 in where water is.
+        assert!((at("room.min_ceiling", &miami).0 - 213.36).abs() < 0.01);
+        assert!((at("room.bathroom.min_ceiling", &miami).0 - 203.2).abs() < 0.01);
+        assert!((at("room.corridor.min_ceiling", &miami).0 - 213.36).abs() < 0.01);
+        // R307.1 is stricter than annex F in front of a toilet: 21 in.
+        assert!((at("clearance.toilet.front", &miami).0 - 53.34).abs() < 0.01);
+        // What the pack has no row for still hears the home standard, as a
+        // reference.
+        let (side, source, named) = at("clearance.bed.side", &miami);
+        assert_eq!((side, source, named), (50.0, Some("nbr15575g"), false));
+
+        // And none of it reaches home, named or not.
+        for home in [
+            Place::default(),
+            Place::from_city(Some("sao-paulo")),
+            Place::from_city(Some("curitiba")),
+        ] {
+            for f in figures() {
+                if let Some(found) = figure(f.name, &home) {
+                    assert_ne!(
+                        found.authority,
+                        Authority::Country("us"),
+                        "{} at {home:?}",
+                        f.name
+                    );
+                }
+            }
+            assert!((at("clearance.toilet.front", &home).0 - 40.0).abs() < f64::EPSILON);
+            assert!((at("room.min_ceiling", &home).0 - 250.0).abs() < f64::EPSILON);
+        }
+    }
+
+    #[test]
     fn a_figure_row_is_whole() {
-        for f in FIGURES {
+        for f in figures() {
             assert!(!f.note.is_empty(), "{} says where it comes from", f.name);
             assert!(
                 f.bound.value().is_finite() && f.bound.value() > 0.0,

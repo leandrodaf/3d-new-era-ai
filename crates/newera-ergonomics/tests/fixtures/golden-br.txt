@@ -1863,6 +1863,8 @@ Cozinha #0 / casal
  @ são paulo
   -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 65 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+ @ curitiba
+  -  Dica room_area:r105 ref=coe-municipal | 2,97 m² para cozinha: códigos de obras costumam pedir ao menos 4,00 m² (confira o do seu município).
 Cozinha #0 / cadeirante
   score=0 [architecture=0 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 1, living_seats: 0, wardrobe_cm: 0.0 }
   refs coe-municipal=A nbr9050=A nbr15575=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A nbr15575g=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
@@ -1907,6 +1909,8 @@ Cozinha #0 / cadeirante
  @ são paulo
   -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 65 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+ @ curitiba
+  -  Dica room_area:r105 ref=coe-municipal | 2,97 m² para cozinha: códigos de obras costumam pedir ao menos 4,00 m² (confira o do seu município).
 Cozinha #0 / família
   score=0 [architecture=0 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 1, living_seats: 0, wardrobe_cm: 0.0 }
   refs coe-municipal=A nbr15575g=A nbr15575=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C caixa-mcmv=A nbr16264=A
@@ -1950,6 +1954,8 @@ Cozinha #0 / família
  @ são paulo
   -  Dica city_not_declared:r105 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 65 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+ @ curitiba
+  -  Dica room_area:r105 ref=coe-municipal | 2,97 m² para cozinha: códigos de obras costumam pedir ao menos 4,00 m² (confira o do seu município).
 Cozinha #1 / casal
   score=0 [architecture=37 electrical=59 plumbing=89] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr5410=A nbr15575g=A nbr5626=A nbr8160=A coe-municipal=A alexander184=C blum-zonas=C nbr16264=A
@@ -2364,6 +2370,12 @@ Cozinha #4 / casal
   +  score=6 [architecture=13 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs coe-municipal=A nbr15575g=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
   +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 95 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+ @ curitiba
+  -  score=18 [architecture=24 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
+  -  refs nbr15575g=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A coe-municipal=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
+  -  Dica room_area:r105 ref=coe-municipal | 3,63 m² para cozinha: códigos de obras costumam pedir ao menos 4,00 m² (confira o do seu município).
+  +  score=18 [architecture=25 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
+  +  refs nbr15575g=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C caixa-mcmv=A coe-municipal=A nbr16264=A
 Cozinha #4 / cadeirante
   score=15 [architecture=20 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr9050=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr15575g=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
@@ -2405,6 +2417,12 @@ Cozinha #4 / cadeirante
   +  score=3 [architecture=9 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs coe-municipal=A nbr9050=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A nbr15575g=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
   +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 95 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+ @ curitiba
+  -  score=15 [architecture=20 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
+  -  refs nbr9050=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A coe-municipal=A nbr15575g=A alexander184=C blum-zonas=C caixa-mcmv=A nbr16264=A
+  -  Dica room_area:r105 ref=coe-municipal | 3,63 m² para cozinha: códigos de obras costumam pedir ao menos 4,00 m² (confira o do seu município).
+  +  score=15 [architecture=21 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
+  +  refs nbr9050=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A nbr15575g=A alexander184=C blum-zonas=C caixa-mcmv=A coe-municipal=A nbr16264=A
 Cozinha #4 / família
   score=18 [architecture=22 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr15575g=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A coe-municipal=A blum-zonas=C panero-zelnik=C alexander184=C caixa-mcmv=A nbr16264=A
@@ -2444,6 +2462,12 @@ Cozinha #4 / família
   +  score=6 [architecture=11 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
   +  refs coe-municipal=A nbr15575g=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C caixa-mcmv=A nbr16264=A
   +  Erro free_circle:r105 ref=coe-municipal | Cabe um círculo de 95 cm no piso; São Paulo — SP pede 150 cm (Decreto 57.776/2017, tabela 5.A.6). Entre norma e lei local prevalece o mais restritivo.
+ @ curitiba
+  -  score=18 [architecture=22 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
+  -  refs nbr15575g=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A coe-municipal=A blum-zonas=C panero-zelnik=C alexander184=C caixa-mcmv=A nbr16264=A
+  -  Dica room_area:r105 ref=coe-municipal | 3,63 m² para cozinha: códigos de obras costumam pedir ao menos 4,00 m² (confira o do seu município).
+  +  score=18 [architecture=23 electrical=88 plumbing=88] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
+  +  refs nbr15575g=A nbr13103=A lbnl-coifa=D nbr5410=A nbr5626=A nbr8160=A blum-zonas=C panero-zelnik=C alexander184=C caixa-mcmv=A coe-municipal=A nbr16264=A
 Cozinha #5 / casal
   score=19 [architecture=32 electrical=88 plumbing=78] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 5, living_seats: 0, wardrobe_cm: 0.0 }
   refs nbr15575g=A nbr5410=A nbr5626=A nbr8160=A alexander184=C blum-zonas=C coe-municipal=A nbr16264=A

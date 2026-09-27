@@ -460,6 +460,10 @@ pub static ENGLISH: &[(&str, &str)] = &[
     ),
     ("Sem janela: {}.", "No window: {}."),
     (
+        "Janelas somam {} m² para {} m² de piso; {} pede 1/{} do piso: {} m², com metade abrindo para ventilar.",
+        "Windows add up to {} m² for {} m² of floor; {} asks for 1/{} of the floor: {} m², half of it opening for air.",
+    ),
+    (
         "Janelas somam {} m² para {} m² de piso; o Código Sanitário de SP pede 1/{} do piso: {} m², com metade abrindo para ventilar.",
         "Windows add up to {} m² for {} m² of floor; São Paulo's Sanitary Code asks for 1/{} of the floor: {} m², half of it opening for air.",
     ),

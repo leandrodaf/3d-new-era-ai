@@ -361,7 +361,7 @@ impl Review<'_, '_> {
     fn fig(&self, name: &str) -> Option<Resolved> {
         let found = self.figures.get(name).copied();
         debug_assert!(
-            found.is_some() || standards::FIGURES.iter().any(|f| f.name == name),
+            found.is_some() || standards::figures().any(|f| f.name == name),
             "no figure is called `{name}`"
         );
         found
@@ -1282,12 +1282,15 @@ impl Review<'_, '_> {
                     );
                 }
             }
-            // Halls, corridors, bathrooms and pantries may be lower.
-            let min_ceiling = self.fig(if matches!(what, RoomUse::Bathroom | RoomUse::Corridor) {
-                "room.min_ceiling.short_stay"
-            } else {
-                "room.min_ceiling"
-            });
+            // A use may be allowed lower — a bathroom, a corridor — and which
+            // ones is the code's to say, so the use asks first.
+            let min_ceiling = slug
+                .and_then(|slug| {
+                    self.figures
+                        .get(format!("room.{slug}.min_ceiling").as_str())
+                        .copied()
+                })
+                .or_else(|| self.fig("room.min_ceiling"));
             if let Some(min) = min_ceiling
                 && what != RoomUse::Other
                 && ceiling + 0.5 < min.bound.value()
@@ -1337,7 +1340,26 @@ impl Review<'_, '_> {
                         Rule::WindowArea,
                         &most,
                         &label,
-                        say!("Janelas somam {} m² para {} m² de piso; o Código Sanitário de SP pede 1/{} do piso: {} m², com metade abrindo para ventilar.", m2(glass), m2(area), format!("{ratio:.0}"), m2(area / ratio)),
+                        // São Paulo's sanitary code is the one the sentence
+                        // was written for; any other code is named by its note.
+                        if most.source == Some("coe-municipal") {
+                            say!(
+                                "Janelas somam {} m² para {} m² de piso; o Código Sanitário de SP pede 1/{} do piso: {} m², com metade abrindo para ventilar.",
+                                m2(glass),
+                                m2(area),
+                                cm(ratio),
+                                m2(area / ratio)
+                            )
+                        } else {
+                            say!(
+                                "Janelas somam {} m² para {} m² de piso; {} pede 1/{} do piso: {} m², com metade abrindo para ventilar.",
+                                m2(glass),
+                                m2(area),
+                                most.note,
+                                cm(ratio),
+                                m2(area / ratio)
+                            )
+                        },
                     );
                 }
             }
@@ -2510,10 +2532,14 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
         ..profile.clone()
     };
     // The place is the project's, so every caller weighs the same law; a city
-    // named in the call still wins, for asking "and under this code?".
-    let place = match profile.city.as_deref() {
-        Some(city) => newera_core::Place::from_city(Some(city)),
-        None => home.compass.place(),
+    // named in the call still wins, for asking "and under this code?" — but
+    // only the city: the country and the state the project declares still
+    // stand, or a project in Miami would be judged in Brazil the moment it
+    // named its city.
+    let place = {
+        let mut compass = home.compass.clone();
+        compass.city.clone_from(&profile.city);
+        compass.place()
     };
     let mut review = Review {
         glass: glass_by_room(&scene),
@@ -4068,9 +4094,9 @@ mod tests {
                 .unwrap_or_default();
             asked += 1;
             assert!(
-                standards::FIGURES.iter().any(|f| f.name == name)
+                standards::figures().any(|f| f.name == name)
                     // A wheelchair asks `<name>.wheelchair` first, then `<name>`.
-                    || standards::FIGURES.iter().any(|f| f.name == format!("{name}.wheelchair")),
+                    || standards::figures().any(|f| f.name == format!("{name}.wheelchair")),
                 "a rule asks for `{name}`, and no figure is called that"
             );
         }
