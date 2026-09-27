@@ -1985,7 +1985,7 @@ mod tests {
 
     /// The part of a source file above its tests.
     fn body(file: &str) -> &str {
-        file.split("#[cfg(test)]\nmod tests").next().unwrap_or(file)
+        file.split("\nmod tests {").next().unwrap_or(file)
     }
 
     #[test]

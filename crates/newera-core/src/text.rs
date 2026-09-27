@@ -1050,7 +1050,7 @@ mod tests {
     /// The string literals right after each `marker` in the part of `file`
     /// above its tests.
     pub(crate) fn literals_after<'a>(file: &'a str, marker: &str) -> Vec<&'a str> {
-        let body = file.split("#[cfg(test)]\nmod tests").next().unwrap_or(file);
+        let body = file.split("\nmod tests {").next().unwrap_or(file);
         body.match_indices(marker)
             .filter_map(|(at, _)| {
                 let rest = body[at + marker.len()..].trim_start();

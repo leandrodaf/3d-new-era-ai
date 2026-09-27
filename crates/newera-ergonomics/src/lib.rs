@@ -3978,7 +3978,7 @@ mod tests {
         // reads the ones the rules still write themselves.
         let mut cited = Vec::new();
         for file in [include_str!("lib.rs"), include_str!("corners.rs")] {
-            let body = file.split("#[cfg(test)]\nmod tests").next().unwrap_or(file);
+            let body = file.split("\nmod tests {").next().unwrap_or(file);
             for (at, _) in body.match_indices("push_ref(") {
                 if body[..at].ends_with("fn ") {
                     continue;
@@ -4059,7 +4059,7 @@ mod tests {
             include_str!("corners.rs"),
             include_str!("scene.rs"),
         ] {
-            let body = file.split("#[cfg(test)]\nmod tests").next().unwrap_or(file);
+            let body = file.split("\nmod tests {").next().unwrap_or(file);
             let mut templates: Vec<String> = Vec::new();
             // The first string literal, escapes and all: the TV's inches are
             // written `{}\"`.
@@ -4111,7 +4111,7 @@ mod tests {
     #[test]
     fn every_figure_a_rule_asks_for_is_in_the_table() {
         let body = include_str!("lib.rs");
-        let body = body.split("#[cfg(test)]\nmod tests").next().unwrap_or(body);
+        let body = body.split("\nmod tests {").next().unwrap_or(body);
         let mut asked = 0;
         for (at, _) in body.match_indices("fig(\"") {
             let name = literals(&body[at + 4..])
