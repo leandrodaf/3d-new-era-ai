@@ -9,6 +9,8 @@ use crate::furniture::{Furniture, OpeningKind};
 use crate::geometry::Point2;
 use crate::home::Home;
 use crate::materials::WallFamily;
+use crate::say;
+use crate::text::Text;
 
 /// How far off a wall's centerline a point still sits in it, beyond half
 /// its thickness, cm.
@@ -372,7 +374,7 @@ pub fn seat(home: &Home, piece: &mut Furniture) -> Result<(), String> {
             // Flush with the finished floor.
             piece.elevation = 0.0;
             match blocked(home, piece) {
-                Some(why) => Err(why),
+                Some(why) => Err(why.to_string()),
                 None => Ok(()),
             }
         }
@@ -464,31 +466,29 @@ fn distance_to_segment(p: Point2, a: Point2, b: Point2) -> f64 {
 /// Why `piece` cannot be set where it stands, if it cannot: in a glass wall,
 /// or in the span of a door, a window or an open passage at its height.
 /// Pieces not set into walls, or standing in no wall, are never refused.
-pub fn blocked(home: &Home, piece: &Furniture) -> Option<String> {
+pub fn blocked(home: &Home, piece: &Furniture) -> Option<Text> {
     let view = home.level_view(home.current_level());
     if mount_of(&piece.catalog) == Some(Mount::Floor) {
         return floor_blocked(&view, piece);
     }
     if mount_of(&piece.catalog) == Some(Mount::Furniture) {
         return host_of(&view, piece).is_none().then(|| {
-            format!(
-                "{} {} está solta: vai embutida no tampo de uma bancada, ilha ou móvel (ou numa mesa, a caixa de mesa).",
-                piece.name, piece.id
-            )
+            say!("{} {} está solta: vai embutida no tampo de uma bancada, ilha ou móvel (ou numa mesa, a caixa de mesa).", piece.name, piece.id)
         });
     }
     if mount_of(&piece.catalog) == Some(Mount::Ceiling) {
         if !in_a_room(&view, piece.position) {
-            return Some(format!(
+            return Some(say!(
                 "{} {} vai no teto e está fora de qualquer cômodo.",
-                piece.name, piece.id
+                piece.name,
+                piece.id
             ));
         }
         let top = piece.elevation + piece.height;
         return ceiling_over(home, piece)
             .filter(|c| top < c - UNDER_CEILING || top > c + 5.0)
             .map(|c| {
-                format!(
+                say!(
                     "{} {} está a {} cm do chão, solto no ar: vai fixado no teto, a {} cm.",
                     piece.name,
                     piece.id,
@@ -533,19 +533,25 @@ pub fn blocked(home: &Home, piece: &Furniture) -> Option<String> {
                 near.depth += 2.0 * IN_WALL;
                 near.contains(piece.position) && lo < f.elevation + f.height && hi > f.elevation
             })
-            .map(|f| match crate::guard::guard_of(f) {
-                Some(guard) => format!(
-                    "{} {} está no {} ({} {}): guarda-corpo e fechamento de sacada não recebem caixa nem ponto; leve-o a uma parede de alvenaria da sacada.",
-                    piece.name,
-                    piece.id,
-                    guard.name(),
-                    f.name,
-                    f.id
-                ),
-                None => format!(
-                    "{} {} está sobre o vidro de {} ({}): não há onde embutir a caixa; leve-o a uma parede.",
-                    piece.name, piece.id, f.name, f.id
-                ),
+            .map(|f| {
+                if let Some(guard) = crate::guard::guard_of(f) {
+                    say!(
+                        "{} {} está no {} ({} {}): guarda-corpo e fechamento de sacada não recebem caixa nem ponto; leve-o a uma parede de alvenaria da sacada.",
+                        piece.name,
+                        piece.id,
+                        guard.said(),
+                        f.name,
+                        f.id
+                    )
+                } else {
+                    say!(
+                        "{} {} está sobre o vidro de {} ({}): não há onde embutir a caixa; leve-o a uma parede.",
+                        piece.name,
+                        piece.id,
+                        f.name,
+                        f.id
+                    )
+                }
             });
     };
     let family = wall
@@ -554,9 +560,11 @@ pub fn blocked(home: &Home, piece: &Furniture) -> Option<String> {
         .and_then(crate::materials::wall_type)
         .map(|t| t.family);
     if family == Some(WallFamily::Glass) {
-        return Some(format!(
+        return Some(say!(
             "{} {} está numa parede de vidro ({}): não há onde embutir a caixa; leve-o a uma parede de alvenaria ou drywall.",
-            piece.name, piece.id, wall.id
+            piece.name,
+            piece.id,
+            wall.id
         ));
     }
     let in_span = view
@@ -584,20 +592,17 @@ pub fn blocked(home: &Home, piece: &Furniture) -> Option<String> {
                     bare.contains(piece.position) && lo < f.elevation + f.height && hi > f.elevation
                 };
                 let what = match (kind, inside) {
-                    (OpeningKind::Door, true) => "no vão da porta",
-                    (OpeningKind::Window, true) => "sobre o vidro da janela",
-                    (OpeningKind::Passage, true) => "no vão aberto",
-                    (OpeningKind::Door | OpeningKind::Passage, false) => "colado ao batente da porta",
-                    (OpeningKind::Window, false) => "colado ao batente ou ao peitoril da janela",
+                    (OpeningKind::Door, true) => say!("no vão da porta"),
+                    (OpeningKind::Window, true) => say!("sobre o vidro da janela"),
+                    (OpeningKind::Passage, true) => say!("no vão aberto"),
+                    (OpeningKind::Door | OpeningKind::Passage, false) => {
+                        say!("colado ao batente da porta")
+                    }
+                    (OpeningKind::Window, false) => {
+                        say!("colado ao batente ou ao peitoril da janela")
+                    }
                 };
-                format!(
-                    "{} {} está {what} {} ({}): a caixa fica a pelo menos {} cm do vão, fora do batente e do alizar; mova-o para o lado ou abaixo do peitoril.",
-                    piece.name,
-                    piece.id,
-                    f.name,
-                    f.id,
-                    JAMB_CLEAR.round()
-                )
+                say!("{} {} está {} {} ({}): a caixa fica a pelo menos {} cm do vão, fora do batente e do alizar; mova-o para o lado ou abaixo do peitoril.", piece.name, piece.id, what, f.name, f.id, JAMB_CLEAR.round())
             })
         });
     if in_span.is_some() {
@@ -614,7 +619,7 @@ const SILL_CLEAR: f64 = 5.0;
 
 /// A point inside an appliance's body at its height: behind the fridge's
 /// shell, under the machine — no hand reaches it, and the plug has no room.
-fn in_appliance(view: &Home, piece: &Furniture) -> Option<String> {
+fn in_appliance(view: &Home, piece: &Furniture) -> Option<Text> {
     let (lo, hi) = (piece.elevation, piece.elevation + piece.height);
     view.furniture
         .iter()
@@ -625,14 +630,7 @@ fn in_appliance(view: &Home, piece: &Furniture) -> Option<String> {
             f.contains(piece.position) && lo < fhi && hi > flo
         })
         .map(|f| {
-            format!(
-                "{} {} está dentro de {} ({}): tomada de eletrodoméstico vai ao lado dele ou acima do seu topo ({} cm), onde a mão alcança.",
-                piece.name,
-                piece.id,
-                f.name,
-                f.id,
-                f.height_range().1.round()
-            )
+            say!("{} {} está dentro de {} ({}): tomada de eletrodoméstico vai ao lado dele ou acima do seu topo ({} cm), onde a mão alcança.", piece.name, piece.id, f.name, f.id, f.height_range().1.round())
         })
 }
 
@@ -742,11 +740,12 @@ fn in_wall<'a>(view: &'a Home, piece: &Furniture) -> Option<&'a crate::elements:
 
 /// A drain set where no floor takes it: outside every room, inside a wall,
 /// or in a door's span.
-fn floor_blocked(view: &Home, piece: &Furniture) -> Option<String> {
+fn floor_blocked(view: &Home, piece: &Furniture) -> Option<Text> {
     if !in_a_room(view, piece.position) {
-        return Some(format!(
+        return Some(say!(
             "{} {} vai no piso de um cômodo e está fora de todos.",
-            piece.name, piece.id
+            piece.name,
+            piece.id
         ));
     }
     if let Some(w) = view
@@ -755,9 +754,11 @@ fn floor_blocked(view: &Home, piece: &Furniture) -> Option<String> {
         .filter(|w| !w.is_arc())
         .find(|w| distance_to_segment(piece.position, w.start, w.end) < w.thickness / 2.0)
     {
-        return Some(format!(
+        return Some(say!(
             "{} {} está dentro da parede {}: o ralo vai no piso, fora dela.",
-            piece.name, piece.id, w.id
+            piece.name,
+            piece.id,
+            w.id
         ));
     }
     view.furniture
@@ -770,15 +771,18 @@ fn floor_blocked(view: &Home, piece: &Furniture) -> Option<String> {
             span.contains(piece.position)
         })
         .map(|f| {
-            format!(
+            say!(
                 "{} {} está no vão de {} ({}): a soleira não leva ralo; ponha-o dentro do cômodo.",
-                piece.name, piece.id, f.name, f.id
+                piece.name,
+                piece.id,
+                f.name,
+                f.id
             )
         })
 }
 
 /// A wall point standing in no wall and on no glass either: loose in a room.
-fn off_structure(view: &Home, piece: &Furniture) -> Option<String> {
+fn off_structure(view: &Home, piece: &Furniture) -> Option<Text> {
     if in_wall(view, piece).is_some() {
         return None;
     }
@@ -795,10 +799,7 @@ fn off_structure(view: &Home, piece: &Furniture) -> Option<String> {
             }
     });
     (!glass_near && built_into(view, piece).is_none()).then(|| {
-        format!(
-            "{} {} está solto no meio do cômodo: vai embutido numa parede, ou no móvel fixo de uma ilha ou bancada.",
-            piece.name, piece.id
-        )
+        say!("{} {} está solto no meio do cômodo: vai embutido numa parede, ou no móvel fixo de uma ilha ou bancada.", piece.name, piece.id)
     })
 }
 
@@ -893,7 +894,7 @@ fn movable(f: &Furniture) -> bool {
 /// hinged door on its hinge side. A point behind furniture or set into it is
 /// not a defect; a drain under a piece standing on the floor is, since it
 /// cannot be cleaned.
-pub fn hidden(home: &Home, piece: &Furniture) -> Option<String> {
+pub fn hidden(home: &Home, piece: &Furniture) -> Option<Text> {
     let view = home.level_view(home.current_level());
     if mount_of(&piece.catalog) == Some(Mount::Floor) {
         // Under a piece standing on the floor it cannot be cleaned: a
@@ -921,9 +922,12 @@ pub fn hidden(home: &Home, piece: &Furniture) -> Option<String> {
             })
             .find(|f| f.contains(piece.position))
             .map(|f| {
-                format!(
+                say!(
                     "{} {} fica embaixo de {} ({}): sem acesso para limpar e desentupir.",
-                    piece.name, piece.id, f.name, f.id
+                    piece.name,
+                    piece.id,
+                    f.name,
+                    f.id
                 )
             });
     }
@@ -955,9 +959,12 @@ pub fn hidden(home: &Home, piece: &Furniture) -> Option<String> {
                 && y.abs() <= f.depth / 2.0 + IN_WALL
                 && lo < f.elevation + f.height
             {
-                return Some(format!(
+                return Some(say!(
                     "{} {} fica atrás da folha aberta de {} ({}): ponha-o do lado da maçaneta.",
-                    piece.name, piece.id, f.name, f.id
+                    piece.name,
+                    piece.id,
+                    f.name,
+                    f.id
                 ));
             }
         }

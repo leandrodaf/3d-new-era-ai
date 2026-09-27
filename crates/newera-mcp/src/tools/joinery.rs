@@ -382,6 +382,9 @@ impl NewEraMcp {
                 "no joinery here: no joinery builds (make one with the joinery tool) and no group drawn with board parts",
             ));
         }
+        // Where the project stands, before the document is let go: the panel
+        // standards oblige here and inform elsewhere, like every other source.
+        let place = doc.home().compass.place();
         drop(doc);
         let mut sheets = Vec::new();
         if let Some(path) = &p.path {
@@ -428,7 +431,7 @@ impl NewEraMcp {
         let mut reply = serde_json::json!({
             "rows": rows,
             "hardware": hardware,
-            "sources": super::sources(&["nbr14810", "nbr15316"]),
+            "sources": super::sources(&["nbr14810", "nbr15316"], &place),
         });
         if !sheets.is_empty() {
             reply["sheets"] = serde_json::json!(sheets);

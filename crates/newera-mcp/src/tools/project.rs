@@ -29,6 +29,16 @@ pub(crate) struct SetHomeParams {
     /// Kept with the project, so `ergonomics`, `check_layout` and every dry
     /// run weigh the same municipal rules.
     city: Option<String>,
+    /// Country whose standards apply, ISO 3166-1 alpha-2: `br`, `us`, `de`;
+    /// `""` clears it. It decides which sources oblige and which only inform —
+    /// a Brazilian standard is a reference in Florida, and the IRC is a
+    /// reference here. A city we hold implies its country, so this is for
+    /// saying where a project is when no code was picked.
+    country: Option<String>,
+    /// State or province whose code applies: `sp`, `fl`; `""` clears it. In the
+    /// United States it is the state that adopts a building code, so it
+    /// matters as much as the country there.
+    region: Option<String>,
     /// Project properties to set, `{key: "value"}`, or remove, `{key: null}`
     /// — what an import leaves behind (window sizes, panel dividers, ids of
     /// the program it came from). With `level`, that storey's instead.
@@ -105,19 +115,26 @@ impl NewEraMcp {
             || p.compass_d.is_some()
             || p.compass_visible.is_some()
             || p.city.is_some()
+            || p.country.is_some()
+            || p.region.is_some()
         {
             let c = doc.home().compass.clone();
+            // `""` clears, absent keeps: a caller setting the country must not
+            // have to restate the city it already chose.
+            let set = |given: Option<&str>, current: &Option<String>| match given.map(str::trim) {
+                Some("") => None,
+                Some(value) => Some(value.to_owned()),
+                None => current.clone(),
+            };
             commands.push(Command::SetCompass {
                 compass: Compass {
                     center: p.compass_at.unwrap_or(c.center),
                     diameter: p.compass_d.unwrap_or(c.diameter),
                     north_degrees: p.north.unwrap_or(c.north_degrees),
                     visible: p.compass_visible.unwrap_or(c.visible),
-                    city: match p.city.as_deref().map(str::trim) {
-                        Some("") => None,
-                        Some(city) => Some(city.to_owned()),
-                        None => c.city.clone(),
-                    },
+                    city: set(p.city.as_deref(), &c.city),
+                    country: set(p.country.as_deref(), &c.country),
+                    region: set(p.region.as_deref(), &c.region),
                     ..c.clone()
                 },
             });

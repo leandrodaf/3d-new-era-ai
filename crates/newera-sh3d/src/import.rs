@@ -1053,7 +1053,12 @@ impl<'g> Importer<'g> {
             latitude: c.num("latitude").map(f64::to_degrees),
             longitude: c.num("longitude").map(f64::to_degrees),
             time_zone,
+            // Sweet Home 3D has no notion of the code a project answers to:
+            // the place is left unsaid, and the review falls back to the home
+            // jurisdiction until somebody says otherwise.
             city: None,
+            country: None,
+            region: None,
         };
         if compass.diameter <= 0.0 {
             compass.diameter = 100.0;

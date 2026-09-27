@@ -42,8 +42,10 @@ mod solid;
 pub mod standards;
 mod style;
 pub mod tape;
+pub mod text;
 mod units;
 pub mod vfs;
+pub mod vocabulary;
 mod wallrun;
 pub mod wifi;
 
@@ -89,7 +91,9 @@ pub use project::{
     save_project, to_project_bytes, to_project_json,
 };
 pub use roof_fit::{ROOF_FIT_ABOVE, ROOF_FIT_KEY, fit_commands, fit_to_roof, roof_height_at};
-pub use standards::{Confidence, MunicipalCode, Standard, Tier, municipal, standard};
+pub use standards::{
+    Confidence, MunicipalCode, Place, Severity, Standard, Tier, municipal, standard,
+};
 pub use style::{
     ArrowStyle, Camera, Cameras, DashStyle, Discipline, DrawingMode, Environment, LineCap,
     LineJoin, PaperOrientation, PhotoSettings, Polyline, PrintSettings, Properties, TextAlign,

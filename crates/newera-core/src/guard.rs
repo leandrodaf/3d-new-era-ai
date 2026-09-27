@@ -9,6 +9,7 @@ use crate::electrical::{Finding, Severity};
 use crate::furniture::Furniture;
 use crate::geometry::Point2;
 use crate::home::Home;
+use crate::say;
 
 /// Where a glass piece keeps its glass: `laminated`, `tempered`,
 /// `tempered-laminated`, `wired`.
@@ -28,6 +29,12 @@ pub enum Guard {
 }
 
 impl Guard {
+    /// Its name as a word of a sentence, translated with it.
+    #[must_use]
+    pub fn said(self) -> crate::text::Text {
+        crate::text::Text::from(self.name())
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             Self::Railing => "gradil",
@@ -59,15 +66,25 @@ pub fn guard_of(piece: &Furniture) -> Option<Guard> {
     }
     let name = crate::annotations::fold(&piece.name);
     let has = |words: &[&str]| words.iter().any(|w| name.contains(w));
+    // Portuguese, then English: a piece imported from an American library
+    // is a guard by the same token.
     if has(&[
         "envidracamento",
         "fechamento de vidro",
         "fechamento da varanda",
         "fechamento da sacada",
         "cortina de vidro",
+        "balcony glazing",
+        "glass enclosure",
     ]) {
         Some(Guard::Glazing)
-    } else if has(&["guarda-corpo de vidro", "guarda corpo de vidro"]) {
+    } else if has(&[
+        "guarda-corpo de vidro",
+        "guarda corpo de vidro",
+        "glass railing",
+        "glass balustrade",
+        "glass guardrail",
+    ]) {
         Some(Guard::GlassRailing)
     } else if has(&[
         "gradil",
@@ -76,6 +93,9 @@ pub fn guard_of(piece: &Furniture) -> Option<Guard> {
         "grade da sacada",
         "grade da varanda",
         "parapeito metalico",
+        "railing",
+        "guardrail",
+        "balustrade",
     ]) {
         Some(Guard::Railing)
     } else {
@@ -98,8 +118,13 @@ fn line_of(f: &Furniture) -> (Point2, Point2) {
     )
 }
 
-/// What the guards and closures of the storey shown ask.
+/// What the guards and closures of the storey shown ask, weighed at the
+/// place the project is — see [`crate::electrical::weighed`].
 pub fn check(home: &Home) -> Vec<Finding> {
+    crate::electrical::weighed(home, found(home))
+}
+
+fn found(home: &Home) -> Vec<Finding> {
     let view = home.level_view(home.current_level());
     let pieces: Vec<(&Furniture, Guard)> = view
         .furniture
@@ -117,11 +142,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Erro,
                 place: place.clone(),
-                message: format!(
-                    "{} com {} cm: o guarda-corpo tem ao menos 1,10 m do piso ao topo do corrimão; sobre mureta, também 0,90 m acima dela.",
-                    guard.name(),
-                    top.round()
-                ),
+                message: say!("{} com {} cm: o guarda-corpo tem ao menos 1,10 m do piso ao topo do corrimão; sobre mureta, também 0,90 m acima dela.", guard.said(), top.round()),
                 source: "nbr14718",
             });
         }
@@ -137,10 +158,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Erro,
                 place: place.clone(),
-                message: format!(
-                    "Vão de {} cm entre as barras: o máximo é 11 cm, e até 45 cm do piso nada em que se possa apoiar o pé para escalar.",
-                    crate::electrical::decimal(gap)
-                ),
+                message: say!("Vão de {} cm entre as barras: o máximo é 11 cm, e até 45 cm do piso nada em que se possa apoiar o pé para escalar.", crate::electrical::decimal(gap)),
                 source: "nbr14718",
             });
         }
@@ -153,9 +171,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                     accepted: None,
                     severity: Severity::Erro,
                     place: place.clone(),
-                    message: format!(
-                        "Guarda-corpo em vidro {other}: a norma pede vidro laminado de segurança (classe 1), aramado ou insulado feito deles; temperado sozinho, ao quebrar, deixa o vão aberto."
-                    ),
+                    message: say!("Guarda-corpo em vidro {}: a norma pede vidro laminado de segurança (classe 1), aramado ou insulado feito deles; temperado sozinho, ao quebrar, deixa o vão aberto.", other),
                     source: "nbr7199",
                 }),
                 None => out.push(Finding {
@@ -177,9 +193,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                     accepted: None,
                     severity: Severity::Erro,
                     place: place.clone(),
-                    message: format!(
-                        "Fechamento de sacada em vidro {g}: pede vidro de segurança temperado ou laminado, com espessura calculada pelo vento do local."
-                    ),
+                    message: say!("Fechamento de sacada em vidro {}: pede vidro de segurança temperado ou laminado, com espessura calculada pelo vento do local.", g),
                     source: "nbr16259",
                 });
             }
@@ -213,10 +227,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                     accepted: None,
                     severity: Severity::Erro,
                     place: place.clone(),
-                    message: format!(
-                        "O fechamento de vidro está sobre uma mureta de {} cm: sem gradil, a mureta é o guarda-corpo e pede 1,10 m; o vidro não conta.",
-                        height.round()
-                    ),
+                    message: say!("O fechamento de vidro está sobre uma mureta de {} cm: sem gradil, a mureta é o guarda-corpo e pede 1,10 m; o vidro não conta.", height.round()),
                     source: "nbr14718",
                 });
             }

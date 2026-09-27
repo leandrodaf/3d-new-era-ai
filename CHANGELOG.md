@@ -6,6 +6,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A project says which country and state it is in — `set_home(country=…, region=…)`, beside
+  the city it already had — and that decides which codes judge it. A project in the United
+  States is reviewed against the IRC 2024 (room areas and sides, ceiling heights, daylight, the
+  clearances in front of fixtures, hallways), the IRC and NEC kitchen outlets and ICC A117.1
+  for a wheelchair; what those codes leave unsaid is still measured by the Brazilian standards,
+  as a reference.
+- Rooms named in English — "Bedroom", "Kitchen", "Powder room" — are recognised by every check,
+  electrical, plumbing, lighting and Wi-Fi included; before, nothing recognised them.
+- Review findings can be said in English, and the window shows them in English when it speaks
+  anything but Portuguese. What they are accepted by does not change.
+
+### Changed
+
+- How much a standard obliges depends on where the project is: an ABNT standard is an error in
+  Brazil and a warning in Miami, and the IRC the other way round. Electrical, plumbing and
+  railing findings follow the same rule, so NBR 5410 no longer accuses a project abroad.
+- The lighting reply cites the table each reference value comes from — NBR 5413 or
+  NBR ISO/CIE 8995-1 — instead of both every time.
+
+### Fixed
+
+- São Paulo's minimum room areas and sides no longer judge a project that says it is in another
+  city, and the São Paulo state kitchen minimum no longer judges another state.
+- A building code picked under "Código de obras" in the desktop is kept when the project is
+  saved; it used to be forgotten.
+
 ## [1.10.0] - 2026-09-26
 
 ### Changed

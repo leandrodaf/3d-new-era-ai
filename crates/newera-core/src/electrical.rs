@@ -14,6 +14,7 @@ use crate::furniture::Furniture;
 use crate::geometry::Point2;
 use crate::home::Home;
 use crate::ids::{FurnitureId, RoomId};
+use crate::say;
 use crate::style::Discipline;
 
 /// Where a point keeps its circuit.
@@ -134,28 +135,20 @@ enum Wet {
 }
 
 fn room_class(room: &Room) -> Wet {
-    let name = crate::annotations::fold(room.semantic_name());
-    let has = |words: &[&str]| words.iter().any(|w| name.contains(w));
-    if has(&["cozinha", "copa", "lavanderia", "servico", "gourmet"]) {
+    use crate::vocabulary::Mention as M;
+    let says = room.mentions();
+    // A kitchen first: a "banheiro de serviço" is wet the way a service area is.
+    if says.any(&[M::Kitchen, M::Pantry, M::Laundry, M::Gourmet]) {
         Wet::Kitchen
-    } else if has(&["banh", "wc", "lavabo", "sanitario"]) {
+    } else if says.any(&[M::Bathroom, M::Lavatory]) {
         Wet::Bathroom
-    } else if has(&[
-        "sala",
-        "quarto",
-        "dormit",
-        "suite",
-        "escritorio",
-        "home office",
-        "estar",
-        "jantar",
-    ]) {
+    } else if says.any(&[M::Living, M::Bedroom, M::Office, M::Dining]) {
         Wet::Living
-    } else if has(&["varanda", "sacada", "terraco"]) {
+    } else if says.has(M::Balcony) {
         Wet::Balcony
-    } else if has(&["garagem"]) {
+    } else if says.has(M::Garage) {
         Wet::Garage
-    } else if has(&["quintal", "jardim", "externa", "piscina", "area de lazer"]) {
+    } else if says.has(M::Outdoor) {
         Wet::Outdoor
     } else {
         Wet::Other
@@ -214,40 +207,25 @@ fn class_in(home: &Home, room: &Room) -> Wet {
 /// laundries; 3 and 2 in a home theater; 1 and 1 in bathrooms, balconies and
 /// the rest. Circulation, closets and storage are not rooms the table counts.
 fn telecom_outlets(room: &Room, bathroom: bool) -> Option<(usize, usize)> {
-    let name = crate::annotations::fold(room.semantic_name());
+    use crate::vocabulary::Mention as M;
     if bathroom {
         return Some((1, 1));
     }
-    let has = |words: &[&str]| words.iter().any(|w| name.contains(w));
-    if has(&[
-        "hall",
-        "corredor",
-        "circulacao",
-        "closet",
-        "deposito",
-        "despensa",
-        "shaft",
-        "escada",
-        "rouparia",
-    ]) {
+    let says = room.mentions();
+    if says.any(&[M::Corridor, M::Stairs, M::Closet, M::Storage, M::Technical]) {
         None
-    } else if has(&["home theater", "cinema"]) {
+    } else if says.has(M::HomeTheater) {
         Some((3, 2))
-    } else if has(&[
-        "quarto",
-        "dormit",
-        "suite",
-        "sala",
-        "estar",
-        "jantar",
-        "escritorio",
-        "home office",
-        "gourmet",
-        "cozinha",
-        "copa",
-        "servico",
-        "lavanderia",
-    ]) && !has(&["banh"])
+    } else if says.any(&[
+        M::Bedroom,
+        M::Living,
+        M::Dining,
+        M::Office,
+        M::Gourmet,
+        M::Kitchen,
+        M::Pantry,
+        M::Laundry,
+    ]) && !says.has(M::Bathroom)
     {
         Some((2, 1))
     } else {
@@ -267,18 +245,8 @@ pub fn in_wet_room(home: &Home, point: &Point) -> bool {
 
 /// Whether a room is one people stay in, where a network point belongs.
 fn long_stay(room: &Room) -> bool {
-    let name = crate::annotations::fold(room.semantic_name());
-    [
-        "sala",
-        "quarto",
-        "dormit",
-        "suite",
-        "escritorio",
-        "home office",
-        "estar",
-    ]
-    .iter()
-    .any(|w| name.contains(w))
+    use crate::vocabulary::Mention as M;
+    room.mentions().any(&[M::Living, M::Bedroom, M::Office])
 }
 
 fn perimeter(room: &Room) -> f64 {
@@ -1055,7 +1023,7 @@ fn built_in_outlets(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
             continue;
         };
         let place = format!("{} {}", piece.name, piece.id);
-        let mut say = |key: &str, severity: Severity, message: String| {
+        let mut say = |key: &str, severity: Severity, message: crate::text::Text| {
             out.push(Finding {
                 key: format!("elec:{key}:{}", piece.id),
                 accepted: None,
@@ -1108,7 +1076,7 @@ fn built_in_outlets(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
                 say(
                     "tower-below",
                     Severity::Erro,
-                    format!(
+                    say!(
                         "Sem espaço embaixo: o corpo da torre desce uns {} cm sob o tampo e cai sobre {} ({}); mova-a para cima de um vão livre do gabinete.",
                         spec.below_cm.round(),
                         f.name,
@@ -1123,7 +1091,7 @@ fn built_in_outlets(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
                 say(
                     "tower-edge",
                     Severity::Alerta,
-                    format!(
+                    say!(
                         "A {} cm da borda do tampo: os fabricantes pedem ao menos 2,5 cm entre o furo e a borda.",
                         decimal(edge.max(0.0))
                     ),
@@ -1160,10 +1128,14 @@ fn built_in_outlets(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
             say(
                 "tower-wet-heat",
                 Severity::Alerta,
-                format!(
+                say!(
                     "A {} cm da {}: mantenha a torre a 30 cm da cuba e do cooktop, fora da área de respingo e de calor.",
                     decimal(sink.min(hob).max(0.0)),
-                    if sink < hob { "cuba" } else { "cocção" }
+                    if sink < hob {
+                        say!("cuba")
+                    } else {
+                        say!("cocção")
+                    }
                 ),
             );
         }
@@ -1237,11 +1209,7 @@ fn automation(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
                         accepted: None,
                         severity: Severity::Alerta,
                         place,
-                        message: format!(
-                            "{} W de iluminação no cômodo e o dimmer aguenta {} W: divida as luminárias em dois dimmers ou use um de maior capacidade.",
-                            decimal(load),
-                            decimal(max)
-                        ),
+                        message: say!("{} W de iluminação no cômodo e o dimmer aguenta {} W: divida as luminárias em dois dimmers ou use um de maior capacidade.", decimal(load), decimal(max)),
                         source: "fabricantes",
                     });
                 } else if load < 10.0 {
@@ -1250,10 +1218,7 @@ fn automation(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
                         accepted: None,
                         severity: Severity::Dica,
                         place,
-                        message: format!(
-                            "{} W de iluminação para dimerizar: abaixo da carga mínima (em geral 10 W) o LED pisca ou não apaga de todo; confira se as lâmpadas são dimerizáveis.",
-                            decimal(load)
-                        ),
+                        message: say!("{} W de iluminação para dimerizar: abaixo da carga mínima (em geral 10 W) o LED pisca ou não apaga de todo; confira se as lâmpadas são dimerizáveis.", decimal(load)),
                         source: "fabricantes",
                     });
                 }
@@ -1266,10 +1231,7 @@ fn automation(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
                         accepted: None,
                         severity: Severity::Dica,
                         place: place.clone(),
-                        message: format!(
-                            "Sensor de teto a {} cm: os fabricantes o instalam por volta de 2,4 m (até 2,9 m); fora disso o alcance muda; na parede, use o sensor de parede.",
-                            decimal(height)
-                        ),
+                        message: say!("Sensor de teto a {} cm: os fabricantes o instalam por volta de 2,4 m (até 2,9 m); fora disso o alcance muda; na parede, use o sensor de parede.", decimal(height)),
                         source: "fabricantes",
                     });
                 }
@@ -1288,11 +1250,7 @@ fn automation(home: &Home, all: &[Point], out: &mut Vec<Finding>) {
                             accepted: None,
                             severity: Severity::Dica,
                             place,
-                            message: format!(
-                                "Não vê o cômodo inteiro: {} m até o canto mais longe e alcance de uns {} m; centralize-o ou ponha um segundo sensor.",
-                                decimal(far / 100.0),
-                                decimal(reach / 100.0)
-                            ),
+                            message: say!("Não vê o cômodo inteiro: {} m até o canto mais longe e alcance de uns {} m; centralize-o ou ponha um segundo sensor.", decimal(far / 100.0), decimal(reach / 100.0)),
                             source: "fabricantes",
                         });
                     }
@@ -1546,21 +1504,18 @@ fn natural(name: &str) -> (String, u64) {
     (letters, digits.parse().unwrap_or(0))
 }
 
-/// How much a finding matters.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Severity {
-    Erro,
-    Alerta,
-    Dica,
-}
+/// How much a finding matters — one type for every discipline, so a finding
+/// weighs the same whichever check made it.
+pub use crate::standards::Severity;
 
 /// Something the project lacks, with the source it stands on.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Finding {
     pub severity: Severity,
     pub place: String,
-    pub message: String,
+    /// What is wrong, as a template and its data: Portuguese when shown as
+    /// a string, and in English on request — see [`crate::text::Text`].
+    pub message: crate::text::Text,
     pub source: &'static str,
     /// The name it is accepted by: `elec:` + the rule + where, stable while
     /// the numbers in the message move.
@@ -1569,8 +1524,43 @@ pub struct Finding {
     pub accepted: Option<String>,
 }
 
-/// What NBR 5410 asks of each room, and what a home's network needs.
+/// Findings as they weigh at the project's place.
+///
+/// Each discipline sets a severity with its source in mind — at home, where
+/// the source has the force it was written with. What a border takes from
+/// that force it takes from the finding: NBR 5410 accuses in São Paulo and
+/// warns in Texas, because there it is a reference. Nothing changes where the
+/// source weighs what it weighs at home, which is how a manufacturer's word on
+/// its own product, or a physical collision, keeps the severity its rule gave.
+pub fn weighed(home: &Home, found: Vec<Finding>) -> Vec<Finding> {
+    use crate::standards::{Place, Severity, Tier, standard};
+    let at = home.compass.place();
+    let home_country = Place::new(Some(Place::HOME_COUNTRY), None, None);
+    found
+        .into_iter()
+        .filter_map(|mut f| {
+            if let Some(source) = standard(f.source) {
+                let here = source.force(&at);
+                if here > source.force(&home_country) {
+                    if here == Tier::E {
+                        return None;
+                    }
+                    f.severity = f.severity.max(Severity::ceiling(here));
+                }
+            }
+            Some(f)
+        })
+        .collect()
+}
+
+/// What NBR 5410 asks of each room, and what a home's network needs, each
+/// finding weighed at the place the project is — see [`weighed`].
 pub fn check(home: &Home) -> Vec<Finding> {
+    weighed(home, found(home))
+}
+
+/// What the rules find, at the severity each one declares.
+fn found(home: &Home) -> Vec<Finding> {
     let view = home.level_view(home.current_level());
     let all = points(home);
     let mut out = Vec::new();
@@ -1616,18 +1606,23 @@ pub fn check(home: &Home) -> Vec<Finding> {
         let have = count(room.id, PointKind::Outlet);
         if have < needed {
             let why = match class {
-                Wet::Kitchen => format!("um a cada 3,5 m de perímetro ({} m)", decimal(per)),
-                Wet::Bathroom => "um junto ao lavatório".into(),
-                Wet::Balcony => "ao menos um".into(),
-                _ if area <= 6.0 => "ao menos um".into(),
-                _ => format!("um a cada 5 m de perímetro ({} m)", decimal(per)),
+                Wet::Kitchen => say!("um a cada 3,5 m de perímetro ({} m)", decimal(per)),
+                Wet::Bathroom => say!("um junto ao lavatório"),
+                Wet::Balcony => say!("ao menos um"),
+                _ if area <= 6.0 => say!("ao menos um"),
+                _ => say!("um a cada 5 m de perímetro ({} m)", decimal(per)),
             };
             out.push(Finding {
                 key: format!("elec:outlets:{}", room.id),
                 accepted: None,
                 severity: Severity::Erro,
                 place: place.clone(),
-                message: format!("{have} de {needed} tomadas de uso geral: a norma pede {why}."),
+                message: say!(
+                    "{} de {} tomadas de uso geral: a norma pede {}.",
+                    have,
+                    needed,
+                    why
+                ),
                 source: "nbr5410",
             });
         }
@@ -1645,9 +1640,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                         Severity::Dica
                     },
                     place: place.clone(),
-                    message: format!(
-                        "{have} de {ict} pontos de rede RJ45: a norma de cabeamento residencial recomenda {ict} neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado."
-                    ),
+                    message: say!("{} de {} pontos de rede RJ45: a norma de cabeamento residencial recomenda {} neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.", have, ict, ict),
                     source: "nbr16264",
                 });
             }
@@ -1658,9 +1651,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                     accepted: None,
                     severity: Severity::Dica,
                     place: place.clone(),
-                    message: format!(
-                        "{tv} de {bct} pontos de TV: a norma de cabeamento residencial recomenda {bct} neste cômodo (coaxial até 100 m do distribuidor)."
-                    ),
+                    message: say!("{} de {} pontos de TV: a norma de cabeamento residencial recomenda {} neste cômodo (coaxial até 100 m do distribuidor).", tv, bct, bct),
                     source: "nbr16264",
                 });
             }
@@ -1744,7 +1735,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Alerta,
                 place: cable.name().into(),
-                message: format!("Pontos sem cabo chegando: {}.", unreached.join(", ")),
+                message: say!("Pontos sem cabo chegando: {}.", unreached.join(", ")),
                 source: "nbr16264",
             });
         }
@@ -1818,12 +1809,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Dica,
                 place,
-                message: format!(
-                    "{} sai com uplink de {uplink}: o cabo que chega é {} e o que sustenta essa velocidade é {}.",
-                    ap.standard.name(),
-                    cat.short(),
-                    needs.short()
-                ),
+                message: say!("{} sai com uplink de {}: o cabo que chega é {} e o que sustenta essa velocidade é {}.", ap.standard.name(), uplink, cat.short(), needs.short()),
                 source: "nbr16264",
             });
         }
@@ -1866,13 +1852,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Erro,
                 place: place.clone(),
-                message: format!(
-                    "Não cabe: {} módulos DIN (com {} de reserva) num quadro de {} módulos{}. Use um quadro maior ou divida em dois, antes de a parede ser fechada.",
-                    panel.used,
-                    panel.spare,
-                    panel.capacity,
-                    if panel.capacity_written { "" } else { " (estimado pelo tamanho; informe elec:modules)" }
-                ),
+                message: say!("Não cabe: {} módulos DIN (com {} de reserva) num quadro de {} módulos{}. Use um quadro maior ou divida em dois, antes de a parede ser fechada.", panel.used, panel.spare, panel.capacity, if panel.capacity_written { crate::text::Text::default() } else { say!(" (estimado pelo tamanho; informe elec:modules)") }),
                 source: "nbr5410",
             });
         }
@@ -1882,10 +1862,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Dica,
                 place: place.clone(),
-                message: format!(
-                    "Geral de {} A e parcial de {} A: com menos de o dobro, uma falta no circuito maior pode desarmar o geral junto (regra prática, não da norma). Confira a seletividade nas tabelas do fabricante; geral curva C e parciais curva B ajudam.",
-                    panel.main_a, panel.largest_partial_a
-                ),
+                message: say!("Geral de {} A e parcial de {} A: com menos de o dobro, uma falta no circuito maior pode desarmar o geral junto (regra prática, não da norma). Confira a seletividade nas tabelas do fabricante; geral curva C e parciais curva B ajudam.", panel.main_a, panel.largest_partial_a),
                 source: "nm60898",
             });
         }
@@ -1895,10 +1872,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Dica,
                 place,
-                message: format!(
-                    "Capacidade de interrupção dos disjuntores assumida em {} kA, o que a Enel SP pede até 63 A: confirme com a concessionária a corrente de curto presumida no ponto de entrega e informe elec:short_ka.",
-                    decimal(panel.icn_ka)
-                ),
+                message: say!("Capacidade de interrupção dos disjuntores assumida em {} kA, o que a Enel SP pede até 63 A: confirme com a concessionária a corrente de curto presumida no ponto de entrega e informe elec:short_ka.", decimal(panel.icn_ka)),
                 source: "nbr5410",
             });
         }
@@ -1914,7 +1888,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
             accepted: None,
             severity: Severity::Alerta,
             place: "Circuitos".into(),
-            message: format!("{} pontos sem circuito: {}.", loose.len(), loose.join(", ")),
+            message: say!("{} pontos sem circuito: {}.", loose.len(), loose.join(", ")),
             source: "nbr5410",
         });
     }
@@ -1943,14 +1917,11 @@ pub fn check(home: &Home) -> Vec<Finding> {
         let place = format!("Circuito {}", circuit.name);
         if mixed(circuit) {
             let why = if circuit.amps > 16.0 {
-                Some(format!(
-                    "carrega {} A, acima dos 16 A",
-                    decimal(circuit.amps)
-                ))
+                Some(say!("carrega {} A, acima dos 16 A", decimal(circuit.amps)))
             } else if lights_all_mixed {
-                Some("toda a iluminação ficou em circuitos mistos".into())
+                Some(say!("toda a iluminação ficou em circuitos mistos"))
             } else if outlets_all_mixed {
-                Some("todas as tomadas ficaram em circuitos mistos".into())
+                Some(say!("todas as tomadas ficaram em circuitos mistos"))
             } else {
                 None
             };
@@ -1960,9 +1931,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                     accepted: None,
                     severity: Severity::Erro,
                     place: place.clone(),
-                    message: format!(
-                        "Iluminação e tomadas no mesmo circuito: a norma só admite em residência até 16 A e sem que toda a iluminação ou todas as tomadas fiquem em circuitos mistos (9.5.3.3); aqui {why}."
-                    ),
+                    message: say!("Iluminação e tomadas no mesmo circuito: a norma só admite em residência até 16 A e sem que toda a iluminação ou todas as tomadas fiquem em circuitos mistos (9.5.3.3); aqui {}.", why),
                     source: "nbr5410",
                 });
             }
@@ -1989,7 +1958,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Erro,
                 place: place.clone(),
-                message: format!(
+                message: say!(
                     "{} passa de 10 A e pede circuito exclusivo (9.5.3.1).",
                     big.iter()
                         .map(|p| format!("{} {}", p.name, p.id))
@@ -2007,11 +1976,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Alerta,
                 place,
-                message: format!(
-                    "Queda de tensão de {} % até o ponto mais longe: o circuito terminal pede no máximo 4 % (6.2.7.2); aumente a seção de {} mm² ou divida o circuito.",
-                    decimal(pct),
-                    decimal(circuit.wire_mm2)
-                ),
+                message: say!("Queda de tensão de {} % até o ponto mais longe: o circuito terminal pede no máximo 4 % (6.2.7.2); aumente a seção de {} mm² ou divida o circuito.", decimal(pct), decimal(circuit.wire_mm2)),
                 source: "nbr5410",
             });
         }
@@ -2054,7 +2019,8 @@ mod tests {
         assert_eq!(legacy.usage, crate::RoomUse::Auto);
         serialized["usage"] = serde_json::json!("office");
         let explicit: Room = serde_json::from_value(serialized).unwrap();
-        assert_eq!(explicit.semantic_name(), "escritorio");
+        assert!(explicit.mentions().has(crate::vocabulary::Mention::Office));
+        assert!(!explicit.mentions().has(crate::vocabulary::Mention::Pantry));
         assert_eq!(explicit.name, "Copa");
     }
 
@@ -2504,6 +2470,27 @@ mod tests {
         assert!(!keys.contains(&"elec:short-circuit".to_owned()));
         // Enel SP asks 10 kA of breakers up to 63 A, whatever less is informed.
         assert!((super::panel(&home).unwrap().icn_ka - 10.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_border_takes_from_a_finding_what_it_takes_from_its_source() {
+        let mut home = Home::default();
+        home.rooms = vec![room(1, "Bedroom", 0.0, 400.0, 400.0)];
+        let light = |home: &Home| {
+            check(home)
+                .into_iter()
+                .find(|f| f.key == "elec:light:r1")
+                .map(|f| f.severity)
+        };
+        // At home NBR 5410 obliges: a room with no light point is an error,
+        // whatever language the room is named in.
+        assert_eq!(light(&home), Some(Severity::Erro));
+        home.compass.country = Some("br".into());
+        assert_eq!(light(&home), Some(Severity::Erro));
+        // In Texas it is a reference: still said, no longer an accusation.
+        home.compass.country = Some("us".into());
+        home.compass.region = Some("tx".into());
+        assert_eq!(light(&home), Some(Severity::Alerta));
     }
 
     #[test]

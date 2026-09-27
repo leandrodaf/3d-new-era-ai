@@ -1767,9 +1767,16 @@ impl NewEraApp {
                     "",
                     true,
                 ) {
-                    self.ergonomics.get_or_insert_with(|| crate::ergonomics::ErgonomicsWindow {
-                        profile: newera_ergonomics::Profile::of(self.document.read().home()),
-                        ..Default::default()
+                    self.ergonomics.get_or_insert_with(|| {
+                        let home = self.document.read();
+                        crate::ergonomics::ErgonomicsWindow {
+                            profile: newera_ergonomics::Profile {
+                                // The building code lives on the compass.
+                                city: home.home().compass.city.clone(),
+                                ..newera_ergonomics::Profile::of(home.home())
+                            },
+                            ..Default::default()
+                        }
                     });
                     ui.close();
                 }

@@ -19,6 +19,7 @@ use crate::geometry::Point2;
 use crate::home::Home;
 use crate::ids::{FurnitureId, RoomId};
 use crate::routing::{Route, Terminal, Via};
+use crate::say;
 use crate::style::Polyline;
 
 /// What a pipe run carries.
@@ -131,6 +132,12 @@ impl Fixture {
             Self::Dishwasher => "lava-louças",
             Self::Bidet => "bidê",
         }
+    }
+
+    /// Its name as a word of a sentence, translated with it.
+    #[must_use]
+    pub fn said(self) -> crate::text::Text {
+        crate::text::Text::from(self.name())
     }
 
     /// Whether it takes hot water where the home has it.
@@ -496,9 +503,14 @@ fn place(room: Option<&Room>, piece: &Furniture) -> String {
     }
 }
 
-/// What each fixture and the project as a whole lack.
-#[allow(clippy::too_many_lines)]
+/// What each fixture and the project as a whole lack, weighed at the place
+/// the project is — see [`crate::electrical::weighed`].
 pub fn check(home: &Home) -> Vec<Finding> {
+    crate::electrical::weighed(home, found(home))
+}
+
+#[allow(clippy::too_many_lines)]
+fn found(home: &Home) -> Vec<Finding> {
     let view = home.level_view(home.current_level());
     let all = points(home);
     let fixtures = fixtures(home);
@@ -519,9 +531,10 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Erro,
                 place: at.clone(),
-                message: format!(
-                    "Sem ponto de água fria a até {reach} cm: o {} não tem de onde ser alimentado.",
-                    fixture.name()
+                message: say!(
+                    "Sem ponto de água fria a até {} cm: o {} não tem de onde ser alimentado.",
+                    reach,
+                    fixture.said()
                 ),
                 source: "nbr5626",
             });
@@ -532,9 +545,10 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Alerta,
                 place: at.clone(),
-                message: format!(
-                    "O projeto tem água quente e o {} não recebe: falta o ponto a até {reach} cm.",
-                    fixture.name()
+                message: say!(
+                    "O projeto tem água quente e o {} não recebe: falta o ponto a até {} cm.",
+                    fixture.said(),
+                    reach
                 ),
                 source: "nbr5626",
             });
@@ -546,18 +560,20 @@ pub fn check(home: &Home) -> Vec<Finding> {
         };
         if !near(piece, outlets) {
             let how = if fixture.drains_to_floor() {
-                "ponto de esgoto ou ralo sifonado"
+                say!("ponto de esgoto ou ralo sifonado")
             } else {
-                "ponto de esgoto próprio"
+                say!("ponto de esgoto próprio")
             };
             out.push(Finding {
                 key: format!("plumb:sewer:{}", piece.id),
                 accepted: None,
                 severity: Severity::Erro,
                 place: at,
-                message: format!(
-                    "Sem {how} a até {reach} cm: o {} não tem para onde escoar (ramal de {} mm).",
-                    fixture.name(),
+                message: say!(
+                    "Sem {} a até {} cm: o {} não tem para onde escoar (ramal de {} mm).",
+                    how,
+                    reach,
+                    fixture.said(),
                     fixture.sewer_mm()
                 ),
                 source: "nbr8160",
@@ -568,19 +584,11 @@ pub fn check(home: &Home) -> Vec<Finding> {
     // (São Paulo's sanitary code, Decreto 12.342/78 art. 15 II); where there
     // is a shower or a tub it is a trap box (NBR 8160).
     for room in view.rooms.iter().filter(|r| r.points.len() >= 3) {
-        let name = crate::annotations::fold(room.semantic_name());
-        let wet_name = [
-            "banh",
-            "wc",
-            "lavabo",
-            "sanitario",
-            "cozinha",
-            "copa",
-            "lavanderia",
-            "servico",
-        ]
-        .iter()
-        .any(|w| name.contains(w));
+        let wet_name = {
+            use crate::vocabulary::Mention as M;
+            room.mentions()
+                .any(&[M::Bathroom, M::Lavatory, M::Kitchen, M::Pantry, M::Laundry])
+        };
         let in_room: Vec<Fixture> = fixtures
             .iter()
             .filter(|(_, f)| inside(&room.points, f.position))
@@ -629,10 +637,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Alerta,
                 place: place.clone(),
-                message: format!(
-                    "Nenhum ralo do cômodo é desconector: ralo seco, linear sem sifão ou sifonado pequeno (fecho de 9 a 20 mm) precisam desaguar numa caixa sifonada com fecho de 50 mm ({}).",
-                    specs.iter().map(|(p, _)| p.id.to_string()).collect::<Vec<_>>().join(", ")
-                ),
+                message: say!("Nenhum ralo do cômodo é desconector: ralo seco, linear sem sifão ou sifonado pequeno (fecho de 9 a 20 mm) precisam desaguar numa caixa sifonada com fecho de 50 mm ({}).", specs.iter().map(|(p, _)| p.id.to_string()).collect::<Vec<_>>().join(", ")),
                 source: "nbr8160",
             });
         }
@@ -648,9 +653,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Alerta,
                 place: place.clone(),
-                message: format!(
-                    "{uhc} UHC vão para o ralo e ele aguenta {capacity}: a saída de 50 mm leva até 6 UHC; use a caixa sifonada 150×185×75 (até 15), divida entre duas caixas ou leve aparelhos a ramais próprios."
-                ),
+                message: say!("{} UHC vão para o ralo e ele aguenta {}: a saída de 50 mm leva até 6 UHC; use a caixa sifonada 150×185×75 (até 15), divida entre duas caixas ou leve aparelhos a ramais próprios.", uhc, capacity),
                 source: "nbr8160",
             });
         }
@@ -687,9 +690,10 @@ pub fn check(home: &Home) -> Vec<Finding> {
         }
         // An open balcony or terrace is rainwater: its drain never joins the
         // sewer (NBR 8160 4.1.3.1, NBR 10844).
-        let open_air = ["terraco", "descobert", "quintal", "area externa", "jardim"]
-            .iter()
-            .any(|w| name.contains(w));
+        let open_air = {
+            use crate::vocabulary::Mention as M;
+            room.mentions().any(&[M::Uncovered, M::Outdoor])
+        };
         if open_air && !drains.is_empty() {
             out.push(Finding {
                 key: format!("plumb:rain:{}", room.id),
@@ -773,11 +777,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                     accepted: None,
                     severity: Severity::Dica,
                     place: format!("{} {}", trap.name, trap.id),
-                    message: format!(
-                        "A {} cm do tubo ventilador mais próximo: um ramal de {mm} mm pede ventilação a até {} cm (em linha reta; trace o ramal com route kind=vent e ele passa a contar).",
-                        nearest.round(),
-                        limit.round()
-                    ),
+                    message: say!("A {} cm do tubo ventilador mais próximo: um ramal de {} mm pede ventilação a até {} cm (em linha reta; trace o ramal com route kind=vent e ele passa a contar).", nearest.round(), mm, limit.round()),
                     source: "nbr8160",
                 });
             }
@@ -801,10 +801,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Alerta,
                 place: format!("{} {}", b.name, b.id),
-                message: format!(
-                    "Caixa de inspeção de {} cm: a norma pede ao menos 60 cm de lado ou diâmetro, e até 1 m de profundidade (mais funda é poço de visita).",
-                    f.width.min(f.depth).round()
-                ),
+                message: say!("Caixa de inspeção de {} cm: a norma pede ao menos 60 cm de lado ou diâmetro, e até 1 m de profundidade (mais funda é poço de visita).", f.width.min(f.depth).round()),
                 source: "nbr8160",
             });
         }
@@ -824,10 +821,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                     accepted: None,
                     severity: Severity::Alerta,
                     place: format!("{} {}", p.name, p.id),
-                    message: format!(
-                        "A {} m da caixa de inspeção: vaso, caixa sifonada e caixa de gordura ficam a até 10 m de um dispositivo de inspeção.",
-                        crate::electrical::decimal(nearest / 100.0)
-                    ),
+                    message: say!("A {} m da caixa de inspeção: vaso, caixa sifonada e caixa de gordura ficam a até 10 m de um dispositivo de inspeção.", crate::electrical::decimal(nearest / 100.0)),
                     source: "nbr8160",
                 });
             }
@@ -876,11 +870,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
             accepted: None,
             severity: Severity::Dica,
             place: "Hidráulica".into(),
-            message: format!(
-                "{} linha(s) desenhadas à mão sem dizer se são água fria, quente ou esgoto ({}): não entram nos metros de tubo; trace com route (que as substitui) ou apague.",
-                untyped.len(),
-                untyped.join(", ")
-            ),
+            message: say!("{} linha(s) desenhadas à mão sem dizer se são água fria, quente ou esgoto ({}): não entram nos metros de tubo; trace com route (que as substitui) ou apague.", untyped.len(), untyped.join(", ")),
             source: "nbr8160",
         });
     }
@@ -936,7 +926,7 @@ pub fn check(home: &Home) -> Vec<Finding> {
                 accepted: None,
                 severity: Severity::Alerta,
                 place: pipe.name().into(),
-                message: format!("Pontos sem tubulação chegando: {}.", unreached.join(", ")),
+                message: say!("Pontos sem tubulação chegando: {}.", unreached.join(", ")),
                 source: if pipe == Pipe::Sewer {
                     "nbr8160"
                 } else {
