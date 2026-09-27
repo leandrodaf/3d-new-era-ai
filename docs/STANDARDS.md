@@ -17,11 +17,48 @@ accuse. It is `Tier` in the code, and the severity cap is enforced in
 
 | Tier | What it is | Severity cap |
 |---|---|---|
-| **A · binding** | Brazilian standard or municipal code. Breaking it is a legal or safety problem. | `Erro` (error) |
-| **B · reference** | Foreign standard or association guideline. Good engineering, no legal force here. | `Alerta` (warning) |
-| **C · doctrine** | Architects and manufacturers. What makes a kitchen good, not what makes it legal. | `Dica` (tip) |
-| **D · measured** | Laboratory research. Empirical data with a published method. | `Alerta` (warning) |
+| **A · binding** | A law, standard or contractual specification that carries where the project is. Breaking it is a legal or safety problem. | `Erro` (error) |
+| **B · reference** | The same kind of source from somewhere else, or an association's guideline. Good engineering, no legal force here. | `Alerta` (warning) |
+| **C · doctrine** | Architects and manufacturers, and standards since withdrawn. What makes a kitchen good, not what makes it legal. | `Dica` (tip) |
+| **D · measured** | Laboratory research, and a manufacturer's data about its own product. | `Alerta` (warning) |
 | **E · descriptive** | Market surveys. What people do, never what they should do. | no findings |
+
+### The letter is not a property of the source
+
+A standard is not the same kind of claim everywhere. ABNT NBR 9050 obliges in
+Brazil and informs in Florida; the IRC does the reverse. So the tier is not
+stored on an entry — it is computed, by `Standard::force(at)`, from three
+things that *are* stored, against the place the review is being conducted at:
+
+| Field | What it answers |
+|---|---|
+| `Authority` | Whose word it is, and over what territory: `Global`, a `Bloc` like the EU, a `Country`, a `Region` (the level that adopts a building code in the United States), or a `City`. |
+| `Kind` | What it is: `Law`, `Standard`, `Contract` (binding by contract — a bank's specification for the units it finances, a utility's spec for the connection it will accept), `Guideline`, `Doctrine`, `Manufacturer`, `Research`, `Survey`. |
+| `Status` | `InForce`, or `Withdrawn(year)` — which keeps advising and stops obliging. |
+
+Only `Law`, `Standard` and `Contract` can reach A, and only where their
+authority carries; everything else is what it is wherever it is read. Below the
+country, silence is not disagreement: a project that names Brazil and no state
+is still judged by a state's code, and between the two the stricter one wins.
+Naming a *different* city is disagreement — which is how a municipal decree
+stops following a project to the next town.
+
+A project that says nothing about where it is gets the home jurisdiction
+(`Place::HOME_COUNTRY`), not nowhere. The compass starts with no city, so that
+is the common case, and letting every Brazilian standard fall to a reference
+there would quietly turn a gas appliance with no permanent opening from an
+error into a warning.
+
+One entry says out loud that it cannot be computed. NBR ISO/CIE 8995-1 is in
+force and Brazilian, so the computation would have it oblige — but it governs
+workplaces, and a home is not one. It carries a `tier_override` with the reason
+in a comment beside it. That field exists for scope, and reaching for it to make
+a letter come out right is how the taxonomy rots.
+
+The place a report was weighed at travels with it, as `Report.place`: whoever
+shows a citation has to know where it was judged, or the letter means nothing.
+`set_home(country=…, region=…, city=…)` is what sets it, and a city the registry
+holds implies its state and country.
 
 Besides the tier, every entry carries a `Confidence`. `ConfirmBeforeUse` marks
 what was not checked against the primary publication: it may advise, never
@@ -43,17 +80,18 @@ specification, not as an error, even though the rule asks for one.
 5. **Manufacturers are a legitimate source on ergonomics, not on need.** Keep the
    motion study; drop the conclusion that the answer is their drawer.
 6. **Foreign data is not local data.** American codes and European habits do not
-   describe a Brazilian kitchen; they enter as tier B, labeled with their origin.
+   describe a Brazilian kitchen. Nobody labels them by hand: they declare the
+   authority they come from, and the letter follows from where the project is.
 7. **Every rule was born in a context.** The work triangle was calibrated for a
    one-person kitchen with no microwave and no dishwasher. Knowing when a rule
    was born tells you where it stops applying.
 
-## A · Brazilian standards
+## Brazilian standards and law — A here, B abroad
 
 | Code | Source | What it governs |
 |---|---|---|
 | `nbr15575` | ABNT NBR 15575-1:2021, performance standard | Minimum ceiling height and system performance |
-| `nbr15575g` | ABNT NBR 15575-1:2021, **Annex G** (informative) | Minimum furniture and equipment, and the clearance around them |
+| `nbr15575g` | ABNT NBR 15575-1:2021, **Annex F** (informative) | Minimum furniture and equipment, and the clearance around them |
 | `nbr9050` | ABNT NBR 9050:2020 (amendment 1:2020) | Approach, reach ranges, control heights, wheelchair turning |
 | `nbr13103` | ABNT NBR 13103:2024 (6th ed.) | Permanent ventilation where gas appliances are installed, up to 80 kW combined |
 | `nbr5410` | ABNT NBR 5410 | One outlet per 3.5 m of perimeter; two above the countertop |
@@ -67,12 +105,20 @@ specification, not as an error, even though the rule asks for one.
 | `rdc216` | ANVISA RDC 216/2004 | Commercial kitchens: out of residential scope |
 
 > **Municipal codes never become constants.** They live in
-> `standards::MUNICIPAL_CODES`, keyed by city, and `Profile.city` decides whether
-> they judge or only advise. Between a standard and local law, the stricter one
-> wins. Today the registry has the city of São Paulo and the São Paulo state
-> sanitary code; an unknown city becomes advice to confirm.
+> `standards::MUNICIPAL_CODES`, keyed by city, and the place the project declares
+> — `Home.compass`, overridable for one call — decides whether they judge or only
+> advise. Between a standard and local law, the stricter one wins. Today the
+> registry has the city of São Paulo and the São Paulo state sanitary code; an
+> unknown city becomes advice to confirm.
+>
+> **This rule is currently broken, and knowingly.** The minimum areas and narrow
+> sides of São Paulo's decree 57.776 are literals in a `match` inside
+> `Review::rooms`, cited as the generic `coe-municipal` and applied whatever city
+> the project declares — so a project in Curitiba is measured against São Paulo's
+> table. `Authority::City` is what makes the fix expressible; moving those numbers
+> out of the rule body is the next step, not a finished one.
 
-## B · Foreign standards and codes
+## Foreign standards and codes — B here, A where they carry
 
 | Code | Source | What it governs |
 |---|---|---|
@@ -83,7 +129,7 @@ specification, not as an error, even though the rule asks for one.
 > **Common mistake:** DIN 68935 covers bathroom furniture, not kitchens. For
 > kitchens the reference is EN 1116.
 
-## C · Design lineage
+## Design lineage — C wherever it is read
 
 Every kitchen rule in circulation today was born at one of these points.
 
@@ -98,14 +144,14 @@ Every kitchen rule in circulation today was born at one of these points.
 | — | `neufert` | **Neufert** (1936): the origin of the 90 × 60 cm counter that became the market standard. |
 | — | `panero-zelnik` | **Panero & Zelnik**: reach and clearances by population percentile. |
 
-## D · Laboratory research
+## Laboratory research — D wherever it is read
 
 | Code | Source | Finding |
 |---|---|---|
 | `lbnl-coifa` | Lawrence Berkeley National Laboratory | Across seven range hoods from US$ 40 to US$ 650, capture ranged from **15 % to 98 %**, and price did not predict performance. About 80 % on the back burners versus about 50 % on the front. Airflow alone does not tell how much pollution leaves the house. |
 | `ibge-adensamento` | IBGE | Above three residents per bedroom a household is overcrowded. |
 
-## E · Market data
+## Market data — E wherever it is read
 
 Kept in the registry as context; by construction they **produce no findings**.
 
@@ -121,7 +167,7 @@ Kept in the registry as context; by construction they **produce no findings**.
 | `nbr8995` | `lighting` · `newera-core/src/lighting.rs` | integrated first; `recommended_lux` is the model the rest followed |
 | `nbr9050` | `ergonomics` | turning circle, door width, outlet and wall-cabinet reach, `wheelchair` profile |
 | `nbr15575` / `nbr15575g` | `ergonomics` | ceiling height, minimum furniture, clearance around pieces |
-| `coe-municipal` | `ergonomics` + `Profile.city` | inscribed circle, areas and windows |
+| `coe-municipal` | `ergonomics` + the project's place | inscribed circle, areas and windows |
 | `caixa-mcmv` | `ergonomics` | minimum kitchen width |
 | `nbr13103` | `ergonomics` | gas appliance without a permanent opening |
 | `nbr5410` | `ergonomics` | outlets per perimeter and above the counter, where there is an electrical plan |
@@ -145,6 +191,8 @@ in the module defaults; the rest is a design choice, not a deviation.
 
 ---
 
-Compiled on September 15, 2026 from direct reading of the sources listed.
+Compiled on September 15, 2026 from direct reading of the sources listed, and
+revised on September 27, 2026 when the tier stopped being a field and became a
+relation between a source and a place.
 Entries marked `ConfirmBeforeUse` in the registry were not confirmed against the
 primary publication.
