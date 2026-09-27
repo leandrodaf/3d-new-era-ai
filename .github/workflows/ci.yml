@@ -204,13 +204,13 @@ jobs:
           PORT=7979 ./target/release/newera-relay &
           for _ in $(seq 1 40); do curl -sf http://127.0.0.1:7979/health >/dev/null && break; sleep 0.25; done
           node scripts/web-mcp-e2e.mjs http://127.0.0.1:8790/editor/ http://127.0.0.1:7979
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: web-editor-screenshots
           path: target/web-e2e
           if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: phone-screenshots
