@@ -125,6 +125,21 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo test -p newera-cloud --locked
 
+  golden:
+    name: Review snapshot
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # Every finding over a fixed corpus, at every Brazilian way of naming a
+      # place: too slow unoptimised, so it has its own job and profile.
+      - run: cargo test --profile quick -p newera-ergonomics --test golden --locked -- --ignored
+
   msrv:
     name: MSRV (1.95)
     needs: changes
@@ -237,7 +252,7 @@ jobs:
   # This job runs either way and speaks for all of them.
   ci:
     name: CI
-    needs: [changes, fmt, clippy, test, cloud, msrv, web, deny]
+    needs: [changes, fmt, clippy, test, golden, cloud, msrv, web, deny]
     if: always()
     runs-on: ubuntu-latest
     steps:

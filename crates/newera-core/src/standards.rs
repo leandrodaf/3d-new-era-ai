@@ -3,12 +3,15 @@
 //! A rule that cites its source in the middle of a sentence cannot be
 //! clicked, cannot say which edition it followed, and cannot tell how much
 //! it matters. So every reference lives here once — code, title, edition,
-//! reliability tier and link — and rules carry only the short [`Standard::code`].
+//! who published it, what it is, and link — and rules carry only the short
+//! [`Standard::code`].
 //!
 //! The tiers are a ladder from what obliges to what merely describes, and
-//! they are what turns a reference into a severity: a Brazilian standard is
-//! not the same kind of claim as a market survey, and treating them alike is
-//! how measurements without an owner end up in software.
+//! they are what turns a reference into a severity: a standard in force where
+//! the project stands is not the same kind of claim as a market survey, and
+//! treating them alike is how measurements without an owner end up in
+//! software. Which rung a source stands on is computed against the place —
+//! see [`Standard::force`].
 //!
 //! Numbers that could not be checked against the primary publication are
 //! marked [`Confidence::ConfirmBeforeUse`] and never raise a finding to an
@@ -17,14 +20,16 @@
 
 use serde::Serialize;
 
-/// How much a source obliges.
+/// How much a source obliges *at a place* — see [`Standard::force`]. The
+/// letter is never stored on a source: the same publication is an A where its
+/// authority carries and a B everywhere else.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum Tier {
-    /// Brazilian standard or municipal code: breaking it is a legal or
-    /// safety problem.
+    /// A law, standard or contract whose authority covers the place: breaking
+    /// it is a legal or safety problem.
     A,
-    /// Foreign standard or association guideline: good engineering, no legal
-    /// force here.
+    /// The same, read outside its territory, or an association's guideline:
+    /// good engineering, no legal force here.
     B,
     /// Architects and manufacturers: what makes a kitchen good, not what
     /// makes it legal.

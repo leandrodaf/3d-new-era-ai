@@ -4729,7 +4729,6 @@ mod tests {
             .find(|f| f.message.contains("A folha da porta bate"))
             .unwrap_or_else(|| panic!("{report:#?}"));
         let fix = door.fix.clone().expect("a fix");
-        eprintln!("DBGFIX {fix} MSG {}", door.message);
         if fix["tool"] == "update" {
             // The flip names the value to set, not only "the other side".
             let right = fix["items"][0]["hinge_right"].as_bool().unwrap();
