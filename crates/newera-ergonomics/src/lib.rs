@@ -199,6 +199,19 @@ pub struct Capacity {
     pub wardrobe_cm: f64,
 }
 
+impl Capacity {
+    fn plus(&self, other: &Self) -> Self {
+        Self {
+            beds: self.beds + other.beds,
+            bedrooms: self.bedrooms + other.bedrooms,
+            bathrooms: self.bathrooms + other.bathrooms,
+            dining_seats: self.dining_seats + other.dining_seats,
+            living_seats: self.living_seats + other.living_seats,
+            wardrobe_cm: self.wardrobe_cm + other.wardrobe_cm,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Report {
     pub scope: ReviewScope,
@@ -246,6 +259,54 @@ struct Review<'s, 'a> {
     /// Glass that lights and airs each room, shared across rooms open to
     /// each other — see [`glass_by_room`].
     glass: std::collections::BTreeMap<newera_core::RoomId, f64>,
+}
+
+/// What the whole home holds — beds, seats, bathrooms — on every storey
+/// being designed, not just the one shown (`scene`): the occupancy findings
+/// speak of the house.
+fn house_capacity(home: &Home, scene: &Scene<'_>) -> Capacity {
+    let storeys = home.design_levels();
+    // A home drawn without storeys is the scene; with one, it is that storey
+    // even when a reference layer is the one shown.
+    if storeys.is_empty() {
+        return capacity_of(scene);
+    }
+    storeys.into_iter().fold(Capacity::default(), |sum, level| {
+        let view = home.level_view(Some(level));
+        sum.plus(&capacity_of(&Scene::new(&view)))
+    })
+}
+
+/// What one storey holds.
+fn capacity_of(scene: &Scene<'_>) -> Capacity {
+    let mut c = Capacity::default();
+    for (i, u) in scene.units.iter().enumerate() {
+        let room = scene.spaces.iter().find(|s| s.units.contains(&i));
+        match u.what {
+            Use::Bed(n) => c.beds += n,
+            Use::Crib => c.beds += 1,
+            Use::DiningTable(n) | Use::DiningSet(n) => c.dining_seats += n,
+            Use::Stool => c.dining_seats += 1,
+            Use::Sofa(n) => c.living_seats += n,
+            Use::Armchair => c.living_seats += 1,
+            Use::Wardrobe if room.is_none_or(|r| r.what == RoomUse::Bedroom || r.is_closet()) => {
+                c.wardrobe_cm += u.piece.width;
+            }
+            _ => {}
+        }
+    }
+    c.wardrobe_cm = c.wardrobe_cm.round();
+    c.bedrooms = scene
+        .spaces
+        .iter()
+        .filter(|s| s.what == RoomUse::Bedroom)
+        .count() as u32;
+    c.bathrooms = scene
+        .spaces
+        .iter()
+        .filter(|s| s.units.iter().any(|&i| scene.units[i].what == Use::Toilet))
+        .count() as u32;
+    c
 }
 
 impl Review<'_, '_> {
@@ -401,45 +462,6 @@ impl Review<'_, '_> {
         for f in &mut self.findings[before..] {
             f.key.clone_from(&key);
         }
-    }
-
-    /// The room a unit stands in.
-    fn room_of(&self, i: usize) -> Option<&Space<'_>> {
-        self.scene.spaces.iter().find(|s| s.units.contains(&i))
-    }
-
-    fn capacity(&self) -> Capacity {
-        let scene = self.scene;
-        let mut c = Capacity::default();
-        for (i, u) in scene.units.iter().enumerate() {
-            let room = self.room_of(i);
-            match u.what {
-                Use::Bed(n) => c.beds += n,
-                Use::Crib => c.beds += 1,
-                Use::DiningTable(n) | Use::DiningSet(n) => c.dining_seats += n,
-                Use::Stool => c.dining_seats += 1,
-                Use::Sofa(n) => c.living_seats += n,
-                Use::Armchair => c.living_seats += 1,
-                Use::Wardrobe
-                    if room.is_none_or(|r| r.what == RoomUse::Bedroom || r.is_closet()) =>
-                {
-                    c.wardrobe_cm += u.piece.width;
-                }
-                _ => {}
-            }
-        }
-        c.wardrobe_cm = c.wardrobe_cm.round();
-        c.bedrooms = scene
-            .spaces
-            .iter()
-            .filter(|s| s.what == RoomUse::Bedroom)
-            .count() as u32;
-        c.bathrooms = scene
-            .spaces
-            .iter()
-            .filter(|s| s.units.iter().any(|&i| scene.units[i].what == Use::Toilet))
-            .count() as u32;
-        c
     }
 
     fn occupancy(&mut self, c: &Capacity) {
@@ -2573,7 +2595,7 @@ fn review_with(home: &Home, profile: &Profile, weigh_fixes: bool) -> Report {
         profile,
         findings: Vec::new(),
     };
-    let capacity = review.capacity();
+    let capacity = house_capacity(home, &scene);
     review.occupancy(&capacity);
     review.clearances();
     review.doors();
@@ -3381,6 +3403,113 @@ mod tests {
         assert_eq!(fix["dx"], 30.0, "{fix}");
     }
 
+    #[test]
+    fn the_house_holds_what_every_storey_holds() {
+        use newera_core::{Level, LevelId};
+        let mut home = Home::default();
+        home.levels = vec![
+            Level {
+                id: LevelId(1),
+                name: "Térreo".into(),
+                elevation: 0.0,
+                height: 280.0,
+                ..Level::default()
+            },
+            Level {
+                id: LevelId(2),
+                name: "Superior".into(),
+                elevation: 292.0,
+                height: 280.0,
+                elevation_index: 1,
+                ..Level::default()
+            },
+        ];
+        let room = |id: u64, name: &str, x: f64, level: u64| {
+            let mut room = Room::new(
+                RoomId(id),
+                name,
+                [(x, 0.0), (x + 400.0, 0.0), (x + 400.0, 400.0), (x, 400.0)]
+                    .iter()
+                    .map(|p| Point2::new(p.0, p.1))
+                    .collect(),
+            );
+            room.level = Some(LevelId(level));
+            room
+        };
+        home.rooms = vec![
+            room(10, "Sala", 0.0, 1),
+            room(11, "Banheiro", 400.0, 1),
+            room(12, "Quarto", 0.0, 2),
+            room(13, "Quarto 2", 400.0, 2),
+        ];
+        let on = |mut f: Furniture, level: u64| {
+            f.level = Some(LevelId(level));
+            f
+        };
+        home.furniture = vec![
+            on(
+                piece(20, "sofa-3", (200.0, 100.0), (210.0, 90.0, 85.0), 0.0),
+                1,
+            ),
+            on(
+                piece(
+                    21,
+                    "dining-table-6",
+                    (200.0, 300.0),
+                    (180.0, 90.0, 75.0),
+                    0.0,
+                ),
+                1,
+            ),
+            on(
+                piece(22, "toilet", (600.0, 100.0), (40.0, 68.0, 40.0), 0.0),
+                1,
+            ),
+            on(
+                piece(23, "bed-double", (200.0, 200.0), (160.0, 200.0, 50.0), 0.0),
+                2,
+            ),
+            on(
+                piece(24, "bed-double", (600.0, 200.0), (160.0, 200.0, 50.0), 0.0),
+                2,
+            ),
+        ];
+        let profile: Profile = serde_json::from_str(r#"{"occupants":4}"#).unwrap();
+        for shown in [1, 2] {
+            home.selected_level = Some(LevelId(shown));
+            let report = review(&home, &profile);
+            assert_eq!(report.capacity.beds, 4, "shown lv{shown}");
+            assert_eq!(report.capacity.bedrooms, 2, "shown lv{shown}");
+            assert_eq!(report.capacity.bathrooms, 1, "shown lv{shown}");
+            assert_eq!(report.capacity.dining_seats, 6, "shown lv{shown}");
+            assert_eq!(report.capacity.living_seats, 3, "shown lv{shown}");
+            let said = |text: &str| report.findings.iter().any(|f| f.message.contains(text));
+            assert!(!said("Nenhum banheiro"), "shown lv{shown}");
+            assert!(!said("Nenhum dormitório"), "shown lv{shown}");
+            assert!(!said("lugares à mesa"), "shown lv{shown}");
+        }
+        // One storey designed, and a traced plan shown: the house is the design.
+        home.levels[1].set_reference(true);
+        for f in &mut home.furniture {
+            if f.level == Some(LevelId(2)) {
+                f.position.y += 400.0;
+            }
+            f.level = Some(LevelId(1));
+        }
+        for r in &mut home.rooms {
+            if r.level == Some(LevelId(2)) {
+                for p in &mut r.points {
+                    p.y += 400.0;
+                }
+            }
+            r.level = Some(LevelId(1));
+        }
+        home.selected_level = Some(LevelId(2));
+        let report = review(&home, &profile);
+        assert_eq!(report.capacity.beds, 4, "the design, not the tracing");
+        assert_eq!(report.capacity.bathrooms, 1);
+    }
+
     fn named_again(home: &mut Home) {
         let mut shower = piece(30, "shower", (40.0, 200.0), (90.0, 90.0, 200.0), 0.0);
         shower.name = "Box".into();
@@ -3859,6 +3988,32 @@ mod tests {
             !says(&report, Severity::Dica, "84,5 cm"),
             "read by name, it is still an appliance: {report:#?}"
         );
+    }
+
+    #[test]
+    fn a_washer_stands_under_a_countertop_with_a_sink() {
+        let mut home = Home::default();
+        square(&mut home, "Lavanderia", 300.0, 200.0);
+        let mut top = piece(20, "group", (150.0, 41.0), (264.0, 67.0, 90.0), 0.0);
+        top.name = "Bancada 264 × 67 cm".into();
+        top.properties.insert(
+            "joinery:params".into(),
+            r#"{"kind":"countertop","length":264,"depth":67,"height":90,"thickness":3,"cutouts":[{"kind":"sink","x":200}]}"#.into(),
+        );
+        home.furniture = vec![
+            top,
+            piece(21, "washer", (60.0, 39.0), (60.0, 60.0, 85.0), 0.0),
+        ];
+        let clash = |home: &Home| {
+            review(home, &Profile::default())
+                .findings
+                .iter()
+                .any(|f| f.message.contains("Ocupa o mesmo lugar"))
+        };
+        assert!(!clash(&home), "under the slab");
+        // Taller than the space under the slab, it is in the countertop.
+        home.furniture[1].height = 95.0;
+        assert!(clash(&home), "through the slab");
     }
 
     #[test]

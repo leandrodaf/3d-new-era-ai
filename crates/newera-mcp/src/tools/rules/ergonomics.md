@@ -11,8 +11,9 @@
   call weigh that review only; `edit_home(people=…)` keeps them with the project, and every
   review and dry run then scores for them.
 - `scope={electrical:false, plumbing:false}` scores architecture only; all findings remain
-  visible, excluded ones weigh zero. `layout` includes the geometric checks on the active
-  storey; `coverage` declares the limits.
+  visible, excluded ones weigh zero. Rooms and pieces are reviewed on the active storey, as
+  `layout` is; `capacity` and the findings about the house (beds, bathrooms, seats,
+  wardrobes per person) count every storey. `coverage` declares the limits.
 - Scores are heuristic, not project completion or certification. `weight` is what the score
   would gain if that finding went away, so a score that moved can be read.
 - `src` is the source a finding stands on, empty when it is common practice; resolve it in

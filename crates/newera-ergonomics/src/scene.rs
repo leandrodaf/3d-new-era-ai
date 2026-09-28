@@ -814,6 +814,20 @@ impl<'a> Scene<'a> {
         matches!(u.what, Use::Sink | Use::Basin | Use::Stove) && lo >= 50.0 && hi - lo <= 45.0
     }
 
+    /// What unit `i` fills between the floor and the ceiling, cm. A
+    /// countertop is its slab: its box reaches the floor, and under the slab
+    /// is where a washer or a dishwasher stands.
+    fn heights(&self, i: usize) -> (f64, f64) {
+        let (lo, hi) = self.units[i].piece.height_range();
+        match &self.units[i].params {
+            Some(p) if p["kind"] == "countertop" => {
+                let thickness = p["thickness"].as_f64().unwrap_or(3.0);
+                ((hi - thickness).max(lo), hi)
+            }
+            _ => (lo, hi),
+        }
+    }
+
     /// Area two outlines share, cm².
     fn shared(a: &Polygon<f64>, b: &Polygon<f64>) -> f64 {
         a.intersection(b).unsigned_area()
@@ -826,10 +840,7 @@ impl<'a> Scene<'a> {
         if i == j || !self.solid(j) {
             return false;
         }
-        let ((a0, a1), (b0, b1)) = (
-            self.units[i].piece.height_range(),
-            self.units[j].piece.height_range(),
-        );
+        let ((a0, a1), (b0, b1)) = (self.heights(i), self.heights(j));
         if a0 >= b1 - 0.5 || b0 >= a1 - 0.5 {
             return false;
         }

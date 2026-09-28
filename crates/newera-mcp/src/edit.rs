@@ -744,8 +744,8 @@ pub(crate) struct UpdateSpec {
     /// Furniture brand (references).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub brand: Option<String>,
-    /// Role independent of the name: `trim`, `backsplash`, `counter`; empty
-    /// restores the automatic one.
+    /// Role independent of the name: `trim`, `backsplash`, `counter`,
+    /// `stair`; empty: automatic.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
     /// Furniture commercial model.
@@ -796,7 +796,7 @@ pub(crate) fn missing(home: &newera_core::Home, id: ElementId) -> String {
             .find(|p| p.id == piece)
             .map_or_else(String::new, |p| format!(" ({})", p.name));
         return format!(
-            "{id}{part} is a part of {}; edit {} instead — changing the group rebuilds its parts (a part takes only name, brand, model_name and url on its own)",
+            "{id}{part} is a part of {}; edit {} instead — changing the group rebuilds its parts",
             owner.id, owner.id
         );
     }
@@ -1051,11 +1051,15 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                         "" => {
                             f.properties.remove(newera_core::Furniture::ROLE_KEY);
                         }
-                        "trim" | "backsplash" | "counter" => {
+                        "trim" | "backsplash" | "counter" | "stair" => {
                             f.properties
                                 .insert(newera_core::Furniture::ROLE_KEY.into(), role);
                         }
-                        _ => return Err("role must be trim, backsplash, counter or empty".into()),
+                        _ => {
+                            return Err(
+                                "role must be trim, backsplash, counter, stair or empty".into()
+                            );
+                        }
                     }
                 }
                 f.info.brand = text(spec.brand, f.info.brand.take());
@@ -1183,6 +1187,11 @@ pub(crate) fn rename(doc: &mut Document, spec: &RenameSpec) -> EditResult<()> {
 /// is, never where it is or how big — the group owns that and rebuilds it.
 const PART_FIELDS: [&str; 6] = ["id", "name", "brand", "model_name", "url", "layer"];
 
+/// What an item set into joinery — a sink bowl, a cooktop, an oven — takes
+/// besides: its own finish. It is not rebuilt with its host but carried
+/// whole, so a finish given to it stays.
+const EMBEDDED_FIELDS: [&str; 3] = ["color", "mat", "opacity"];
+
 /// A piece declared fixed or free-standing, or `""` to clear it.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, JsonSchema)]
 #[serde(untagged)]
@@ -1254,15 +1263,29 @@ fn rename_part(
     ) else {
         return Err(missing(home, id));
     };
+    let embedded = owner
+        .flatten()
+        .into_iter()
+        .any(|p| p.id == part && p.properties.contains_key(newera_joinery::EMBED_KEY));
+    let takes: Vec<&str> = PART_FIELDS
+        .iter()
+        .chain(if embedded { &EMBEDDED_FIELDS[..] } else { &[] })
+        .copied()
+        .collect();
     if let Some(bad) = spec
         .fields()
         .into_iter()
-        .find(|f| !PART_FIELDS.contains(&f.as_str()))
+        .find(|f| !takes.contains(&f.as_str()))
     {
         return Err(format!(
-            "{}; a part takes only {} on its own (`{bad}` belongs to the group)",
+            "{}; {} takes only {} on its own (`{bad}` belongs to the group)",
             missing(home, id),
-            PART_FIELDS[1..].join(", ")
+            if embedded {
+                "an item set into it"
+            } else {
+                "a part"
+            },
+            takes[1..].join(", ")
         ));
     }
     // Two parts of one group in one call edit the same copy of the group.
@@ -1290,6 +1313,13 @@ fn rename_part(
     piece.info.url = text(spec.url, piece.info.url.take());
     if let Some(layer) = &spec.layer {
         set_layer(piece, layer)?;
+    }
+    piece.color = spec.color.or(piece.color);
+    if let Some(raw) = &spec.mat {
+        piece.texture = material(raw)?;
+    }
+    if let Some(o) = spec.opacity {
+        piece.opacity = (o < 1.0).then_some(o.clamp(0.0, 1.0));
     }
     commands.push(Command::Update {
         element: Element::Furniture(group),
@@ -1659,6 +1689,11 @@ mod tests {
         assert_eq!(
             doc.home().furniture[0].properties[newera_core::Furniture::ROLE_KEY],
             "backsplash"
+        );
+        set(&mut doc, "stair").unwrap();
+        assert!(
+            doc.home().furniture[0].is_stairs(),
+            "a flight built by hand"
         );
     }
 
