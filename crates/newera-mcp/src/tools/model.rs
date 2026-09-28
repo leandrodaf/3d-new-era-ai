@@ -828,7 +828,7 @@ mod tests {
             boxes(&[("puxador", [0.0, 0.0, 0.0], [5.0, 3.0, 4.0])]),
         )
         .unwrap();
-        let file = dir.join("puxador.obj").display().to_string();
+        let file = path(&dir.join("puxador.obj"));
         let s = server();
         let place = |item: &str| {
             s.place(Parameters(
