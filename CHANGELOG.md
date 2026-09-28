@@ -75,10 +75,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- `ergonomics` measures a TV from the seats that can watch it. It took the nearest sofa or
-  armchair whichever way it faced, so a reading chair beside the TV, its back to it, was "121 cm
-  from a 56-inch TV" while the sofa facing it sat at a comfortable 3.1 m. Seats turned away from the
-  screen are left out.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
