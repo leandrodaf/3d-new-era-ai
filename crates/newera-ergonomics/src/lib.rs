@@ -2899,113 +2899,6 @@ mod tests {
     }
 
     #[test]
-    fn the_house_holds_what_every_storey_holds() {
-        use newera_core::{Level, LevelId};
-        let mut home = Home::default();
-        home.levels = vec![
-            Level {
-                id: LevelId(1),
-                name: "Térreo".into(),
-                elevation: 0.0,
-                height: 280.0,
-                ..Level::default()
-            },
-            Level {
-                id: LevelId(2),
-                name: "Superior".into(),
-                elevation: 292.0,
-                height: 280.0,
-                elevation_index: 1,
-                ..Level::default()
-            },
-        ];
-        let room = |id: u64, name: &str, x: f64, level: u64| {
-            let mut room = Room::new(
-                RoomId(id),
-                name,
-                [(x, 0.0), (x + 400.0, 0.0), (x + 400.0, 400.0), (x, 400.0)]
-                    .iter()
-                    .map(|p| Point2::new(p.0, p.1))
-                    .collect(),
-            );
-            room.level = Some(LevelId(level));
-            room
-        };
-        home.rooms = vec![
-            room(10, "Sala", 0.0, 1),
-            room(11, "Banheiro", 400.0, 1),
-            room(12, "Quarto", 0.0, 2),
-            room(13, "Quarto 2", 400.0, 2),
-        ];
-        let on = |mut f: Furniture, level: u64| {
-            f.level = Some(LevelId(level));
-            f
-        };
-        home.furniture = vec![
-            on(
-                piece(20, "sofa-3", (200.0, 100.0), (210.0, 90.0, 85.0), 0.0),
-                1,
-            ),
-            on(
-                piece(
-                    21,
-                    "dining-table-6",
-                    (200.0, 300.0),
-                    (180.0, 90.0, 75.0),
-                    0.0,
-                ),
-                1,
-            ),
-            on(
-                piece(22, "toilet", (600.0, 100.0), (40.0, 68.0, 40.0), 0.0),
-                1,
-            ),
-            on(
-                piece(23, "bed-double", (200.0, 200.0), (160.0, 200.0, 50.0), 0.0),
-                2,
-            ),
-            on(
-                piece(24, "bed-double", (600.0, 200.0), (160.0, 200.0, 50.0), 0.0),
-                2,
-            ),
-        ];
-        let profile: Profile = serde_json::from_str(r#"{"occupants":4}"#).unwrap();
-        for shown in [1, 2] {
-            home.selected_level = Some(LevelId(shown));
-            let report = review(&home, &profile);
-            assert_eq!(report.capacity.beds, 4, "shown lv{shown}");
-            assert_eq!(report.capacity.bedrooms, 2, "shown lv{shown}");
-            assert_eq!(report.capacity.bathrooms, 1, "shown lv{shown}");
-            assert_eq!(report.capacity.dining_seats, 6, "shown lv{shown}");
-            assert_eq!(report.capacity.living_seats, 3, "shown lv{shown}");
-            let said = |text: &str| report.findings.iter().any(|f| f.message.contains(text));
-            assert!(!said("Nenhum banheiro"), "shown lv{shown}");
-            assert!(!said("Nenhum dormitório"), "shown lv{shown}");
-            assert!(!said("lugares à mesa"), "shown lv{shown}");
-        }
-        // One storey designed, and a traced plan shown: the house is the design.
-        home.levels[1].set_reference(true);
-        for f in &mut home.furniture {
-            if f.level == Some(LevelId(2)) {
-                f.position.y += 400.0;
-            }
-            f.level = Some(LevelId(1));
-        }
-        for r in &mut home.rooms {
-            if r.level == Some(LevelId(2)) {
-                for p in &mut r.points {
-                    p.y += 400.0;
-                }
-            }
-            r.level = Some(LevelId(1));
-        }
-        home.selected_level = Some(LevelId(2));
-        let report = review(&home, &profile);
-        assert_eq!(report.capacity.beds, 4, "the design, not the tracing");
-        assert_eq!(report.capacity.bathrooms, 1);
-    }
-
-    #[test]
     fn a_vanity_with_two_bowls_is_a_bathroom_not_a_kitchen() {
         let mut home = Home::default();
         square(&mut home, "Banho master", 250.0, 130.0);
@@ -3508,6 +3401,113 @@ mod tests {
             .expect("a move that frees the side");
         assert_eq!(fix["tool"], "move");
         assert_eq!(fix["dx"], 30.0, "{fix}");
+    }
+
+    #[test]
+    fn the_house_holds_what_every_storey_holds() {
+        use newera_core::{Level, LevelId};
+        let mut home = Home::default();
+        home.levels = vec![
+            Level {
+                id: LevelId(1),
+                name: "Térreo".into(),
+                elevation: 0.0,
+                height: 280.0,
+                ..Level::default()
+            },
+            Level {
+                id: LevelId(2),
+                name: "Superior".into(),
+                elevation: 292.0,
+                height: 280.0,
+                elevation_index: 1,
+                ..Level::default()
+            },
+        ];
+        let room = |id: u64, name: &str, x: f64, level: u64| {
+            let mut room = Room::new(
+                RoomId(id),
+                name,
+                [(x, 0.0), (x + 400.0, 0.0), (x + 400.0, 400.0), (x, 400.0)]
+                    .iter()
+                    .map(|p| Point2::new(p.0, p.1))
+                    .collect(),
+            );
+            room.level = Some(LevelId(level));
+            room
+        };
+        home.rooms = vec![
+            room(10, "Sala", 0.0, 1),
+            room(11, "Banheiro", 400.0, 1),
+            room(12, "Quarto", 0.0, 2),
+            room(13, "Quarto 2", 400.0, 2),
+        ];
+        let on = |mut f: Furniture, level: u64| {
+            f.level = Some(LevelId(level));
+            f
+        };
+        home.furniture = vec![
+            on(
+                piece(20, "sofa-3", (200.0, 100.0), (210.0, 90.0, 85.0), 0.0),
+                1,
+            ),
+            on(
+                piece(
+                    21,
+                    "dining-table-6",
+                    (200.0, 300.0),
+                    (180.0, 90.0, 75.0),
+                    0.0,
+                ),
+                1,
+            ),
+            on(
+                piece(22, "toilet", (600.0, 100.0), (40.0, 68.0, 40.0), 0.0),
+                1,
+            ),
+            on(
+                piece(23, "bed-double", (200.0, 200.0), (160.0, 200.0, 50.0), 0.0),
+                2,
+            ),
+            on(
+                piece(24, "bed-double", (600.0, 200.0), (160.0, 200.0, 50.0), 0.0),
+                2,
+            ),
+        ];
+        let profile: Profile = serde_json::from_str(r#"{"occupants":4}"#).unwrap();
+        for shown in [1, 2] {
+            home.selected_level = Some(LevelId(shown));
+            let report = review(&home, &profile);
+            assert_eq!(report.capacity.beds, 4, "shown lv{shown}");
+            assert_eq!(report.capacity.bedrooms, 2, "shown lv{shown}");
+            assert_eq!(report.capacity.bathrooms, 1, "shown lv{shown}");
+            assert_eq!(report.capacity.dining_seats, 6, "shown lv{shown}");
+            assert_eq!(report.capacity.living_seats, 3, "shown lv{shown}");
+            let said = |text: &str| report.findings.iter().any(|f| f.message.contains(text));
+            assert!(!said("Nenhum banheiro"), "shown lv{shown}");
+            assert!(!said("Nenhum dormitório"), "shown lv{shown}");
+            assert!(!said("lugares à mesa"), "shown lv{shown}");
+        }
+        // One storey designed, and a traced plan shown: the house is the design.
+        home.levels[1].set_reference(true);
+        for f in &mut home.furniture {
+            if f.level == Some(LevelId(2)) {
+                f.position.y += 400.0;
+            }
+            f.level = Some(LevelId(1));
+        }
+        for r in &mut home.rooms {
+            if r.level == Some(LevelId(2)) {
+                for p in &mut r.points {
+                    p.y += 400.0;
+                }
+            }
+            r.level = Some(LevelId(1));
+        }
+        home.selected_level = Some(LevelId(2));
+        let report = review(&home, &profile);
+        assert_eq!(report.capacity.beds, 4, "the design, not the tracing");
+        assert_eq!(report.capacity.bathrooms, 1);
     }
 
     fn named_again(home: &mut Home) {
