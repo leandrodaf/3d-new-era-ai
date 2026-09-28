@@ -1,0 +1,359 @@
+{
+  "total": 147560,
+  "tools": {
+    "accept": {
+      "total": 1669,
+      "description": 447,
+      "input": 493,
+      "output": 530
+    },
+    "annotations": {
+      "total": 2636,
+      "description": 1313,
+      "input": 347,
+      "output": 761
+    },
+    "arrange": {
+      "total": 3147,
+      "description": 822,
+      "input": 1712,
+      "output": 401
+    },
+    "cabinet_run": {
+      "total": 2877,
+      "description": 824,
+      "input": 1282,
+      "output": 547
+    },
+    "cameras": {
+      "total": 591,
+      "description": 130,
+      "input": 46,
+      "output": 231
+    },
+    "catalog": {
+      "total": 1734,
+      "description": 661,
+      "input": 479,
+      "output": 392
+    },
+    "check_layout": {
+      "total": 6159,
+      "description": 3615,
+      "input": 424,
+      "output": 1935
+    },
+    "checkpoint": {
+      "total": 1172,
+      "description": 331,
+      "input": 229,
+      "output": 401
+    },
+    "checkpoints": {
+      "total": 466,
+      "description": 111,
+      "input": 46,
+      "output": 127
+    },
+    "create": {
+      "total": 10052,
+      "description": 505,
+      "input": 8924,
+      "output": 401
+    },
+    "cut_list": {
+      "total": 1626,
+      "description": 663,
+      "input": 205,
+      "output": 595
+    },
+    "delete": {
+      "total": 1366,
+      "description": 276,
+      "input": 291,
+      "output": 600
+    },
+    "disciplines": {
+      "total": 1519,
+      "description": 497,
+      "input": 139,
+      "output": 679
+    },
+    "edit_annotations": {
+      "total": 3796,
+      "description": 1317,
+      "input": 959,
+      "output": 1289
+    },
+    "edit_cameras": {
+      "total": 1816,
+      "description": 343,
+      "input": 855,
+      "output": 401
+    },
+    "edit_disciplines": {
+      "total": 2074,
+      "description": 762,
+      "input": 405,
+      "output": 679
+    },
+    "edit_electrical": {
+      "total": 7105,
+      "description": 2160,
+      "input": 2754,
+      "output": 1951
+    },
+    "edit_levels": {
+      "total": 1811,
+      "description": 491,
+      "input": 717,
+      "output": 401
+    },
+    "edit_plumbing": {
+      "total": 3558,
+      "description": 1220,
+      "input": 784,
+      "output": 1350
+    },
+    "edit_variants": {
+      "total": 1213,
+      "description": 235,
+      "input": 297,
+      "output": 465
+    },
+    "edit_video": {
+      "total": 2308,
+      "description": 338,
+      "input": 1153,
+      "output": 592
+    },
+    "electrical": {
+      "total": 6745,
+      "description": 4832,
+      "input": 356,
+      "output": 1352
+    },
+    "embed": {
+      "total": 2371,
+      "description": 533,
+      "input": 923,
+      "output": 695
+    },
+    "ergonomics": {
+      "total": 5167,
+      "description": 2679,
+      "input": 1288,
+      "output": 1017
+    },
+    "export_cut_list": {
+      "total": 1410,
+      "description": 262,
+      "input": 339,
+      "output": 595
+    },
+    "export_plan": {
+      "total": 1124,
+      "description": 117,
+      "input": 402,
+      "output": 401
+    },
+    "feedback": {
+      "total": 2658,
+      "description": 898,
+      "input": 1334,
+      "output": 205
+    },
+    "fill_lighting": {
+      "total": 1389,
+      "description": 291,
+      "input": 399,
+      "output": 478
+    },
+    "fit_roof": {
+      "total": 1435,
+      "description": 375,
+      "input": 373,
+      "output": 474
+    },
+    "get_home": {
+      "total": 3411,
+      "description": 594,
+      "input": 1218,
+      "output": 1426
+    },
+    "joinery": {
+      "total": 3503,
+      "description": 1324,
+      "input": 1457,
+      "output": 524
+    },
+    "levels": {
+      "total": 526,
+      "description": 142,
+      "input": 46,
+      "output": 169
+    },
+    "lighting": {
+      "total": 1417,
+      "description": 526,
+      "input": 230,
+      "output": 480
+    },
+    "materials": {
+      "total": 554,
+      "description": 98,
+      "input": 33,
+      "output": 219
+    },
+    "measure": {
+      "total": 3516,
+      "description": 756,
+      "input": 1790,
+      "output": 788
+    },
+    "merge_walls": {
+      "total": 1227,
+      "description": 461,
+      "input": 169,
+      "output": 401
+    },
+    "move": {
+      "total": 3206,
+      "description": 223,
+      "input": 1049,
+      "output": 1739
+    },
+    "new_home": {
+      "total": 653,
+      "description": 26,
+      "input": 33,
+      "output": 401
+    },
+    "open_home": {
+      "total": 837,
+      "description": 91,
+      "input": 145,
+      "output": 401
+    },
+    "place": {
+      "total": 9542,
+      "description": 1915,
+      "input": 5419,
+      "output": 1969
+    },
+    "plugins": {
+      "total": 448,
+      "description": 113,
+      "input": 46,
+      "output": 119
+    },
+    "plumbing": {
+      "total": 2611,
+      "description": 1731,
+      "input": 46,
+      "output": 635
+    },
+    "redo": {
+      "total": 1081,
+      "description": 28,
+      "input": 33,
+      "output": 845
+    },
+    "render_3d": {
+      "total": 2149,
+      "description": 875,
+      "input": 948,
+      "output": 146
+    },
+    "render_photo": {
+      "total": 1185,
+      "description": 240,
+      "input": 620,
+      "output": 146
+    },
+    "render_plan": {
+      "total": 1796,
+      "description": 422,
+      "input": 1036,
+      "output": 146
+    },
+    "run_plugin": {
+      "total": 1121,
+      "description": 160,
+      "input": 210,
+      "output": 555
+    },
+    "save_home": {
+      "total": 808,
+      "description": 63,
+      "input": 140,
+      "output": 401
+    },
+    "sessions": {
+      "total": 496,
+      "description": 77,
+      "input": 33,
+      "output": 201
+    },
+    "set_background": {
+      "total": 2363,
+      "description": 222,
+      "input": 1527,
+      "output": 401
+    },
+    "set_home": {
+      "total": 4452,
+      "description": 473,
+      "input": 3375,
+      "output": 401
+    },
+    "show_plan": {
+      "total": 934,
+      "description": 243,
+      "input": 33,
+      "output": 345
+    },
+    "split_wall": {
+      "total": 840,
+      "description": 47,
+      "input": 195,
+      "output": 401
+    },
+    "trace_background": {
+      "total": 1485,
+      "description": 379,
+      "input": 776,
+      "output": 135
+    },
+    "trace_walls": {
+      "total": 1560,
+      "description": 162,
+      "input": 776,
+      "output": 401
+    },
+    "undo": {
+      "total": 1091,
+      "description": 38,
+      "input": 33,
+      "output": 845
+    },
+    "update": {
+      "total": 12476,
+      "description": 1553,
+      "input": 8815,
+      "output": 1907
+    },
+    "variants": {
+      "total": 531,
+      "description": 142,
+      "input": 46,
+      "output": 160
+    },
+    "video": {
+      "total": 687,
+      "description": 128,
+      "input": 46,
+      "output": 331
+    }
+  }
+}

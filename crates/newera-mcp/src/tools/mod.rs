@@ -29,7 +29,7 @@
 //! A new tool goes in the domain it belongs to, and its router joins
 //! `parts` in [`NewEraMcp::new`]. Two domains claiming one name would
 //! overwrite in silence, so the count is asserted there and the whole
-//! surface is frozen by `tool_surface_is_unchanged`.
+//! surface is frozen by `tool_surface_matches_snapshot`.
 
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::model::{Implementation, ServerCapabilities, ServerConfig};
@@ -65,10 +65,8 @@ Points are [x,y]. Id prefixes: w wall, r room, d dimension, t label, f furniture
 All kinds share one id counter, and composite pieces (roofs, joinery, cabinet runs) also number their \
 parts, so ids have gaps: use the ids a reply returns, never guess the next one. \
 Reads omit defaults (wall t=15 h=250). Writes reply `ok rev=N [ids=...]`; don't re-read \
-unless needed. Furniture has a front (seat, doors, foot of the bed; the catalog tool names it): say which \
-way it looks with place facing=+x|-x|+y|-y|[x,y]|<id> instead of working out angle (clockwise on a y-down \
-plan: 0 front to +y, 90 to -x, 180 to -y, 270 to +x), or wall=<id> to put its back on a wall; place replies \
-faces=<id>:<side>, and check_layout lists pieces turned to face a wall as backwards. \
+unless needed. Furniture has a front (seat, doors, foot of the bed; the catalog tool names it): place facing= says which \
+way it looks, or wall=<id> puts its back on a wall; check_layout lists pieces turned to face a wall as backwards. \
 Spots, panels and pendants are kept on the ceiling for you: a pendant takes elev (shade height) or h (drop). Every change is one undoable step. Use render_plan to check visually. \
 A project can hold several plan versions (variants, edit_variants); tools act on the active one. \
 Reads never change the plan; what changes it is a tool of its own (edit_cameras beside cameras, accept for review findings, fill_lighting, trace_walls, export_cut_list). \
@@ -97,7 +95,7 @@ pub struct NewEraMcp {
 /// A new tool means a `#[tool]` in a domain module and its router in
 /// `parts`. Two domains claiming one name would overwrite in silence — the
 /// merge is a map insert — so the count is checked here, and the whole
-/// surface is frozen by `tool_surface_is_unchanged`.
+/// surface is frozen by `tool_surface_matches_snapshot`.
 impl NewEraMcp {
     pub fn new(document: SharedDocument) -> Self {
         let parts = [
@@ -331,29 +329,6 @@ mod tests {
             .join("tests/fixtures/tool-surface.json");
         let json = serde_json::to_string_pretty(&tool_surface()).unwrap();
         std::fs::write(path, format!("{json}\n")).unwrap();
-    }
-
-    #[test]
-    #[ignore = "prints the size of the tool list"]
-    fn tool_list_size() {
-        let tools = server().tool_router.list_all();
-        let json = serde_json::to_string(&tools).unwrap();
-        println!(
-            "{} tools, {} bytes (~{} tokens)",
-            tools.len(),
-            json.len(),
-            json.len() / 4
-        );
-        let mut sizes: Vec<(usize, String)> = tools
-            .iter()
-            .map(|t| (serde_json::to_string(t).unwrap().len(), t.name.to_string()))
-            .collect();
-        sizes.sort();
-        for (n, name) in sizes.iter().rev() {
-            println!("{n:6} {name}");
-        }
-        let update = tools.iter().find(|t| t.name == "update").unwrap();
-        println!("{}", serde_json::to_string(&update.input_schema).unwrap());
     }
 
     #[test]

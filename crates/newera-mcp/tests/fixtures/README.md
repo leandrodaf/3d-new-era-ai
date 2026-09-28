@@ -19,3 +19,10 @@ cargo test -p newera-mcp
 
 Normal tests and CI never rewrite the snapshot. Browser-specific descriptions
 and transport behavior remain covered separately by the browser MCP E2E test.
+
+## Budget and search
+
+`tool-budget.json` records what each tool costs in bytes; `tool-search.json` holds the
+requests a tool search must answer and the pairs of tools allowed to read alike. Both
+are read by `src/surface_rules.rs`, and [docs/MCP-TOOLS.md](../../../../docs/MCP-TOOLS.md)
+says how to change them.

@@ -86,8 +86,13 @@ pub(crate) struct RunPluginParams {
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct PathParams {
-    /// Project file (`.newera`). Optional for save when already saved once.
+    /// Project file (`.newera`). Optional when the project was saved once.
     path: Option<String>,
+}
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct OpenParams {
+    /// Project (`.newera`) or Sweet Home 3D file (`.sh3d`).
+    path: String,
 }
 fn with_extension(path: PathBuf) -> PathBuf {
     if path.extension().is_some() {
@@ -219,9 +224,9 @@ impl NewEraMcp {
     )]
     pub(crate) fn open_home(
         &self,
-        Parameters(p): Parameters<PathParams>,
+        Parameters(p): Parameters<OpenParams>,
     ) -> Result<String, ErrorData> {
-        let path = PathBuf::from(p.path.ok_or_else(|| invalid("`path` is required"))?);
+        let path = PathBuf::from(p.path);
         let mut doc = self.document.write();
         let opened = newera_sh3d::open_file(&mut doc, &path).map_err(invalid)?;
         let mut reply = ok(&doc, &[]);
@@ -653,8 +658,8 @@ mod tests {
         assert!(reply.ends_with("casa.newera"), "{reply}");
         s.new_home();
         assert!(s.document.read().home().labels.is_empty());
-        s.open_home(Parameters(PathParams {
-            path: Some(dir.join("casa.newera").display().to_string()),
+        s.open_home(Parameters(OpenParams {
+            path: dir.join("casa.newera").display().to_string(),
         }))
         .unwrap();
         assert_eq!(s.document.read().home().labels[0].text, "Oi");

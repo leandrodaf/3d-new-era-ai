@@ -58,17 +58,10 @@ pub(super) fn on_variant(doc: &mut Document, v: Option<usize>) -> Result<(), Err
     }
 }
 
-/// Runs an edit against a copy of the plan and reports what it would do.
-///
-/// Trying a size used to mean applying it, reviewing, and undoing — a round
-/// trip that showed in the user's window and burned a revision each time.
-/// The copy has no history and is thrown away, so nothing of that happens.
-/// How much of a dry run to answer with.
-///
-/// `true` answers with everything it would change; `"summary"` answers with
-/// the decision — how many pieces move, which roots, the clearances, the
-/// findings and the score — because a group that rebuilds lists ninety-seven
-/// parts for a choice that fits in five lines.
+/// How much of a dry run to answer with: `true` everything it would change,
+/// `"summary"` the decision — pieces moved, roots, clearances, findings, score.
+// The summary exists because a group that rebuilds lists ninety-seven parts
+// for a choice that fits in five lines.
 #[derive(Debug, Clone, serde::Deserialize, schemars::JsonSchema)]
 #[serde(untagged)]
 pub(crate) enum Dry {
@@ -92,6 +85,11 @@ impl Dry {
     }
 }
 
+/// Runs an edit against a copy of the plan and reports what it would do.
+///
+/// Trying a size used to mean applying it, reviewing, and undoing — a round
+/// trip that showed in the user's window and burned a revision each time.
+/// The copy has no history and is thrown away, so nothing of that happens.
 pub(super) fn preview_with(
     doc: &Document,
     brief: bool,
