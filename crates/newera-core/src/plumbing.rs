@@ -140,6 +140,23 @@ impl Fixture {
         crate::text::Text::from(self.name())
     }
 
+    /// Its name with its article, to start a sentence with: "a pia de
+    /// cozinha", never "o pia de cozinha".
+    #[must_use]
+    pub fn the(self) -> crate::text::Text {
+        crate::text::Text::from(match self {
+            Self::Toilet => "o vaso sanitário",
+            Self::Basin => "o lavatório",
+            Self::KitchenSink => "a pia de cozinha",
+            Self::Shower => "o chuveiro",
+            Self::Bathtub => "a banheira",
+            Self::Washer => "a máquina de lavar",
+            Self::LaundrySink => "o tanque",
+            Self::Dishwasher => "o lava-louças",
+            Self::Bidet => "o bidê",
+        })
+    }
+
     /// Whether it takes hot water where the home has it.
     fn takes_hot(self) -> bool {
         matches!(
@@ -532,9 +549,9 @@ fn found(home: &Home) -> Vec<Finding> {
                 severity: Severity::Erro,
                 place: at.clone(),
                 message: say!(
-                    "Sem ponto de água fria a até {} cm: o {} não tem de onde ser alimentado.",
+                    "Sem ponto de água fria a até {} cm: {} não tem de onde receber água.",
                     reach,
-                    fixture.said()
+                    fixture.the()
                 ),
                 source: "nbr5626",
             });
@@ -546,8 +563,8 @@ fn found(home: &Home) -> Vec<Finding> {
                 severity: Severity::Alerta,
                 place: at.clone(),
                 message: say!(
-                    "O projeto tem água quente e o {} não recebe: falta o ponto a até {} cm.",
-                    fixture.said(),
+                    "O projeto tem água quente e {} não recebe: falta o ponto a até {} cm.",
+                    fixture.the(),
                     reach
                 ),
                 source: "nbr5626",
@@ -570,10 +587,10 @@ fn found(home: &Home) -> Vec<Finding> {
                 severity: Severity::Erro,
                 place: at,
                 message: say!(
-                    "Sem {} a até {} cm: o {} não tem para onde escoar (ramal de {} mm).",
+                    "Sem {} a até {} cm: {} não tem para onde escoar (ramal de {} mm).",
                     how,
                     reach,
-                    fixture.said(),
+                    fixture.the(),
                     fixture.sewer_mm()
                 ),
                 source: "nbr8160",
@@ -1461,6 +1478,30 @@ mod tests {
             found.iter().map(|(x, f)| (x, f.id)).collect::<Vec<_>>()
         );
         assert_eq!(found[0].0, Fixture::KitchenSink);
+    }
+
+    #[test]
+    fn a_fixture_is_named_with_its_own_article() {
+        use crate::vocabulary::Language;
+        let mut home = Home::default();
+        home.furniture = vec![
+            piece(40, "sink-counter", "Pia", (100.0, 30.0), (120.0, 60.0, 90.0)),
+            piece(41, "washer", "Máquina", (300.0, 30.0), (60.0, 60.0, 85.0)),
+        ];
+        let said: Vec<(String, String)> = check(&home)
+            .iter()
+            .filter(|f| f.key.starts_with("plumb:cold:"))
+            .map(|f| {
+                (
+                    f.message.in_language(Language::Portuguese),
+                    f.message.in_language(Language::English),
+                )
+            })
+            .collect();
+        assert_eq!(said.len(), 2, "{said:?}");
+        assert!(said[0].0.contains(": a pia de cozinha não tem"), "{said:?}");
+        assert!(said[0].1.contains(": the kitchen sink has"), "{said:?}");
+        assert!(said[1].0.contains(": a máquina de lavar não tem"), "{said:?}");
     }
 
     #[test]

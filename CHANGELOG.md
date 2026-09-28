@@ -75,6 +75,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `plumbing` names each fixture with its own article: "a pia de cozinha", "a máquina de lavar",
+  "a banheira" — it said "o" for all of them — and a missing cold-water point reads "não tem de onde
+  receber água", which agrees with either. Keys, and acceptances given before, are unchanged.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every

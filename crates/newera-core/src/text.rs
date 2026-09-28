@@ -711,12 +711,12 @@ pub static ENGLISH: &[(&str, &str)] = &[
         "Plug-in tower (1.5 m cord): plan an outlet inside the cabinet, on an RCD-protected circuit, to plug it in without an extension.",
     ),
     (
-        "Sem ponto de água fria a até {} cm: o {} não tem de onde ser alimentado.",
-        "No cold water point within {} cm: the {} has nowhere to be supplied from.",
+        "Sem ponto de água fria a até {} cm: {} não tem de onde receber água.",
+        "No cold water point within {} cm: {} has nowhere to get water from.",
     ),
     (
-        "O projeto tem água quente e o {} não recebe: falta o ponto a até {} cm.",
-        "The design has hot water and the {} gets none: the point within {} cm is missing.",
+        "O projeto tem água quente e {} não recebe: falta o ponto a até {} cm.",
+        "The design has hot water and {} gets none: the point within {} cm is missing.",
     ),
     (
         "ponto de esgoto ou ralo sifonado",
@@ -724,8 +724,8 @@ pub static ENGLISH: &[(&str, &str)] = &[
     ),
     ("ponto de esgoto próprio", "sewer point of its own"),
     (
-        "Sem {} a até {} cm: o {} não tem para onde escoar (ramal de {} mm).",
-        "No {} within {} cm: the {} has nowhere to drain to ({} mm branch).",
+        "Sem {} a até {} cm: {} não tem para onde escoar (ramal de {} mm).",
+        "No {} within {} cm: {} has nowhere to drain to ({} mm branch).",
     ),
     (
         "Nenhum ralo do cômodo é desconector: ralo seco, linear sem sifão ou sifonado pequeno (fecho de 9 a 20 mm) precisam desaguar numa caixa sifonada com fecho de 50 mm ({}).",
@@ -1003,6 +1003,15 @@ pub static ENGLISH: &[(&str, &str)] = &[
     ("tanque", "laundry sink"),
     ("lava-louças", "dishwasher"),
     ("bidê", "bidet"),
+    ("o vaso sanitário", "the toilet"),
+    ("o lavatório", "the basin"),
+    ("a pia de cozinha", "the kitchen sink"),
+    ("o chuveiro", "the shower"),
+    ("a banheira", "the bathtub"),
+    ("a máquina de lavar", "the washing machine"),
+    ("o tanque", "the laundry sink"),
+    ("o lava-louças", "the dishwasher"),
+    ("o bidê", "the bidet"),
     ("gradil", "railing"),
     ("guarda-corpo de vidro", "glass guard"),
     ("fechamento de vidro da sacada", "balcony glazing"),
