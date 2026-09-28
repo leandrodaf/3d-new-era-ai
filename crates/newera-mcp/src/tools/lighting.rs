@@ -368,7 +368,6 @@ mod tests {
         assert!(s.document.read().home().furniture.is_empty());
     }
 
-
     #[test]
     fn a_room_with_no_light_totals_zero_not_minus_zero() {
         let s = server();
