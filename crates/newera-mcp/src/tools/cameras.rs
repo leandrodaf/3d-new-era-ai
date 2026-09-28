@@ -14,7 +14,8 @@ use crate::compact;
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct CamerasParams {
-    /// `view`, `aerial`, `store` or `delete`.
+    /// What to do with the points of view.
+    #[schemars(extend("enum" = ["view", "aerial", "store", "delete"]))]
     pub(crate) action: Option<String>,
     /// Stored view index.
     pub(crate) i: Option<usize>,
@@ -37,7 +38,8 @@ pub(crate) struct CamerasParams {
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct VideoParams {
-    /// `add`, `delete`, `clear`, `orbit`, `set` or `render`.
+    /// What to do with the camera path.
+    #[schemars(extend("enum" = ["add", "delete", "clear", "orbit", "set", "render"]))]
     action: Option<String>,
     /// Keyframe index (`delete`, or insert position for `add`).
     i: Option<usize>,

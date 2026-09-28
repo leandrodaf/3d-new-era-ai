@@ -49,17 +49,20 @@ uses the type.
 ## Arguments
 
 - An argument that picks one of a few things (`action`, `kind`, `view`, `format`,
-  `what`, `mode`, `quality`) is an enum in the schema (`choices_are_listed_in_the_schema`).
-- Every params struct has `#[serde(deny_unknown_fields)]`. An argument nobody declared
-  is refused by name, never dropped (`unknown_arguments_are_refused_by_name`): a
-  misspelled `dry` would otherwise write.
-- An argument that does not apply to the chosen action is refused, not ignored.
-- Errors say what to do next: the valid choices, and which tool reads what a write
-  was asked to read.
-
-The lists `OPEN_CHOICES` and `LOOSE_ARGUMENTS` in `surface_rules.rs` hold what predates
-these rules. They only shrink: the test fails if a tool is added to the problem, and
-also when one is fixed and still listed.
+  `what`, `mode`, `quality`) is an enum in the schema — `#[schemars(extend("enum" = [...]))]`
+  on the field (`choices_are_listed_in_the_schema`). Its description then says what the
+  values mean or which is the default, not the list again.
+- Every call is checked against the tool's own schema before it runs
+  ([`src/args.rs`](../crates/newera-mcp/src/args.rs)), so no struct can forget to: an
+  argument nobody declared is refused by name, with what the tool takes instead
+  (`unknown_arguments_are_refused_by_name`). A misspelled `dry` would otherwise write.
+- An argument that belongs to some actions says so at the start of its description —
+  ``For `route`: …``, ``For `cable` and `route`: …``, or `rotate/mirror: …` — and the
+  same check refuses it with any other action, instead of answering as if it had been used.
+- A refusal is a tool result with `isError: true`, not a protocol error: the agent reads
+  why and tries again. The reason says what to do next — the valid choices, and which
+  tool reads what a write was asked to read. A value with two shapes (`dry`, `facing`)
+  says both when it gets neither.
 
 ## Hints and output
 
@@ -99,7 +102,7 @@ one is a read and its write.
 - [ ] The intent is new, or the change is an `action` of an existing tool.
 - [ ] Name, `HINTS` row and output schema follow the rules above.
 - [ ] Description in the four parts; no manual, no orders.
-- [ ] Choices are enums; unknown arguments refused; errors say what to do next.
+- [ ] Choices are enums; action-scoped arguments say their action; errors say what to do next.
 - [ ] Queries for it in `tool-search.json`; the search floor still holds.
 - [ ] `tool-surface.json` and `tool-budget.json` regenerated and the diff reviewed.
 - [ ] Skills in `plugin/skills/` and the docs name the tool correctly.

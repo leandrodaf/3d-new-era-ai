@@ -27,8 +27,8 @@ pub(crate) struct PlaceParams {
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct ArrangeParams {
-    /// `array` (copies in a row), `align`, `distribute`, `flip`, `rotate`,
-    /// `mirror`, `group`, `ungroup`, `front`, `back`.
+    /// What to do; `array` makes copies in a row.
+    #[schemars(extend("enum" = ["array", "align", "distribute", "flip", "rotate", "mirror", "group", "ungroup", "front", "back"]))]
     action: String,
     /// The elements to act on (ungroup: the group).
     ids: Vec<String>,

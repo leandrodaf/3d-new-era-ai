@@ -170,7 +170,19 @@
           "description": "rotate: pivot `[x,y]` (default the center of the elements)"
         },
         "action": {
-          "description": "`array` (copies in a row), `align`, `distribute`, `flip`, `rotate`, `mirror`, `group`, `ungroup`, `front`, `back`",
+          "description": "What to do; `array` makes copies in a row",
+          "enum": [
+            "array",
+            "align",
+            "distribute",
+            "flip",
+            "rotate",
+            "mirror",
+            "group",
+            "ungroup",
+            "front",
+            "back"
+          ],
           "type": "string"
         },
         "angle": {
@@ -578,7 +590,11 @@
     "inputSchema": {
       "properties": {
         "action": {
-          "description": "`checkpoint` (remember here, the default) or `revert` (go back)",
+          "description": "Default `checkpoint`, remembering here; `revert` goes back",
+          "enum": [
+            "checkpoint",
+            "revert"
+          ],
           "type": "string"
         },
         "label": {
@@ -853,7 +869,11 @@
               "type": "number"
             },
             "kind": {
-              "description": "`gable` (two slopes, default; steep = A-frame) or `shed` (one slope rising from the pts[0]→pts[1] side)",
+              "description": "Default `gable` (steep = A-frame); `shed` rises from the pts[0]→pts[1] side",
+              "enum": [
+                "gable",
+                "shed"
+              ],
               "type": "string"
             },
             "name": {
@@ -1323,7 +1343,11 @@
       "additionalProperties": false,
       "properties": {
         "action": {
-          "description": "`active` (default) or `quantities`",
+          "description": "Default `active`",
+          "enum": [
+            "active",
+            "quantities"
+          ],
           "type": "string"
         }
       },
@@ -1508,7 +1532,13 @@
     "inputSchema": {
       "properties": {
         "action": {
-          "description": "`view`, `aerial`, `store` or `delete`",
+          "description": "What to do with the points of view",
+          "enum": [
+            "view",
+            "aerial",
+            "store",
+            "delete"
+          ],
           "type": "string"
         },
         "fov": {
@@ -1601,7 +1631,12 @@
     "inputSchema": {
       "properties": {
         "action": {
-          "description": "`select`, `show` or `hide`",
+          "description": "What to do with discipline `d`",
+          "enum": [
+            "select",
+            "show",
+            "hide"
+          ],
           "type": "string"
         },
         "d": {
@@ -1679,7 +1714,14 @@
       },
       "properties": {
         "action": {
-          "description": "`assign`: put `ids` on `circuit` (empty takes them off), with `va` to set their power; `voltage`: the supply, 127 or 220 V; `cable`, `route` or `wifi`",
+          "description": "`assign` puts `ids` on `circuit` (empty takes them off), `va` sets their power; `voltage` is the supply, 127 or 220 V",
+          "enum": [
+            "assign",
+            "voltage",
+            "cable",
+            "route",
+            "wifi"
+          ],
           "type": "string"
         },
         "band": {
@@ -1725,7 +1767,12 @@
           "type": "array"
         },
         "kind": {
-          "description": "For `cable`: what the run carries, `power`, `data` or `tv`",
+          "description": "For `cable` and `route`: what the run carries",
+          "enum": [
+            "power",
+            "data",
+            "tv"
+          ],
           "type": "string"
         },
         "max_w": {
@@ -1910,7 +1957,13 @@
     "inputSchema": {
       "properties": {
         "action": {
-          "description": "`add`, `select`, `update` or `delete`",
+          "description": "What to do with the storeys",
+          "enum": [
+            "add",
+            "select",
+            "update",
+            "delete"
+          ],
           "type": "string"
         },
         "elev": {
@@ -1982,7 +2035,10 @@
     "inputSchema": {
       "properties": {
         "action": {
-          "description": "`route`",
+          "description": "The change to make",
+          "enum": [
+            "route"
+          ],
           "type": "string"
         },
         "depth": {
@@ -2002,7 +2058,13 @@
           "type": "array"
         },
         "kind": {
-          "description": "For `route`: what the run carries, `cold`, `hot` or `sewer`",
+          "description": "For `route`: what the run carries",
+          "enum": [
+            "cold",
+            "hot",
+            "sewer",
+            "vent"
+          ],
           "type": "string"
         },
         "via": {
@@ -2108,7 +2170,14 @@
     "inputSchema": {
       "properties": {
         "action": {
-          "description": "`duplicate` (copy active), `new` (empty), `switch`, `rename` or `delete`",
+          "description": "`duplicate` copies the active version, `new` starts an empty one",
+          "enum": [
+            "duplicate",
+            "new",
+            "switch",
+            "rename",
+            "delete"
+          ],
           "type": "string"
         },
         "i": {
@@ -2172,7 +2241,15 @@
     "inputSchema": {
       "properties": {
         "action": {
-          "description": "`add`, `delete`, `clear`, `orbit`, `set` or `render`",
+          "description": "What to do with the camera path",
+          "enum": [
+            "add",
+            "delete",
+            "clear",
+            "orbit",
+            "set",
+            "render"
+          ],
           "type": "string"
         },
         "cam": {
@@ -2289,6 +2366,11 @@
       "properties": {
         "action": {
           "description": "`check` (default): points by kind and what the norm finds; `circuits`: the load schedule and the panel; `wifi`: coverage and a suggestion",
+          "enum": [
+            "check",
+            "circuits",
+            "wifi"
+          ],
           "type": "string"
         },
         "band": {
@@ -2749,6 +2831,11 @@
         },
         "kind": {
           "description": "`friction` (it worked, at a cost), `bug` (it answered wrong) or `idea` (something missing)",
+          "enum": [
+            "friction",
+            "bug",
+            "idea"
+          ],
           "type": "string"
         },
         "must_keep": {
@@ -3121,7 +3208,15 @@
           "type": "string"
         },
         "kind": {
-          "description": "New build: `cabinet`, `slats`, `countertop`, `cove`, `shadow_gap` or `sofa`",
+          "description": "What a new build is",
+          "enum": [
+            "cabinet",
+            "slats",
+            "countertop",
+            "cove",
+            "shadow_gap",
+            "sofa"
+          ],
           "type": "string"
         },
         "p": {
@@ -4338,7 +4433,16 @@
           "type": "number"
         },
         "view": {
-          "description": "`aerial` (default), `visitor`, or an elevation: `front`, `back`, `left`, `right`, `top`",
+          "description": "Default `aerial`; `front` to `top` are elevations",
+          "enum": [
+            "aerial",
+            "visitor",
+            "front",
+            "back",
+            "left",
+            "right",
+            "top"
+          ],
           "type": "string"
         },
         "w": {
@@ -4401,11 +4505,20 @@
           "type": "number"
         },
         "quality": {
-          "description": "`draft` (default), `good`, `best`",
+          "description": "Default `draft`",
+          "enum": [
+            "draft",
+            "good",
+            "best"
+          ],
           "type": "string"
         },
         "view": {
-          "description": "`aerial` (default) or `visitor`",
+          "description": "Default `aerial`",
+          "enum": [
+            "aerial",
+            "visitor"
+          ],
           "type": "string"
         },
         "w": {
@@ -5376,7 +5489,11 @@
               "type": "string"
             },
             "what": {
-              "description": "`names` (default: pieces and the parts of groups) or `labels`",
+              "description": "Default `names`, parts of groups included",
+              "enum": [
+                "names",
+                "labels"
+              ],
               "type": "string"
             }
           },
@@ -5658,7 +5775,7 @@
       "properties": {
         "dry": {
           "$ref": "#/$defs/Dry",
-          "description": "Try it without applying: reports what would change, the clearances around every piece it touches, and which layout and ergonomics findings it would resolve or create. Nothing is written and the user's window does not move"
+          "description": "Try it without applying: reports what would change, the clearances around every piece it touches, and which layout and ergonomics findings it would resolve or create. Nothing is written"
         },
         "items": {
           "default": [],

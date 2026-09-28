@@ -81,6 +81,11 @@ check "undo reverted the split" "$(count w)" "9"
 reply=$(call delete '{"ids":["w1","nope"]}')
 check "unknown id is rejected" "$reply" 'invalid id'
 check "failed delete changes nothing" "$(count w)" "9"
+check "a refusal is a tool result, not a protocol error" "$reply" '"isError":true'
+reply=$(call undo '{"zz":1}')
+check "an unknown argument is refused by name" "$reply" 'unknown argument `zz`'
+check "and inside the result" "$reply" '"isError":true'
+check "the refused undo changes nothing" "$(count w)" "9"
 
 reply=$(call catalog '{"q":"cama casal"}')
 check "catalog search finds the double bed" "$reply" 'bed-double'

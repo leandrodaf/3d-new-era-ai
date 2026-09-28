@@ -57,7 +57,7 @@ pub(super) async fn run(
     context: RequestContext<RoleServer>,
 ) -> Result<CallToolResponse, ErrorData> {
     let permit = RENDER.try_acquire().map_err(|_| {
-        invalid("Uma renderização já está em andamento; aguarde ou cancele antes de iniciar outra.")
+        invalid("A render is already running; wait for it or cancel it before starting another.")
     })?;
     let handle = tokio::runtime::Handle::current();
     let work_context = context.clone();
@@ -112,10 +112,10 @@ async fn supervise(
     let mut next_progress = tokio::time::Instant::now();
     loop {
         tokio::select! {
-            result = &mut worker => return result.map_err(|e| invalid(format!("Falha na renderização: {e}")))?,
+            result = &mut worker => return result.map_err(|e| invalid(format!("The render failed: {e}")))?,
             () = cancel.cancelled() => return Err(invalid(newera_core::progress::CANCELLED)),
             _ = poll.tick() => {
-                if context.peer.is_transport_closed() { return Err(invalid("Cliente desconectado; renderização cancelada.")); }
+                if context.peer.is_transport_closed() { return Err(invalid("The client disconnected; the render was cancelled.")); }
                 let now = tokio::time::Instant::now();
                 if now >= next_ping {
                     // Ping is part of MCP even when no progress token was
@@ -128,10 +128,10 @@ async fn supervise(
                         ).await?.await_response().await
                     };
                     tokio::select! {
-                        result = &mut worker => return result.map_err(|e| invalid(format!("Falha na renderização: {e}")))?,
+                        result = &mut worker => return result.map_err(|e| invalid(format!("The render failed: {e}")))?,
                         () = cancel.cancelled() => return Err(invalid(newera_core::progress::CANCELLED)),
                         result = tokio::time::timeout(response_timeout, ping) => {
-                            if !matches!(result, Ok(Ok(_))) { return Err(invalid("Cliente não respondeu; renderização cancelada.")); }
+                            if !matches!(result, Ok(Ok(_))) { return Err(invalid("The client stopped answering; the render was cancelled.")); }
                         }
                     }
                     next_ping = tokio::time::Instant::now() + heartbeat;
@@ -146,7 +146,7 @@ async fn supervise(
                             ProgressNotificationParam::new(token.clone(), progress).with_message(message)
                         };
                         if !matches!(tokio::time::timeout(response_timeout, context.peer.notify_progress(notification)).await, Ok(Ok(()))) {
-                            return Err(invalid("Falha no envio de progresso; renderização cancelada."));
+                            return Err(invalid("Progress could not be sent; the render was cancelled."));
                         }
                     }
                     next_progress = now + Duration::from_secs(1);

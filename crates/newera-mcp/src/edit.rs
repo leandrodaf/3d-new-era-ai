@@ -326,8 +326,8 @@ fn solid(doc: &mut Document, spec: &SolidSpec) -> EditResult<newera_core::Furnit
 pub(crate) struct RoofSpec {
     /// Rectangle corners in order; the ridge runs along pts[0]→pts[1].
     pub pts: Vec<Point2>,
-    /// `gable` (two slopes, default; steep = A-frame) or `shed` (one slope rising
-    /// from the pts[0]→pts[1] side).
+    /// Default `gable` (steep = A-frame); `shed` rises from the pts[0]→pts[1] side.
+    #[schemars(extend("enum" = ["gable", "shed"]))]
     pub kind: Option<String>,
     /// Slope in degrees (default 30), unless `ridge_h` is given.
     pub pitch: Option<f64>,
@@ -1132,7 +1132,8 @@ pub(crate) struct RenameSpec {
     /// Replacement; `$1` refers to a group, empty removes the match.
     #[serde(default)]
     pub to: String,
-    /// `names` (default: pieces and the parts of groups) or `labels`.
+    /// Default `names`, parts of groups included.
+    #[schemars(extend("enum" = ["names", "labels"]))]
     pub what: Option<String>,
 }
 
@@ -1189,11 +1190,25 @@ pub(crate) fn rename(doc: &mut Document, spec: &RenameSpec) -> EditResult<()> {
 const PART_FIELDS: [&str; 6] = ["id", "name", "brand", "model_name", "url", "layer"];
 
 /// A piece declared fixed or free-standing, or `""` to clear it.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, JsonSchema)]
 #[serde(untagged)]
 pub(crate) enum Fixed {
     Declared(bool),
     Cleared(String),
+}
+
+// By hand, so a wrong value says what the right ones are instead of
+// "did not match any variant".
+impl<'de> Deserialize<'de> for Fixed {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        match serde_json::Value::deserialize(d)? {
+            serde_json::Value::Bool(b) => Ok(Self::Declared(b)),
+            serde_json::Value::String(s) => Ok(Self::Cleared(s)),
+            other => Err(serde::de::Error::custom(format!(
+                "fixed: true, false, or \"\" to let the name decide (not {other})"
+            ))),
+        }
+    }
 }
 
 /// Puts a piece in a plan layer by hand, or back in the one it is in by itself.
@@ -1745,13 +1760,30 @@ mod tests {
 }
 
 /// Where a placed piece's front looks.
-#[derive(Debug, Clone, Deserialize, serde::Serialize, JsonSchema)]
+#[derive(Debug, Clone, serde::Serialize, JsonSchema)]
 #[serde(untagged)]
 pub(crate) enum Facing {
     /// A point `[x, y]` to turn toward.
     At(Point2),
     /// A side (`+x`, `-x`, `+y`, `-y`) or the id of an element to turn toward.
     Toward(String),
+}
+
+impl<'de> Deserialize<'de> for Facing {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let wrong = |v: &serde_json::Value| {
+            serde::de::Error::custom(format!(
+                "facing: a side (+x -x +y -y), [x,y] or an element id (not {v})"
+            ))
+        };
+        match serde_json::Value::deserialize(d)? {
+            serde_json::Value::String(s) => Ok(Self::Toward(s)),
+            v @ serde_json::Value::Array(_) => serde_json::from_value(v.clone())
+                .map(Self::At)
+                .map_err(|_| wrong(&v)),
+            v => Err(wrong(&v)),
+        }
+    }
 }
 
 impl Facing {

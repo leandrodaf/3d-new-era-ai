@@ -15,7 +15,8 @@ use crate::compact;
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct LevelsParams {
-    /// `add`, `select`, `update` or `delete`.
+    /// What to do with the storeys.
+    #[schemars(extend("enum" = ["add", "select", "update", "delete"]))]
     action: Option<String>,
     /// Level id, e.g. `lv3`.
     id: Option<String>,

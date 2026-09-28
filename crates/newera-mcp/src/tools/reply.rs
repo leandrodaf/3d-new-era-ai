@@ -62,11 +62,25 @@ pub(super) fn on_variant(doc: &mut Document, v: Option<usize>) -> Result<(), Err
 /// `"summary"` the decision — pieces moved, roots, clearances, findings, score.
 // The summary exists because a group that rebuilds lists ninety-seven parts
 // for a choice that fits in five lines.
-#[derive(Debug, Clone, serde::Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, schemars::JsonSchema)]
 #[serde(untagged)]
 pub(crate) enum Dry {
     All(bool),
     How(String),
+}
+
+// By hand, so a wrong value says what the right ones are instead of
+// "did not match any variant".
+impl<'de> serde::Deserialize<'de> for Dry {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        match serde_json::Value::deserialize(d)? {
+            serde_json::Value::Bool(on) => Ok(Self::All(on)),
+            serde_json::Value::String(how) => Ok(Self::How(how)),
+            other => Err(serde::de::Error::custom(format!(
+                "dry: true, false or \"summary\" (not {other})"
+            ))),
+        }
+    }
 }
 
 impl Dry {

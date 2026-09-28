@@ -16,7 +16,8 @@ use crate::edit;
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct JoineryParams {
-    /// New build: `cabinet`, `slats`, `countertop`, `cove`, `shadow_gap` or `sofa`.
+    /// What a new build is.
+    #[schemars(extend("enum" = ["cabinet", "slats", "countertop", "cove", "shadow_gap", "sofa"]))]
     kind: Option<String>,
     /// Or an existing build's group id: `p` holds only what changes.
     id: Option<String>,
