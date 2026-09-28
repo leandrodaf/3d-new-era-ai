@@ -104,6 +104,17 @@ impl Category {
     }
 }
 
+/// Risers of a straight flight climbing `height` cm: the fewest that keep
+/// each at most 18 cm, the top of what a step comfortably rises (NBR 9050:
+/// 16 to 18). The 2.8 m catalog flight has 16 of 17.5 cm, and one resized to
+/// 1.31 m has 8 of 16.4 — not sixteen of 8 cm, as when the count was fixed.
+#[must_use]
+pub fn stair_risers(height: f64) -> u8 {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let n = (height / 18.0).ceil().clamp(2.0, 255.0) as u8;
+    n
+}
+
 /// Which procedural generator builds an item, with its style parameters.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Model {
@@ -154,9 +165,8 @@ pub enum Model {
         panes: u8,
     },
     Passage,
-    Stairs {
-        steps: u8,
-    },
+    /// A straight flight; its risers follow its height ([`stair_risers`]).
+    Stairs,
     Plant,
     Tree,
     Lamp,
@@ -1104,7 +1114,7 @@ pub static CATALOG: &[CatalogItem] = &[
         C::Structure,
         [90.0, 300.0, 280.0],
         WOOD,
-        Model::Stairs { steps: 16 },
+        Model::Stairs,
         "stairs staircase escada",
     ),
     item(
@@ -1922,6 +1932,27 @@ mod tests {
     use newera_core::{FurnitureId, Point2};
 
     use super::*;
+
+    #[test]
+    fn a_resized_flight_keeps_its_steps_a_step_high() {
+        assert_eq!(stair_risers(280.0), 16, "the catalog flight is unchanged");
+        assert_eq!(stair_risers(131.0), 8);
+        for h in [36.0, 90.0, 131.0, 262.0, 300.0, 450.0] {
+            let rise = h / f64::from(stair_risers(h));
+            assert!(rise <= 18.0 + 1e-9, "{h}: {rise}");
+        }
+        // The plan draws the same steps: a line between each two treads.
+        let shapes = |height: f64| {
+            let mut flight = find("stairs")
+                .unwrap()
+                .instantiate(FurnitureId(1), Point2::new(0.0, 0.0));
+            flight.width = 110.0;
+            flight.depth = 224.0;
+            flight.height = height;
+            crate::symbols::plan_symbol(&flight).len()
+        };
+        assert_eq!(shapes(131.0) - shapes(36.0), 8 - 2);
+    }
 
     #[test]
     fn explicit_colors_recolor_every_primary_surface_and_preserve_fixed_materials() {

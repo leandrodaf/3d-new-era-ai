@@ -173,7 +173,7 @@ pub(crate) fn build(model: Model, piece: &Furniture, color: Rgb) -> Mesh {
             opening.is_some_and(|o| o.kind == OpeningKind::Window),
         ),
         Model::Passage => passage(&mut ctx),
-        Model::Stairs { steps } => stairs(&mut ctx, steps),
+        Model::Stairs => stairs(&mut ctx, crate::stair_risers(piece.height)),
         Model::Plant => plant(&mut ctx),
         Model::Tree => tree(&mut ctx),
         Model::Lamp => lamp(&mut ctx),
