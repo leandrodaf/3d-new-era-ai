@@ -757,7 +757,7 @@ mod tests {
             .replace("v 55 50 6", "v 55 50 3"),
         )
         .unwrap();
-        let file = dir.join("poltrona.obj").display().to_string();
+        let file = path(&dir.join("poltrona.obj"));
         let s = server();
         let seen = call(&s, &format!(r#"{{"file":"{file}","check":"clashes"}}"#)).unwrap();
         let clashes = seen["clashes"].as_array().unwrap();
