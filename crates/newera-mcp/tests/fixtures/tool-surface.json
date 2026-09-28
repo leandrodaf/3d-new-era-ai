@@ -2182,7 +2182,7 @@
           "type": "string"
         },
         "name": {
-          "description": "publish: the entry, lowercase letters, digits, - and _ (e.g. `tokstok-win`)",
+          "description": "publish: the entry, lowercase letters, digits, - and _ (e.g. `oak-armchair`)",
           "type": "string"
         },
         "notes": {

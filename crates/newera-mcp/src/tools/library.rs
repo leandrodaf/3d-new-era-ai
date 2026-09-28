@@ -26,7 +26,7 @@ pub(crate) struct EditLibraryParams {
     action: String,
     /// publish: the piece whose model, photos, measurements and unit are kept, e.g. `f12`.
     id: String,
-    /// publish: the entry, lowercase letters, digits, - and _ (e.g. `tokstok-win`).
+    /// publish: the entry, lowercase letters, digits, - and _ (e.g. `oak-armchair`).
     name: String,
     /// publish: what changed in this version.
     notes: Option<String>,
@@ -203,7 +203,7 @@ mod tests {
             .unwrap();
         first
             .update(Parameters(
-                serde_json::from_str(r#"{"items":[{"id":"f1","brand":"Tok&Stok","model_name":"Poltrona Win","url":"https://www.tokstok.com.br/win"}]}"#)
+                serde_json::from_str(r#"{"items":[{"id":"f1","brand":"Example Furniture","model_name":"Poltrona Win","url":"https://example.com/win"}]}"#)
                     .unwrap(),
             ))
             .unwrap();
@@ -242,7 +242,7 @@ mod tests {
                 .unwrap();
         assert_eq!(
             listed["rows"],
-            json!([["win", 2, "Poltrona Win", "Tok&Stok", 2]])
+            json!([["win", 2, "Poltrona Win", "Example Furniture", 2]])
         );
         let versions: serde_json::Value = serde_json::from_str(
             &first
@@ -275,7 +275,7 @@ mod tests {
             "{:?}",
             placed.model
         );
-        assert_eq!(placed.info.brand.as_deref(), Some("Tok&Stok"));
+        assert_eq!(placed.info.brand.as_deref(), Some("Example Furniture"));
         assert_eq!((placed.references.len(), placed.measures.len()), (1, 1));
         assert!(std::path::Path::new(&placed.references[0].file).is_file());
         assert!(
