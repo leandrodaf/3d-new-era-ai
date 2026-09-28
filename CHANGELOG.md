@@ -75,12 +75,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- `layout(level="all")` no longer lists every piece that stands over another on the storey
-  below. Pieces of two storeys were an overlap wherever their plans crossed — a sofa downstairs
-  and a bed upstairs, a roof over the furniture — which buried a real problem under hundreds of
-  `cross_level` rows with no height shared. They are now one only where they share height in the
-  building (storeys drawn at the same elevation, a piece reaching into the storey above), and
-  the extent's z is that shared height.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
