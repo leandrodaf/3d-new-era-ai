@@ -2731,7 +2731,6 @@ mod place_tests {
     }
 
     #[test]
-
     fn a_batch_says_every_item_it_refuses_and_places_none() {
         let mut doc = Document::default();
         let spec = |cat: &str, x: f64| PlaceSpec {
