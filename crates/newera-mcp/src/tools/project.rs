@@ -354,11 +354,16 @@ impl NewEraMcp {
                 ])
             })
             .collect();
-        let mut out = serde_json::json!({ "rev": doc.revision(), "rows": rows });
+        let out = serde_json::json!({ "rev": doc.revision(), "rows": rows });
+        // A render running here, on the desktop (a tab renders on its own).
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(render) = super::native_job::status() {
-            out["render"] = render;
-        }
+        let out = {
+            let mut out = out;
+            if let Some(render) = super::native_job::status() {
+                out["render"] = render;
+            }
+            out
+        };
         out.to_string()
     }
     #[tool(
