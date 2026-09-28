@@ -14,9 +14,11 @@ use newera_core::routing::{self, Terminal, Via};
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct PlumbingParams {
-    /// `route`.
+    /// The change to make.
+    #[schemars(extend("enum" = ["route"]))]
     action: Option<String>,
-    /// For `route`: what the run carries, `cold`, `hot` or `sewer`.
+    /// For `route`: what the run carries.
+    #[schemars(extend("enum" = ["cold", "hot", "sewer"]))]
     kind: Option<String>,
     /// For `route`: the points; default every point of the kind.
     #[serde(default)]

@@ -1,5 +1,5 @@
 {
-  "total": 147560,
+  "total": 147973,
   "tools": {
     "accept": {
       "total": 1669,
@@ -14,9 +14,9 @@
       "output": 761
     },
     "arrange": {
-      "total": 3147,
+      "total": 3171,
       "description": 822,
-      "input": 1712,
+      "input": 1736,
       "output": 401
     },
     "cabinet_run": {
@@ -44,9 +44,9 @@
       "output": 1935
     },
     "checkpoint": {
-      "total": 1172,
+      "total": 1198,
       "description": 331,
-      "input": 229,
+      "input": 255,
       "output": 401
     },
     "checkpoints": {
@@ -56,9 +56,9 @@
       "output": 127
     },
     "create": {
-      "total": 10052,
+      "total": 10048,
       "description": 505,
-      "input": 8924,
+      "input": 8920,
       "output": 401
     },
     "cut_list": {
@@ -74,9 +74,9 @@
       "output": 600
     },
     "disciplines": {
-      "total": 1519,
+      "total": 1532,
       "description": 497,
-      "input": 139,
+      "input": 152,
       "output": 679
     },
     "edit_annotations": {
@@ -86,51 +86,51 @@
       "output": 1289
     },
     "edit_cameras": {
-      "total": 1816,
+      "total": 1855,
       "description": 343,
-      "input": 855,
+      "input": 894,
       "output": 401
     },
     "edit_disciplines": {
-      "total": 2074,
+      "total": 2110,
       "description": 762,
-      "input": 405,
+      "input": 441,
       "output": 679
     },
     "edit_electrical": {
-      "total": 7105,
+      "total": 7139,
       "description": 2160,
-      "input": 2754,
+      "input": 2788,
       "output": 1951
     },
     "edit_levels": {
-      "total": 1811,
+      "total": 1843,
       "description": 491,
-      "input": 717,
+      "input": 749,
       "output": 401
     },
     "edit_plumbing": {
-      "total": 3558,
+      "total": 3590,
       "description": 1220,
-      "input": 784,
+      "input": 816,
       "output": 1350
     },
     "edit_variants": {
-      "total": 1213,
+      "total": 1259,
       "description": 235,
-      "input": 297,
+      "input": 343,
       "output": 465
     },
     "edit_video": {
-      "total": 2308,
+      "total": 2342,
       "description": 338,
-      "input": 1153,
+      "input": 1187,
       "output": 592
     },
     "electrical": {
-      "total": 6745,
+      "total": 6780,
       "description": 4832,
-      "input": 356,
+      "input": 391,
       "output": 1352
     },
     "embed": {
@@ -158,9 +158,9 @@
       "output": 401
     },
     "feedback": {
-      "total": 2658,
+      "total": 2691,
       "description": 898,
-      "input": 1334,
+      "input": 1367,
       "output": 205
     },
     "fill_lighting": {
@@ -182,9 +182,9 @@
       "output": 1426
     },
     "joinery": {
-      "total": 3503,
+      "total": 3514,
       "description": 1324,
-      "input": 1457,
+      "input": 1468,
       "output": 524
     },
     "levels": {
@@ -260,15 +260,15 @@
       "output": 845
     },
     "render_3d": {
-      "total": 2149,
+      "total": 2175,
       "description": 875,
-      "input": 948,
+      "input": 974,
       "output": 146
     },
     "render_photo": {
-      "total": 1185,
+      "total": 1211,
       "description": 240,
-      "input": 620,
+      "input": 646,
       "output": 146
     },
     "render_plan": {
@@ -338,9 +338,9 @@
       "output": 845
     },
     "update": {
-      "total": 12476,
+      "total": 12446,
       "description": 1553,
-      "input": 8815,
+      "input": 8785,
       "output": 1907
     },
     "variants": {

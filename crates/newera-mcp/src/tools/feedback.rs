@@ -19,6 +19,7 @@ use super::reply::invalid;
 pub(crate) struct FeedbackParams {
     /// `friction` (it worked, at a cost), `bug` (it answered wrong) or
     /// `idea` (something missing).
+    #[schemars(extend("enum" = ["friction", "bug", "idea"]))]
     kind: Option<String>,
     /// The tool it is about, e.g. `measure`.
     tool: Option<String>,

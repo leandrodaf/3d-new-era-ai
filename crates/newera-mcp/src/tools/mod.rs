@@ -148,6 +148,24 @@ impl NewEraMcp {
     pub fn tools(&self) -> Vec<rmcp::model::Tool> {
         self.tool_router.list_all()
     }
+
+    /// The first argument `name` was given that its schema does not declare,
+    /// as the sentence an agent needs to fix its call. `None` for a tool that
+    /// is not there: that is the router's to say.
+    pub(crate) fn unknown_argument(&self, name: &str, args: &serde_json::Value) -> Option<String> {
+        let route = self.tool_router.map.get(name)?;
+        let schema = serde_json::Value::Object((*route.attr.input_schema).clone());
+        crate::args::unknown(&schema, args)
+    }
+}
+
+/// A call the tool refused, as a result the agent reads and acts on — not a
+/// protocol error, which a client may show to nobody. The reason is the one
+/// the tool gave, with what to do instead.
+fn refused(message: impl Into<String>) -> rmcp::model::CallToolResponse {
+    rmcp::model::CallToolResponse::Complete(rmcp::model::CallToolResult::error(vec![
+        rmcp::model::ContentBlock::text(message.into()),
+    ]))
 }
 
 // The macro generates async trait methods that resolve immediately.
@@ -159,6 +177,11 @@ impl ServerHandler for NewEraMcp {
         request: rmcp::model::CallToolRequestParams,
         context: rmcp::service::RequestContext<rmcp::RoleServer>,
     ) -> Result<rmcp::model::CallToolResponse, rmcp::ErrorData> {
+        let args = serde_json::Value::Object(request.arguments.clone().unwrap_or_default());
+        if let Some(why) = self.unknown_argument(&request.name, &args) {
+            return Ok(refused(why));
+        }
+        let known = self.tool_router.map.contains_key(request.name.as_ref());
         #[cfg(not(target_arch = "wasm32"))]
         let answer = if matches!(
             request.name.as_ref(),
@@ -173,6 +196,16 @@ impl ServerHandler for NewEraMcp {
         let answer = {
             let call = rmcp::handler::server::tool::ToolCallContext::new(self, request, context);
             self.tool_router.call(call).await
+        };
+        // Arguments that do not fit, and a tool that refuses what it was
+        // asked, are answered inside the result (the protocol's own advice),
+        // so the agent sees why and tries again. An unknown tool stays a
+        // protocol error.
+        let answer = match answer {
+            Err(e) if known && e.code == rmcp::model::ErrorCode::INVALID_PARAMS => {
+                Ok(refused(e.message.into_owned()))
+            }
+            other => other,
         };
         answer.map(|response| match response {
             rmcp::model::CallToolResponse::Complete(mut result) => {

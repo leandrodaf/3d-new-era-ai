@@ -34,6 +34,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- A tool that refuses a call answers inside the result (`isError`) on the desktop and `newera mcp`,
+  as the hosted service and the browser tab already did, so the agent reads why and tries again
+  instead of a client showing a protocol error to nobody.
+- Every tool refuses an argument it does not have, by name and with what it takes instead —
+  before, forty of them dropped it in silence, so a misspelled `dry` wrote. An argument given with
+  an action it does not belong to (`dx` with `rotate`) is refused the same way. Every choice
+  (`action`, `kind`, `view`, `quality`…) lists its values in the schema, and `dry`, `fixed` and
+  `facing` say what they take when given something else.
 - How much a standard obliges depends on where the project is: an ABNT standard is an error in
   Brazil and a warning in Miami, and the IRC the other way round. Electrical, plumbing and
   railing findings follow the same rule, so NBR 5410 no longer accuses a project abroad.

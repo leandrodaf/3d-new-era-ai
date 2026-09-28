@@ -335,7 +335,7 @@ mod tests {
             let why =
                 crate::call(document.clone(), tool, args).expect_err("a write argument is refused");
             assert!(
-                why.contains("unknown field") || why.contains("only"),
+                why.contains("unknown argument") || why.contains("only"),
                 "{tool}: {why}"
             );
         }

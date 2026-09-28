@@ -61,7 +61,8 @@ pub(crate) struct PluginsParams {
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct VariantsParams {
-    /// `duplicate` (copy active), `new` (empty), `switch`, `rename` or `delete`.
+    /// `duplicate` copies the active version, `new` starts an empty one.
+    #[schemars(extend("enum" = ["duplicate", "new", "switch", "rename", "delete"]))]
     action: Option<String>,
     /// Variant index for switch/rename/delete.
     i: Option<usize>,
@@ -71,7 +72,8 @@ pub(crate) struct VariantsParams {
 /// A point in the work, by name.
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct CheckpointParams {
-    /// `checkpoint` (remember here, the default) or `revert` (go back).
+    /// Default `checkpoint`, remembering here; `revert` goes back.
+    #[schemars(extend("enum" = ["checkpoint", "revert"]))]
     action: Option<String>,
     /// The checkpoint's name; required by both actions.
     label: Option<String>,

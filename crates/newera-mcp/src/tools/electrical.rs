@@ -13,9 +13,9 @@ use newera_core::electrical;
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct ElectricalParams {
-    /// `assign`: put `ids` on `circuit` (empty takes them off), with `va` to
-    /// set their power; `voltage`: the supply, 127 or 220 V; `cable`, `route`
-    /// or `wifi`.
+    /// `assign` puts `ids` on `circuit` (empty takes them off), `va` sets
+    /// their power; `voltage` is the supply, 127 or 220 V.
+    #[schemars(extend("enum" = ["assign", "voltage", "cable", "route", "wifi"]))]
     action: Option<String>,
     /// Point ids for `assign`.
     #[serde(default)]
@@ -48,7 +48,8 @@ pub(crate) struct ElectricalParams {
     #[serde(default)]
     #[schemars(skip)]
     prune: bool,
-    /// For `cable`: what the run carries, `power`, `data` or `tv`.
+    /// For `cable` and `route`: what the run carries.
+    #[schemars(extend("enum" = ["power", "data", "tv"]))]
     kind: Option<String>,
     /// For `cable`: the run's points `[[x,y], …]`, cm.
     #[serde(default)]
@@ -81,6 +82,7 @@ pub(crate) struct ElectricalReadParams {
     /// `check` (default): points by kind and what the norm finds;
     /// `circuits`: the load schedule and the panel; `wifi`: coverage and a
     /// suggestion.
+    #[schemars(extend("enum" = ["check", "circuits", "wifi"]))]
     action: Option<String>,
     /// For `wifi`: the band the suggestion aims at, `2.4`, `5` (default) or `6`.
     band: Option<String>,

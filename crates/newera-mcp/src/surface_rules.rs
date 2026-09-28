@@ -399,30 +399,6 @@ const CHOICE_ARGUMENTS: &[&str] = &[
     "action", "kind", "view", "format", "what", "mode", "quality",
 ];
 
-/// Choice arguments still typed as free text: the list only shrinks.
-const OPEN_CHOICES: &[&str] = &[
-    "arrange.action",
-    "checkpoint.action",
-    "create.$defs.RoofSpec.kind",
-    "disciplines.action",
-    "edit_cameras.action",
-    "edit_disciplines.action",
-    "edit_electrical.action",
-    "edit_electrical.kind",
-    "edit_levels.action",
-    "edit_plumbing.action",
-    "edit_plumbing.kind",
-    "edit_variants.action",
-    "edit_video.action",
-    "electrical.action",
-    "feedback.kind",
-    "joinery.kind",
-    "render_3d.view",
-    "render_photo.quality",
-    "render_photo.view",
-    "update.$defs.RenameSpec.what",
-];
-
 fn open_choices(value: &Value, path: &str, out: &mut BTreeSet<String>) {
     let Value::Object(map) = value else { return };
     if let Some(Value::Object(props)) = map.get("properties") {
@@ -444,25 +420,10 @@ fn choices_are_listed_in_the_schema() {
     for (name, tool) in surface() {
         open_choices(&tool["inputSchema"], &name, &mut found);
     }
-    let listed: BTreeSet<String> = OPEN_CHOICES.iter().map(|s| (*s).to_owned()).collect();
-    let new: Vec<_> = found.difference(&listed).collect();
-    let fixed: Vec<_> = listed.difference(&found).collect();
     assert!(
-        new.is_empty(),
-        "choice arguments typed as free text — give them an enum:\n  {}",
-        new.iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<_>>()
-            .join("\n  ")
-    );
-    assert!(
-        fixed.is_empty(),
-        "these have an enum now; take them out of OPEN_CHOICES:\n  {}",
-        fixed
-            .iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<_>>()
-            .join("\n  ")
+        found.is_empty(),
+        "choice arguments typed as free text — give them an enum (#[schemars(extend(\"enum\" = [...]))]):\n  {}",
+        found.into_iter().collect::<Vec<_>>().join("\n  ")
     );
 }
 
@@ -470,53 +431,10 @@ fn choices_are_listed_in_the_schema() {
 /// same way as their neighbours'.
 const TOO_SLOW_TO_PROBE: &[&str] = &["render_photo"];
 
-/// Tools that still drop an argument they do not know: the list only shrinks.
-const LOOSE_ARGUMENTS: &[&str] = &[
-    "accept",
-    "arrange",
-    "cabinet_run",
-    "catalog",
-    "checkpoint",
-    "create",
-    "delete",
-    "edit_cameras",
-    "edit_disciplines",
-    "edit_electrical",
-    "edit_levels",
-    "edit_plumbing",
-    "edit_variants",
-    "edit_video",
-    "embed",
-    "export_plan",
-    "feedback",
-    "fill_lighting",
-    "fit_roof",
-    "get_home",
-    "joinery",
-    "materials",
-    "measure",
-    "merge_walls",
-    "move",
-    "new_home",
-    "open_home",
-    "place",
-    "redo",
-    "render_3d",
-    "render_plan",
-    "run_plugin",
-    "save_home",
-    "sessions",
-    "set_background",
-    "set_home",
-    "show_plan",
-    "split_wall",
-    "undo",
-    "update",
-];
-
 /// An argument nobody declared is refused by name. Dropped in silence, a
 /// misspelled `dry` would write, and a write's argument sent to a read would
-/// look like a change that was made.
+/// look like a change that was made. `crate::args` checks every call against
+/// the tool's schema; this makes sure nothing goes around it.
 #[test]
 fn unknown_arguments_are_refused_by_name() {
     use newera_core::{Document, SharedDocument};
@@ -536,25 +454,10 @@ fn unknown_arguments_are_refused_by_name() {
             loose.insert(name);
         }
     }
-    let listed: BTreeSet<String> = LOOSE_ARGUMENTS.iter().map(|s| (*s).to_owned()).collect();
-    let new: Vec<_> = loose.difference(&listed).collect();
-    let fixed: Vec<_> = listed.difference(&loose).collect();
     assert!(
-        new.is_empty(),
-        "these tools accept an argument they do not know — add #[serde(deny_unknown_fields)]:\n  {}",
-        new.iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<_>>()
-            .join("\n  ")
-    );
-    assert!(
-        fixed.is_empty(),
-        "these refuse unknown arguments now; take them out of LOOSE_ARGUMENTS:\n  {}",
-        fixed
-            .iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<_>>()
-            .join("\n  ")
+        loose.is_empty(),
+        "these tools accept an argument they do not know (crate::args should refuse it):\n  {}",
+        loose.into_iter().collect::<Vec<_>>().join("\n  ")
     );
 }
 

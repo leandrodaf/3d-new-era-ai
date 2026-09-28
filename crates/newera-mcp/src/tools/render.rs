@@ -47,7 +47,8 @@ pub(crate) struct ExportParams {
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct PhotoParams {
-    /// `aerial` (default) or `visitor`.
+    /// Default `aerial`.
+    #[schemars(extend("enum" = ["aerial", "visitor"]))]
     view: Option<String>,
     /// Stored point of view index.
     cam: Option<usize>,
@@ -55,7 +56,8 @@ pub(crate) struct PhotoParams {
     yaw: Option<f32>,
     /// Aerial height angle, degrees (default 40).
     pitch: Option<f32>,
-    /// `draft` (default), `good`, `best`.
+    /// Default `draft`.
+    #[schemars(extend("enum" = ["draft", "good", "best"]))]
     quality: Option<String>,
     /// Local solar hour, 0–24.
     hour: Option<f64>,
@@ -66,7 +68,8 @@ pub(crate) struct PhotoParams {
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct Render3dParams {
-    /// `aerial` (default), `visitor`, or an elevation: `front`, `back`, `left`, `right`, `top`.
+    /// Default `aerial`; `front` to `top` are elevations.
+    #[schemars(extend("enum" = ["aerial", "visitor", "front", "back", "left", "right", "top"]))]
     view: Option<String>,
     /// Stored point of view index (see cameras).
     cam: Option<usize>,

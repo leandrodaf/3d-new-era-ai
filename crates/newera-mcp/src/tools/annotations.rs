@@ -81,7 +81,8 @@ pub(crate) struct AnnotationEditParams {
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct DisciplineParams {
-    /// `select`, `show` or `hide`.
+    /// What to do with discipline `d`.
+    #[schemars(extend("enum" = ["select", "show", "hide"]))]
     action: Option<String>,
     /// Whether the 3D shows everything (true) or hides what the plan hides
     /// (false). Applies with any action.
@@ -93,7 +94,8 @@ pub(crate) struct DisciplineParams {
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct DisciplineReadParams {
-    /// `active` (default) or `quantities`.
+    /// Default `active`.
+    #[schemars(extend("enum" = ["active", "quantities"]))]
     action: Option<String>,
 }
 #[tool_router(router = annotations_router, vis = "pub(crate)")]

@@ -28,8 +28,7 @@ pub(crate) struct UpdateParams {
     pub(crate) v: Option<usize>,
     /// Try it without applying: reports what would change, the clearances
     /// around every piece it touches, and which layout and ergonomics
-    /// findings it would resolve or create. Nothing is written and the
-    /// user's window does not move.
+    /// findings it would resolve or create. Nothing is written.
     pub(crate) dry: Option<Dry>,
 }
 #[derive(Debug, Deserialize, JsonSchema)]

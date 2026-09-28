@@ -6,6 +6,7 @@
 //! screen immediately and can be undone with Ctrl+Z.
 
 pub mod app;
+mod args;
 mod compact;
 mod edit;
 mod hints;
@@ -121,6 +122,9 @@ fn run(
     }
     let reason = |e: rmcp::ErrorData| e.message.to_string();
     let server = NewEraMcp::new(document);
+    if let Some(why) = server.unknown_argument(name, &args) {
+        return Err(why);
+    }
     match name {
         "disciplines" => Ok(said(
             server
