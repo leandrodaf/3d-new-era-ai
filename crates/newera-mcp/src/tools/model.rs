@@ -19,6 +19,8 @@ pub(crate) struct ModelParams {
     id: Option<String>,
     /// Instead of `id`: an .obj/.gltf/.glb file, before placing it.
     file: Option<String>,
+    /// Only the parts whose name has these words (`braco`), all of them.
+    part: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -66,6 +68,50 @@ fn cm(v: f64) -> f64 {
     (v * 10.0).round() / 10.0
 }
 
+/// The named parts of a model: `[name, triangles, [x, y, z] min, [x, y, z]
+/// max, materials]`, in cm of the piece — x across its width from the
+/// center, y from the center to its front, z up from its bottom — scaled
+/// by `scale` (the piece's size over the file's).
+pub(crate) fn parts(
+    mesh: &newera_catalog::Mesh,
+    scale: [f64; 3],
+    only: Option<&str>,
+) -> Vec<Value> {
+    let words: Vec<String> = only
+        .map(newera_core::fold)
+        .unwrap_or_default()
+        .split_whitespace()
+        .map(str::to_owned)
+        .collect();
+    mesh.parts
+        .iter()
+        .filter(|p| {
+            let name = newera_core::fold(&p.name);
+            words.iter().all(|w| name.contains(w.as_str()))
+        })
+        .filter_map(|p| {
+            let (min, max) = mesh.part_bounds(p)?;
+            // Mesh axes: x width, y up, z depth (front +z).
+            let at = |v: [f32; 3]| {
+                [
+                    cm(f64::from(v[0]) * scale[0]),
+                    cm(f64::from(v[2]) * scale[1]),
+                    cm(f64::from(v[1]) * scale[2]),
+                ]
+            };
+            let mut materials: Vec<&str> = mesh
+                .indices
+                .get(p.start * 3..(p.start + p.count) * 3)?
+                .iter()
+                .filter_map(|&i| mesh.material_of(i as usize).map(|m| m.name.as_str()))
+                .collect();
+            materials.sort_unstable();
+            materials.dedup();
+            Some(json!([p.name, p.count, at(min), at(max), materials]))
+        })
+        .collect()
+}
+
 /// What `model` answers for a loaded file.
 pub(crate) fn report(file: &str, loaded: &newera_catalog::ImportedModel) -> Value {
     let mesh = &loaded.mesh;
@@ -107,6 +153,7 @@ pub(crate) fn report(file: &str, loaded: &newera_catalog::ImportedModel) -> Valu
         "materials": materials,
         "images": images.len(),
         "uv": mesh.uvs.iter().any(|uv| *uv != [0.0, 0.0]),
+        "parts": parts(mesh, [1.0; 3], None),
         "warnings": r.warnings,
     })
 }
@@ -114,7 +161,7 @@ pub(crate) fn report(file: &str, loaded: &newera_catalog::ImportedModel) -> Valu
 #[tool_router(router = model_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken for its numbers and its natural size, triangles, its materials with their images, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, alpha masks, extensions). For a piece that looks wrong after place model=…, instead of reading the file. Reply {file, format, unit, raw (file units), size cm, tris, materials [[name, color, image, tris]], images, uv, warnings}; with id also piece {size, scale per axis}. place model=… imports one."
+        description = "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken for its numbers and its natural size, triangles, its materials with their images, its named parts (OBJ objects and groups, glTF nodes: arms, seat, frame) with their bounds and materials, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, alpha masks, extensions). For a piece that looks wrong after place model=…, instead of reading the file. part=<words> keeps the parts named so. Reply {file, format, unit, raw (file units), size cm, tris, materials [[name, color, image, tris]], images, uv, parts [[name, tris, min, max, materials]] in cm of the piece (x across, y to the front, z up), warnings}; with id also piece {size, scale per axis}. place model=… imports one."
     )]
     pub(crate) fn model(
         &self,
@@ -145,6 +192,16 @@ impl NewEraMcp {
         let loaded = newera_catalog::load_model(&path)
             .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
         let mut out = report(&file, &loaded);
+        let scale = piece.as_ref().map_or([1.0; 3], |piece| {
+            [piece.width, piece.depth, piece.height]
+                .iter()
+                .zip(loaded.size)
+                .map(|(s, natural)| s / natural)
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap_or([1.0; 3])
+        });
+        out["parts"] = json!(parts(&loaded.mesh, scale, p.part.as_deref()));
         if let Some(piece) = piece {
             let size = [piece.width, piece.depth, piece.height];
             let scale: Vec<f64> = size
@@ -515,6 +572,78 @@ mod tests {
             assert_eq!(p.model.as_deref(), Some(v4.as_str()));
             assert!((p.width - 70.0).abs() < 1e-3, "{}", p.width);
         }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn the_arms_and_cushions_answer_by_name_after_the_project_is_reopened() {
+        let dir = std::env::temp_dir().join(format!("newera-model-parts-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut obj = String::from("mtllib win.mtl\n");
+        let mut n = 0;
+        for (name, material, x0, x1, z0, z1) in [
+            ("braco_esquerdo", "madeira", 0.0, 0.1, 0.0, 0.6),
+            ("braco_direito", "madeira", 0.7, 0.8, 0.0, 0.6),
+            ("almofada_assento", "tecido", 0.1, 0.7, 0.0, 0.45),
+            ("almofada_encosto", "tecido", 0.1, 0.7, 0.45, 0.8),
+        ] {
+            let _ = write!(
+                obj,
+                "o {name}\nusemtl {material}\nv {x0} {z0} 0\nv {x1} {z0} 0\nv {x1} {z1} 0.7\nf {} {} {}\n",
+                n + 1,
+                n + 2,
+                n + 3
+            );
+            n += 3;
+        }
+        std::fs::write(dir.join("win.obj"), obj).unwrap();
+        std::fs::write(
+            dir.join("win.mtl"),
+            "newmtl madeira\nKd 0.5 0.3 0.1\nnewmtl tecido\nKd 0.2 0.4 0.3\n",
+        )
+        .unwrap();
+        let s = server();
+        let file = dir.join("win.obj").display().to_string();
+        s.place(Parameters(
+            serde_json::from_str(&format!(r#"{{"items":[{{"model":"{file}","at":[0,0]}}]}}"#))
+                .unwrap(),
+        ))
+        .unwrap();
+        let arms = call(&s, r#"{"id":"f1","part":"braco"}"#).unwrap();
+        assert_eq!(
+            arms["parts"],
+            json!([
+                [
+                    "braco_esquerdo",
+                    1,
+                    [-40.0, -35.0, 0.0],
+                    [-30.0, 35.0, 60.0],
+                    ["madeira"]
+                ],
+                [
+                    "braco_direito",
+                    1,
+                    [30.0, -35.0, 0.0],
+                    [40.0, 35.0, 60.0],
+                    ["madeira"]
+                ]
+            ]),
+            "{arms}"
+        );
+        // Saved and opened again, the same names come back.
+        let saved = dir.join("win.newera");
+        let file_call = |args: Value| crate::call(s.document.clone(), "file", args).unwrap();
+        file_call(json!({"action": "save", "path": saved}));
+        file_call(json!({"action": "new"}));
+        file_call(json!({"action": "open", "path": saved}));
+        let back = call(&s, r#"{"id":"f1","part":"almofada"}"#).unwrap();
+        let names: Vec<&str> = back["parts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p[0].as_str().unwrap())
+            .collect();
+        assert_eq!(names, ["almofada_assento", "almofada_encosto"], "{back}");
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

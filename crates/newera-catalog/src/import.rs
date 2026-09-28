@@ -194,7 +194,9 @@ fn load_obj(path: &Path, report: &mut ImportReport) -> Result<Mesh, ImportError>
             .map(|t| [t[0], t[1], t[2]])
             .collect();
         let start = mesh.positions.len();
+        let part = mesh.begin_part();
         append_triangles(&mut mesh, &positions, &normals, &triangles, color);
+        mesh.end_part(&model.name, part);
         for tri in &triangles {
             for &k in tri {
                 mesh.uvs
@@ -393,6 +395,11 @@ fn load_gltf(path: &Path, report: &mut ImportReport) -> Result<Mesh, ImportError
     while let Some((node, parent)) = stack.pop() {
         let world = mul(&parent, &node.transform().matrix());
         if let Some(node_mesh) = node.mesh() {
+            let part = mesh.begin_part();
+            let name = node
+                .name()
+                .or_else(|| node_mesh.name())
+                .map_or_else(|| format!("node{}", node.index()), str::to_owned);
             for primitive in node_mesh.primitives() {
                 if primitive.mode() != gltf::mesh::Mode::Triangles {
                     skipped += 1;
@@ -461,6 +468,7 @@ fn load_gltf(path: &Path, report: &mut ImportReport) -> Result<Mesh, ImportError
                 mesh.vertex_materials.resize(start, u16::MAX);
                 mesh.vertex_materials.resize(mesh.positions.len(), material);
             }
+            mesh.end_part(&name, part);
         }
         stack.extend(node.children().map(|child| (child, world)));
     }
@@ -941,6 +949,49 @@ mod memory_tests {
         let clean = load_model(&dir.join("clean.glb")).unwrap().report;
         assert!(clean.warnings.is_empty(), "{clean:?}");
         assert_eq!((clean.format.as_str(), clean.unit), ("glb", "cm"));
+        newera_core::vfs::unmount(dir);
+    }
+
+    #[test]
+    fn the_named_pieces_of_a_file_stay_apart() {
+        let dir = Path::new("/virtual/catalog-parts-test");
+        let tri = |x: f32| format!("v {x} 0 0\nv {} 0 0\nv {x} 1 0\n", x + 1.0);
+        let obj = format!(
+            "o braco_esquerdo\n{}f 1 2 3\no assento\n{}f 4 5 6\nf 4 6 5\no braco_esquerdo\n{}f 7 8 9\n",
+            tri(0.0),
+            tri(2.0),
+            tri(4.0)
+        );
+        newera_core::vfs::mount(
+            dir,
+            [
+                ("chair.obj".to_owned(), obj.into_bytes()),
+                ("chair.glb".to_owned(), textured_glb(b"png")),
+            ],
+        );
+        let obj = load_model(&dir.join("chair.obj")).unwrap().mesh;
+        let parts: Vec<(&str, usize, usize)> = obj
+            .parts
+            .iter()
+            .map(|p| (p.name.as_str(), p.start, p.count))
+            .collect();
+        assert_eq!(
+            parts,
+            [
+                ("braco_esquerdo", 0, 1),
+                ("assento", 1, 2),
+                ("braco_esquerdo#2", 3, 1)
+            ]
+        );
+        // In centimeters, after the unit guess (meters): the seat spans 2..3 m.
+        let (min, max) = obj.part_bounds(&obj.parts[1]).unwrap();
+        assert!((max[0] - min[0] - 100.0).abs() < 1e-3, "{min:?} {max:?}");
+        let glb = load_model(&dir.join("chair.glb")).unwrap().mesh;
+        assert_eq!(glb.parts.len(), 1);
+        assert_eq!(
+            (glb.parts[0].name.as_str(), glb.parts[0].count),
+            ("assento", 1)
+        );
         newera_core::vfs::unmount(dir);
     }
 

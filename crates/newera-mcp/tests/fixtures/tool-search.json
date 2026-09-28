@@ -40,6 +40,7 @@
     ["why is the imported chair gray without texture", "model"],
     ["replace model file of a placed piece keep id", "edit_model"],
     ["swap chair v3 for v4 new version of the glb", "edit_model"],
+    ["parts of an imported model arm seat cushion", "model"],
     ["lux illuminance per room", "lighting"],
     ["add light fixtures to reach lux", "edit_lighting"],
     ["electrical circuits breakers", "electrical"],
