@@ -365,25 +365,21 @@ pub fn fixtures(home: &Home) -> Vec<(Fixture, Furniture)> {
     for piece in &view.furniture {
         walk(piece, &mut out);
     }
-    // A bowl — "cuba" — is what the room makes it: washed at in a bathroom,
-    // cooked beside in a kitchen (a kitchen sink's branch, its fat trap),
-    // a laundry sink in the laundry. A piece named or made as a basin stays one.
+    // A bowl — "cuba", or the catalog's inset bowl, whatever it is called —
+    // is what the room makes it: washed at in a bathroom, cooked beside in a
+    // kitchen (a kitchen sink's branch, its fat trap), a laundry sink in the
+    // laundry. One named or made as a basin stays one.
     for (fixture, piece) in &mut out {
-        if *fixture != Fixture::Basin || !is_bowl(piece) {
+        if !matches!(*fixture, Fixture::Basin | Fixture::KitchenSink) || !is_bowl(piece) {
             continue;
         }
-        let Some(room) = view
-            .rooms
-            .iter()
-            .find(|r| r.points.len() >= 3 && crate::electrical::inside(&r.points, piece.position))
-        else {
+        let Some(room) = room_of(&view.rooms, piece.position) else {
             continue;
         };
         let says = room.mentions();
         if says.any(&[M::Bathroom, M::Lavatory]) {
-            continue;
-        }
-        if says.any(&[M::Kitchen, M::Pantry, M::Gourmet]) {
+            *fixture = Fixture::Basin;
+        } else if says.any(&[M::Kitchen, M::Pantry, M::Gourmet]) {
             *fixture = Fixture::KitchenSink;
         } else if says.has(M::Laundry) {
             *fixture = Fixture::LaundrySink;
@@ -392,9 +388,11 @@ pub fn fixtures(home: &Home) -> Vec<(Fixture, Furniture)> {
     out
 }
 
-/// A bowl called by what it is, not by what it is for: a "cuba".
+/// A bowl called by what it is, not by what it is for: a "cuba", or the
+/// catalog's inset bowl unless it is named a basin.
 fn is_bowl(piece: &Furniture) -> bool {
-    piece.catalog == "sink-bowl" || crate::annotations::fold(&piece.name).starts_with("cuba")
+    let name = crate::annotations::fold(&piece.name);
+    !name.starts_with("lavatorio") && (piece.catalog == "sink-bowl" || name.starts_with("cuba"))
 }
 
 /// How far from a fixture's centre its points may stand: half its size and
@@ -1529,6 +1527,54 @@ mod tests {
         assert_eq!(bowl_in("Cozinha antiga", U::Bathroom), Fixture::Basin);
         // Nowhere in particular, a bowl is still a basin.
         assert_eq!(bowl_in("Sala", U::Auto), Fixture::Basin);
+        // Called "Pia" or "Lavatório", the catalog's bowl: the room decides the
+        // first, the name the second.
+        let named = |name: &str, room: &str| {
+            let mut home = Home::default();
+            home.rooms.push(crate::Room::new(
+                crate::RoomId(10),
+                room,
+                vec![
+                    Point2::new(0.0, 0.0),
+                    Point2::new(300.0, 0.0),
+                    Point2::new(300.0, 300.0),
+                    Point2::new(0.0, 300.0),
+                ],
+            ));
+            home.furniture = vec![piece(
+                40,
+                "sink-bowl",
+                name,
+                (150.0, 30.0),
+                (50.0, 40.0, 18.0),
+            )];
+            fixtures(&home)[0].0
+        };
+        assert_eq!(named("Pia do banheiro", "Banheiro"), Fixture::Basin);
+        assert_eq!(named("Pia", "Lavanderia"), Fixture::LaundrySink);
+        assert_eq!(named("Lavatório de apoio", "Cozinha"), Fixture::Basin);
+        // A bathroom inside a kitchen's outline is the room the bowl is in.
+        let mut home = Home::default();
+        for (id, name, size) in [(10, "Cozinha", 600.0), (11, "Lavabo", 200.0)] {
+            home.rooms.push(crate::Room::new(
+                crate::RoomId(id),
+                name,
+                vec![
+                    Point2::new(0.0, 0.0),
+                    Point2::new(size, 0.0),
+                    Point2::new(size, size),
+                    Point2::new(0.0, size),
+                ],
+            ));
+        }
+        home.furniture = vec![piece(
+            40,
+            "sink-bowl",
+            "Cuba",
+            (100.0, 30.0),
+            (50.0, 40.0, 18.0),
+        )];
+        assert_eq!(fixtures(&home)[0].0, Fixture::Basin);
     }
 
     #[test]
