@@ -2884,43 +2884,6 @@ mod tests {
     }
 
     #[test]
-    fn a_glass_sliding_door_lights_the_room_like_a_window() {
-        let dark = |catalog: &str| {
-            let mut home = Home::default();
-            square(&mut home, "Sala", 400.0, 400.0);
-            let swung = catalog == "door-sliding-swung";
-            let catalog = if swung { "door-sliding" } else { catalog };
-            let mut door = piece(20, catalog, (200.0, 0.0), (220.0, 15.0, 220.0), 0.0);
-            door.opening = Some(newera_core::Opening {
-                kind: if catalog == "french-window" {
-                    OpeningKind::Window
-                } else {
-                    OpeningKind::Door
-                },
-                leaves: 2,
-                sliding: catalog != "door" && !swung,
-                ..newera_core::Opening::default()
-            });
-            home.furniture.push(door);
-            review(&home, &Profile::default())
-                .findings
-                .iter()
-                .filter(|f| {
-                    f.key.starts_with("room_without_window") || f.key.starts_with("window_area")
-                })
-                .map(|f| f.message.to_string())
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(dark("door-sliding"), Vec::<String>::new());
-        assert!(
-            !dark("door-sliding-swung").is_empty(),
-            "made to swing, its leaves are solid"
-        );
-        assert_eq!(dark("french-window"), Vec::<String>::new());
-        assert!(!dark("door").is_empty(), "a wooden door is not a window");
-    }
-
-    #[test]
     fn a_vanity_with_two_bowls_is_a_bathroom_not_a_kitchen() {
         let mut home = Home::default();
         square(&mut home, "Banho master", 250.0, 130.0);
@@ -4494,6 +4457,43 @@ mod tests {
             ),
             "{closed:#?}"
         );
+    }
+
+    #[test]
+    fn a_glass_sliding_door_lights_the_room_like_a_window() {
+        let dark = |catalog: &str| {
+            let mut home = Home::default();
+            square(&mut home, "Sala", 400.0, 400.0);
+            let swung = catalog == "door-sliding-swung";
+            let catalog = if swung { "door-sliding" } else { catalog };
+            let mut door = piece(20, catalog, (200.0, 0.0), (220.0, 15.0, 220.0), 0.0);
+            door.opening = Some(newera_core::Opening {
+                kind: if catalog == "french-window" {
+                    OpeningKind::Window
+                } else {
+                    OpeningKind::Door
+                },
+                leaves: 2,
+                sliding: catalog != "door" && !swung,
+                ..newera_core::Opening::default()
+            });
+            home.furniture.push(door);
+            review(&home, &Profile::default())
+                .findings
+                .iter()
+                .filter(|f| {
+                    f.key.starts_with("room_without_window") || f.key.starts_with("window_area")
+                })
+                .map(|f| f.message.to_string())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(dark("door-sliding"), Vec::<String>::new());
+        assert!(
+            !dark("door-sliding-swung").is_empty(),
+            "made to swing, its leaves are solid"
+        );
+        assert_eq!(dark("french-window"), Vec::<String>::new());
+        assert!(!dark("door").is_empty(), "a wooden door is not a window");
     }
 
     /// A dishwasher under the stone is 6 cm lower than the stone, by design.
