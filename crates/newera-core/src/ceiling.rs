@@ -312,6 +312,31 @@ pub fn room_ceiling(home: &Home, room: &Room) -> Vec<CeilingTriangle> {
         }
         surface = next;
     }
+    // The stair climbing to the storey above goes up through this ceiling:
+    // its void, the one it opens in that storey's floor, is open here too.
+    let above = home
+        .sorted_levels()
+        .iter()
+        .skip_while(|l| Some(l.id) != level)
+        .nth(1)
+        .map(|l| l.id);
+    if let Some(above) = above {
+        for void in crate::stair_holes(home, Some(above)) {
+            let cut = to_polygon(&void);
+            let mut next = Vec::new();
+            for patch in surface {
+                let original = to_polygon(&patch.points);
+                for poly in original.difference(&cut) {
+                    let mut remaining = triangles(&poly, |p| patch.height_at(p), patch.draw);
+                    for face in &mut remaining {
+                        face.known = patch.known;
+                    }
+                    next.extend(remaining);
+                }
+            }
+            surface = next;
+        }
+    }
     surface.retain(|p| p.known);
     surface
 }
@@ -320,6 +345,53 @@ pub fn room_ceiling(home: &Home, room: &Room) -> Vec<CeilingTriangle> {
 mod tests {
     use super::*;
     use crate::{FurnitureId, Issue, Level, LevelId, RoomId, WallId};
+
+    #[test]
+    fn the_stair_to_the_storey_above_opens_the_ceiling_under_it() {
+        let mut home = Home::default();
+        home.levels = vec![
+            Level {
+                id: LevelId(1),
+                elevation: 0.0,
+                height: 250.0,
+                floor_thickness: 12.0,
+                ..Level::default()
+            },
+            Level {
+                id: LevelId(2),
+                elevation: 262.0,
+                height: 250.0,
+                floor_thickness: 12.0,
+                elevation_index: 1,
+                ..Level::default()
+            },
+        ];
+        let below = room();
+        let area = |home: &Home| -> f64 {
+            room_ceiling(home, &below)
+                .iter()
+                .map(|t| crate::polygon_area(&t.points))
+                .sum()
+        };
+        assert!((area(&home) - 400.0 * 400.0).abs() < 1e-3);
+        home.furniture.push(Furniture {
+            id: FurnitureId(20),
+            catalog: "stairs".into(),
+            position: Point2::new(200.0, 200.0),
+            width: 90.0,
+            depth: 300.0,
+            height: 262.0,
+            ..Furniture::default()
+        });
+        assert!(
+            (area(&home) - (400.0 * 400.0 - 90.0 * 300.0)).abs() < 1e-3,
+            "{}",
+            area(&home)
+        );
+        // A step stool reaching nowhere leaves it closed.
+        home.furniture[0].height = 60.0;
+        assert!((area(&home) - 400.0 * 400.0).abs() < 1e-3);
+    }
 
     fn room() -> Room {
         Room::new(

@@ -75,6 +75,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The ceiling under a stair's void is open. A stair climbing to the storey above opened its hole in
+  that storey's floor, but the ceiling of the room it climbs from stayed closed over it — in 3D, to
+  the lighting and to the ceiling checks — so seeing the stair from either floor meant turning that
+  room's whole ceiling off. The same void is now cut from it.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
