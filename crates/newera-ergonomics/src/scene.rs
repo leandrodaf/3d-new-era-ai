@@ -807,11 +807,11 @@ impl<'a> Scene<'a> {
         p.width.min(p.depth) <= 3.0
     }
 
-    /// Sink bowls and cooktops set into a countertop.
+    /// Sink bowls, basins and cooktops set into a countertop.
     pub fn embedded(&self, i: usize) -> bool {
         let u = &self.units[i];
         let (lo, hi) = u.piece.height_range();
-        matches!(u.what, Use::Sink | Use::Stove) && lo >= 50.0 && hi - lo <= 45.0
+        matches!(u.what, Use::Sink | Use::Basin | Use::Stove) && lo >= 50.0 && hi - lo <= 45.0
     }
 
     /// Area two outlines share, cm².

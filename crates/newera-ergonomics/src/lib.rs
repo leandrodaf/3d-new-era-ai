@@ -2894,8 +2894,14 @@ mod tests {
             bowl.name = "Cuba de embutir".into();
             bowl.elevation = 70.0;
         }
+        // Deep bowls, sunk into the vanity they are set in.
+        for bowl in &mut home.furniture[3..] {
+            bowl.height = 24.0;
+            bowl.elevation = 62.0;
+        }
         let report = review(&home, &Profile::default());
         let said = |text: &str| report.findings.iter().any(|f| f.message.contains(text));
+        assert!(!said("Ocupa o mesmo lugar"), "{:#?}", report.findings);
         assert!(!said("zonas de trabalho"), "{:#?}", report.findings);
         assert!(!said("lavatório para testar"), "{:#?}", report.findings);
         assert!(!said("bancada e equipamentos"), "{:#?}", report.findings);
