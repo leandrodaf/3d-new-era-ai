@@ -25,6 +25,16 @@ fn compact_object(map: &mut Map<String, Value>) {
     ] {
         map.remove(key);
     }
+    // A default that is what absence already means — `false`, empty, null —
+    // says nothing. (A field named `default` is an object, never one of these.)
+    if map.get("default").is_some_and(|d| {
+        matches!(d, Value::Bool(false) | Value::Null)
+            || d.as_array().is_some_and(Vec::is_empty)
+            || d.as_object().is_some_and(Map::is_empty)
+            || d.as_str().is_some_and(str::is_empty)
+    }) {
+        map.remove("default");
+    }
     // `["number", "null"]` → `"number"`: absence already means null.
     if let Some(Value::Array(types)) = map.get("type") {
         let kept: Vec<Value> = types.iter().filter(|t| *t != "null").cloned().collect();

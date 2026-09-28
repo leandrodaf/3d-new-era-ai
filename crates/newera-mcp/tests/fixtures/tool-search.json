@@ -1,5 +1,5 @@
 {
-  "floor": {"top3": 0.902, "top5": 0.951},
+  "floor": {"top3": 0.965, "top5": 1.0},
   "queries": [
     ["new empty project", "new_home"],
     ["start a new floor plan", "new_home"],
@@ -82,22 +82,23 @@
     ["who is editing sessions", "sessions"],
     ["list plugins", "plugins"],
     ["run plugin", "run_plugin"],
-    ["report tool problem feedback", "feedback"]
+    ["report tool problem feedback", "feedback"],
+    ["what does nbr 5410 require outlets per room", "rules"],
+    ["rules for floor drains and traps", "rules"],
+    ["what each layout problem means", "rules"],
+    ["how the ergonomics score is weighed", "rules"]
   ],
   "alike": [
     ["annotations", "edit_annotations", "a read and the write that changes it: separate tools so a client runs the read without asking"],
     ["cameras", "edit_cameras", "a read and the write that changes it: separate tools so a client runs the read without asking"],
     ["checkpoints", "checkpoint", "a read and the write that changes it: separate tools so a client runs the read without asking"],
     ["disciplines", "edit_disciplines", "a read and the write that changes it: separate tools so a client runs the read without asking"],
-    ["electrical", "edit_electrical", "a read and the write that changes it: separate tools so a client runs the read without asking"],
     ["levels", "edit_levels", "a read and the write that changes it: separate tools so a client runs the read without asking"],
     ["variants", "edit_variants", "a read and the write that changes it: separate tools so a client runs the read without asking"],
     ["video", "edit_video", "a read and the write that changes it: separate tools so a client runs the read without asking"],
     ["plugins", "run_plugin", "a read and the write that changes it: separate tools so a client runs the read without asking"],
     ["cut_list", "export_cut_list", "a read and the write that changes it: separate tools so a client runs the read without asking"],
     ["trace_background", "trace_walls", "a read and the write that changes it: separate tools so a client runs the read without asking"],
-    ["accept", "ergonomics", "accept names the reviews whose findings it marks"],
-    ["edit_cameras", "render_3d", "both speak of a camera (yaw, pitch): one stores a view, the other draws one"],
-    ["ergonomics", "set_home", "set_home keeps the people and the city that ergonomics weighs"]
+    ["edit_cameras", "render_3d", "both speak of a camera (yaw, pitch): one stores a view, the other draws one"]
   ]
 }

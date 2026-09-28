@@ -33,10 +33,7 @@ impl JsonSchema for Point2 {
 
     fn json_schema(generator: &mut SchemaGenerator) -> Schema {
         let mut schema = <[f64; 2]>::json_schema(generator);
-        schema.insert(
-            "description".into(),
-            "[x, y] in centimeters; x grows right, y grows down".into(),
-        );
+        schema.insert("description".into(), "[x, y] cm".into());
         schema
     }
 }

@@ -435,6 +435,7 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
             ],
             &[],
         ),
+        "rules" => shape(&[("text", text("The rules, as Markdown"))], &["text"]),
         "materials" => shape(
             &[
                 ("wall_types", list("[id, name, thickness cm]")),
@@ -901,8 +902,39 @@ pub fn ok_schema() -> Value {
 
 /// Gives a tool its output schema.
 pub(crate) fn apply(tool: &mut rmcp::model::Tool) {
-    if let Some(Value::Object(schema)) = schema(&tool.name) {
-        tool.output_schema = Some(std::sync::Arc::new(schema));
+    if let Some(mut schema) = schema(&tool.name) {
+        undescribe(&mut schema);
+        if let Value::Object(schema) = schema {
+            tool.output_schema = Some(std::sync::Arc::new(schema));
+        }
+    }
+}
+
+/// The output schema goes out without its descriptions. The model reads the
+/// answer, not its schema — the tool's description already says what comes
+/// back — and a client validates the shape, which the descriptions do not
+/// change; they cost 20 KB on every conversation. They stay in the table
+/// above, for whoever maintains it.
+fn undescribe(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            map.remove("description");
+            if let Some(Value::Object(props)) = map.get_mut("properties") {
+                props.values_mut().for_each(undescribe);
+            }
+            for key in ["items", "additionalProperties"] {
+                if let Some(inner) = map.get_mut(key) {
+                    undescribe(inner);
+                }
+            }
+            for key in ["anyOf", "oneOf"] {
+                if let Some(Value::Array(branches)) = map.get_mut(key) {
+                    branches.iter_mut().for_each(undescribe);
+                }
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(undescribe),
+        _ => {}
     }
 }
 
@@ -1008,7 +1040,10 @@ mod tests {
                 )
             });
             assert_eq!(schema["type"], "object", "{}", tool.name);
-            for (key, field) in schema["properties"].as_object().expect("properties") {
+            // Descriptions leave on the way out (`undescribe`); the table
+            // keeps them for whoever maintains it.
+            let table = super::schema(&tool.name).expect("in the table");
+            for (key, field) in table["properties"].as_object().expect("properties") {
                 assert!(
                     field.get("description").is_some(),
                     "{}.{key} has no description",

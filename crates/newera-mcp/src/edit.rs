@@ -69,7 +69,8 @@ pub(crate) struct RoomSpec {
     pub floor_mat: Option<String>,
     /// Ceiling finish.
     pub ceil_mat: Option<String>,
-    /// Ceiling mode: true (default) is flat at storey height; false follows wall profiles. Lower roof panels clip either mode.
+    /// Ceiling flat at storey height (true, default) or following the wall
+    /// profiles (false).
     pub ceiling_flat: Option<bool>,
 }
 
@@ -158,14 +159,13 @@ pub(crate) struct CreateParams {
     /// Pitched roofs over a rectangle, built as one group of sloping panels.
     #[serde(default)]
     pub roofs: Vec<RoofSpec>,
-    /// Solids from polygons: plan outlines raised by `h` (slabs, mezzanines,
-    /// decks with any shape) or cross-sections swept from `a` to `b` (gables, ramps).
+    /// Solids: plan outlines raised by `h` (slabs, decks) or cross-sections
+    /// swept from `a` to `b` (gables, ramps).
     #[serde(default)]
     pub solids: Vec<SolidSpec>,
     /// Plan version (tab) to write to; switches to it first.
     pub v: Option<usize>,
-    /// Every point is given in pixels of the background image (converted with its
-    /// scale and offset); lengths (t, h, off) stay in cm.
+    /// Points are background-image pixels; lengths stay in cm.
     #[serde(default)]
     pub px: bool,
 }
@@ -220,9 +220,8 @@ pub(crate) struct SkylightSpec {
 pub(crate) struct SolidSpec {
     /// Plan outline `[[x,y],…]` cm.
     pub pts: Option<Vec<Point2>>,
-    /// Instead of `pts`: cross-section `[[u,z],…]` cm swept from `a` to `b`;
-    /// u runs across the path (for a→b going down the plan, +u is +x),
-    /// z is the height above the storey floor.
+    /// Instead of `pts`: cross-section `[[u,z],…]` cm swept from `a` to `b`
+    /// (+u is +x when a→b goes down the plan; z above the floor).
     pub profile: Option<Vec<Point2>>,
     /// With `profile`: where the sweep starts, `[x,y]` cm.
     pub a: Option<Point2>,
@@ -344,8 +343,7 @@ pub(crate) struct RoofSpec {
     /// Also close the gable ends with sloping walls.
     #[serde(default)]
     pub gables: bool,
-    /// Glazed openings cut through the roof: center `at:[x,y]` on the plan,
-    /// `w` along the ridge and `d` across it (plan size), cm.
+    /// Glazed roof openings: center `at`, `w` along the ridge, `d` across, cm.
     #[serde(default)]
     pub skylights: Vec<SkylightSpec>,
     /// The roof group's name.
@@ -592,9 +590,8 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
     Ok(ids)
 }
 
-/// Fields that can be changed on an element. Each applies only to the kinds
-/// that have it; anything else — a field that does not exist included — is
-/// rejected so mistakes are loud.
+/// Fields to change; each applies only to the kinds that have it, and any
+/// other is refused.
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct UpdateSpec {
@@ -625,8 +622,8 @@ pub(crate) struct UpdateSpec {
     /// Room polygon.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pts: Option<Vec<Point2>>,
-    /// The piece a note is about, e.g. `f1185`; its numbers are then checked
-    /// against that piece by `annotations(stale=true)`. `""` unties it.
+    /// The piece a note is about (e.g. `f1185`), checked by `annotations`
+    /// stale; `""` unties it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub about: Option<String>,
     /// Room floor visible.
@@ -635,7 +632,8 @@ pub(crate) struct UpdateSpec {
     /// Room ceiling visible.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ceiling: Option<bool>,
-    /// Room ceiling mode: true is flat at storey height; false follows wall profiles. Lower roof panels clip either mode; ceiling controls visibility separately.
+    /// Room ceiling flat at storey height (true) or following the wall
+    /// profiles (false).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ceiling_flat: Option<bool>,
     /// Label text.
@@ -686,20 +684,17 @@ pub(crate) struct UpdateSpec {
     /// Furniture mirrored left to right.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mirror: Option<bool>,
-    /// Which face of the piece stays put when `w`, `d` or `h` change:
-    /// `back`, `front`, `left`, `right` (relative to the way it faces),
-    /// `bottom`, `top`, or a plan side `+x`, `-x`, `+y`, `-y`. Without it a
-    /// resize grows around the center and both faces move, which is almost
-    /// never what a run of joinery wants.
+    /// Face that stays put on a resize: `back`, `front`, `left`, `right`
+    /// (as the piece faces), `bottom`, `top`, or `+x`, `-x`, `+y`, `-y`;
+    /// default the center.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub anchor: Option<String>,
-    /// On a group resize, the parts that take the change (ids); every other
-    /// part keeps its size and moves along. Without it the group scales all
-    /// its parts by the same factor.
+    /// On a group resize, the parts that take the change; the others keep
+    /// their size.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stretch: Option<Vec<String>>,
-    /// Plan layer of a piece: `lighting`, `appliances`, `joinery`, `none`
-    /// (in no layer), or empty to go back to the layer it is in by itself.
+    /// Plan layer: `lighting`, `appliances`, `joinery` or `none`; empty
+    /// restores its own.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub layer: Option<String>,
     /// Show or hide the element.
@@ -718,9 +713,8 @@ pub(crate) struct UpdateSpec {
     /// Clear gap between a railing's bars, cm.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gap: Option<f64>,
-    /// Furniture: `true` fixed joinery (a top that can host a built-in
-    /// outlet), `false` free-standing, when its name does not say; `""`
-    /// takes the declaration back and lets the name decide again.
+    /// Furniture: `true` fixed joinery, `false` free-standing; `""` lets the
+    /// name decide.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fixed: Option<Fixed>,
     /// Move the element to this level id (e.g. `lv2`).
@@ -750,8 +744,8 @@ pub(crate) struct UpdateSpec {
     /// Furniture brand (references).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub brand: Option<String>,
-    /// Functional role independent of name: `trim`, `backsplash`, `counter`;
-    /// empty restores automatic classification. Does not disable collisions.
+    /// Role independent of the name: `trim`, `backsplash`, `counter`; empty
+    /// restores the automatic one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
     /// Furniture commercial model.
@@ -1892,8 +1886,8 @@ pub(crate) struct LightSpec {
     pub beam: Option<f64>,
     /// Emitting panel facing down, [w, d] cm.
     pub area: Option<[f64; 2]>,
-    /// Source height as a fraction of the piece's height (default: its base
-    /// for spots and panels, the middle otherwise).
+    /// Source height, fraction of the piece's (default: base for spots and
+    /// panels, else middle).
     pub z: Option<f64>,
     /// `false` turns it off.
     pub on: Option<bool>,

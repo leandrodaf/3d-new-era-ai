@@ -36,7 +36,7 @@ pub(crate) struct LevelsParams {
 impl NewEraMcp {
     #[tool(
         name = "levels",
-        description = "Storeys: rows [id,name,elev,h,selected,layout_index,viewable,reference]. Other tools act on the selected storey; change them with edit_levels."
+        description = "Storeys (floors, levels) of the project: rows [id,name,elev,h,selected,layout_index,viewable,reference]. Other tools act on the selected storey; change them with edit_levels."
     )]
     pub(crate) fn list_levels(
         &self,

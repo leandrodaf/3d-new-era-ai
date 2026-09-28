@@ -36,9 +36,13 @@ A description is, in this order:
 3. the shape of the reply (rows, fields);
 4. the tools next to it, by name.
 
-It is not a manual. The rules behind a review (what a standard demands, how a load is
-sized) belong in the review's answer: each finding carries its `msg` and `src`, and the
-standards resolve in `sources`. A description does not give orders to the model or
+It is not a manual. What a review checks against (a standard's tables, what each
+layout problem means, how a score is weighed) lives in
+[`src/tools/rules/`](../crates/newera-mcp/src/tools/rules), answered by the `rules` tool
+and served as the resources `newera://rules/<topic>`; the description points there. Each
+finding carries its own `msg` and `src`, and the standards resolve in `sources`. A
+description uses the words a user would search with — "remove", "lux", "floors" — since a
+client's tool search matches words, not meaning. It does not give orders to the model or
 advertise (`descriptions_neither_order_nor_sell`).
 
 Arguments are described in a line each. A shared type (`$defs`) is described in at most
@@ -68,8 +72,9 @@ uses the type.
 
 Every tool has a row in `HINTS` (`hints.rs`): its title for people, and whether it
 reads, adds or changes. A read must change nothing (`reads_change_nothing`). Every tool
-has an output schema in `output.rs`, and every answer fits it
-(`every_answer_fits_its_schema`).
+has an output schema in `output.rs`, with a description on every field, and every answer
+fits it (`every_answer_fits_its_schema`). The descriptions stay in that table and leave
+on the way out: the model reads the answer, and a client validates only the shape.
 
 ## Budget
 

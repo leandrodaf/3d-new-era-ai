@@ -211,8 +211,7 @@ impl Wall {
     }
 }
 
-/// Declared room program, independent of its display name. Auto preserves
-/// legacy name/equipment inference; other values are explicit intent.
+/// Declared room program; `auto` infers it from the name and equipment.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum RoomUse {

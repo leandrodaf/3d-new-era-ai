@@ -24,6 +24,7 @@
 //! | [`feedback`] | `feedback` |
 //! | [`electrical`] | `electrical` |
 //! | [`plumbing`] | `plumbing` |
+//! | [`rules`] | `rules` |
 //! | [`reply`] | no tools: what every write needs to answer |
 //!
 //! A new tool goes in the domain it belongs to, and its router joins
@@ -58,6 +59,7 @@ mod read;
 mod render;
 mod reply;
 mod roof;
+pub(crate) mod rules;
 
 const INSTRUCTIONS: &str = "\
 Home design editor, live in the user's window. Units: cm. Plan axes: x right, y down. \
@@ -117,6 +119,7 @@ impl NewEraMcp {
             Self::feedback_router(),
             Self::electrical_router(),
             Self::plumbing_router(),
+            Self::rules_router(),
         ];
         let expected: usize = parts.iter().map(|r| r.map.len()).sum();
         let mut tool_router = parts

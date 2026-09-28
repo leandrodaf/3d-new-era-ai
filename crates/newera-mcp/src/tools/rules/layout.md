@@ -1,0 +1,52 @@
+# Layout: what each problem means
+
+`check_layout` answers the problems by kind; `{}` means none. Every row is an object with
+the `key` it is accepted by and the elements involved (name, bounds and z).
+
+- **overlap**: classified `collision` (a real clash, listed first), `nesting` (built in,
+  resting on, tucked under), `served` (a project point inside a piece on purpose: the water
+  point in the basin, the outlet behind the fridge or set into a cabinet) or `cross_level`,
+  with extent [x,y,z] cm of the shared space; overlap_kinds counts them.
+- **blocked**: a cabinet, fridge or wardrobe whose opening face is against a solid. It
+  cannot be used, and `angle` alone does not show it.
+- **in_wall** `{key, piece, wall}`: a piece inside a wall.
+- **blocks_door** `{key, door, by}`: includes a 60 cm approach on either face, even for
+  sliding doors and passages.
+- **blocks_window**: nearby tall or elevated solids masking the window, with extent
+  [width,height] cm; compact countertop objects are exempt, so this does not certify sash
+  operation or ventilation.
+- **no_door**: a bedroom or bathroom (by name) with no door — only open passages, listed,
+  or no way in at all — said once the storey has doors somewhere; a living room, kitchen or
+  balcony left open is not.
+- **backwards**: a piece whose back belongs on a wall (sofa, bed, toilet, TV, desk — the
+  catalog marks them `wall`) with its front against a wall instead: turned half around.
+  fix.angle turns it the right way; its back then touches that wall only if it was flush —
+  placing again with `wall=<id>` seats it.
+- **turned**: a group whose built fronts (doors, drawer fronts, kick) face one way and whose
+  `angle` says another: the piece opens where the panels are, so fix the angle, not the
+  clearance it seems to lack.
+- **unrated_light**: a light fixture with neither lumens nor watts — only the relative power
+  an import carries — so the lighting review's lux for its room are a guess: set its output
+  with update(light={lm or w}).
+- **unclear_front**: a group whose parts name fronts on more than one face with no clear
+  winner (candidates, strongest first; placed is the angle's guess every "in front of"
+  falls back to). Rename the misleading part or set the angle. Handles weigh most.
+- **loose_opening**: a door or window in no wall — a passage drawn as a panel — which reads
+  as an opening in every schedule and opens nothing.
+- **outgrew_niche**: an appliance its host stopped holding after the joinery was resized
+  around it, with how far it sticks out. Built-in pieces are left out of the overlap check
+  by design, which is why nothing else notices.
+- **outside_rooms**: a piece outside every room.
+- **loose**: a fixed point with nothing to be fixed to — loose in a room, on glass, in a
+  door or window span, hanging under the ceiling — with why.
+- **above_ceiling**: compares the full luminaire footprint with the room ceiling surface the
+  3D uses, with ceiling/top/over in cm: declared storey height, sloping wall profiles and
+  lower roof panels. Hidden ceilings and unknown uncovered slopes are not inferred.
+
+## Accepting
+
+`accept` marks a finding looked at and right as drawn — an imported model whose box is
+bigger than the piece it draws. It leaves the sections, the variant count and every dry
+run, and is listed under `accepted {key, kind, why, extent}` with its reason, kept in the
+project. `orphaned [[key, reason]]` lists acceptances whose finding is gone on every storey;
+`accept(prune=true)` drops them.

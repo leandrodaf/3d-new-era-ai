@@ -10,7 +10,6 @@
     "inputSchema": {
       "properties": {
         "accept": {
-          "default": [],
           "description": "`[[key, reason]]`, key as the review names it (`check_layout`, ergonomics, electrical, plumbing): it keeps showing there with the reason and stops counting. An empty reason takes it back",
           "items": {
             "items": {
@@ -21,7 +20,6 @@
           "type": "array"
         },
         "prune": {
-          "default": false,
           "description": "Drop every acceptance whose finding is gone — the `orphaned` the reviews list — from all of them at once",
           "type": "boolean"
         }
@@ -32,34 +30,27 @@
     "outputSchema": {
       "properties": {
         "accepted": {
-          "description": "Findings accepted",
           "type": "integer"
         },
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "removed": {
-          "description": "Acceptances removed",
           "type": "integer"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -77,7 +68,7 @@
       "readOnlyHint": true,
       "title": "Read dimensions, tags and notes"
     },
-    "description": "Plan annotations, read. stale=true lists notes whose numbers no longer match the piece they are about, piece names whose sizes (`módulo 70 cm`, `80 × 60`) no longer match the piece, dimensions whose anchor is gone, and unanchored dimensions left with one end in the air a few cm from a face (the drawing moved under them): rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared — an empty list with nothing checked is not a clean plan — and unverified [[id, text]] lists sizes nothing can confirm: a label about no piece, or a name giving an inner opening, niche, leaf or set (vão, nicho, folha, conjunto) — run it after moving geometry, before handing the plan over. A note says which piece it is about with update(id=t1, about=f5); without that, one standing on a piece or beside a single piece that still shares a number is checked too. q=<text> searches label text on every storey; q=re:<pattern> by a regex (`re:^\\[\\d+\\]$` finds index codes). With neither, returns the schedule {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]} — the modes on, and the room reference schedule with its tags. edit_annotations turns modes on and off, ties dimensions and bakes chains. Give pieces brand/model/url via update.",
+    "description": "Plan annotations, read. stale=true lists what no longer matches: notes whose numbers differ from their piece, piece names whose sizes (`módulo 70 cm`, `80 × 60`) differ, dimensions whose anchor is gone, and unanchored ones left with an end in the air near a face — rows [id, written, measured, against, text]; checked {dims, dims_unanchored, labels, names} counts what was compared (nothing checked is not a clean plan), and unverified [[id, text]] lists sizes nothing can confirm. It is the check after moving geometry. A note is tied to its piece with update(id=t1, about=f5). q=<text> searches label text on every storey, q=re:<pattern> by regex. With neither, answers the schedule {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. `edit_annotations` switches modes, ties dimensions and bakes chains; brand, model and url go on pieces with `update`.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -96,43 +87,33 @@
     "outputSchema": {
       "properties": {
         "checked": {
-          "description": "stale=true: what was checked",
           "type": "object"
         },
         "details": {
-          "description": "Details shown",
           "type": "boolean"
         },
         "dims": {
-          "description": "Dimensions shown",
           "type": "boolean"
         },
         "labels": {
-          "description": "With q: labels {id, text, at, …}",
           "type": "array"
         },
         "legend": {
-          "description": "Legend shown",
           "type": "boolean"
         },
         "refs": {
-          "description": "Reference tags shown",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "rooms": {
-          "description": "The schedule: [room, [[tag, name, w, d, h, brand?, model?, url?]]]",
           "type": "array"
         },
         "stale": {
-          "description": "stale=true: [id, written, measured, against, text]",
           "type": "array"
         },
         "unverified": {
-          "description": "stale=true: [id, text] nobody can check",
           "type": "array"
         }
       },
@@ -151,7 +132,7 @@
     "inputSchema": {
       "$defs": {
         "Point2": {
-          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "description": "[x, y] cm",
           "items": {
             "type": "number"
           },
@@ -198,7 +179,6 @@
           "description": "mirror: the second point of the mirror line"
         },
         "copy": {
-          "default": false,
           "description": "rotate/mirror: keep the originals and transform a copy",
           "type": "boolean"
         },
@@ -252,26 +232,21 @@
     "outputSchema": {
       "properties": {
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -294,7 +269,6 @@
     "inputSchema": {
       "properties": {
         "dry": {
-          "default": false,
           "description": "Plan and report only",
           "type": "boolean"
         },
@@ -337,33 +311,27 @@
     "outputSchema": {
       "properties": {
         "adjusted": {
-          "description": "Neighbouring runs replanned, same shape",
           "type": "array"
         },
         "modules": {
-          "description": "[id, role, from cm, w cm]",
           "type": "array"
         },
         "notes": {
-          "description": "What the rules say about it",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "removed": {
-          "description": "Cabinets it replaced",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "row": {
-          "description": "base, wall or tall",
           "type": "string"
         },
         "wall": {
-          "description": "The wall the run is on",
           "type": "string"
         }
       },
@@ -393,11 +361,9 @@
     "outputSchema": {
       "properties": {
         "active": {
-          "description": "The camera in use: visitor or aerial",
           "type": "string"
         },
         "rows": {
-          "description": "Stored views: [i, name, x, y, z, yaw, pitch, fov]",
           "type": "array"
         }
       },
@@ -441,22 +407,18 @@
     "outputSchema": {
       "properties": {
         "categories": {
-          "description": "Categories to search by, when neither q nor cat was given",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "items": {
-          "description": "[id, name, w, d, h, front?] cm",
           "type": "array"
         },
         "more": {
-          "description": "How many more matched than the limit",
           "type": "integer"
         },
         "used": {
-          "description": "scope=project: [kind, name, count, id]",
           "type": "array"
         }
       },
@@ -470,7 +432,7 @@
       "readOnlyHint": true,
       "title": "Check the layout"
     },
-    "description": "Layout problems: above_ceiling, overlap, blocked, in_wall, blocks_door, blocks_window, no_door, backwards, unrated_light, turned, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose (a fixed point with nothing to be fixed to: loose in a room, on glass, in a door or window span, hanging under the ceiling, with why); {} means none. Each one carries name, bounds and z of both elements. Overlaps are classified kind collision (a real clash, listed first), nesting (built in, resting on, tucked under), served (a project point inside a piece on purpose: the water point in the basin, the outlet behind the fridge or set into a cabinet) or cross_level, with extent [x,y,z] cm of the shared space; overlap_kinds counts them. blocks_window reports nearby tall/elevated solids masking the window, with extent [width,height] cm; compact countertop objects are exempt, so this does not certify sash operation or ventilation. blocks_door includes a 60 cm approach on either face, even for sliding doors and passages. blocked is a cabinet, fridge or wardrobe whose opening face is against a solid — it cannot be used, and `angle` alone does not show it. backwards is a piece whose back belongs on a wall (sofa, bed, toilet, TV, desk — the catalog tool marks them `wall`) with its front against a wall instead: it is turned half around; fix.angle turns it the right way, and the piece's back then touches that wall only if it was flush — placing again with wall=<id> seats it. turned is a group whose built fronts (doors, drawer fronts, kick) face one way and whose `angle` says another: the piece opens where the panels are, so fix the angle, not the clearance it seems to lack. unrated_light is a light fixture with neither lumens nor watts — only the relative power an import carries — so the lighting tool's lux for its room are a guess: set its output with update(light={lm or w}). no_door is a bedroom or bathroom (by name) with no door — only open passages, listed, or no way in at all — said once the storey has doors somewhere; a living room, kitchen or balcony left open is not. unclear_front is a group whose parts name fronts on more than one face with no clear winner (candidates, strongest first; placed is the angle's guess every \"in front of\" falls back to) — rename the misleading part or set the angle. Handles weigh most. loose_opening is a door or window in no wall — a passage drawn as a panel — which reads as an opening in every schedule and opens nothing. outgrew_niche is an appliance its host stopped holding after the joinery was resized around it, with how far it sticks out: built-in pieces are left out of the overlap check by design, which is why nothing else notices. above_ceiling compares the full luminaire footprint with the same room ceiling surface used in 3D, with ceiling/top/over in cm: declared storey height, sloping wall profiles and lower roof panels. Hidden ceilings and unknown uncovered slopes are not inferred. Every row is an object with the `key` it is accepted by (in_wall {key, piece, wall}, blocks_door {key, door, by}). The accept tool marks one looked at and right as drawn — an imported model whose box is bigger than the piece it draws: it leaves the sections, the variant count and every dry run, and is listed here under accepted {key, kind, why, extent} with its reason, kept in the project; orphaned [[key, reason]] lists acceptances whose finding is gone on every storey, and accept(prune=true) drops them. level: a storey id or `all`, default the one shown. areas {name|id: m²} compares room areas with the reference drawing.",
+    "description": "Layout problems on a storey — pieces colliding or clashing, blocked doors and windows: overlap, blocked, in_wall, blocks_door, blocks_window, no_door, backwards, turned, unrated_light, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose and above_ceiling, as {kind: [rows]}; {} means none. Every row is an object with the `key` it is accepted by and the elements involved (name, bounds, z). Overlaps are classified collision (a real clash, first), nesting, served or cross_level, with extent [x,y,z] cm, counted in overlap_kinds. accepted {key, kind, why, extent} lists findings `accept` marked right as drawn; orphaned [[key, reason]] acceptances whose finding is gone. What each problem means and how to fix it: `rules` topic=layout. level: a storey id or `all` (default the one shown); areas {name|id: m²} compares room areas with a reference drawing.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -492,83 +454,63 @@
     "outputSchema": {
       "properties": {
         "above_ceiling": {
-          "description": "Pieces through the ceiling: {key, piece, room, ceiling, top, over}",
           "type": "array"
         },
         "accepted": {
-          "description": "Issues accepted as they are: {key, kind, why}",
           "type": "array"
         },
         "areas": {
-          "description": "With areas: [name, expected m², actual m², difference %]",
           "type": "array"
         },
         "backwards": {
-          "description": "Pieces turned to face a wall: {key, piece, wall, cm, fix}",
           "type": "array"
         },
         "blocked": {
-          "description": "Pieces whose use is blocked: {key, piece, against, cm}",
           "type": "array"
         },
         "blocks_door": {
-          "description": "Doors blocked: {key, door, by}",
           "type": "array"
         },
         "blocks_window": {
-          "description": "Windows blocked: {key, window, by, extent}",
           "type": "array"
         },
         "in_wall": {
-          "description": "Pieces inside a wall: {key, piece, wall}",
           "type": "array"
         },
         "loose": {
-          "description": "Pieces floating or unsupported: {key, piece, why}",
           "type": "array"
         },
         "loose_opening": {
-          "description": "Doors or windows in no wall",
           "type": "array"
         },
         "no_door": {
-          "description": "Rooms nobody can walk into: {key, name, room, passages}",
           "type": "array"
         },
         "orphaned": {
-          "description": "Acceptances whose issue is gone: [key, reason]",
           "type": "array"
         },
         "outgrew_niche": {
-          "description": "Pieces bigger than their niche: {key, piece, host, over}",
           "type": "array"
         },
         "outside_rooms": {
-          "description": "Pieces in no room",
           "type": "array"
         },
         "overlap": {
-          "description": "Pieces that overlap: {key, a, b, kind, extent}",
           "type": "array"
         },
         "overlap_kinds": {
-          "description": "Overlaps by kind: {collision, nesting, served, cross_level}",
           "type": "object"
         },
         "turned": {
-          "description": "Pieces placed turned from how they were built: {key, piece, built, placed}",
           "type": "array"
         },
         "unclear_front": {
-          "description": "Pieces whose front is a guess: {key, piece, candidates, placed}",
           "type": "array"
         },
         "unrated_light": {
-          "description": "Lights without a rating",
           "type": "array"
         },
         "warnings": {
-          "description": "Storeys stacked at the same elevation",
           "items": {
             "type": "string"
           },
@@ -608,26 +550,21 @@
     "outputSchema": {
       "properties": {
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -654,7 +591,6 @@
     "outputSchema": {
       "properties": {
         "checkpoints": {
-          "description": "[label, changes ago]",
           "type": "array"
         }
       },
@@ -714,7 +650,6 @@
               "description": "End of a free dimension, `[x,y]` cm"
             },
             "chain": {
-              "default": false,
               "description": "With `wall`: one dimension per wall piece and opening along the face",
               "type": "boolean"
             },
@@ -723,7 +658,6 @@
               "type": "number"
             },
             "in3d": {
-              "default": false,
               "description": "Also draw it in 3D",
               "type": "boolean"
             },
@@ -784,7 +718,7 @@
           "type": "object"
         },
         "Point2": {
-          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "description": "[x, y] cm",
           "items": {
             "type": "number"
           },
@@ -804,7 +738,6 @@
               "type": "array"
             },
             "closed": {
-              "default": false,
               "description": "Join the last point back to the first",
               "type": "boolean"
             },
@@ -818,7 +751,6 @@
               "type": "array"
             },
             "curved": {
-              "default": false,
               "description": "Smooth curve through the points",
               "type": "boolean"
             },
@@ -827,7 +759,6 @@
               "description": "`solid`, `dot`, `dash`, `dash_dot`, `dash_dot_dot`"
             },
             "divider": {
-              "default": false,
               "description": "Room divider: splits an open space into rooms without a wall (dashed)",
               "type": "boolean"
             },
@@ -860,7 +791,6 @@
               "type": "array"
             },
             "gables": {
-              "default": false,
               "description": "Also close the gable ends with sloping walls",
               "type": "boolean"
             },
@@ -900,7 +830,7 @@
               "type": "number"
             },
             "skylights": {
-              "description": "Glazed openings cut through the roof: center `at:[x,y]` on the plan, `w` along the ridge and `d` across it (plan size), cm",
+              "description": "Glazed roof openings: center `at`, `w` along the ridge, `d` across, cm",
               "items": {
                 "$ref": "#/$defs/SkylightSpec"
               },
@@ -927,7 +857,7 @@
               "type": "string"
             },
             "ceiling_flat": {
-              "description": "Ceiling mode: true (default) is flat at storey height; false follows wall profiles. Lower roof panels clip either mode",
+              "description": "Ceiling flat at storey height (true, default) or following the wall profiles (false)",
               "type": "boolean"
             },
             "floor_mat": {
@@ -956,7 +886,7 @@
           "type": "object"
         },
         "RoomUse": {
-          "description": "Declared room program, independent of its display name. Auto preserves legacy name/equipment inference; other values are explicit intent",
+          "description": "Declared room program; `auto` infers it from the name and equipment",
           "enum": [
             "auto",
             "bedroom",
@@ -1035,7 +965,7 @@
               "type": "number"
             },
             "profile": {
-              "description": "Instead of `pts`: cross-section `[[u,z],…]` cm swept from `a` to `b`; u runs across the path (for a→b going down the plan, +u is +x), z is the height above the storey floor",
+              "description": "Instead of `pts`: cross-section `[[u,z],…]` cm swept from `a` to `b` (+u is +x when a→b goes down the plan; z above the floor)",
               "items": {
                 "$ref": "#/$defs/Point2"
               },
@@ -1058,7 +988,6 @@
               "type": "number"
             },
             "closed": {
-              "default": false,
               "description": "Join the last point back to the first",
               "type": "boolean"
             },
@@ -1122,8 +1051,7 @@
           "type": "array"
         },
         "px": {
-          "default": false,
-          "description": "Every point is given in pixels of the background image (converted with its scale and offset); lengths (t, h, off) stay in cm",
+          "description": "Points are background-image pixels; lengths stay in cm",
           "type": "boolean"
         },
         "roofs": {
@@ -1141,7 +1069,7 @@
           "type": "array"
         },
         "solids": {
-          "description": "Solids from polygons: plan outlines raised by `h` (slabs, mezzanines, decks with any shape) or cross-sections swept from `a` to `b` (gables, ramps)",
+          "description": "Solids: plan outlines raised by `h` (slabs, decks) or cross-sections swept from `a` to `b` (gables, ramps)",
           "items": {
             "$ref": "#/$defs/SolidSpec"
           },
@@ -1165,26 +1093,21 @@
     "outputSchema": {
       "properties": {
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -1220,33 +1143,27 @@
     "outputSchema": {
       "properties": {
         "drawn": {
-          "description": "Hand-drawn builds left out",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "hardware": {
-          "description": "Hardware by build: \"<id>: <item>\"",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "rows": {
-          "description": "[part, board, qty, length, width, thickness, edge, cutouts?]",
           "type": "array"
         },
         "sheets": {
-          "description": ".dxf/.svg: [board, sheets]",
           "type": "array"
         },
         "skipped": {
-          "description": "[id, name] left out",
           "type": "array"
         },
         "sources": {
-          "description": "Standards cited, by code: [title, tier, url]",
           "type": "object"
         }
       },
@@ -1266,7 +1183,7 @@
       "readOnlyHint": false,
       "title": "Delete elements"
     },
-    "description": "Delete elements by id, atomically. Labels left pointing at a deleted piece — about it, or standing on it — are named in the reply as labels_left [[id, text]], since an index code over what is now another piece is found by nobody; labels=true deletes them in the same step.",
+    "description": "Delete (remove) walls, rooms, pieces or any element by id, atomically. Labels left pointing at a deleted piece — about it, or standing on it — are named in the reply as labels_left [[id, text]], since an index code over what is now another piece is found by nobody; labels=true deletes them in the same step.",
     "inputSchema": {
       "properties": {
         "ids": {
@@ -1290,37 +1207,30 @@
     "outputSchema": {
       "properties": {
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "labels_deleted": {
-          "description": "Labels deleted with them",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "labels_left": {
-          "description": "Labels left pointing at deleted pieces: [id, text]",
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -1357,37 +1267,30 @@
     "outputSchema": {
       "properties": {
         "active": {
-          "description": "Discipline drawn on top: electrical, plumbing, or null",
           "type": [
             "string",
             "null"
           ]
         },
         "electrical": {
-          "description": "action=quantities: [kind, count, names?]",
           "type": "array"
         },
         "hidden": {
-          "description": "Disciplines hidden",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "layers": {
-          "description": "Plan layers: {lighting, appliances, joinery} → {pieces, hidden}",
           "type": "object"
         },
         "lines_cm": {
-          "description": "action=quantities: drawn lines by discipline, cm",
           "type": "object"
         },
         "plumbing": {
-          "description": "action=quantities: [kind, count, names?]",
           "type": "array"
         },
         "show_all_3d": {
-          "description": "Every discipline shown in 3D",
           "type": "boolean"
         }
       },
@@ -1402,7 +1305,7 @@
       "readOnlyHint": false,
       "title": "Change dimensions and tags"
     },
-    "description": "Change the plan annotations. anchor=true ties every straight dimension to what its ends touch now, and from then on they are measured again on every change instead of drifting — run it while the numbers are still right; one with an end already off its face is not tied and comes back in left [[id, written, measured, near]], to be fixed first; one whose anchor died with a deleted piece is tied again to what it touches now, or else released (no anchor) instead of staying stale. Set any of dims (engineering dimension chains; auto_dimensions in the project JSON), refs (room reference schedule with tags; references — a tag, once given, stays with its piece: new pieces take the next free number and removed ones leave a gap, so a print and the plan a week later agree; renumber=true numbers them again in reading order), details (brand/model/link in refs; reference_details), legend (symbol legend with counts): a switch answers with the modes, changed, and what it shows — chains [[from,to,cm]] for dims, symbols {discipline:[[name,count]]} for legend — not the schedule; refs=true returns {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. bake=true turns the automatic chains into editable dimensions (ids returned). The annotations tool reads them (stale, q, the schedule).",
+    "description": "Change the plan annotations. anchor=true ties every straight dimension to what its ends touch now, so it is measured again on every change instead of drifting (tie them while the numbers are right); one already off its face is not tied and comes back in left [[id, written, measured, near]], and one whose anchor died with a deleted piece is tied again or released. Switch dims (dimension chains), refs (the room reference schedule, whose tags stay with their pieces; renumber=true numbers them again in reading order), details (brand/model/link in refs) and legend (symbols with counts): a switch answers with the modes, changed, and what it shows — chains [[from,to,cm]] for dims, symbols {discipline:[[name,count]]} for legend; refs=true returns the schedule {dims,refs,details,legend,rooms:[[room,[[tag,name,w,d,h,brand?,model?,url?]]]]}. bake=true turns the automatic chains into editable dimensions (ids returned). `annotations` reads them.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -1441,79 +1344,63 @@
     "outputSchema": {
       "properties": {
         "anchored": {
-          "description": "anchor=true: labels now tied to what they measure",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "chains": {
-          "description": "dims=true: [[x,y], [x,y], cm]",
           "type": "array"
         },
         "changed": {
-          "description": "Switches that changed",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "details": {
-          "description": "Details shown",
           "type": "boolean"
         },
         "dims": {
-          "description": "Dimensions shown",
           "type": "boolean"
         },
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "left": {
-          "description": "anchor=true: [id, written, measured, near id] left as they were",
           "type": "array"
         },
         "legend": {
-          "description": "Legend shown",
           "type": "boolean"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "refs": {
-          "description": "Reference tags shown",
           "type": "boolean"
         },
         "released": {
-          "description": "anchor=true: labels let go",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "rooms": {
-          "description": "The schedule: [room, [[tag, name, w, d, h, …]]]",
           "type": "array"
         },
         "symbols": {
-          "description": "legend=true: {electrical?, plumbing?} → [name, count]",
           "type": "object"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -1589,26 +1476,21 @@
     "outputSchema": {
       "properties": {
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -1654,37 +1536,30 @@
     "outputSchema": {
       "properties": {
         "active": {
-          "description": "Discipline drawn on top: electrical, plumbing, or null",
           "type": [
             "string",
             "null"
           ]
         },
         "electrical": {
-          "description": "action=quantities: [kind, count, names?]",
           "type": "array"
         },
         "hidden": {
-          "description": "Disciplines hidden",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "layers": {
-          "description": "Plan layers: {lighting, appliances, joinery} → {pieces, hidden}",
           "type": "object"
         },
         "lines_cm": {
-          "description": "action=quantities: drawn lines by discipline, cm",
           "type": "object"
         },
         "plumbing": {
-          "description": "action=quantities: [kind, count, names?]",
           "type": "array"
         },
         "show_all_3d": {
-          "description": "Every discipline shown in 3D",
           "type": "boolean"
         }
       },
@@ -1699,11 +1574,11 @@
       "readOnlyHint": false,
       "title": "Change the electrical project"
     },
-    "description": "Change the electrical and telecom project (the electrical tool reads it: check, circuits, wifi). assign {ids, circuit, va?} — or the whole division at once, circuits {\"C1\": [ids], \"C2\": [ids]} — writes the circuits (and power, and volts 127|220 per point — a 220 V outlet makes its circuit 220 V) on points in one undoable step. voltage {volts?, short_ka?, earthing?: TN-S|TN-C-S|TT}. cable {kind: power|data|tv, pts} (with ids or circuit instead of pts, it is a route): draws a run of the electrical project, told apart on the plan (power solid, network dashed, TV dash-dot); check then reports cables_m, the length by kind with a tenth for the drops, and network or TV points no run reaches, or a telecom panel none reaches. route {kind: power|data|tv, ids? | circuit?, via?: ceiling|floor|wall|tape, cat?: cat5e|cat6|cat6a, from?}: lays the run the way it is built, along the walls and inside them (or in the slab), from the nearest panel of its kind to the points (all of the kind when none given), sharing the trunk, and draws it replacing the earlier run of the same circuit and the cables drawn by hand to its points (listed in replaced_drawn); replies {via, suggested, length_m {horizontal, vertical, total}, by_premise_m, bends, materials: [[item, qty, unit]]} — conduit, boxes, wire by conductor, cable, connectors. via=tape lays adhesive flat wiring tape (Eletrofitas) on the surface of walls and ceiling for power only: the model by the load and whether any point is a socket (sockets take the earthed EF18.9.18), refused over its rating or in a bathroom or outdoors, bought as Leroy Merlin kits by piece (codes, prices, splices) with tape {model, tracks, rated_a, load_a, earthed, pieces_m, splices, total_brl, notes}. Without via it takes the cheapest premise that can be built; a via that cannot reach a point (wall with a point out of every wall; ceiling with a low point out of every wall, nowhere to drop) is refused naming the points. wifi {ids, standard?, poe?, uplink?, bands?} writes those on the access points (wifi-point), in one undoable step. assign on automation points takes standby_w, on a dimmer max_w, on a panel modules.",
+    "description": "Change the electrical and telecom project (`electrical` reads it); each action is one undoable step. assign {ids, circuit, va?}, or circuits {\"C1\": [ids], …} for the whole division, writes circuits, power and volts (127|220; a 220 V outlet makes its circuit 220 V) on points; on automation points it takes standby_w, on a dimmer max_w, on a panel modules. voltage {volts?, short_ka?, earthing?}. cable {kind, pts} draws a run by hand (with ids or circuit instead of pts it is a route). route {kind, ids? | circuit?, via?: ceiling|floor|wall|tape, cat?, from?} lays the run as it is built, from the nearest panel along and inside the walls, replacing the earlier run of the circuit, and answers {via, suggested, length_m, by_premise_m, bends, materials: [[item, qty, unit]]}; without via it takes the cheapest premise that can be built. via=tape is surface flat wiring, power only (`rules` topic=electrical). wifi {ids, standard?, poe?, uplink?, bands?} writes those on access points.",
     "inputSchema": {
       "$defs": {
         "Point2": {
-          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "description": "[x, y] cm",
           "items": {
             "type": "number"
           },
@@ -1759,7 +1634,6 @@
           "type": "string"
         },
         "ids": {
-          "default": [],
           "description": "Point ids for `assign`",
           "items": {
             "type": "string"
@@ -1788,7 +1662,6 @@
           "type": "boolean"
         },
         "pts": {
-          "default": [],
           "description": "For `cable`: the run's points `[[x,y], …]`, cm",
           "items": {
             "$ref": "#/$defs/Point2"
@@ -1830,112 +1703,90 @@
     "outputSchema": {
       "properties": {
         "access_points": {
-          "description": "action=wifi: [id, standard, bands, uplink]",
           "type": "array"
         },
         "added": {
-          "description": "Ids added, or their count",
           "type": [
             "array",
             "integer"
           ]
         },
         "annotations": {
-          "description": "Annotation switches {from, to}",
           "type": "object"
         },
         "bends": {
-          "description": "Bends along the run",
           "type": "integer"
         },
         "by_premise_m": {
-          "description": "Total metres by route: {ceiling, floor, wall}; a reason instead where one is impossible",
           "type": "object"
         },
         "changed": {
-          "description": "{id, from, to} per element changed; a count past 20",
           "type": [
             "array",
             "integer"
           ]
         },
         "coverage": {
-          "description": "action=wifi: [room, band, median, worst, good, grade]",
           "type": "array"
         },
         "gone": {
-          "description": "Ids removed, or their count",
           "type": [
             "array",
             "integer"
           ]
         },
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "length_m": {
-          "description": "Metres: {horizontal, vertical, total}",
           "type": "object"
         },
         "materials": {
-          "description": "Bill of materials: [item, quantity, unit]",
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "properties": {
-          "description": "Project properties changed",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "replaced_drawn": {
-          "description": "Hand-drawn lines this run replaced",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "run": {
-          "description": "The run: <system>:<circuit|all|ids>",
           "type": "string"
         },
         "suggested": {
-          "description": "Route: the one the rules suggest; action=wifi: where access points would go",
           "type": [
             "string",
             "object"
           ]
         },
         "tape": {
-          "description": "via=tape: the tape light system",
           "type": "object"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         },
         "via": {
-          "description": "Where it runs: ceiling, floor, wall (or tape)",
           "type": "string"
         },
         "warnings": {
-          "description": "Data points past 90 m",
           "items": {
             "type": "string"
           },
@@ -1993,26 +1844,21 @@
     "outputSchema": {
       "properties": {
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -2031,7 +1877,7 @@
       "readOnlyHint": false,
       "title": "Lay a pipe run"
     },
-    "description": "Lay a pipe run of the plumbing project (the plumbing tool reads it). route {kind: cold|hot|sewer|vent, ids?, via?: ceiling|floor|wall, from?, depth?}: lays the run from its source to the points along the walls and inside them, or through the ceiling or under the floor, sharing the trunk, draws it (replacing the earlier run of the same points and the lines drawn by hand to them, listed in replaced_drawn) and replies {via, suggested, length_m, by_premise_m, bends, branches, materials: [[item, qty, unit]]} — water: pipe and bars, 90° elbows, tees, threaded elbows at the points, a gate valve per room, adhesive; sewer: the branch at the largest diameter it takes, the drops at each point's own, a 45° Y junction at each branch (never a 90° tee), two 45° elbows per turn, sealing rings, trap boxes. Sewer runs only under the floor, by gravity, with 2 % fall up to 75 mm and 1 % above: the reply says needs_depth_cm, and with depth a run that does not fit is refused saying how much it needs. Without via the cheapest premise that can be built is taken; one that cannot (a point in no wall; from the ceiling a low point in no wall, nowhere to drop; sewer up to the ceiling or lying in a wall) is refused with why.",
+    "description": "Lay a pipe run of the plumbing project (`plumbing` reads it). route {kind: cold|hot|sewer|vent, ids?, via?: ceiling|floor|wall, from?, depth?} lays the run from its source to the points along and inside the walls, through the ceiling or under the floor, sharing the trunk; it replaces the earlier run of the same points and the lines drawn by hand to them (replaced_drawn) and answers {via, suggested, length_m, by_premise_m, bends, branches, materials: [[item, qty, unit]]}. Sewer runs only under the floor, by gravity (2 % fall up to 75 mm, 1 % above): the reply says needs_depth_cm, and with depth a run that does not fit is refused saying how much it needs. Without via the cheapest premise that can be built is taken; one that cannot is refused with why. Fittings and what is refused: `rules` topic=plumbing.",
     "inputSchema": {
       "properties": {
         "action": {
@@ -2050,7 +1896,6 @@
           "type": "string"
         },
         "ids": {
-          "default": [],
           "description": "For `route`: the points; default every point of the kind",
           "items": {
             "type": "string"
@@ -2078,72 +1923,57 @@
     "outputSchema": {
       "properties": {
         "bends": {
-          "description": "Bends along the run",
           "type": "integer"
         },
         "branches": {
-          "description": "Branches off the trunk",
           "type": "integer"
         },
         "by_premise_m": {
-          "description": "Total metres by route: {ceiling, floor, wall}; a reason instead where one is impossible",
           "type": "object"
         },
         "length_m": {
-          "description": "Metres: {horizontal, vertical, total}",
           "type": "object"
         },
         "materials": {
-          "description": "Bill of materials: [item, quantity, unit]",
           "type": "array"
         },
         "merged_into": {
-          "description": "The run this one joined, or null",
           "type": [
             "string",
             "null"
           ]
         },
         "needs_depth_cm": {
-          "description": "Sewer: depth it needs under the floor, cm",
           "type": "number"
         },
         "notes": {
-          "description": "What the rules say about the run",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "replaced_drawn": {
-          "description": "Hand-drawn lines this run replaced",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "run": {
-          "description": "The run: <system>:<circuit|all|ids>",
           "type": "string"
         },
         "slope_pct": {
-          "description": "Sewer: slope %",
           "type": "number"
         },
         "suggested": {
-          "description": "The route the rules suggest",
           "type": "string"
         },
         "trunk_mm": {
-          "description": "Sewer: trunk diameter mm",
           "type": "integer"
         },
         "via": {
-          "description": "Where it runs: ceiling, floor, wall (or tape)",
           "type": "string"
         }
       },
@@ -2195,30 +2025,24 @@
     "outputSchema": {
       "properties": {
         "i": {
-          "description": "Index of the new version",
           "type": "integer"
         },
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -2315,38 +2139,30 @@
     "outputSchema": {
       "properties": {
         "bytes": {
-          "description": "action=render: file size",
           "type": "integer"
         },
         "frames": {
-          "description": "action=render: frames written",
           "type": "integer"
         },
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "secs": {
-          "description": "action=render: length in seconds",
           "type": "number"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -2360,7 +2176,7 @@
       "readOnlyHint": true,
       "title": "Check the electrical project"
     },
-    "description": "Electrical and telecom project, NBR 5410 and NBR 16264 (residential cabling). Points are the electrical pieces (catalog electrical: outlets, switches, lighting points, panel, network-outlet RJ45, tv-outlet, wifi-point, telecom-panel) plus every fixture that lights. check (default): {points:{kind:count}, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — orphaned lists acceptances whose finding is gone (the accept tool marks findings looked at, and its prune drops those) — a ceiling lighting point per room, general-use outlets per room (kitchens and laundries one per 3.5 m of perimeter, bathrooms one by the basin, living rooms and bedrooms one per 5 m), RJ45 and TV outlets per room as NBR 16264 table 1 recommends (2 RJ45 and 1 TV in bedrooms, living rooms, offices, kitchens and laundries; 3 and 2 in a home theater; 1 and 1 elsewhere; a Wi-Fi point is not an RJ45 outlet), a power outlet by the telecom panel, a distribution and a telecom panel, points without a circuit, lighting and outlets sharing a circuit, a dedicated load not alone. circuits: rows [name, kinds, points, VA, V, A, wire mm², breaker A, DR] and main_breaker {a, phases, load_a_per_phase}: the supply to ask for, by Enel SP's categories on 127/220 V (single-phase up to 12 kW with no 220 V circuit, two-phase up to 20 kW, three-phase up to 75 kW) and the smallest of its fixed entry breakers (50, 63, 80, 100… A) — power by NBR 5410 (lighting per room by area: 100 VA up to 6 m² and 60 VA per whole 4 m² beyond, shared by its points; 600 VA for each of the first three outlets of a kitchen, laundry or bathroom, 100 VA after and elsewhere; dedicated points at their rated power, a shower 7500 W and air conditioning 1500 until written) unless set; the section is the smallest from 1.5 mm² (lighting) or 2.5 (with outlets) whose capacity, corrected for the circuits sharing its conduit on the laid-out runs (table 42, or grouping written on the project), admits a breaker between the current and it; DR on every point of a room with a bath or shower, on kitchen, laundry, service and garage points (lighting at 2.50 m or higher excepted) and on outdoor and balcony outlets; a shower over 4.4 kVA runs on 220 V. check also says lighting and outlets sharing a circuit only when NBR 5410 9.5.3.3 forbids it (over 16 A, or all lighting or all outlets on shared circuits), kitchen and laundry outlets sharing with anything else, equipment over 10 A not alone, and a voltage drop over 4 % to the farthest point of a laid-out run. circuits also gives panel {devices: [[device, count, DIN modules]], modules {used, capacity, capacity_written, spare}, dps, earthing, icn_ka, selective}: one-pole breakers for 127 V circuits and two-pole for 220 V between phases, a two-pole DR per circuit that needs one, the main breaker, the surge protector (DPS class II, a module per phase and neutral) and NBR 5410's spare ways (2 up to 6 circuits, 3 up to 12, 4 up to 30, 15 % above); capacity is the panel's modules (assign modules on it) or a guess from its size, and check says when it does not fit, when the main breaker is under twice the largest partial (selectivity) and when the short-circuit level was assumed. Automation (catalog smart-relay, smart-switch, dimmer, presence-sensor, smart-lock): each draws its standby on its circuit (assign standby_w; relay, dimmer and sensor 1 W, smart switch 1.2 by default, from manufacturers' sheets), circuits reports standby_w, and check asks a relay or smart switch for a neutral in its box, a dimmer for the room's lighting to fit its max_w (default 1.1 A at the supply voltage, some 140 W at 127 V) and pass 10 W, a ceiling sensor to be between 2.2 and 3 m (manufacturers install at about 2.4) and to see the room's far corner (about 1.45 × its height), a lock to sit on a door. wifi {band?: 2.4|5|6}: replies {access_points: [[id, standard, bands, uplink]], coverage: [[room, band, median dBm, worst dBm (9 places in 10), share at -67 dBm or better, grade]], suggested: {standard, band, points: [[x, y, z, room]], short: [rooms still under -67 dBm]}} — signal estimated from free-space loss, distance and each wall crossed by its material and thickness (a door or window where the path goes through one), per band; the suggestion is the fewest ceiling points (up to four) at room centres covering the rooms people use. check also asks each access point for its data cable, power (an outlet within 1.5 m or poe) and a cable category that carries its uplink (uplink up to 2.5 GbE: Cat 5e; 5 GbE: Cat 6; 10 GbE: Cat 6A). Circuit numbers are drawn next to the points on the plan, and with edit_annotations(legend=true) the load schedule under the legend. Changes — assign, voltage, cable, route, and the standard, PoE, uplink or bands of access points — are edit_electrical.",
+    "description": "Electrical and telecom review, NBR 5410 and NBR 16264: points are the catalog's electrical pieces (outlets, switches, lighting points, panels, RJ45, TV, Wi-Fi, automation) plus every fixture that lights. action check (default) answers {points:{kind:count}, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources}: outlets and lighting per room, circuits, DR, the panel, voltage drop, access points' cables. circuits answers the load schedule, rows [name, kinds, points, VA, V, A, wire mm², breaker A, DR], with main_breaker {a, phases, load_a_per_phase} and panel {devices, modules, dps, earthing, icn_ka, selective}. wifi {band?} answers access_points, coverage per room and band [[room, band, median dBm, worst dBm, share at -67 dBm or better, grade]] and suggested ceiling points. What each check demands: `rules` topic=electrical. Changes are `edit_electrical`; `accept` marks a finding right as drawn.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -2384,63 +2200,48 @@
     "outputSchema": {
       "properties": {
         "access_points": {
-          "description": "action=wifi: [id, standard, bands, uplink]",
           "type": "array"
         },
         "cables_m": {
-          "description": "Cable metres: {power, data, tv}",
           "type": "object"
         },
         "circuits": {
-          "description": "action=circuits: [name, kinds, points, VA, V, A, wire mm², breaker A, DR]",
           "type": "array"
         },
         "coverage": {
-          "description": "action=wifi: [room, band, median, worst, good, grade]",
           "type": "array"
         },
         "findings": {
-          "description": "Rows [severity erro|alerta|dica, place, message, source, key, accepted reason?]",
           "type": "array"
         },
         "main_breaker": {
-          "description": "action=circuits: {a, phases, load_a_per_phase}",
           "type": "object"
         },
         "orphaned": {
-          "description": "Acceptances whose finding is gone: [key, reason, successor key?]",
           "type": "array"
         },
         "panel": {
-          "description": "action=circuits: the distribution panel",
           "type": "object"
         },
         "pending": {
-          "description": "Findings not accepted",
           "type": "integer"
         },
         "points": {
-          "description": "Points by kind",
           "type": "object"
         },
         "rev": {
-          "description": "action=wifi: plan revision",
           "type": "integer"
         },
         "sources": {
-          "description": "Standards cited, by code: [title, tier, url]",
           "type": "object"
         },
         "standby_w": {
-          "description": "action=circuits: standby watts",
           "type": "number"
         },
         "suggested": {
-          "description": "action=wifi: where access points would go",
           "type": "object"
         },
         "total_va": {
-          "description": "action=circuits: total load VA",
           "type": "number"
         }
       },
@@ -2471,7 +2272,6 @@
           "type": "number"
         },
         "dry": {
-          "default": false,
           "description": "Check and report only",
           "type": "boolean"
         },
@@ -2505,38 +2305,30 @@
     "outputSchema": {
       "properties": {
         "bottom": {
-          "description": "Bottom above the floor, cm",
           "type": "number"
         },
         "cutout": {
-          "description": "Countertop: the hole [w, d] cm",
           "type": "array"
         },
         "host": {
-          "description": "The countertop or cabinet it went into",
           "type": "string"
         },
         "item": {
-          "description": "The embedded piece (empty when dry)",
           "type": "string"
         },
         "kind": {
-          "description": "sink, cooktop, oven, microwave, …",
           "type": "string"
         },
         "niche": {
-          "description": "Cabinet: the niche [w, h] cm",
           "type": "array"
         },
         "notes": {
-          "description": "What the rules say about it",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "x": {
-          "description": "Countertop or panel: center along it, cm",
           "type": "number"
         }
       },
@@ -2556,7 +2348,7 @@
       "readOnlyHint": true,
       "title": "Review ergonomics"
     },
-    "description": "Ergonomics and habitability review for the people living there. It never blocks anything: it reads the drawing and says what it finds, and the drawing stays the user's — somebody sketching to learn or to see an idea is not stopped by a standard. People (occupants, children, elderly, wheelchair, stature cm, city, scope) given here weigh this review only; set_home(people=…) keeps them with the project, and every review and dry run then scores for them. It covers room to walk beside beds and in front of kitchen equipment, beds/seats/bathrooms/wardrobes per person, kitchen (work triangle, counter heights, Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. Reply {score, score_basis, scope, scores:{architecture,electrical,plumbing}, layout, coverage, capacity, findings:[{sev, place, msg, key, weight, discipline, in_scope, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. scope={electrical:false,plumbing:false} scores architecture only; all findings remain visible, excluded ones weigh zero. layout includes geometric checks on the active storey; coverage declares limits. Scores are heuristic, not project completion or certification. weight is what the score would gain if that one went away, so a score that moved can be read. src is the source the finding stands on, empty when it is common practice; resolve it in sources instead of asking. tier is the reliability ladder, read against where the project is: A obliges (a law, standard or utility spec that carries there) · B references (the same kind of source from somewhere else, or an association's guidance) · C doctrine, including a standard since withdrawn · D measured · E survey — and it is why a finding is an error or only a tip. The same source is A or B depending on the place, so set_home(country=…, region=…, city=…) is what makes the ladder right. fix, when present, is a checked change as tool arguments (move or update): apply one, then review again (fixes of one review may overlap). city, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against a standard the more restrictive one wins — set it once with set_home(city=…) so dry runs and check_layout weigh the same rules. key names the finding for the accept tool: a finding accepted there stays in the report with its reason and stops costing score, which is what lets a correct plan reach zero pendencies honestly. orphaned [[key, reason]] lists acceptances no current finding answers to — the problem was fixed, and would come back already silenced; accept(prune=true) drops them.",
+    "description": "Ergonomics and habitability review for the people living there: room to walk beside beds and in front of kitchen equipment, beds, seats, bathrooms and wardrobes per person, the kitchen (work triangle, counter heights and lengths, work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. It advises and never blocks. Answers {score, score_basis, scope, scores:{architecture,electrical,plumbing}, layout, coverage, capacity, findings:[{sev, place, msg, key, weight, discipline, in_scope, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. weight is what the score gains if that finding goes; fix is a checked change as `move` or `update` arguments, to apply and review again; tier A–E is how much the source obliges where the project is. People and city given here weigh this call only; `set_home` keeps them for every review. `accept` marks a finding right as drawn. How the score and the tiers work: `rules` topic=ergonomics.",
     "inputSchema": {
       "$defs": {
         "ReviewScope": {
@@ -2613,43 +2405,33 @@
     "outputSchema": {
       "properties": {
         "capacity": {
-          "description": "What the home holds: beds, bedrooms, bathrooms, seats, wardrobe cm",
           "type": "object"
         },
         "coverage": {
-          "description": "What was checked and what was not",
           "type": "object"
         },
         "findings": {
-          "description": "{sev, place, msg, key, weight, discipline, in_scope, src?, fix?, accepted?}",
           "type": "array"
         },
         "layout": {
-          "description": "Layout issues of the storey, as check_layout gives them",
           "type": "object"
         },
         "orphaned": {
-          "description": "Acceptances whose finding is gone: [key, reason, successor key?]",
           "type": "array"
         },
         "scope": {
-          "description": "Disciplines counted: {electrical, plumbing}",
           "type": "object"
         },
         "score": {
-          "description": "Habitability score 0-100",
           "type": "integer"
         },
         "score_basis": {
-          "description": "What the score is: habitability_heuristic",
           "type": "string"
         },
         "scores": {
-          "description": "Score by discipline: {architecture, electrical, plumbing}",
           "type": "object"
         },
         "sources": {
-          "description": "Standards cited, by code: [title, tier, url]",
           "type": "object"
         }
       },
@@ -2693,33 +2475,27 @@
     "outputSchema": {
       "properties": {
         "drawn": {
-          "description": "Hand-drawn builds left out",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "hardware": {
-          "description": "Hardware by build: \"<id>: <item>\"",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "rows": {
-          "description": "[part, board, qty, length, width, thickness, edge, cutouts?]",
           "type": "array"
         },
         "sheets": {
-          "description": ".dxf/.svg: [board, sheets]",
           "type": "array"
         },
         "skipped": {
-          "description": "[id, name] left out",
           "type": "array"
         },
         "sources": {
-          "description": "Standards cited, by code: [title, tier, url]",
           "type": "object"
         }
       },
@@ -2768,26 +2544,21 @@
     "outputSchema": {
       "properties": {
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -2810,22 +2581,18 @@
     "inputSchema": {
       "properties": {
         "cost": {
-          "default": "",
           "description": "What it cost: the workaround, the extra calls, the wrong conclusion reached before the right one, the distortion made to the plan",
           "type": "string"
         },
         "expected": {
-          "default": "",
           "description": "What was true instead, and how you found out (another tool, a render, a probe) — the reference the fix will be checked against",
           "type": "string"
         },
         "goal": {
-          "default": "",
           "description": "What you were trying to do, and the situation in the plan: the pieces, rooms and numbers involved",
           "type": "string"
         },
         "got": {
-          "default": "",
           "description": "What came back, literally — the part of the reply that is the proof",
           "type": "string"
         },
@@ -2839,7 +2606,6 @@
           "type": "string"
         },
         "must_keep": {
-          "default": "",
           "description": "What works today and must keep working with that change — the cases where the current behaviour is right. \"none known\" is an answer",
           "type": "string"
         },
@@ -2848,12 +2614,10 @@
           "type": "string"
         },
         "tried": {
-          "default": "",
           "description": "The exact call, with its arguments",
           "type": "string"
         },
         "would_help": {
-          "default": "",
           "description": "The change that would have shortened the way, as concretely as you can: a field, a parameter, a rule",
           "type": "string"
         }
@@ -2864,11 +2628,9 @@
     "outputSchema": {
       "properties": {
         "kept": {
-          "description": "Where the report was written",
           "type": "string"
         },
         "sent": {
-          "description": "Whether it reached the developers",
           "type": "boolean"
         }
       },
@@ -2917,19 +2679,15 @@
     "outputSchema": {
       "properties": {
         "after": {
-          "description": "[id, name, m², average lx, minimum lx, uniformity, reference lx, fixtures, W/m², verdict]",
           "type": "array"
         },
         "before": {
-          "description": "[id, name, m², average lx, minimum lx, uniformity, reference lx, fixtures, W/m², verdict]",
           "type": "array"
         },
         "note": {
-          "description": "Why nothing was placed",
           "type": "string"
         },
         "placed": {
-          "description": "Fixtures placed",
           "items": {
             "type": "string"
           },
@@ -2966,7 +2724,6 @@
           "type": "array"
         },
         "off": {
-          "default": false,
           "description": "Stop following the roof (heights stay as they are)",
           "type": "boolean"
         }
@@ -2980,30 +2737,24 @@
     "outputSchema": {
       "properties": {
         "fitted": {
-          "description": "Panels fitted under the roof",
           "type": "integer"
         },
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -3086,67 +2837,51 @@
     "outputSchema": {
       "properties": {
         "background": {
-          "description": "The scanned plan under the drawing",
           "type": "object"
         },
         "bounds": {
-          "description": "detail=summary: [[minx,miny],[maxx,maxy]] cm",
           "type": "array"
         },
         "counts": {
-          "description": "detail=summary: how many of each kind",
           "type": "object"
         },
         "dims": {
-          "description": "Dimensions: {id, a, b, len, off?}",
           "type": "array"
         },
         "furniture": {
-          "description": "Pieces: {id, cat, at, bounds, faces, wdh?, angle?, elev?, name?, …}",
           "type": "array"
         },
         "labels": {
-          "description": "Labels: {id, text, at, …}",
           "type": "array"
         },
         "levels": {
-          "description": "Storeys: [id, name, elevation, height, selected, index, viewable, reference]",
           "type": "array"
         },
         "lines": {
-          "description": "ndjson=true: the head, then one element per line",
           "type": "array"
         },
         "name": {
-          "description": "Project name",
           "type": "string"
         },
         "north": {
-          "description": "Degrees from plan up to north, when set",
           "type": "number"
         },
         "parts": {
-          "description": "Note when parts=true found no groups",
           "type": "string"
         },
         "polylines": {
-          "description": "Free lines: {id, pts, t, color, …}",
           "type": "array"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "rooms": {
-          "description": "Rooms: {id, name, pts, m2, …}; with detail=summary, rows [id, name, m²]",
           "type": "array"
         },
         "walls": {
-          "description": "Walls: {id, a, b, t?, h?, arc?, type?, sides?|left?, right?}",
           "type": "array"
         },
         "warnings": {
-          "description": "What the read could not do as asked",
           "items": {
             "type": "string"
           },
@@ -3164,11 +2899,11 @@
       "readOnlyHint": false,
       "title": "Build joinery"
     },
-    "description": "Parametric joinery and interiors; the server computes every board, clearance and rule and replies {id,name,size,parts,hardware,notes}. What a workshop would say — a board nobody stocks, a shelf that will sag, a drawer front too short to grip, a niche shallower than the cooktop standard wants — comes back in notes and is built anyway: the rules advise, they never refuse. Only what has no geometry at all fails, and says why. kind + p: cabinet {w,h,d cm; t 15|18|25 mm; back mm; door hinged|sliding|drawers|none; doors; shelves; drawers; dividers; plinth; cooktop; top_cutout [x,y,w,d] cm from cabinet left-back; color; front finish} · slats {w,h cm; slat, thickness, gap mm; orientation vertical|horizontal; backing; finish} · countertop {length,depth,height,thickness cm; material; support none|legs|brackets; cutouts [{kind sink|cooktop|grommet, x, w?, d?}]} · cove {room or pts; type open|closed|inverted; ceiling, width, drop, slot cm; led} · shadow_gap {room or pts; ceiling, gap, depth cm; led} · sofa {length,depth,seat,back cm; arms straight|rounded|none; modules; color}. Place with at|wall(+along), angle, elev. Change a build: id + p with only new values (e.g. {\"shelves\":3}); a new size keeps its back where it was (anchor back|front|left|right|bottom|top|+x|-x|+y|-y|center). dry=true validates only.",
+    "description": "Parametric joinery and interiors: the server computes every board, clearance and rule and answers {id,name,size,parts,hardware,notes}. Workshop advice (a board nobody stocks, a sagging shelf, a short drawer front) comes back in notes and the piece is built anyway; only what has no geometry fails, saying why. kind + p: cabinet {w,h,d cm; t 15|18|25 mm; back mm; door hinged|sliding|drawers|none; doors; shelves; drawers; dividers; plinth; cooktop; top_cutout [x,y,w,d] cm from the left-back; color; front finish} · slats {w,h cm; slat, thickness, gap mm; orientation vertical|horizontal; backing; finish} · countertop {length,depth,height,thickness cm; material; support none|legs|brackets; cutouts [{kind sink|cooktop|grommet, x, w?, d?}]} · cove {room or pts; type open|closed|inverted; ceiling, width, drop, slot cm; led} · shadow_gap {room or pts; ceiling, gap, depth cm; led} · sofa {length,depth,seat,back cm; arms straight|rounded|none; modules; color}. Place with at|wall(+along), angle, elev. Change a build with id + p holding only the new values; a new size keeps its back (anchor back|front|left|right|bottom|top|+x|-x|+y|-y|center). dry=true validates only.",
     "inputSchema": {
       "$defs": {
         "Point2": {
-          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "description": "[x, y] cm",
           "items": {
             "type": "number"
           },
@@ -3195,7 +2930,6 @@
           "description": "Center on the plan (default: 0,0), or `wall` (+`along` cm) to back it onto a wall"
         },
         "dry": {
-          "default": false,
           "description": "Only check and report, create nothing",
           "type": "boolean"
         },
@@ -3239,33 +2973,27 @@
     "outputSchema": {
       "properties": {
         "hardware": {
-          "description": "Hardware it needs",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "id": {
-          "description": "The build's group id (empty when dry)",
           "type": "string"
         },
         "name": {
-          "description": "Its name",
           "type": "string"
         },
         "notes": {
-          "description": "What a workshop would say about it",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "parts": {
-          "description": "Parts it is made of",
           "type": "integer"
         },
         "size": {
-          "description": "[w, d, h] cm",
           "type": "array"
         }
       },
@@ -3287,7 +3015,7 @@
       "readOnlyHint": true,
       "title": "List storeys"
     },
-    "description": "Storeys: rows [id,name,elev,h,selected,layout_index,viewable,reference]. Other tools act on the selected storey; change them with edit_levels.",
+    "description": "Storeys (floors, levels) of the project: rows [id,name,elev,h,selected,layout_index,viewable,reference]. Other tools act on the selected storey; change them with edit_levels.",
     "inputSchema": {
       "additionalProperties": false,
       "type": "object"
@@ -3296,7 +3024,6 @@
     "outputSchema": {
       "properties": {
         "rows": {
-          "description": "Storeys: [id, name, elevation, height, selected, index, viewable, reference]",
           "type": "array"
         }
       },
@@ -3313,7 +3040,7 @@
       "readOnlyHint": true,
       "title": "Rate the lighting"
     },
-    "description": "Lighting design by photometry: every fixture's flux (lm, or W × lamp efficacy), color temperature and distribution (bulb, spot beam, LED panel/strip) lights the work plane by the inverse-square cosine law, walls casting shadows, plus interreflection (split flux). Reply rooms [[id,name,m²,avg lx,min lx,uniformity,reference lx,fixtures,W/m²,verdict]] against ABNT NBR ISO/CIE 8995-1 residential references. fill_lighting places the fixtures a room needs. Set a piece's light with place/update light {lm|w,lamp,k,beam,area}.",
+    "description": "Lighting review: lux (illuminance) per room by photometry. Every fixture's flux (lm, or W × lamp efficacy), color temperature and distribution (bulb, spot beam, LED panel/strip) lights the work plane by the inverse-square cosine law, walls casting shadows, plus interreflection (split flux). Reply rooms [[id,name,m²,avg lx,min lx,uniformity,reference lx,fixtures,W/m²,verdict]] against ABNT NBR ISO/CIE 8995-1 residential references. fill_lighting places the fixtures a room needs. Set a piece's light with place/update light {lm|w,lamp,k,beam,area}.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -3332,23 +3059,18 @@
     "outputSchema": {
       "properties": {
         "W": {
-          "description": "Total watts",
           "type": "number"
         },
         "fixtures": {
-          "description": "Light fixtures in the plan",
           "type": "integer"
         },
         "lm": {
-          "description": "Total lumens",
           "type": "number"
         },
         "rooms": {
-          "description": "[id, name, m², average lx, minimum lx, uniformity, reference lx, fixtures, W/m², verdict]",
           "type": "array"
         },
         "sources": {
-          "description": "Standards cited, by code: [title, tier, url]",
           "type": "object"
         }
       },
@@ -3378,11 +3100,9 @@
     "outputSchema": {
       "properties": {
         "patterns": {
-          "description": "[key, label, #rrggbb, tile WxH cm]",
           "type": "array"
         },
         "wall_types": {
-          "description": "[id, name, thickness cm]",
           "type": "array"
         }
       },
@@ -3479,47 +3199,36 @@
     "outputSchema": {
       "properties": {
         "axis": {
-          "description": "Axis measured along",
           "type": "string"
         },
         "bounds": {
-          "description": "The piece's [[minx,miny],[maxx,maxy]] cm",
           "type": "array"
         },
         "clear": {
-          "description": "Free floor by side: [cm, against id, name]",
           "type": "object"
         },
         "cm": {
-          "description": "Distance, cm",
           "type": "number"
         },
         "faces": {
-          "description": "Side its front looks to",
           "type": "string"
         },
         "fit": {
-          "description": "Probe with gap: {free, max, blocked_by}",
           "type": "object"
         },
         "id": {
-          "description": "The element measured",
           "type": "string"
         },
         "opening": {
-          "description": "A door or window: {basis, hosts}",
           "type": "object"
         },
         "spans": {
-          "description": "Probe: [from, to, id, name] along the axis",
           "type": "array"
         },
         "x": {
-          "description": "Gap along x, cm",
           "type": "number"
         },
         "y": {
-          "description": "Gap along y, cm",
           "type": "number"
         }
       },
@@ -3554,26 +3263,21 @@
     "outputSchema": {
       "properties": {
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -3607,7 +3311,7 @@
           "description": "How much of a dry run to answer with: `true` everything it would change, `\"summary\"` the decision — pieces moved, roots, clearances, findings, score"
         },
         "Point2": {
-          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "description": "[x, y] cm",
           "items": {
             "type": "number"
           },
@@ -3656,110 +3360,87 @@
     "outputSchema": {
       "properties": {
         "acceptance_cleanup": {
-          "description": "Acceptances orphaned, and the calls that clear them",
           "type": "object"
         },
         "added": {
-          "description": "Ids added, or their count",
           "type": [
             "array",
             "integer"
           ]
         },
         "added_count": {
-          "description": "Roots added",
           "type": "integer"
         },
         "annotations": {
-          "description": "Annotation switches {from, to}",
           "type": "object"
         },
         "changed": {
-          "description": "{id, from, to} per element changed; a count past 20",
           "type": [
             "array",
             "integer"
           ]
         },
         "changed_count": {
-          "description": "Roots changed",
           "type": "integer"
         },
         "clearances": {
-          "description": "Free floor around touched pieces, by id",
           "type": "object"
         },
         "dry": {
-          "description": "Nothing was written",
           "type": "boolean"
         },
         "findings_changed": {
-          "description": "Findings changed",
           "type": "array"
         },
         "gone": {
-          "description": "Ids removed, or their count",
           "type": [
             "array",
             "integer"
           ]
         },
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "issues_changed": {
-          "description": "Layout issues resized",
           "type": "array"
         },
         "issues_new": {
-          "description": "Layout issues created",
           "type": "array"
         },
         "issues_resolved": {
-          "description": "Layout issues settled",
           "type": "array"
         },
         "new_findings": {
-          "description": "Findings created",
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "properties": {
-          "description": "Project properties changed",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "resolved": {
-          "description": "Findings settled",
           "type": "array"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "score": {
-          "description": "Score [before, after]",
           "type": "array"
         },
         "score_scope": {
-          "description": "Disciplines scored",
           "type": "object"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -3783,26 +3464,21 @@
     "outputSchema": {
       "properties": {
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -3838,26 +3514,21 @@
     "outputSchema": {
       "properties": {
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -3876,7 +3547,7 @@
       "readOnlyHint": false,
       "title": "Place furniture, doors and windows"
     },
-    "description": "Place catalog items, or copy=<id> of a piece already in the project (its model — even one embedded from an old import —, finish and parts, the id catalog(scope=project) gives): at=[x,y] center (doors/windows near a wall snap into it; into=[x,y] picks the swing side), or wall=id (+along cm) to put doors/windows in a wall or furniture against it, back to the wall and front to the room. Sizes w/d/h override defaults; pitch/roll tilt. Ceiling pieces (spots, LED panels, pendants, ceiling points) always hang from the ceiling the 3D draws — flat, sloping or under a roof — and follow it when they move or it changes: never compute their elev; for a pendant give elev = height of the shade's bottom (over a table ~150-160) or h = its drop, and the cord takes the rest. Which way it looks: facing=+x|-x|+y|-y, [x,y] or an element id to turn its front toward (armchair facing the TV) — prefer it to angle, clockwise degrees on a plan whose y grows down: 0 front to +y, 90 to -x, 180 to -y, 270 to +x (the catalog tool names each front: seat, doors, foot of the bed). A piece whose back belongs on a wall, put at=[x,y] within 30 cm of one with neither angle nor facing, is turned back to that wall on its own. The reply says where each front ended up: faces=f3:+y(seat), turned=f3:back to w2 — read it before building on the piece; mat finish (wood, marble, img:…; 'img:facade.png fit' stretches one image: a reference board to compare with render_3d view=front) and opacity (glass 0.3); defaults {…} fills every item; px=true reads coordinates as background pixels. cat=beam with a,b=[x,y,z] (z above the floor) and w×h section makes rafters, posts and braces; a beam reaching into a roof stops under it. Pools: pool or pool-oval. dry=true answers what it would do — what it would add, the clearances around it, the findings it would settle or create — without writing; dry=\"summary\" answers short.",
+    "description": "Place catalog items, or copy=<id> of a piece already in the project (model, finish and parts; `catalog` scope=project lists them). at=[x,y] is the center (doors and windows near a wall snap into it; into=[x,y] picks the swing side); wall=<id> (+along cm) puts doors and windows in a wall, or furniture with its back to it. facing=+x|-x|+y|-y|[x,y]|<id> turns the front toward a side, point or element, preferred to angle (clockwise degrees, y down: 0 front to +y, 90 to -x, 180 to -y, 270 to +x); a piece whose back belongs on a wall, put within 30 cm of one with neither, turns its back to it. The reply says where fronts ended: faces=f3:+y(seat), turned=f3:back to w2. Ceiling pieces hang from the ceiling the 3D draws and follow it: a pendant takes elev (shade bottom, ~150-160 over a table) or h (drop). w/d/h, pitch/roll, mat, opacity; defaults {…} fills every item; px=true reads background pixels. cat=beam with a,b=[x,y,z] makes rafters and posts. dry=true answers what it would add, the clearances and the findings, without writing.",
     "inputSchema": {
       "$defs": {
         "Dry": {
@@ -3950,7 +3621,7 @@
               "type": "number"
             },
             "z": {
-              "description": "Source height as a fraction of the piece's height (default: its base for spots and panels, the middle otherwise)",
+              "description": "Source height, fraction of the piece's (default: base for spots and panels, else middle)",
               "type": "number"
             }
           },
@@ -3989,7 +3660,6 @@
               "type": "array"
             },
             "cat": {
-              "default": "",
               "description": "Catalog id, e.g. `bed-double` (see the `catalog` tool)",
               "type": "string"
             },
@@ -4082,7 +3752,7 @@
           "type": "object"
         },
         "Point2": {
-          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "description": "[x, y] cm",
           "items": {
             "type": "number"
           },
@@ -4108,7 +3778,6 @@
           "type": "array"
         },
         "px": {
-          "default": false,
           "description": "Coordinates (`at`, `into`, `a`, `b`, `along`) are pixels of the background image",
           "type": "boolean"
         },
@@ -4126,124 +3795,99 @@
     "outputSchema": {
       "properties": {
         "acceptance_cleanup": {
-          "description": "Acceptances orphaned, and the calls that clear them",
           "type": "object"
         },
         "added": {
-          "description": "Ids added, or their count",
           "type": [
             "array",
             "integer"
           ]
         },
         "added_count": {
-          "description": "Roots added",
           "type": "integer"
         },
         "annotations": {
-          "description": "Annotation switches {from, to}",
           "type": "object"
         },
         "changed": {
-          "description": "{id, from, to} per element changed; a count past 20",
           "type": [
             "array",
             "integer"
           ]
         },
         "changed_count": {
-          "description": "Roots changed",
           "type": "integer"
         },
         "clearances": {
-          "description": "Free floor around touched pieces, by id",
           "type": "object"
         },
         "dry": {
-          "description": "Nothing was written",
           "type": "boolean"
         },
         "faces": {
-          "description": "Where each front looks: <id>:<side>(<front>)",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "findings_changed": {
-          "description": "Findings changed",
           "type": "array"
         },
         "gone": {
-          "description": "Ids removed, or their count",
           "type": [
             "array",
             "integer"
           ]
         },
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "issues_changed": {
-          "description": "Layout issues resized",
           "type": "array"
         },
         "issues_new": {
-          "description": "Layout issues created",
           "type": "array"
         },
         "issues_resolved": {
-          "description": "Layout issues settled",
           "type": "array"
         },
         "new_findings": {
-          "description": "Findings created",
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "properties": {
-          "description": "Project properties changed",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "resolved": {
-          "description": "Findings settled",
           "type": "array"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "score": {
-          "description": "Score [before, after]",
           "type": "array"
         },
         "score_scope": {
-          "description": "Disciplines scored",
           "type": "object"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "turned": {
-          "description": "Pieces turned back to a wall: <id>:back to <wall>",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -4266,7 +3910,6 @@
     "outputSchema": {
       "properties": {
         "rows": {
-          "description": "[name, title, description]",
           "type": "array"
         }
       },
@@ -4283,7 +3926,7 @@
       "readOnlyHint": true,
       "title": "Check the plumbing project"
     },
-    "description": "Plumbing project, NBR 5626 (cold and hot water) and NBR 8160 (sewer). Points are the plumbing pieces (catalog plumbing: cold-water, hot-water, sewer, valve, grease-trap, inspection-box, water-meter, gas-point, vent-pipe, and the drains as the models they are: floor-drain caixa sifonada 150x150x50, floor-drain-100, floor-drain-75 (150x185x75, up to 15 UHC), trap-drain-small (seal under 50 mm, no trap), dry-drain, linear-drain (w 50/70/90, no trap), linear-drain-trap, rain-drain for open areas; drains are set flush in the floor of a room, never in a wall, a door span or under a cabinet) and what a point is comes from its catalog, never its name; fixtures are the pieces that use water (toilet, basin, kitchen sink, shower, bathtub, washer, laundry sink, dishwasher). check (default): {points:{kind:count}, pipes_m, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources} — a cold-water point by every fixture and a sewer point (or a floor drain for basin, shower, tub and machines) within reach, the discharge diameter it needs (toilet 100 mm, kitchen sink and machines 50, others 40); hot water where the project has any; a floor drain in every bathroom, kitchen and laundry, inside the shower area where there is one, at least one real trap (50 mm seal) per room, the UHC its outlet takes (50 mm: 6, 75 mm: 15), rain drains for open terraces; a grease trap for a kitchen sink; the premises — where the water comes from (water-meter or valve) and where the sewer goes (inspection-box or stack); points no drawn pipe of their kind reaches. orphaned lists acceptances whose finding is gone (the accept tool marks findings looked at, and its prune drops those). Pipe runs are laid with edit_plumbing.",
+    "description": "Plumbing review, NBR 5626 (cold and hot water) and NBR 8160 (sewer): points are the catalog's plumbing pieces (water and sewer points, valves, drains, traps, grease trap, inspection box, meter, gas, vent) and fixtures are the pieces that use water. Answers {points:{kind:count}, pipes_m, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources}: water and sewer points by every fixture, discharge diameters, floor drains and traps in wet rooms, grease trap, where the water comes from and the sewer goes, points no pipe reaches. The drain models and what each check demands: `rules` topic=plumbing. Pipe runs are laid with `edit_plumbing`; `accept` marks a finding right as drawn.",
     "inputSchema": {
       "additionalProperties": false,
       "type": "object"
@@ -4292,27 +3935,21 @@
     "outputSchema": {
       "properties": {
         "findings": {
-          "description": "Rows [severity erro|alerta|dica, place, message, source, key, accepted reason?]",
           "type": "array"
         },
         "orphaned": {
-          "description": "Acceptances whose finding is gone: [key, reason, successor key?]",
           "type": "array"
         },
         "pending": {
-          "description": "Findings not accepted",
           "type": "integer"
         },
         "pipes_m": {
-          "description": "Pipe metres: {cold, hot, sewer, vent}",
           "type": "object"
         },
         "points": {
-          "description": "Points by kind",
           "type": "object"
         },
         "sources": {
-          "description": "Standards cited, by code: [title, tier, url]",
           "type": "object"
         }
       },
@@ -4344,58 +3981,48 @@
     "outputSchema": {
       "properties": {
         "added": {
-          "description": "Ids added, or their count",
           "type": [
             "array",
             "integer"
           ]
         },
         "annotations": {
-          "description": "Annotation switches {from, to}",
           "type": "object"
         },
         "changed": {
-          "description": "{id, from, to} per element changed; a count past 20",
           "type": [
             "array",
             "integer"
           ]
         },
         "gone": {
-          "description": "Ids removed, or their count",
           "type": [
             "array",
             "integer"
           ]
         },
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "properties": {
-          "description": "Project properties changed",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -4468,7 +4095,6 @@
     "outputSchema": {
       "properties": {
         "mimeType": {
-          "description": "Type of the image in the content (image/png)",
           "type": "string"
         }
       },
@@ -4536,7 +4162,6 @@
     "outputSchema": {
       "properties": {
         "mimeType": {
-          "description": "Type of the image in the content (image/png)",
           "type": "string"
         }
       },
@@ -4557,7 +4182,7 @@
     "inputSchema": {
       "$defs": {
         "Point2": {
-          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "description": "[x, y] cm",
           "items": {
             "type": "number"
           },
@@ -4607,7 +4232,6 @@
     "outputSchema": {
       "properties": {
         "mimeType": {
-          "description": "Type of the image in the content (image/png)",
           "type": "string"
         }
       },
@@ -4617,6 +4241,46 @@
       "type": "object"
     },
     "title": "Render the floor plan"
+  },
+  "rules": {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Read the rules behind a review"
+    },
+    "description": "The rules behind a review, as Markdown: what `electrical` and `plumbing` check against NBR 5410, 16264, 5626 and 8160 (outlets per room, loads, wire sections, DR, the panel, Wi-Fi, drains, diameters, traps, pipe runs), what each `check_layout` problem means and how to fix it, and how `ergonomics` scores (weights, source tiers, scope, city). For designing to a standard, or explaining a finding.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "topic": {
+          "description": "Which review's rules",
+          "enum": [
+            "electrical",
+            "plumbing",
+            "layout",
+            "ergonomics"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "topic"
+      ],
+      "type": "object"
+    },
+    "name": "rules",
+    "outputSchema": {
+      "properties": {
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "title": "Read the rules behind a review"
   },
   "run_plugin": {
     "annotations": {
@@ -4645,34 +4309,27 @@
     "outputSchema": {
       "properties": {
         "code": {
-          "description": "Exit code; null when it was stopped",
           "type": [
             "integer",
             "null"
           ]
         },
         "edits": {
-          "description": "Changes it made",
           "type": "integer"
         },
         "ok": {
-          "description": "The plugin exited cleanly",
           "type": "boolean"
         },
         "revision": {
-          "description": "Plan revision after it",
           "type": "integer"
         },
         "stderr": {
-          "description": "What it complained",
           "type": "string"
         },
         "stdout": {
-          "description": "What it printed",
           "type": "string"
         },
         "timed_out": {
-          "description": "It ran out of time",
           "type": "boolean"
         }
       },
@@ -4708,26 +4365,21 @@
     "outputSchema": {
       "properties": {
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -4754,11 +4406,9 @@
     "outputSchema": {
       "properties": {
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "rows": {
-          "description": "[id, name, cursor [x,y]|null, selection, edits]",
           "type": "array"
         }
       },
@@ -4803,7 +4453,7 @@
           "type": "object"
         },
         "Point2": {
-          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "description": "[x, y] cm",
           "items": {
             "type": "number"
           },
@@ -4829,7 +4479,6 @@
           "type": "array"
         },
         "clear": {
-          "default": false,
           "description": "Remove the background",
           "type": "boolean"
         },
@@ -4864,26 +4513,21 @@
     "outputSchema": {
       "properties": {
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -4941,7 +4585,7 @@
           "type": "object"
         },
         "Point2": {
-          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "description": "[x, y] cm",
           "items": {
             "type": "number"
           },
@@ -5019,26 +4663,21 @@
     "outputSchema": {
       "properties": {
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -5075,19 +4714,15 @@
     "outputSchema": {
       "properties": {
         "editor": {
-          "description": "Link that opens the project in the editor",
           "type": "string"
         },
         "name": {
-          "description": "Project name",
           "type": "string"
         },
         "summary": {
-          "description": "{rooms, area, walls, pieces}",
           "type": "object"
         },
         "svg": {
-          "description": "The plan as SVG",
           "type": "string"
         }
       },
@@ -5129,26 +4764,21 @@
     "outputSchema": {
       "properties": {
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -5210,7 +4840,6 @@
     "outputSchema": {
       "properties": {
         "rows": {
-          "description": "Walls found: [[x1,y1], [x2,y2], thickness]",
           "type": "array"
         }
       },
@@ -5272,26 +4901,21 @@
     "outputSchema": {
       "properties": {
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -5319,58 +4943,48 @@
     "outputSchema": {
       "properties": {
         "added": {
-          "description": "Ids added, or their count",
           "type": [
             "array",
             "integer"
           ]
         },
         "annotations": {
-          "description": "Annotation switches {from, to}",
           "type": "object"
         },
         "changed": {
-          "description": "{id, from, to} per element changed; a count past 20",
           "type": [
             "array",
             "integer"
           ]
         },
         "gone": {
-          "description": "Ids removed, or their count",
           "type": [
             "array",
             "integer"
           ]
         },
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "properties": {
-          "description": "Project properties changed",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -5389,7 +5003,7 @@
       "readOnlyHint": false,
       "title": "Change elements"
     },
-    "description": "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto/ceiling_flat, polyline divider); a part of a group takes name, brand, model_name and url on its own — its size and place belong to the group. anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. stretch=[part ids] on a group resize says what takes the change: the listed parts grow or shrink, every other part keeps its size and moves along (uprights stay 5.8 cm while the opening between them grows); without it all parts scale together. dry=true answers what it would do — changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), findings resolved and created as issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the same kind check_layout gives (only real defects: a piece resting or built in is never listed), and issues_changed for a clash that stays but grows or shrinks (extent_was) — without writing anything, so a size can be tried before it is applied; dry=\"summary\" answers the same decision without listing the parts a group rebuilds. Otherwise the reply names what changed. rename {pattern, to, what: names|labels} renames in bulk by a regex (Rust syntax, `(?i)` for any case, `$1` in to): every piece name — parts of groups included — or label text that matches, in one step; with dry it lists them first.",
+    "description": "Change fields of elements by id; each field applies only to the kinds that have it (furniture mat/opacity/pitch, wall h_end, room auto/ceiling_flat, polyline divider). A part of a group takes name, brand, model_name and url on its own; its size and place belong to the group. anchor on a resize holds one face still instead of growing around the center; stretch=[part ids] on a group resize grows only those parts and moves the rest along (uprights keep 5.8 cm while the opening grows). dry=true answers what it would do without writing: changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the kinds `check_layout` gives, and issues_changed (extent_was); dry=\"summary\" leaves out the parts a group rebuilds. Otherwise the reply names what changed. rename {pattern, to, what} renames in bulk by a regex (Rust syntax, `(?i)` for any case, `$1` in to) in one step; with dry it lists them first.",
     "inputSchema": {
       "$defs": {
         "Dry": {
@@ -5461,14 +5075,14 @@
               "type": "number"
             },
             "z": {
-              "description": "Source height as a fraction of the piece's height (default: its base for spots and panels, the middle otherwise)",
+              "description": "Source height, fraction of the piece's (default: base for spots and panels, else middle)",
               "type": "number"
             }
           },
           "type": "object"
         },
         "Point2": {
-          "description": "[x, y] in centimeters; x grows right, y grows down",
+          "description": "[x, y] cm",
           "items": {
             "type": "number"
           },
@@ -5484,7 +5098,6 @@
               "type": "string"
             },
             "to": {
-              "default": "",
               "description": "Replacement; `$1` refers to a group, empty removes the match",
               "type": "string"
             },
@@ -5503,7 +5116,7 @@
           "type": "object"
         },
         "RoomUse": {
-          "description": "Declared room program, independent of its display name. Auto preserves legacy name/equipment inference; other values are explicit intent",
+          "description": "Declared room program; `auto` infers it from the name and equipment",
           "enum": [
             "auto",
             "bedroom",
@@ -5532,14 +5145,14 @@
         },
         "UpdateSpec": {
           "additionalProperties": false,
-          "description": "Fields that can be changed on an element. Each applies only to the kinds that have it; anything else — a field that does not exist included — is rejected so mistakes are loud",
+          "description": "Fields to change; each applies only to the kinds that have it, and any other is refused",
           "properties": {
             "a": {
               "$ref": "#/$defs/Point2",
               "description": "Start point (wall, dimension)"
             },
             "about": {
-              "description": "The piece a note is about, e.g. `f1185`; its numbers are then checked against that piece by `annotations(stale=true)`. `\"\"` unties it",
+              "description": "The piece a note is about (e.g. `f1185`), checked by `annotations` stale; `\"\"` unties it",
               "type": "string"
             },
             "align": {
@@ -5547,7 +5160,7 @@
               "description": "Label alignment: `left`, `center`, `right`"
             },
             "anchor": {
-              "description": "Which face of the piece stays put when `w`, `d` or `h` change: `back`, `front`, `left`, `right` (relative to the way it faces), `bottom`, `top`, or a plan side `+x`, `-x`, `+y`, `-y`. Without it a resize grows around the center and both faces move, which is almost never what a run of joinery wants",
+              "description": "Face that stays put on a resize: `back`, `front`, `left`, `right` (as the piece faces), `bottom`, `top`, or `+x`, `-x`, `+y`, `-y`; default the center",
               "type": "string"
             },
             "angle": {
@@ -5587,7 +5200,7 @@
               "type": "boolean"
             },
             "ceiling_flat": {
-              "description": "Room ceiling mode: true is flat at storey height; false follows wall profiles. Lower roof panels clip either mode; ceiling controls visibility separately",
+              "description": "Room ceiling flat at storey height (true) or following the wall profiles (false)",
               "type": "boolean"
             },
             "color": {
@@ -5613,7 +5226,7 @@
             },
             "fixed": {
               "$ref": "#/$defs/Fixed",
-              "description": "Furniture: `true` fixed joinery (a top that can host a built-in outlet), `false` free-standing, when its name does not say; `\"\"` takes the declaration back and lets the name decide again"
+              "description": "Furniture: `true` fixed joinery, `false` free-standing; `\"\"` lets the name decide"
             },
             "floor": {
               "description": "Room floor visible",
@@ -5656,7 +5269,7 @@
               "type": "boolean"
             },
             "layer": {
-              "description": "Plan layer of a piece: `lighting`, `appliances`, `joinery`, `none` (in no layer), or empty to go back to the layer it is in by itself",
+              "description": "Plan layer: `lighting`, `appliances`, `joinery` or `none`; empty restores its own",
               "type": "string"
             },
             "left": {
@@ -5711,7 +5324,7 @@
               "type": "string"
             },
             "role": {
-              "description": "Functional role independent of name: `trim`, `backsplash`, `counter`; empty restores automatic classification. Does not disable collisions",
+              "description": "Role independent of the name: `trim`, `backsplash`, `counter`; empty restores the automatic one",
               "type": "string"
             },
             "roll": {
@@ -5735,7 +5348,7 @@
               "type": "number"
             },
             "stretch": {
-              "description": "On a group resize, the parts that take the change (ids); every other part keeps its size and moves along. Without it the group scales all its parts by the same factor",
+              "description": "On a group resize, the parts that take the change; the others keep their size",
               "items": {
                 "type": "string"
               },
@@ -5775,10 +5388,9 @@
       "properties": {
         "dry": {
           "$ref": "#/$defs/Dry",
-          "description": "Try it without applying: reports what would change, the clearances around every piece it touches, and which layout and ergonomics findings it would resolve or create. Nothing is written"
+          "description": "Answer what it would change, without writing"
         },
         "items": {
-          "default": [],
           "description": "The elements to change, one object each: `id` and the fields to set",
           "items": {
             "$ref": "#/$defs/UpdateSpec"
@@ -5787,7 +5399,7 @@
         },
         "rename": {
           "$ref": "#/$defs/RenameSpec",
-          "description": "Rename in bulk by a rule instead of listing items: every name (pieces and the parts of groups) or label text matching `pattern` has it replaced by `to`, in one undoable step"
+          "description": "Rename in bulk by a regex, in one step"
         },
         "v": {
           "description": "Plan version (tab) to write to; switches to it first",
@@ -5800,118 +5412,93 @@
     "outputSchema": {
       "properties": {
         "acceptance_cleanup": {
-          "description": "Acceptances orphaned, and the calls that clear them",
           "type": "object"
         },
         "added": {
-          "description": "Ids added, or their count",
           "type": [
             "array",
             "integer"
           ]
         },
         "added_count": {
-          "description": "Roots added",
           "type": "integer"
         },
         "annotations": {
-          "description": "Annotation switches {from, to}",
           "type": "object"
         },
         "changed": {
-          "description": "{id, from, to} per element changed; a count past 20",
           "type": [
             "array",
             "integer"
           ]
         },
         "changed_count": {
-          "description": "Roots changed",
           "type": "integer"
         },
         "clearances": {
-          "description": "Free floor around touched pieces, by id",
           "type": "object"
         },
         "dry": {
-          "description": "Nothing was written",
           "type": "boolean"
         },
         "findings_changed": {
-          "description": "Findings changed",
           "type": "array"
         },
         "gone": {
-          "description": "Ids removed, or their count",
           "type": [
             "array",
             "integer"
           ]
         },
         "ids": {
-          "description": "Ids created or touched",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "issues_changed": {
-          "description": "Layout issues resized",
           "type": "array"
         },
         "issues_new": {
-          "description": "Layout issues created",
           "type": "array"
         },
         "issues_resolved": {
-          "description": "Layout issues settled",
           "type": "array"
         },
         "new_findings": {
-          "description": "Findings created",
           "type": "array"
         },
         "ok": {
-          "description": "Always true",
           "type": "boolean"
         },
         "properties": {
-          "description": "Project properties changed",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "resolved": {
-          "description": "Findings settled",
           "type": "array"
         },
         "rev": {
-          "description": "Plan revision",
           "type": "integer"
         },
         "score": {
-          "description": "Score [before, after]",
           "type": "array"
         },
         "score_scope": {
-          "description": "Disciplines scored",
           "type": "object"
         },
         "text": {
-          "description": "The reply as written",
           "type": "string"
         },
         "unchanged": {
-          "description": "Asked ids that came out as they were: {id, now}",
           "type": "array"
         },
         "unchanged_note": {
-          "description": "Why they did not change",
           "type": "string"
         },
         "v": {
-          "description": "Plan version written to, when there are several",
           "type": "integer"
         }
       },
@@ -5934,7 +5521,6 @@
     "outputSchema": {
       "properties": {
         "rows": {
-          "description": "Plan versions: [i, name, active, walls, rooms, m², pieces, issues]",
           "type": "array"
         }
       },
@@ -5960,19 +5546,15 @@
     "outputSchema": {
       "properties": {
         "fps": {
-          "description": "Frames per second",
           "type": "integer"
         },
         "rows": {
-          "description": "Keyframes: [i, x, y, z, yaw, pitch, fov]",
           "type": "array"
         },
         "secs": {
-          "description": "Length in seconds",
           "type": "number"
         },
         "speed": {
-          "description": "Camera speed m/s",
           "type": "number"
         }
       },

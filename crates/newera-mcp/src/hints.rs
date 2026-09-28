@@ -66,6 +66,12 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
         false,
     ),
     ("check_layout", "Check the layout", Effect::Read, false),
+    (
+        "rules",
+        "Read the rules behind a review",
+        Effect::Read,
+        false,
+    ),
     ("ergonomics", "Review ergonomics", Effect::Read, false),
     (
         "electrical",
