@@ -807,7 +807,10 @@ impl Review<'_, '_> {
                 // In a bathroom they are a vanity, used like the basin in it.
                 Use::Counter
                     if !scene.countertop(i)
-                        && self.room_of(i).is_some_and(|s| s.what == RoomUse::Bathroom) =>
+                        && scene
+                            .spaces
+                            .iter()
+                            .any(|s| s.what == RoomUse::Bathroom && s.units.contains(&i)) =>
                 {
                     found.extend(need(
                         Side::Front,
