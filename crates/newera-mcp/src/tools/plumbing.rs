@@ -18,7 +18,7 @@ pub(crate) struct PlumbingParams {
     #[schemars(extend("enum" = ["route"]))]
     action: Option<String>,
     /// For `route`: what the run carries.
-    #[schemars(extend("enum" = ["cold", "hot", "sewer"]))]
+    #[schemars(extend("enum" = ["cold", "hot", "sewer", "vent"]))]
     kind: Option<String>,
     /// For `route`: the points; default every point of the kind.
     #[serde(default)]

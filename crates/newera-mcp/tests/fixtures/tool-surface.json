@@ -2062,7 +2062,8 @@
           "enum": [
             "cold",
             "hot",
-            "sewer"
+            "sewer",
+            "vent"
           ],
           "type": "string"
         },

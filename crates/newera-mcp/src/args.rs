@@ -37,20 +37,25 @@ fn scope<'a>(description: &'a str, actions: &[&str]) -> Option<Vec<&'a str>> {
 
 /// An argument given with an action it does not belong to. Ignored, it
 /// would answer as if it had been used: the agent asked for a pivot and got
-/// the rotation about the centre, and never learns why.
+/// the rotation about the centre, and never learns why. With no action given
+/// the tool's default is the action — the one its description names — and
+/// with no default, the argument says which actions it is for.
 fn out_of_scope(schema: &Value, args: &Value) -> Option<String> {
     let props = schema.get("properties")?.as_object()?;
-    let actions: Vec<&str> = props
-        .get("action")?
+    let selector = props.get("action")?;
+    let actions: Vec<&str> = selector
         .get("enum")?
         .as_array()?
         .iter()
         .filter_map(Value::as_str)
         .collect();
-    let action = args.get("action")?.as_str()?;
-    if !actions.contains(&action) {
-        return None;
-    }
+    let given = args.get("action").and_then(Value::as_str);
+    let action = match given {
+        Some(a) if actions.contains(&a) => Some(a),
+        // An action that does not exist is the tool's to refuse, by name.
+        Some(_) => return None,
+        None => default_choice(selector, &actions),
+    };
     for key in args.as_object()?.keys() {
         let Some(description) = props
             .get(key)
@@ -59,20 +64,36 @@ fn out_of_scope(schema: &Value, args: &Value) -> Option<String> {
         else {
             continue;
         };
-        if let Some(belongs) = scope(description, &actions)
-            && !belongs.contains(&action)
-        {
-            return Some(format!(
-                "`{key}` is for {}, not `{action}`",
-                belongs
-                    .iter()
-                    .map(|b| format!("`{b}`"))
-                    .collect::<Vec<_>>()
-                    .join(" and ")
-            ));
+        let Some(belongs) = scope(description, &actions) else {
+            continue;
+        };
+        let listed = belongs
+            .iter()
+            .map(|b| format!("`{b}`"))
+            .collect::<Vec<_>>()
+            .join(" and ");
+        match (action, given) {
+            (Some(a), _) if belongs.contains(&a) => {}
+            (Some(a), Some(_)) => return Some(format!("`{key}` is for {listed}, not `{a}`")),
+            (Some(a), None) => {
+                return Some(format!(
+                    "`{key}` is for {listed}, and the default action is `{a}`: give action"
+                ));
+            }
+            (None, _) => return Some(format!("`{key}` is for {listed}: give action")),
         }
     }
     None
+}
+
+/// The choice a description names as the default: "Default `x`" or
+/// "`x` (default…".
+fn default_choice<'a>(schema: &'a Value, choices: &[&'a str]) -> Option<&'a str> {
+    let description = schema.get("description")?.as_str()?;
+    choices.iter().copied().find(|c| {
+        description.contains(&format!("Default `{c}`"))
+            || description.contains(&format!("`{c}` (default"))
+    })
 }
 
 fn resolve<'a>(root: &'a Value, schema: &'a Value) -> &'a Value {
@@ -219,6 +240,25 @@ mod tests {
         let why = unknown(&schema, &json!({"action": "cable", "depth": 20})).unwrap();
         assert_eq!(why, "`depth` is for `route`, not `cable`");
         assert!(unknown(&schema, &json!({"action": "array", "ids": ["f1"]})).is_none());
+        // No action and no default: the argument says which actions it is for.
+        let why = unknown(&schema, &json!({"dx": 1})).unwrap();
+        assert_eq!(why, "`dx` is for `array`: give action");
+    }
+
+    /// With the action left out, the default the description names is the
+    /// action an argument is checked against.
+    #[test]
+    fn an_omitted_action_is_the_default() {
+        let schema = json!({"type": "object", "properties": {
+            "action": {"enum": ["check", "wifi"], "description": "`check` (default): findings"},
+            "band": {"description": "For `wifi`: the band"}
+        }});
+        let why = unknown(&schema, &json!({"band": "5"})).unwrap();
+        assert_eq!(
+            why,
+            "`band` is for `wifi`, and the default action is `check`: give action"
+        );
+        assert!(unknown(&schema, &json!({"action": "wifi", "band": "5"})).is_none());
     }
 
     /// The values that are one of two shapes answer with both, not with
