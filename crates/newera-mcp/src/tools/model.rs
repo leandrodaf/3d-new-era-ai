@@ -1413,8 +1413,8 @@ mod tests {
             boxes(&[("moldura", [0.0, 0.0, 0.0], [47.0, 81.0, 5.0])]),
         )
         .unwrap();
-        let file = dir.join("ares.obj").display().to_string();
-        let light = dir.join("ares-leve.obj").display().to_string();
+        let file = path(&dir.join("ares.obj"));
+        let light = path(&dir.join("ares-leve.obj"));
         let s = server();
         s.place(Parameters(
             serde_json::from_str(&format!(r#"{{"items":[{{"model":"{file}","at":[0,0],"unit":"cm"}},{{"model":"{file}","at":[100,0],"unit":"cm"}}]}}"#)).unwrap(),
