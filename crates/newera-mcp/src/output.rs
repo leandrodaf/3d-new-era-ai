@@ -785,6 +785,10 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
                 ("kind", text("sink, cooktop, oven, microwave, …")),
                 ("notes", strings("What the rules say about it")),
                 ("cutout", list("Countertop: the hole [w, d] cm")),
+                (
+                    "cut_below",
+                    list("Countertop: cabinets under it whose wooden top was cut for the item"),
+                ),
                 ("x", num("Countertop or panel: center along it, cm")),
                 ("niche", list("Cabinet: the niche [w, h] cm")),
                 ("bottom", num("Bottom above the floor, cm")),

@@ -38,7 +38,7 @@ pub(crate) struct EmbedParams {
 #[tool_router(router = cabinets_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Embed an item into joinery with an exact fit: a sink bowl or cooktop into a countertop (cutout from the item's size, generic fixture not drawn), an oven, microwave or other appliance into a cabinet niche (doors above and below, boards around it), a TV onto a slatted panel at seated eye level (z = screen center). The item becomes part of the host and moves with it. item: id in the plan, or cat (+w/d/h) for a new one. Errors say what to change (e.g. use w = 61 no armário). Reply {host, item, kind, cutout|niche, x|bottom, notes}."
+        description = "Embed an item into joinery with an exact fit: a sink bowl or cooktop into a countertop (cutout from the item's size, generic fixture not drawn; the wooden top of a joinery cabinet under it is cut too), an oven, microwave or other appliance into a cabinet niche (doors above and below, boards around it), a TV onto a slatted panel at seated eye level (z = screen center). The item becomes part of the host and moves with it. item: id in the plan, or cat (+w/d/h) for a new one. Errors say what to change (e.g. use w = 61 no armário). Reply {host, item, kind, cutout|niche, x|bottom, cut_below, notes}."
     )]
     pub(crate) fn embed(
         &self,
@@ -544,6 +544,45 @@ mod tests {
                 hole.distance(cooktop.position) < 35.0,
                 "{wall}: hole {hole:?} vs cabinet {:?}",
                 cooktop.position
+            );
+        }
+    }
+
+    #[test]
+    fn a_run_cuts_the_tops_its_sink_and_cooktop_go_through() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[420,0],[420,300],[0,300]],"closed":true}],"rooms":[{"name":"Cozinha","at":[210,150]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let p: newera_joinery::CabinetRunParams =
+            serde_json::from_str(r#"{"wall":"w1","p":{"sink":130,"cooktop":260}}"#).unwrap();
+        let base: serde_json::Value =
+            serde_json::from_str(&s.cabinet_run(Parameters(p)).unwrap()).unwrap();
+        let doc = s.document.read();
+        for role in ["sink", "cooktop"] {
+            let row = base["modules"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|m| m[1] == role)
+                .unwrap_or_else(|| panic!("no {role}: {base}"));
+            let id: newera_core::FurnitureId = row[0].as_str().unwrap().parse().unwrap();
+            let group = doc.home().find_piece(id).unwrap();
+            let params: serde_json::Value =
+                serde_json::from_str(&group.properties[newera_joinery::PARAMS_KEY]).unwrap();
+            let cut = params["top_cutout"]
+                .as_array()
+                .unwrap_or_else(|| panic!("{role} cabinet top not cut: {params}"));
+            // Centered on the hole along the wall: 130 and 260 cm.
+            let from = row[2].as_f64().unwrap();
+            let center = from + cut[0].as_f64().unwrap() + cut[2].as_f64().unwrap() / 2.0;
+            let want = if role == "sink" { 130.0 } else { 260.0 };
+            assert!((center - want).abs() < 0.2, "{role}: {center} {params}");
+            assert!(
+                !group.children.iter().any(|c| c.name == "Tampo"),
+                "{role}: the whole board is gone"
             );
         }
     }
