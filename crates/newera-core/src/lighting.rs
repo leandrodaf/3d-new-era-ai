@@ -673,6 +673,7 @@ pub fn grid_positions(points: &[Point2], count: usize, clear: f64) -> Vec<Point2
     let (w, d) = ((hi.x - lo.x).max(1.0), (hi.y - lo.y).max(1.0));
     // Grow the grid until enough of it falls inside (L-shaped rooms).
     let mut want = count;
+    let mut best: Vec<Point2> = Vec::new();
     for _ in 0..8 {
         let cols = ((want as f64 * w / d).sqrt().round() as usize).max(1);
         let rows = want.div_ceil(cols).max(1);
@@ -691,8 +692,15 @@ pub fn grid_positions(points: &[Point2], count: usize, clear: f64) -> Vec<Point2
             return grid;
         }
         want += count - grid.len();
+        if grid.len() > best.len() {
+            best = grid;
+        }
     }
-    // The middle, if even that keeps the fixture in; else nowhere does.
+    // Fewer than asked, where they fit; or the middle, if even that keeps
+    // the fixture in; else nowhere does.
+    if !best.is_empty() {
+        return best;
+    }
     crate::polygon_centroid(points)
         .filter(|c| inside(points, *c) && edge_distance(points, *c) >= clear)
         .into_iter()
@@ -825,6 +833,28 @@ mod tests {
                 assert!(edge_distance(&l, *p) >= 30.0, "{count}: {p:?} on the edge");
             }
         }
+        // A U whose middle is the courtyard: the spots that fit are kept even
+        // when there are fewer than asked and the middle fits nothing.
+        let u = [
+            (0.0, 0.0),
+            (600.0, 0.0),
+            (600.0, 400.0),
+            (420.0, 400.0),
+            (420.0, 80.0),
+            (180.0, 80.0),
+            (180.0, 400.0),
+            (0.0, 400.0),
+        ]
+        .map(|(x, y)| Point2::new(x, y));
+        let middle = crate::polygon_centroid(&u).unwrap();
+        assert!(!inside(&u, middle) || edge_distance(&u, middle) < 60.0);
+        let spots = grid_positions(&u, 40, 60.0);
+        assert!(!spots.is_empty() && spots.len() < 40, "{spots:?}");
+        assert!(
+            spots
+                .iter()
+                .all(|p| inside(&u, *p) && edge_distance(&u, *p) >= 60.0)
+        );
         // A room too small for the fixture has no spot for it, not a wrong one.
         let closet =
             [(0.0, 0.0), (40.0, 0.0), (40.0, 40.0), (0.0, 40.0)].map(|(x, y)| Point2::new(x, y));

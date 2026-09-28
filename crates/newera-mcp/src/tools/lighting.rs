@@ -223,13 +223,6 @@ impl NewEraMcp {
         // one until the room reaches the reference.
         let mut count = fixtures_needed(wanted, area, fixture_lm).clamp(1, 60);
         let (mut placed, mut after) = layout(count);
-        if placed.is_empty() {
-            return Err(invalid(format!(
-                "no spot in {} keeps a {cat} whole inside it ({} cm off every edge): a smaller fixture, or place it by hand",
-                room.id,
-                (template.width.hypot(template.depth) / 2.0).ceil()
-            )));
-        }
         #[allow(clippy::cast_precision_loss)]
         let gain = (after.average - before.average) / count as f64;
         if gain > 0.0 {
@@ -242,6 +235,13 @@ impl NewEraMcp {
         while after.average + 0.5 < wanted && count < 60 {
             count += 1;
             (placed, after) = layout(count);
+        }
+        if placed.is_empty() {
+            return Err(invalid(format!(
+                "no spot in {} keeps a {cat} whole inside it ({} cm off every edge): a smaller fixture, or place it by hand",
+                room.id,
+                (template.width.hypot(template.depth) / 2.0).ceil()
+            )));
         }
         let mut ids = Vec::new();
         let mut commands = Vec::new();
