@@ -2921,7 +2921,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn a_vanity_with_two_bowls_is_a_bathroom_not_a_kitchen() {
         let mut home = Home::default();
