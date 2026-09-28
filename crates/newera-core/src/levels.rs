@@ -347,6 +347,13 @@ mod tests {
             (area - (500.0 * 400.0 - 90.0 * 300.0)).abs() < 1e-3,
             "{area}"
         );
+        // A flight built by hand opens it only once it says it is one.
+        home.furniture[0].catalog = "group".into();
+        assert!(floor_shapes(&home, Some(LevelId(2)))[0].holes.is_empty());
+        home.furniture[0]
+            .properties
+            .insert(Furniture::ROLE_KEY.into(), "stair".into());
+        assert_eq!(floor_shapes(&home, Some(LevelId(2)))[0].holes.len(), 1);
     }
 
     /// A room 400 wide either side of a wall 20 thick lying on y = 0.

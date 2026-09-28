@@ -1,5 +1,5 @@
 {
-  "total": 110284,
+  "total": 110277,
   "tools": {
     "accept": {
       "total": 1360,
@@ -302,9 +302,9 @@
       "output": 181
     },
     "update": {
-      "total": 9762,
+      "total": 9755,
       "description": 1001,
-      "input": 7703,
+      "input": 7696,
       "output": 857
     },
     "variants": {

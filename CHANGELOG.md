@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A flight of stairs built by hand is a stair: `update(role="stair")` on the group or the solid
+  that draws it opens its hole in the floor of the storey it climbs to, as the catalog's flight
+  does. Before, only the catalog's did, so a staircase of drawn treads and landings meant cutting
+  the upper room's outline around it by hand.
 - A `rules` tool answers what a review checks against — the NBR 5410, 16264, 5626 and 8160
   tables behind `electrical` and `plumbing`, what each `check_layout` problem means, how
   `ergonomics` scores — and the same texts are resources, `newera://rules/<topic>`.

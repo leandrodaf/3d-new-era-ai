@@ -744,8 +744,8 @@ pub(crate) struct UpdateSpec {
     /// Furniture brand (references).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub brand: Option<String>,
-    /// Role independent of the name: `trim`, `backsplash`, `counter`; empty
-    /// restores the automatic one.
+    /// Role independent of the name: `trim`, `backsplash`, `counter`,
+    /// `stair`; empty: automatic.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
     /// Furniture commercial model.
@@ -1051,11 +1051,15 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                         "" => {
                             f.properties.remove(newera_core::Furniture::ROLE_KEY);
                         }
-                        "trim" | "backsplash" | "counter" => {
+                        "trim" | "backsplash" | "counter" | "stair" => {
                             f.properties
                                 .insert(newera_core::Furniture::ROLE_KEY.into(), role);
                         }
-                        _ => return Err("role must be trim, backsplash, counter or empty".into()),
+                        _ => {
+                            return Err(
+                                "role must be trim, backsplash, counter, stair or empty".into()
+                            );
+                        }
                     }
                 }
                 f.info.brand = text(spec.brand, f.info.brand.take());
@@ -1659,6 +1663,11 @@ mod tests {
         assert_eq!(
             doc.home().furniture[0].properties[newera_core::Furniture::ROLE_KEY],
             "backsplash"
+        );
+        set(&mut doc, "stair").unwrap();
+        assert!(
+            doc.home().furniture[0].is_stairs(),
+            "a flight built by hand"
         );
     }
 
