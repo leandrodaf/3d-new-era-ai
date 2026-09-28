@@ -476,7 +476,11 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
                 ("format", text("obj, gltf or glb")),
                 (
                     "unit",
-                    text("Unit taken for the file's numbers: m, cm or mm"),
+                    text("Unit taken for the file's numbers: m, cm, mm or in"),
+                ),
+                (
+                    "guessed",
+                    flag("Whether the unit was guessed from its size"),
                 ),
                 ("raw", list("[w, d, h] in the file's units")),
                 ("size", list("Natural [w, d, h] cm")),

@@ -1864,6 +1864,10 @@ pub(crate) struct PlaceSpec {
     pub cat: String,
     /// Instead of `cat`: path of an .obj/.gltf/.glb model to import.
     pub model: Option<String>,
+    /// With `model`: unit of its numbers, `m`, `cm`, `mm` or `in` (default: guessed from its size).
+    pub unit: Option<String>,
+    /// With `model`: w/d/h may stretch it unevenly; otherwise one or two of them scale it evenly.
+    pub stretch: Option<bool>,
     /// Instead of `cat`: id of a piece already in the project to copy —
     /// its model (even one embedded from an old import), finish, size and
     /// parts — to `at` or `wall`, with any size, angle or name given here
@@ -2341,6 +2345,44 @@ pub(crate) fn with_defaults(
         .collect()
 }
 
+/// The unit a piece's model file was placed with, when it was given.
+pub(crate) const MODEL_UNIT_KEY: &str = "newera:model-unit";
+
+/// A model's size from its natural one and the w/d/h asked: all three as
+/// given with `stretch`, else scaled evenly by the one or two given (they
+/// must agree), so a chair asked 90 cm tall keeps its proportions.
+fn model_size(
+    natural: [f64; 3],
+    asked: [Option<f64>; 3],
+    stretch: Option<bool>,
+) -> EditResult<[f64; 3]> {
+    if stretch == Some(true) {
+        return Ok(std::array::from_fn(|k| asked[k].unwrap_or(natural[k])));
+    }
+    let factors: Vec<f64> = asked
+        .iter()
+        .zip(natural)
+        .filter_map(|(a, n)| a.map(|a| a / n))
+        .collect();
+    let Some(&first) = factors.first() else {
+        return Ok(natural);
+    };
+    if factors.iter().any(|f| (f - first).abs() > 0.02 * first) {
+        return Err(format!(
+            "w/d/h {:?} would stretch the model's {:?} cm unevenly (×{:?}): give one of them to scale it evenly, or stretch=true",
+            asked.map(|a| a.map(|v| (v * 10.0).round() / 10.0)),
+            natural.map(|v| (v * 10.0).round() / 10.0),
+            factors
+                .iter()
+                .map(|f| (f * 1000.0).round() / 1000.0)
+                .collect::<Vec<_>>()
+        ));
+    }
+    Ok(std::array::from_fn(|k| {
+        asked[k].unwrap_or(natural[k] * first)
+    }))
+}
+
 /// Places catalog pieces in one undoable step; returns their ids.
 pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec<String>> {
     place_noting(doc, items).map(|placed| placed.ids)
@@ -2410,6 +2452,9 @@ pub(crate) fn place_noting(doc: &mut Document, items: Vec<PlaceSpec>) -> EditRes
                 .and_then(|id| home.find_piece(id))
                 .map(|f| f.id.to_string())
         });
+        if spec.model.is_none() && (spec.unit.is_some() || spec.stretch.is_some()) {
+            return Err("unit and stretch are for model=<file>".into());
+        }
         let copied = match &source_id {
             Some(raw) => {
                 let id: newera_core::FurnitureId = raw.parse().map_err(|e| format!("copy: {e}"))?;
@@ -2431,7 +2476,16 @@ pub(crate) fn place_noting(doc: &mut Document, items: Vec<PlaceSpec>) -> EditRes
             piece
         } else if let Some(model) = &spec.model {
             let path = doc.resolve_asset(model);
-            let loaded = newera_catalog::load_model(&path)
+            let unit = spec
+                .unit
+                .as_deref()
+                .map(|u| {
+                    newera_catalog::Unit::parse(u).ok_or_else(|| {
+                        format!("unit `{u}`: {}", newera_catalog::Unit::NAMES.join(", "))
+                    })
+                })
+                .transpose()?;
+            let loaded = newera_catalog::load_model_in(&path, unit)
                 .map_err(|e| {
                     format!(
                         "{}: {e} (a model embedded in the project is repeated with copy=<id of a piece using it>)",
@@ -2442,7 +2496,25 @@ pub(crate) fn place_noting(doc: &mut Document, items: Vec<PlaceSpec>) -> EditRes
                 .file_stem()
                 .map_or_else(|| "Modelo".to_owned(), |n| n.to_string_lossy().into_owned());
             let id = doc.new_furniture_id();
-            let warnings = &loaded.report.warnings;
+            let size = model_size(loaded.size, [spec.w, spec.d, spec.h], spec.stretch)?;
+            let mut warnings = loaded.report.warnings.clone();
+            // A wrong guess makes a piece 10 or 100 times its size: said
+            // when what came in is no size for furniture.
+            let largest = loaded.size.iter().copied().fold(0.0, f64::max);
+            if loaded.report.guessed && !(10.0..=400.0).contains(&largest) {
+                warnings.push(format!(
+                    "unit guessed as {}, so it is {largest:.0} cm across: unit= says what its numbers are",
+                    loaded.report.unit
+                ));
+            }
+            let scale: Vec<f64> = size
+                .iter()
+                .zip(loaded.size)
+                .map(|(s, n)| (s / n * 1000.0).round() / 1000.0)
+                .collect();
+            if scale.iter().any(|f| (f - scale[0]).abs() > 0.02 * scale[0]) {
+                warnings.push(format!("stretched ×{scale:?} (width, depth, height)"));
+            }
             if !warnings.is_empty() {
                 imported.push(format!(
                     "{id} {model}: {} warning{} ({})",
@@ -2451,16 +2523,21 @@ pub(crate) fn place_noting(doc: &mut Document, items: Vec<PlaceSpec>) -> EditRes
                     warnings.join("; ")
                 ));
             }
+            let mut properties = newera_core::Properties::new();
+            if let Some(unit) = unit {
+                properties.insert(MODEL_UNIT_KEY.into(), unit.name().into());
+            }
             newera_core::Furniture {
+                properties,
                 id,
                 catalog: "imported".to_owned(),
                 name,
                 position: spec.at.unwrap_or_default(),
                 elevation: 0.0,
                 angle: 0.0,
-                width: loaded.size[0],
-                depth: loaded.size[1],
-                height: loaded.size[2],
+                width: size[0],
+                depth: size[1],
+                height: size[2],
                 mirrored: false,
                 color: None,
                 opening: None,

@@ -42,6 +42,7 @@
     ["swap chair v3 for v4 new version of the glb", "edit_model"],
     ["parts of an imported model arm seat cushion", "model"],
     ["cushion passes through the frame intersection check", "model"],
+    ["import model drawn in centimeters unit mm inches", "place"],
     ["lux illuminance per room", "lighting"],
     ["add light fixtures to reach lux", "edit_lighting"],
     ["electrical circuits breakers", "electrical"],

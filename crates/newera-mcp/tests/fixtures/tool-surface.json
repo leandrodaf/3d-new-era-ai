@@ -2259,6 +2259,10 @@
             "natural"
           ],
           "type": "string"
+        },
+        "unit": {
+          "description": "replace: unit of the new file's numbers, `m`, `cm`, `mm` or `in` (default: guessed)",
+          "type": "string"
         }
       },
       "required": [
@@ -3842,7 +3846,7 @@
       "readOnlyHint": true,
       "title": "Inspect an imported model"
     },
-    "description": "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken for its numbers and its natural size, triangles, its materials with their images, its named parts (OBJ objects and groups, glTF nodes: arms, seat, frame) with their bounds and materials, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, alpha masks, extensions). For a piece that looks wrong after place model=…, instead of reading the file. part=<words> keeps the parts named so; check=clashes finds parts passing through one another (a cushion through a rail), not those that touch. Reply {file, format, unit, raw (file units), size cm, tris, materials [[name, color, image, tris]], images, uv, parts [[name, tris, min, max, materials]] in cm of the piece (x across, y to the front, z up), warnings}; with id also piece {size, scale per axis}; check adds clashes [[part, part, triangle pairs, at, depth cm]], degenerate [[part, faces]] and checked (what was and was not looked at). place model=… imports one.",
+    "description": "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken for its numbers (guessed from the size unless unit= or the piece says) and its natural size, triangles, its materials with their images, its named parts (OBJ objects and groups, glTF nodes: arms, seat, frame) with their bounds and materials, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, alpha masks, extensions). For a piece that looks wrong after place model=…, instead of reading the file. part=<words> keeps the parts named so; check=clashes finds parts passing through one another (a cushion through a rail), not those that touch. Reply {file, format, unit, raw (file units), size cm, tris, materials [[name, color, image, tris]], images, uv, parts [[name, tris, min, max, materials]] in cm of the piece (x across, y to the front, z up), warnings}; with id also piece {size, scale per axis}; check adds clashes [[part, part, triangle pairs, at, depth cm]], degenerate [[part, faces]] and checked (what was and was not looked at). place model=… imports one.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -3868,6 +3872,10 @@
         "tol": {
           "description": "check: how far a surface must pass the other to count, cm (default 0.05); touching is not a clash",
           "type": "number"
+        },
+        "unit": {
+          "description": "Unit of the file's numbers, `m`, `cm`, `mm` or `in` (default: the piece's, or guessed)",
+          "type": "string"
         }
       },
       "type": "object"
@@ -3889,6 +3897,9 @@
         },
         "format": {
           "type": "string"
+        },
+        "guessed": {
+          "type": "boolean"
         },
         "images": {
           "type": "integer"
@@ -4298,6 +4309,14 @@
             "roll": {
               "description": "Tilt around the depth axis, degrees",
               "type": "number"
+            },
+            "stretch": {
+              "description": "With `model`: w/d/h may stretch it unevenly; otherwise one or two of them scale it evenly",
+              "type": "boolean"
+            },
+            "unit": {
+              "description": "With `model`: unit of its numbers, `m`, `cm`, `mm` or `in` (default: guessed from its size)",
+              "type": "string"
             },
             "w": {
               "description": "Width override, cm",
