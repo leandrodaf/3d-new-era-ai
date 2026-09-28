@@ -75,6 +75,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `home` gives `elev` for every piece off the floor. It left it out when it matched the catalog's
+  default, which `catalog` does not say, so a LED strip placed without `elev` — 140 cm up, for under
+  a cabinet — read as if it were anywhere, and a profile meant for the ceiling was found hanging in
+  the render instead.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
