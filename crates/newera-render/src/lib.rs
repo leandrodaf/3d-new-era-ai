@@ -359,6 +359,55 @@ pub fn camera_distance(
     (center - eye.as_dvec3() * 100.0).length()
 }
 
+/// `(min, max)` cm in a piece's model frame: x across, y up, z to its front.
+pub type LocalBox = ([f32; 3], [f32; 3]);
+
+/// A piece alone, as a product shot: the piece (and what is inside it)
+/// on a plain ground, with no walls, rooms or other pieces, and the box
+/// to frame — the whole piece, or its model's part `part` — in its model
+/// frame (cm: x across, y up, z to its front).
+///
+/// # Errors
+/// When the piece has no part of that name.
+pub fn isolated(
+    home: &newera_core::Home,
+    piece: &newera_core::Furniture,
+    part: Option<&str>,
+    assets: Option<&Path>,
+) -> Result<(newera_core::Home, LocalBox), String> {
+    let mut alone = newera_core::Home::default();
+    alone.levels.clone_from(&home.levels);
+    alone.environment.all_levels_visible = true;
+    alone.furniture.push(piece.clone());
+    #[allow(clippy::cast_possible_truncation)]
+    let whole = (
+        [
+            (-piece.width / 2.0) as f32,
+            0.0,
+            (-piece.depth / 2.0) as f32,
+        ],
+        [
+            (piece.width / 2.0) as f32,
+            piece.height as f32,
+            (piece.depth / 2.0) as f32,
+        ],
+    );
+    let Some(name) = part else {
+        return Ok((alone, whole));
+    };
+    let mesh = ModelCache::default()
+        .piece_model(piece, assets)
+        .ok_or_else(|| format!("{} is not an imported model with parts", piece.id))?;
+    let found = mesh.parts.iter().find(|p| p.name == name).ok_or_else(|| {
+        let names: Vec<&str> = mesh.parts.iter().map(|p| p.name.as_str()).collect();
+        format!("no part `{name}` in {} ({})", piece.id, names.join(", "))
+    })?;
+    let bounds = mesh
+        .part_bounds(found)
+        .ok_or_else(|| format!("part `{name}` has no triangles"))?;
+    Ok((alone, bounds))
+}
+
 /// Exports the home's 3D model (`.glb` or `.obj`), with models and textures
 /// resolved relative to `assets`. The ground plane is left out.
 pub fn export_home(

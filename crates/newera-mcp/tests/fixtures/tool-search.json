@@ -49,6 +49,8 @@
     ["hide a part of an imported model", "edit_model"],
     ["lighter version of a heavy model far from the camera level of detail", "edit_model"],
     ["how many triangles does the imported chair have", "model"],
+    ["3d picture of one piece alone seen from its front", "render_3d"],
+    ["3d image of one piece alone framed on a part", "render_3d"],
     ["lux illuminance per room", "lighting"],
     ["add light fixtures to reach lux", "edit_lighting"],
     ["electrical circuits breakers", "electrical"],

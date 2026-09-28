@@ -110,6 +110,10 @@ pub(crate) struct Render3dParams {
     w: Option<u32>,
     /// Height px (default 360, 64..1200).
     h: Option<u32>,
+    /// Only this piece, framed from its own side.
+    piece: Option<String>,
+    /// With piece: frame this part of its model (`model` lists them).
+    part: Option<String>,
 }
 /// Plan options as the user sees them: backgrounds, and top views for
 /// imported models.
@@ -278,7 +282,7 @@ impl NewEraMcp {
         result
     }
     #[tool(
-        description = "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations — front looks from the plan's bottom edge (large y) toward y=0, back from y=0 toward large y, left from x=0, right from large x; cut=cm makes a section keeping only what is beyond that plane from the viewer (front cut=200 keeps y<200, so the wall at y=0 stays as the backdrop; to remove it look from back), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). walls=cutaway drops the walls between the eye and a room to 40 cm, walls=down drops them all; either hides ceilings, roofs and the doors, windows and wall pieces of lowered walls, to see the furniture from the side. Keep w/h small."
+        description = "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations — front looks from the plan's bottom edge (large y) toward y=0, back from y=0 toward large y, left from x=0, right from large x; cut=cm makes a section keeping only what is beyond that plane from the viewer (front cut=200 keeps y<200, so the wall at y=0 stays as the backdrop; to remove it look from back), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). walls=cutaway drops the walls between the eye and a room to 40 cm, walls=down drops them all; either hides ceilings, roofs and the doors, windows and wall pieces of lowered walls, to see the furniture from the side. piece=<id> draws it alone, seen from its own side (view; aerial is three-quarter), framed the same wherever it stands; part=<name> frames one part of its model. Keep w/h small."
     )]
     pub(crate) fn render_3d(
         &self,
@@ -309,36 +313,70 @@ impl NewEraMcp {
         }
         let assets = doc.asset_dir();
         drop(doc);
-        let home = &home;
-        let view = match (p.cam, p.view.as_deref()) {
-            (Some(i), _) => {
-                let camera = home
-                    .cameras
-                    .stored
-                    .get(i)
-                    .ok_or_else(|| invalid(format!("no stored camera {i}")))?;
-                newera_render::View::from_camera(camera, aspect)
-            }
-            (None, Some("visitor")) => {
-                newera_render::View::from_camera(&home.cameras.observer, aspect)
-            }
-            (None, None | Some("aerial")) => newera_render::View::aerial_zoom(
-                home,
-                p.yaw.unwrap_or(60.0),
-                p.pitch.unwrap_or(40.0),
-                p.zoom.unwrap_or(1.0),
-            ),
-            (None, Some(side @ ("front" | "back" | "left" | "right" | "top"))) => {
-                let side = match side {
-                    "front" => newera_render::Side::Front,
-                    "back" => newera_render::Side::Back,
-                    "left" => newera_render::Side::Left,
-                    "right" => newera_render::Side::Right,
-                    _ => newera_render::Side::Top,
+        let isolated;
+        let (home, framed) = match &p.piece {
+            Some(raw) => {
+                let id: newera_core::FurnitureId =
+                    raw.parse().map_err(|e| invalid(format!("piece: {e}")))?;
+                let piece = home
+                    .find_piece(id)
+                    .ok_or_else(|| invalid(format!("no piece {raw}")))?;
+                let (alone, bounds) =
+                    newera_render::isolated(&home, piece, p.part.as_deref(), assets.as_deref())
+                        .map_err(invalid)?;
+                let side = match p.view.as_deref() {
+                    None | Some("aerial") => None,
+                    Some("front") => Some(newera_render::Side::Front),
+                    Some("back") => Some(newera_render::Side::Back),
+                    Some("left") => Some(newera_render::Side::Left),
+                    Some("right") => Some(newera_render::Side::Right),
+                    Some("top") => Some(newera_render::Side::Top),
+                    Some(other) => {
+                        return Err(invalid(format!(
+                            "view `{other}` with piece: front, back, left, right, top or aerial"
+                        )));
+                    }
                 };
-                newera_render::View::orthographic(home, side, aspect, p.cut)
+                let view =
+                    newera_render::View::product(&home, piece, bounds, side, p.zoom.unwrap_or(1.0));
+                isolated = alone;
+                (&isolated, Some(view))
             }
-            (None, Some(other)) => return Err(invalid(format!("unknown view `{other}`"))),
+            None if p.part.is_some() => return Err(invalid("part: give the piece it belongs to")),
+            None => (&home, None),
+        };
+        let view = match (framed, p.cam, p.view.as_deref()) {
+            (Some(view), ..) => view,
+            (None, cam, view) => match (cam, view) {
+                (Some(i), _) => {
+                    let camera = home
+                        .cameras
+                        .stored
+                        .get(i)
+                        .ok_or_else(|| invalid(format!("no stored camera {i}")))?;
+                    newera_render::View::from_camera(camera, aspect)
+                }
+                (None, Some("visitor")) => {
+                    newera_render::View::from_camera(&home.cameras.observer, aspect)
+                }
+                (None, None | Some("aerial")) => newera_render::View::aerial_zoom(
+                    home,
+                    p.yaw.unwrap_or(60.0),
+                    p.pitch.unwrap_or(40.0),
+                    p.zoom.unwrap_or(1.0),
+                ),
+                (None, Some(side @ ("front" | "back" | "left" | "right" | "top"))) => {
+                    let side = match side {
+                        "front" => newera_render::Side::Front,
+                        "back" => newera_render::Side::Back,
+                        "left" => newera_render::Side::Left,
+                        "right" => newera_render::Side::Right,
+                        _ => newera_render::Side::Top,
+                    };
+                    newera_render::View::orthographic(home, side, aspect, p.cut)
+                }
+                (None, Some(other)) => return Err(invalid(format!("unknown view `{other}`"))),
+            },
         };
         let cutaway = match p.walls.as_deref() {
             None | Some("up") => None,
@@ -511,6 +549,99 @@ mod tests {
             .decode(&image.data)
             .unwrap();
         assert_eq!(&bytes[1..4], b"PNG");
+    }
+    #[test]
+    fn a_piece_alone_is_the_same_shot_wherever_it_stands_and_leaves_the_room_out() {
+        let dir = std::env::temp_dir().join(format!("newera-render-piece-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("banco.obj"),
+            "o assento\nv 0 40 0\nv 50 40 0\nv 50 40 40\nv 0 40 40\nf 1 4 3 2\n\
+             o perna\nv 0 0 0\nv 5 0 0\nv 5 40 0\nv 0 40 0\nf 1 2 3 4\n"
+                .replace("f 1 2 3 4", "f 5 6 7 8"),
+        )
+        .unwrap();
+        let file = dir.join("banco.obj").display().to_string();
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[600,0],[600,400],[0,400]],"closed":true}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(&format!(
+                r#"{{"items":[{{"model":"{file}","at":[150,150],"unit":"cm"}},{{"cat":"sofa-3","at":[150,260]}}]}}"#
+            ))
+            .unwrap(),
+        ))
+        .unwrap();
+        let shot = |json: &str| -> Vec<u8> {
+            let result = s
+                .render_3d(Parameters(serde_json::from_str(json).unwrap()))
+                .unwrap();
+            let ContentBlock::Image(image) = &result.content[0] else {
+                panic!("expected image")
+            };
+            base64::engine::general_purpose::STANDARD
+                .decode(&image.data)
+                .unwrap()
+        };
+        let id = {
+            let doc = s.document.read();
+            doc.home()
+                .furniture
+                .iter()
+                .find(|f| f.model.is_some())
+                .unwrap()
+                .id
+                .to_string()
+        };
+        let alone = shot(&format!(
+            r#"{{"piece":"{id}","view":"front","w":96,"h":72}}"#
+        ));
+        // Moved across the room, with the sofa still behind it: the same shot.
+        s.move_elements(Parameters(
+            serde_json::from_str(&format!(r#"{{"ids":["{id}"],"dx":300,"dy":50}}"#)).unwrap(),
+        ))
+        .unwrap();
+        let moved = shot(&format!(
+            r#"{{"piece":"{id}","view":"front","w":96,"h":72}}"#
+        ));
+        let (a, b) = (
+            image::load_from_memory(&alone).unwrap().to_rgba8(),
+            image::load_from_memory(&moved).unwrap().to_rgba8(),
+        );
+        let differ = a
+            .pixels()
+            .zip(b.pixels())
+            .filter(|(p, q)| p.0.iter().zip(q.0).any(|(x, y)| x.abs_diff(y) > 24))
+            .count();
+        assert!(
+            differ < a.pixels().len() / 50,
+            "same piece, same shot: {differ} pixels differ"
+        );
+        let leg = shot(&format!(
+            r#"{{"piece":"{id}","part":"perna","w":96,"h":72}}"#
+        ));
+        assert_ne!(leg, alone);
+        let wrong = s
+            .render_3d(Parameters(
+                serde_json::from_str(&format!(r#"{{"piece":"{id}","part":"braco"}}"#)).unwrap(),
+            ))
+            .unwrap_err();
+        assert!(
+            wrong.message.contains("assento") && wrong.message.contains("perna"),
+            "{wrong:?}"
+        );
+        assert!(
+            s.render_3d(Parameters(
+                serde_json::from_str(r#"{"part":"perna"}"#).unwrap()
+            ))
+            .is_err()
+        );
+        std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]
     fn render_3d_returns_a_png() {
