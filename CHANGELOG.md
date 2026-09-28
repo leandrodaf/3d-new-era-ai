@@ -75,11 +75,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- `plumbing` reads a bowl by the room it is in. Every "cuba" was a basin — a 40 mm branch, one
-  fixture unit — so the kitchen sink was asked for a basin's drain and no grease trap, and the
-  laundry's bowl the same. A bowl in a kitchen (or a gourmet area) is now a kitchen sink, 50 mm and
-  a grease trap as NBR 8160 asks, and in a laundry a laundry sink; in a bathroom, and anywhere
-  else, it is still a basin.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
