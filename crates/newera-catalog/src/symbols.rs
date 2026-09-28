@@ -738,8 +738,8 @@ pub fn plan_symbol(piece: &Furniture) -> Vec<SymbolShape> {
                 false,
             );
         }
-        Model::Stairs { steps } => {
-            let n = steps.max(2);
+        Model::Stairs => {
+            let n = crate::stair_risers(piece.height);
             let run = d / f64::from(n);
             for i in 1..n {
                 let y = hd - f64::from(i) * run;
