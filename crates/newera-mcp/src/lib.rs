@@ -349,6 +349,9 @@ fn run(
                 .export_plan(Parameters(params(args)?))
                 .map_err(reason)?,
         )),
+        "rules" => Ok(said(
+            server.rules(Parameters(params(args)?)).map_err(reason)?,
+        )),
         "fit_roof" => Ok(said(
             server.fit_roof(Parameters(params(args)?)).map_err(reason)?,
         )),

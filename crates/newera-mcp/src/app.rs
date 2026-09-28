@@ -28,7 +28,7 @@ const VIEWER_HTML: &str = include_str!("app/plan-viewer.html");
 /// The resources this server has, each with its contents, as JSON: what the
 /// relay needs to answer `resources/list` and `resources/read` for a tab.
 pub fn resources() -> Vec<Value> {
-    vec![json!({
+    let viewer = json!({
         "uri": VIEWER_URI,
         "name": "plan-viewer",
         "title": "Plan viewer",
@@ -36,7 +36,20 @@ pub fn resources() -> Vec<Value> {
         "mimeType": MIME,
         "text": VIEWER_HTML,
         "_meta": meta(),
-    })]
+    });
+    // The rules behind the reviews, the same texts the `rules` tool answers.
+    let rules = crate::tools::rules::TOPICS
+        .iter()
+        .map(|(topic, title, text)| {
+            json!({
+                "uri": format!("newera://rules/{topic}"),
+                "name": format!("rules-{topic}"),
+                "title": title,
+                "mimeType": "text/markdown",
+                "text": text,
+            })
+        });
+    std::iter::once(viewer).chain(rules).collect()
 }
 
 /// What `resources/list` answers: the resources without their contents.

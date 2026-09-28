@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A `rules` tool answers what a review checks against — the NBR 5410, 16264, 5626 and 8160
+  tables behind `electrical` and `plumbing`, what each `check_layout` problem means, how
+  `ergonomics` scores — and the same texts are resources, `newera://rules/<topic>`.
 - The MCP tool surface keeps its own rules as it grows, as tests (`docs/MCP-TOOLS.md` lists
   them): a byte budget per tool that only goes down, names that say whether a tool reads or
   writes, descriptions that neither order the model around nor name a tool that is not there,
@@ -34,6 +37,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The tool list an agent reads on every conversation is a quarter smaller (149 KB to 113 KB): the
+  reviews' descriptions say what they answer and point to `rules` for the tables, output schemas go
+  out without their field descriptions, and defaults that only restate absence are left out. The
+  descriptions use the words people search with, so a tool search finds the right tool for all 86
+  requests in the test set, and the first three hold it for 96.5 % of them (90 % before).
 - A tool that refuses a call answers inside the result (`isError`) on the desktop and `newera mcp`,
   as the hosted service and the browser tab already did, so the agent reads why and tries again
   instead of a client showing a protocol error to nobody.

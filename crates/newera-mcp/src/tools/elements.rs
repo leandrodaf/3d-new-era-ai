@@ -19,16 +19,12 @@ pub(crate) struct UpdateParams {
     /// The elements to change, one object each: `id` and the fields to set.
     #[serde(default)]
     pub(crate) items: Vec<UpdateSpec>,
-    /// Rename in bulk by a rule instead of listing items: every name (pieces
-    /// and the parts of groups) or label text matching `pattern` has it
-    /// replaced by `to`, in one undoable step.
+    /// Rename in bulk by a regex, in one step.
     #[serde(default)]
     pub(crate) rename: Option<edit::RenameSpec>,
     /// Plan version (tab) to write to; switches to it first.
     pub(crate) v: Option<usize>,
-    /// Try it without applying: reports what would change, the clearances
-    /// around every piece it touches, and which layout and ergonomics
-    /// findings it would resolve or create. Nothing is written.
+    /// Answer what it would change, without writing.
     pub(crate) dry: Option<Dry>,
 }
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -148,7 +144,7 @@ impl NewEraMcp {
         Ok(ok(&doc, &ids))
     }
     #[tool(
-        description = "Change fields of elements by id; fields must match the element kind (e.g. furniture mat/opacity/pitch, wall h_end, room auto/ceiling_flat, polyline divider); a part of a group takes name, brand, model_name and url on its own — its size and place belong to the group. anchor on a resize holds one face still (back/front/left/right of the piece, bottom/top, or a plan side) instead of growing around the center, so a run of joinery keeps its back on the wall. stretch=[part ids] on a group resize says what takes the change: the listed parts grow or shrink, every other part keeps its size and moves along (uprights stay 5.8 cm while the opening between them grows); without it all parts scale together. dry=true answers what it would do — changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), findings resolved and created as issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the same kind check_layout gives (only real defects: a piece resting or built in is never listed), and issues_changed for a clash that stays but grows or shrinks (extent_was) — without writing anything, so a size can be tried before it is applied; dry=\"summary\" answers the same decision without listing the parts a group rebuilds. Otherwise the reply names what changed. rename {pattern, to, what: names|labels} renames in bulk by a regex (Rust syntax, `(?i)` for any case, `$1` in to): every piece name — parts of groups included — or label text that matches, in one step; with dry it lists them first."
+        description = "Change fields of elements by id; each field applies only to the kinds that have it (furniture mat/opacity/pitch, wall h_end, room auto/ceiling_flat, polyline divider). A part of a group takes name, brand, model_name and url on its own; its size and place belong to the group. anchor on a resize holds one face still instead of growing around the center; stretch=[part ids] on a group resize grows only those parts and moves the rest along (uprights keep 5.8 cm while the opening grows). dry=true answers what it would do without writing: changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the kinds `check_layout` gives, and issues_changed (extent_was); dry=\"summary\" leaves out the parts a group rebuilds. Otherwise the reply names what changed. rename {pattern, to, what} renames in bulk by a regex (Rust syntax, `(?i)` for any case, `$1` in to) in one step; with dry it lists them first."
     )]
     pub(crate) fn update(
         &self,
@@ -191,7 +187,7 @@ impl NewEraMcp {
         Ok(with_unchanged(&applied(&doc, &before), &still))
     }
     #[tool(
-        description = "Delete elements by id, atomically. Labels left pointing at a deleted piece — about it, or standing on it — are named in the reply as labels_left [[id, text]], since an index code over what is now another piece is found by nobody; labels=true deletes them in the same step."
+        description = "Delete (remove) walls, rooms, pieces or any element by id, atomically. Labels left pointing at a deleted piece — about it, or standing on it — are named in the reply as labels_left [[id, text]], since an index code over what is now another piece is found by nobody; labels=true deletes them in the same step."
     )]
     pub(crate) fn delete(
         &self,
