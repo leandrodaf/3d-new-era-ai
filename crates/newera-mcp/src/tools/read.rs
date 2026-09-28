@@ -571,7 +571,6 @@ mod tests {
         assert_eq!(dry["changed"][0]["to"]["mat"], "wood", "{dry}");
     }
 
-
     #[test]
     fn a_raised_piece_says_its_elevation_even_when_it_is_the_catalogs() {
         let s = server();
