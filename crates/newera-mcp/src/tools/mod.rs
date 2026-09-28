@@ -352,6 +352,38 @@ mod tests {
         std::fs::write(path, format!("{json}\n")).unwrap();
     }
 
+    /// The table at the top of this file names every tool once, and only
+    /// tools: it went stale once, listing a third of the surface.
+    #[test]
+    fn the_module_table_names_every_tool() {
+        let mut listed: Vec<String> = include_str!("mod.rs")
+            .lines()
+            .take_while(|line| line.starts_with("//!"))
+            .filter(|line| line.starts_with("//! | [`"))
+            .flat_map(|line| {
+                line.rsplit('|')
+                    .nth(1)
+                    .unwrap_or_default()
+                    .split(',')
+                    .map(|name| name.trim().trim_matches('`').to_owned())
+                    .filter(|name| !name.is_empty() && !name.contains(' '))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        listed.sort();
+        let before = listed.len();
+        listed.dedup();
+        assert_eq!(before, listed.len(), "a tool is in the table twice");
+        let mut tools: Vec<String> = server()
+            .tool_router
+            .list_all()
+            .iter()
+            .map(|t| t.name.to_string())
+            .collect();
+        tools.sort();
+        assert_eq!(listed, tools, "update the table at the top of tools/mod.rs");
+    }
+
     #[test]
     fn an_orphan_points_to_the_finding_that_took_its_place() {
         let live = vec![
