@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-28
+
 ### Added
 
 - `ergonomics`, `electrical`, `plumbing` and `lighting` take `level`, the storey to review, as
@@ -872,7 +874,8 @@ MCP server, with everything below.
 - `scripts/mcp.sh` / `make mcp` to call MCP tools from the shell.
 - CI for formatting, clippy, tests on Linux/macOS/Windows, MCP smoke test, MSRV and cargo-deny; release builds.
 
-[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.10.0...v2.0.0
 [1.10.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.9.2...v1.10.0
 [1.9.2]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.9.1...v1.9.2
 [1.9.1]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.9.0...v1.9.1
