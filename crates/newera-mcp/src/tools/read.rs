@@ -530,4 +530,44 @@ mod tests {
             "{walls_only}"
         );
     }
+
+    #[test]
+    fn a_pieces_finish_reads_back_as_it_was_written() {
+        let s = server();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"wardrobe","at":[100,100],"mat":"marble #2b2b2b 60"},{"cat":"bed-double","at":[300,300]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let read: serde_json::Value = serde_json::from_str(
+            &s.get_home(Parameters(
+                serde_json::from_str(r#"{"kinds":["furniture"],"fields":["mat"]}"#).unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let rows = read["furniture"].as_array().unwrap();
+        let mat = rows[0]["mat"].as_str().unwrap_or_else(|| panic!("{read}"));
+        let back: newera_core::Material = mat.parse().unwrap();
+        assert_eq!(back, "marble #2b2b2b 60".parse().unwrap(), "{mat}");
+        assert!(
+            rows[1].get("mat").is_none(),
+            "none given, none said: {read}"
+        );
+        // A dry run of a new finish says it changes.
+        let id = rows[1]["id"].as_str().unwrap();
+        let dry: serde_json::Value = serde_json::from_str(
+            &s.update(Parameters(
+                serde_json::from_str(&format!(
+                    r#"{{"items":[{{"id":"{id}","mat":"wood"}}],"dry":true}}"#
+                ))
+                .unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(dry["changed"][0]["to"]["mat"], "wood", "{dry}");
+    }
 }
