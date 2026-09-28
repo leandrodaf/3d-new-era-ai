@@ -11,6 +11,8 @@ mod edit;
 mod hints;
 pub mod output;
 mod schema;
+#[cfg(test)]
+mod surface_rules;
 mod tools;
 mod trace;
 

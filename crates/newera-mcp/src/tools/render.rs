@@ -66,7 +66,7 @@ pub(crate) struct PhotoParams {
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct Render3dParams {
-    /// `aerial` (default) or `visitor`.
+    /// `aerial` (default), `visitor`, or an elevation: `front`, `back`, `left`, `right`, `top`.
     view: Option<String>,
     /// Stored point of view index (see cameras).
     cam: Option<usize>,

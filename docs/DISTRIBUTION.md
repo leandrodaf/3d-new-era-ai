@@ -79,7 +79,8 @@ them fails CI:
   `openWorldHint` annotations (`every_tool_has_hints`);
 - reads never change the document (`reads_change_nothing`), and a read refuses
   write arguments (`a_read_refuses_a_write_argument`);
-- descriptions do not give orders to the model or advertise;
+- descriptions do not give orders to the model or advertise
+  (`descriptions_neither_order_nor_sell`);
 - errors say what to do next;
 - hosted tools declare their OAuth scope in `securitySchemes`
   (`every_hosted_tool_asks_for_the_account`).

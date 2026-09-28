@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- The MCP tool surface keeps its own rules as it grows, as tests (`docs/MCP-TOOLS.md` lists
+  them): a byte budget per tool that only goes down, names that say whether a tool reads or
+  writes, descriptions that neither order the model around nor name a tool that is not there,
+  choices typed as enums, unknown arguments refused, and a BM25 tool search over the surface
+  that must keep finding the right tool for 82 requests agents make.
 - A project says which country and state it is in — `set_home(country=…, region=…)`, beside
   the city it already had — and that decides which codes judge it. A project in the United
   States is reviewed against the IRC 2024 (room areas and sides, ceiling heights, daylight, the
@@ -45,6 +50,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Tool descriptions that told agents something untrue: `electrical` promised that `wifi` writes
+  the access points' standard (only `edit_electrical` does), `render_3d` listed two of its seven
+  views, `open_home` called its required `path` optional, and `check_layout` left `backwards`
+  out of the problems it lists. A doc comment meant for a function sat on the dry-run type and
+  was sent, 583 bytes of it, in three tools' schemas.
 - São Paulo's minimum room areas and sides no longer judge a project that says it is in another
   city, and the São Paulo state kitchen minimum no longer judges another state.
 - A building code picked under "Código de obras" in the desktop is kept when the project is
