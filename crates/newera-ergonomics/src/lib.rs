@@ -266,7 +266,9 @@ struct Review<'s, 'a> {
 /// speak of the house.
 fn house_capacity(home: &Home, scene: &Scene<'_>) -> Capacity {
     let storeys = home.design_levels();
-    if storeys.len() < 2 {
+    // A home drawn without storeys is the scene; with one, it is that storey
+    // even when a reference layer is the one shown.
+    if storeys.is_empty() {
         return capacity_of(scene);
     }
     storeys.into_iter().fold(Capacity::default(), |sum, level| {
@@ -2957,6 +2959,26 @@ mod tests {
             assert!(!said("Nenhum dormitório"), "shown lv{shown}");
             assert!(!said("lugares à mesa"), "shown lv{shown}");
         }
+        // One storey designed, and a traced plan shown: the house is the design.
+        home.levels[1].set_reference(true);
+        for f in &mut home.furniture {
+            if f.level == Some(LevelId(2)) {
+                f.position.y += 400.0;
+            }
+            f.level = Some(LevelId(1));
+        }
+        for r in &mut home.rooms {
+            if r.level == Some(LevelId(2)) {
+                for p in &mut r.points {
+                    p.y += 400.0;
+                }
+            }
+            r.level = Some(LevelId(1));
+        }
+        home.selected_level = Some(LevelId(2));
+        let report = review(&home, &profile);
+        assert_eq!(report.capacity.beds, 4, "the design, not the tracing");
+        assert_eq!(report.capacity.bathrooms, 1);
     }
 
     fn square(home: &mut Home, name: &str, w: f64, d: f64) {
