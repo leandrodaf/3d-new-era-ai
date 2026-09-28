@@ -1,5 +1,5 @@
 {
-  "total": 110436,
+  "total": 110533,
   "tools": {
     "accept": {
       "total": 1360,
@@ -152,10 +152,10 @@
       "output": 463
     },
     "embed": {
-      "total": 1960,
-      "description": 533,
+      "total": 2057,
+      "description": 601,
       "input": 907,
-      "output": 300
+      "output": 329
     },
     "ergonomics": {
       "total": 2820,
