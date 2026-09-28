@@ -179,8 +179,17 @@ mod tests {
         let obj = |w: f64| format!("v 0 0 0\nv {w} 0 0\nv {w} 90 0\nv 0 0 85\nf 1 2 3\nf 1 3 4\n");
         std::fs::write(work.join("win.obj"), obj(80.0)).unwrap();
         std::fs::write(work.join("frente.png"), b"png").unwrap();
-        let file = work.join("win.obj").display().to_string();
-        let photo = work.join("frente.png").display().to_string();
+        // Paths inside JSON: `\\` would escape, `/` works everywhere.
+        let file = work
+            .join("win.obj")
+            .display()
+            .to_string()
+            .replace('\\', "/");
+        let photo = work
+            .join("frente.png")
+            .display()
+            .to_string()
+            .replace('\\', "/");
 
         // Checked in one project, and published.
         let first = server();
@@ -262,7 +271,7 @@ mod tests {
         };
         let placed = piece(&second);
         assert!(
-            placed.model.as_deref().unwrap().ends_with("win/v2/win.obj"),
+            std::path::Path::new(placed.model.as_deref().unwrap()).ends_with("win/v2/win.obj"),
             "{:?}",
             placed.model
         );
@@ -282,10 +291,7 @@ mod tests {
             ))
             .unwrap();
         assert!(
-            piece(&second)
-                .model
-                .as_deref()
-                .unwrap()
+            std::path::Path::new(piece(&second).model.as_deref().unwrap())
                 .ends_with("win/v1/win.obj"),
             "{reply}"
         );
