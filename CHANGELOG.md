@@ -75,11 +75,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- `ergonomics` lets a washer, a dryer or a dishwasher stand under a countertop with a sink in it.
-  A countertop was measured by its box, which reaches the floor, and one with a sink cutout no
-  longer counted as the cabinetry things go under — so the laundry's washer and dryer, set under
-  its counter, were each an error, "ocupa o mesmo lugar", with nowhere to move. A countertop is now
-  its slab; a piece that reaches into the slab still clashes with it.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
