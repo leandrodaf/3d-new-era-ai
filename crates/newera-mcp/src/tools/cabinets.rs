@@ -549,6 +549,51 @@ mod tests {
     }
 
     #[test]
+    fn a_piece_given_a_wall_stands_on_that_walls_storey() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}],"rooms":[{"name":"Cozinha","at":[200,150]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        // The upper storey is the one shown while the ground floor gets work.
+        let (ground, upper) = {
+            let mut doc = s.document.write();
+            let upper = newera_core::ops::add_level(&mut doc, None, None).unwrap();
+            (doc.home().base_level(), Some(upper))
+        };
+        assert_eq!(s.document.read().home().current_level(), upper);
+        let place: PlaceParams = serde_json::from_str(
+            r#"{"items":[{"cat":"door","wall":"w2","along":150},{"cat":"outlet-low","wall":"w4","along":150}]}"#,
+        )
+        .unwrap();
+        s.place(Parameters(place)).unwrap();
+        let joinery: JoineryParams =
+            serde_json::from_str(r#"{"kind":"cabinet","p":{"w":80,"h":90,"d":57},"wall":"w3"}"#)
+                .unwrap();
+        s.joinery(Parameters(joinery)).unwrap();
+        let p: newera_joinery::CabinetRunParams = serde_json::from_str(r#"{"wall":"w1"}"#).unwrap();
+        let run: serde_json::Value =
+            serde_json::from_str(&s.cabinet_run(Parameters(p)).unwrap()).unwrap();
+        assert!(!run["modules"].as_array().unwrap().is_empty(), "{run}");
+        let doc = s.document.read();
+        let home = doc.home();
+        assert!(!home.furniture.is_empty());
+        for piece in &home.furniture {
+            assert_eq!(
+                home.resolve_level(piece.level),
+                ground,
+                "{} {} is on the storey of its wall",
+                piece.id,
+                piece.name
+            );
+        }
+        // And the storey shown is still the one it was.
+        assert_eq!(home.current_level(), upper);
+    }
+
+
+    #[test]
     fn an_item_set_into_joinery_takes_its_own_finish() {
         let s = server();
         let joinery: JoineryParams = serde_json::from_str(

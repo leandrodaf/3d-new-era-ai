@@ -2480,6 +2480,9 @@ pub(crate) fn place_noting(
             return Err("give `angle` or `facing`, not both".into());
         }
         let mut angle = spec.angle;
+        // It stands on the storey being edited — or, given a wall, on that
+        // wall's storey, whichever one is shown.
+        piece.level = doc.home().current_level();
         match (&spec.wall, spec.at) {
             (Some(wall), _) => {
                 let wall_id = wall.parse().map_err(|e| format!("{e}"))?;
@@ -2488,6 +2491,7 @@ pub(crate) fn place_noting(
                     .wall(wall_id)
                     .ok_or_else(|| format!("{wall} not found"))?
                     .clone();
+                piece.level = doc.home().resolve_level(wall.level);
                 let along = spec
                     .along
                     .unwrap_or_else(|| wall.start.distance(wall.end) / 2.0);

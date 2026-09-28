@@ -277,6 +277,13 @@ fn in_a_room(view: &Home, at: Point2) -> bool {
         .any(|r| r.points.len() >= 3 && crate::electrical::inside(&r.points, at))
 }
 
+/// The storey a piece is judged on: its own (`None` is the lowest one, as
+/// for every stored element). A piece about to be placed says its storey
+/// before it is judged.
+fn storey_of(home: &Home, piece: &Furniture) -> Option<crate::LevelId> {
+    home.resolve_level(piece.level)
+}
+
 /// Seats a fixed point where it is fixed: a wall point onto the face of the
 /// nearest wall, its back to it; a ceiling point at the ceiling height.
 /// Refuses one that has no structure to be fixed to.
@@ -284,7 +291,7 @@ pub fn seat(home: &Home, piece: &mut Furniture) -> Result<(), String> {
     let Some(mount) = mount_of(&piece.catalog) else {
         return Ok(());
     };
-    let view = home.level_view(home.current_level());
+    let view = home.level_view(storey_of(home, piece));
     match mount {
         Mount::Wall => {
             let (wall, dist) = view
@@ -405,7 +412,7 @@ pub fn counter_in_front(home: &Home, piece: &Furniture) -> Option<f64> {
     ) {
         return None;
     }
-    let view = home.level_view(home.current_level());
+    let view = home.level_view(storey_of(home, piece));
     view.furniture
         .iter()
         .flat_map(Furniture::flatten)
@@ -467,7 +474,7 @@ fn distance_to_segment(p: Point2, a: Point2, b: Point2) -> f64 {
 /// or in the span of a door, a window or an open passage at its height.
 /// Pieces not set into walls, or standing in no wall, are never refused.
 pub fn blocked(home: &Home, piece: &Furniture) -> Option<Text> {
-    let view = home.level_view(home.current_level());
+    let view = home.level_view(storey_of(home, piece));
     if mount_of(&piece.catalog) == Some(Mount::Floor) {
         return floor_blocked(&view, piece);
     }
@@ -714,7 +721,7 @@ pub fn is_appliance(f: &Furniture) -> bool {
 /// Where along its wall a refused point can go: the nearest place, within
 /// 1,5 m either way, that no opening, appliance or glass refuses.
 pub fn nearest_free(home: &Home, piece: &Furniture) -> Option<Point2> {
-    let view = home.level_view(home.current_level());
+    let view = home.level_view(storey_of(home, piece));
     let wall = in_wall(&view, piece)?;
     let (a, b) = (wall.start, wall.end);
     let len = a.distance(b).max(1e-9);
@@ -895,7 +902,7 @@ fn movable(f: &Furniture) -> bool {
 /// not a defect; a drain under a piece standing on the floor is, since it
 /// cannot be cleaned.
 pub fn hidden(home: &Home, piece: &Furniture) -> Option<Text> {
-    let view = home.level_view(home.current_level());
+    let view = home.level_view(storey_of(home, piece));
     if mount_of(&piece.catalog) == Some(Mount::Floor) {
         // Under a piece standing on the floor it cannot be cleaned: a
         // shower's or a tub's own drain is where it belongs.
@@ -1077,6 +1084,41 @@ mod tests {
             Some(FurnitureId(4))
         );
         assert!(host_of(&home, &tower(510.0)).is_none());
+    }
+
+    #[test]
+    fn a_stored_point_is_judged_on_its_own_storey_whichever_is_shown() {
+        use crate::elements::Level;
+        use crate::ids::LevelId;
+        let mut home = Home::default();
+        home.levels = vec![
+            Level {
+                id: LevelId(1),
+                elevation: 0.0,
+                height: 280.0,
+                ..Level::default()
+            },
+            Level {
+                id: LevelId(2),
+                elevation: 292.0,
+                height: 280.0,
+                elevation_index: 1,
+                ..Level::default()
+            },
+        ];
+        // A ground-floor wall and its outlet, stored without a storey: the lowest.
+        home.walls.push(Wall::new(
+            WallId(1),
+            Point2::new(0.0, 0.0),
+            Point2::new(400.0, 0.0),
+        ));
+        let point = outlet(30.0, (300.0, 9.5));
+        assert!(blocked(&home, &point).is_none(), "on its wall");
+        home.selected_level = Some(LevelId(2));
+        assert!(
+            blocked(&home, &point).is_none(),
+            "still on its wall upstairs shown"
+        );
     }
 
     #[test]
