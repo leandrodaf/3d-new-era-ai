@@ -75,10 +75,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- An item set into joinery — a sink bowl, a cooktop, an oven — takes its own `color`, `mat` and
-  `opacity` in `update`. It was refused like a board the host builds, so repainting a bathroom
-  meant leaving the bowl as it was or changing the countertop around it. The item is carried whole
-  when its host is rebuilt, and its finish with it; the host's own parts still refuse.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
