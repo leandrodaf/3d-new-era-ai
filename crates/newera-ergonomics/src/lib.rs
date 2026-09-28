@@ -2852,6 +2852,32 @@ mod tests {
         assert_eq!(Scene::new(&home).spaces[0].what, RoomUse::Bathroom);
     }
 
+    #[test]
+    fn a_washer_stands_under_a_countertop_with_a_sink() {
+        let mut home = Home::default();
+        square(&mut home, "Lavanderia", 300.0, 200.0);
+        let mut top = piece(20, "group", (150.0, 41.0), (264.0, 67.0, 90.0), 0.0);
+        top.name = "Bancada 264 × 67 cm".into();
+        top.properties.insert(
+            "joinery:params".into(),
+            r#"{"kind":"countertop","length":264,"depth":67,"height":90,"thickness":3,"cutouts":[{"kind":"sink","x":200}]}"#.into(),
+        );
+        home.furniture = vec![
+            top,
+            piece(21, "washer", (60.0, 39.0), (60.0, 60.0, 85.0), 0.0),
+        ];
+        let clash = |home: &Home| {
+            review(home, &Profile::default())
+                .findings
+                .iter()
+                .any(|f| f.message.contains("Ocupa o mesmo lugar"))
+        };
+        assert!(!clash(&home), "under the slab");
+        // Taller than the space under the slab, it is in the countertop.
+        home.furniture[1].height = 95.0;
+        assert!(clash(&home), "through the slab");
+    }
+
     fn square(home: &mut Home, name: &str, w: f64, d: f64) {
         let corners = [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)];
         for k in 0..4 {
