@@ -4754,12 +4754,20 @@
       "readOnlyHint": true,
       "title": "Render a photo"
     },
-    "description": "Realistic photo (path traced: sun from compass location and time, lamps, glass). cam=i stored view, or view=visitor/aerial (yaw,pitch). quality draft (~10 s) | good | best; hour = local solar time (e.g. 9, 15.5, 20); w/h small. Returns PNG.",
+    "description": "Realistic photo (path traced: sun from compass location and time, lamps, glass). cam=i stored view, or view=visitor/aerial (yaw,pitch). quality draft (~10 s) | good | best; hour = local solar time (e.g. 9, 15.5, 20); w/h small. Returns PNG. One runs at a time, on at most half the cores (4): threads lowers that, max_s stops it past a deadline, estimate=true answers the budget and the work (pixels, rays, triangles, memory) without rendering, cancel=true stops the one running (sessions shows it).",
     "inputSchema": {
       "properties": {
         "cam": {
           "description": "Stored point of view index",
           "type": "integer"
+        },
+        "cancel": {
+          "description": "Stop the photo being rendered now (`sessions` shows it)",
+          "type": "boolean"
+        },
+        "estimate": {
+          "description": "Answer the budget and what the photo would take, without rendering",
+          "type": "boolean"
         },
         "h": {
           "description": "Height px (default 360, 64..1200)",
@@ -4767,6 +4775,10 @@
         },
         "hour": {
           "description": "Local solar hour, 0–24",
+          "type": "number"
+        },
+        "max_s": {
+          "description": "Seconds it may take; past them it stops, and nothing is returned",
           "type": "number"
         },
         "pitch": {
@@ -4781,6 +4793,10 @@
             "best"
           ],
           "type": "string"
+        },
+        "threads": {
+          "description": "Threads it may use, under the budget (half the cores, at most 4)",
+          "type": "integer"
         },
         "view": {
           "description": "Default `aerial`",
@@ -4804,13 +4820,25 @@
     "name": "render_photo",
     "outputSchema": {
       "properties": {
+        "budget": {
+          "type": "object"
+        },
+        "measured": {
+          "type": "string"
+        },
+        "memory_mb": {
+          "type": "number"
+        },
         "mimeType": {
           "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "work": {
+          "type": "object"
         }
       },
-      "required": [
-        "mimeType"
-      ],
       "type": "object"
     },
     "title": "Render a photo"
@@ -4993,7 +5021,7 @@
       "readOnlyHint": true,
       "title": "List who is editing"
     },
-    "description": "People and agents on this project now: rows [id,name,cursor,selection,edits].",
+    "description": "People and agents on this project now: rows [id,name,cursor,selection,edits]; render, while one runs: {tool, seconds, phase, done, total, threads} (render_photo cancel=true stops it).",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -5001,6 +5029,9 @@
     "name": "sessions",
     "outputSchema": {
       "properties": {
+        "render": {
+          "type": "object"
+        },
         "rev": {
           "type": "integer"
         },

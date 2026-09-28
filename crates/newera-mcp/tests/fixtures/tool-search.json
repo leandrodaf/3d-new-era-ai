@@ -53,6 +53,8 @@
     ["3d image of one piece alone framed on a part", "render_3d"],
     ["attach product photos to the imported chair", "edit_model"],
     ["seat height of the product page compared with the model", "model"],
+    ["how heavy is a photo render cpu threads budget", "render_photo"],
+    ["cancel the render that is running", "render_photo"],
     ["lux illuminance per room", "lighting"],
     ["add light fixtures to reach lux", "edit_lighting"],
     ["electrical circuits breakers", "electrical"],

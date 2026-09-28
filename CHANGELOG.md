@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `render_photo` answers for the machine it runs on: `estimate=true` gives the thread budget
+  (half the cores, at most four, one render at a time) and the work — pixels, rays, triangles,
+  images, memory estimated from their sizes — without rendering, and says that time,
+  temperature and power are not measured; `threads` lowers the threads it may use, `max_s`
+  stops it past a deadline with nothing changed, and `cancel=true` stops the one running.
+  `sessions` shows the render running (`tool`, seconds, phase, progress, threads). An agent
+  could only pick a quality and a size, and a render already running was a refusal to wait on.
+
 - A piece keeps photos and measurements of the product it reproduces, with where they came
   from. `edit_model` `action=reference` adds a photo (`file`, `view`, `part`, `source`, `note`;
   `remove`, `clear`), which travels with the project; `render_3d piece=… ref=i` puts it beside

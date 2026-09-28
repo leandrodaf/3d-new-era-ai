@@ -1,5 +1,5 @@
 {
-  "total": 119195,
+  "total": 120128,
   "tools": {
     "accept": {
       "total": 1360,
@@ -278,10 +278,10 @@
       "output": 85
     },
     "render_photo": {
-      "total": 1150,
-      "description": 240,
-      "input": 646,
-      "output": 85
+      "total": 1950,
+      "description": 498,
+      "input": 1076,
+      "output": 197
     },
     "render_plan": {
       "total": 1694,
@@ -302,10 +302,10 @@
       "output": 288
     },
     "sessions": {
-      "total": 402,
-      "description": 77,
+      "total": 535,
+      "description": 183,
       "input": 33,
-      "output": 107
+      "output": 134
     },
     "show_plan": {
       "total": 770,
