@@ -277,6 +277,14 @@ fn in_a_room(view: &Home, at: Point2) -> bool {
         .any(|r| r.points.len() >= 3 && crate::electrical::inside(&r.points, at))
 }
 
+/// The storey a piece is judged on: its own, or — one not placed yet — the
+/// storey being edited, where it will land.
+fn storey_of(home: &Home, piece: &Furniture) -> Option<crate::LevelId> {
+    piece
+        .level
+        .map_or_else(|| home.current_level(), |l| home.resolve_level(Some(l)))
+}
+
 /// Seats a fixed point where it is fixed: a wall point onto the face of the
 /// nearest wall, its back to it; a ceiling point at the ceiling height.
 /// Refuses one that has no structure to be fixed to.
@@ -284,7 +292,7 @@ pub fn seat(home: &Home, piece: &mut Furniture) -> Result<(), String> {
     let Some(mount) = mount_of(&piece.catalog) else {
         return Ok(());
     };
-    let view = home.level_view(home.current_level());
+    let view = home.level_view(storey_of(home, piece));
     match mount {
         Mount::Wall => {
             let (wall, dist) = view
@@ -405,7 +413,7 @@ pub fn counter_in_front(home: &Home, piece: &Furniture) -> Option<f64> {
     ) {
         return None;
     }
-    let view = home.level_view(home.current_level());
+    let view = home.level_view(storey_of(home, piece));
     view.furniture
         .iter()
         .flat_map(Furniture::flatten)
@@ -467,7 +475,7 @@ fn distance_to_segment(p: Point2, a: Point2, b: Point2) -> f64 {
 /// or in the span of a door, a window or an open passage at its height.
 /// Pieces not set into walls, or standing in no wall, are never refused.
 pub fn blocked(home: &Home, piece: &Furniture) -> Option<Text> {
-    let view = home.level_view(home.current_level());
+    let view = home.level_view(storey_of(home, piece));
     if mount_of(&piece.catalog) == Some(Mount::Floor) {
         return floor_blocked(&view, piece);
     }
@@ -714,7 +722,7 @@ pub fn is_appliance(f: &Furniture) -> bool {
 /// Where along its wall a refused point can go: the nearest place, within
 /// 1,5 m either way, that no opening, appliance or glass refuses.
 pub fn nearest_free(home: &Home, piece: &Furniture) -> Option<Point2> {
-    let view = home.level_view(home.current_level());
+    let view = home.level_view(storey_of(home, piece));
     let wall = in_wall(&view, piece)?;
     let (a, b) = (wall.start, wall.end);
     let len = a.distance(b).max(1e-9);
@@ -895,7 +903,7 @@ fn movable(f: &Furniture) -> bool {
 /// not a defect; a drain under a piece standing on the floor is, since it
 /// cannot be cleaned.
 pub fn hidden(home: &Home, piece: &Furniture) -> Option<Text> {
-    let view = home.level_view(home.current_level());
+    let view = home.level_view(storey_of(home, piece));
     if mount_of(&piece.catalog) == Some(Mount::Floor) {
         // Under a piece standing on the floor it cannot be cleaned: a
         // shower's or a tub's own drain is where it belongs.
