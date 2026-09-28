@@ -1680,8 +1680,8 @@ mod tests {
         image::RgbaImage::from_pixel(40, 20, image::Rgba([200, 30, 30, 255]))
             .save(dir.join("frente.png"))
             .unwrap();
-        let file = dir.join("cadeira.obj").display().to_string();
-        let photo = dir.join("frente.png").display().to_string();
+        let file = path(&dir.join("cadeira.obj"));
+        let photo = path(&dir.join("frente.png"));
         let s = server();
         s.place(Parameters(
             serde_json::from_str(&format!(
