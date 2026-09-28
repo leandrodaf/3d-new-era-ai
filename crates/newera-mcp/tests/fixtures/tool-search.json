@@ -43,6 +43,8 @@
     ["parts of an imported model arm seat cushion", "model"],
     ["cushion passes through the frame intersection check", "model"],
     ["import model drawn in centimeters unit mm inches", "place"],
+    ["change the fabric color of an imported chair material", "edit_model"],
+    ["texture scale of an imported material too big", "edit_model"],
     ["lux illuminance per room", "lighting"],
     ["add light fixtures to reach lux", "edit_lighting"],
     ["electrical circuits breakers", "electrical"],
@@ -97,6 +99,7 @@
     ["how the ergonomics score is weighed", "rules"]
   ],
   "alike": [
+    ["model", "edit_model", "a read and the write that changes it: separate tools so a client runs the read without asking"],
     ["annotations", "edit_annotations", "a read and the write that changes it: separate tools so a client runs the read without asking"],
     ["cameras", "edit_cameras", "a read and the write that changes it: separate tools so a client runs the read without asking"],
     ["history", "edit_history", "a read and the write that changes it: separate tools so a client runs the read without asking"],

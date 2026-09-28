@@ -1221,7 +1221,12 @@ impl Mesh {
                 let planar = over_texture
                     .filter(|_| !has_uv.get(i).copied().unwrap_or(false))
                     .map(newera_core::Material::tile_size);
-                (color, layer, m.alpha, planar)
+                #[allow(clippy::cast_possible_truncation)]
+                let repeat = over
+                    .and_then(|o| o.repeat)
+                    .filter(|r| r.is_finite() && *r > 0.0)
+                    .map_or(1.0, |r| r as f32);
+                (color, layer, m.alpha, planar, repeat)
             })
             .collect();
         let planar_uv = |position: &[f32; 3], normal: &[f32; 3], [w, h]: [f64; 2]| {
@@ -1297,7 +1302,7 @@ impl Mesh {
                 };
                 color = [1.0; 3];
                 kind = layer;
-            } else if let Some((over, layer, _, planar)) = look {
+            } else if let Some((over, layer, _, planar, repeat)) = look {
                 if let Some(c) = over {
                     color = *c;
                 } else if let Some(layer) = layer {
@@ -1306,7 +1311,10 @@ impl Mesh {
                     uv = match planar {
                         Some(size) => planar_uv(position, normal, *size),
                         // The shader flips v, matching OBJ's bottom-up convention.
-                        None => local.uvs.get(k).copied().unwrap_or([0.0, 0.0]),
+                        None => local
+                            .uvs
+                            .get(k)
+                            .map_or([0.0, 0.0], |uv| uv.map(|c| c * repeat)),
                     };
                 }
             }
@@ -1409,7 +1417,7 @@ impl Mesh {
 
 /// How one model material is painted: `(color, image layer, alpha, planar
 /// tile size)`.
-type Look = (Option<[f32; 3]>, Option<u32>, f32, Option<[f64; 2]>);
+type Look = (Option<[f32; 3]>, Option<u32>, f32, Option<[f64; 2]>, f32);
 
 /// The part of the polygon `points` lying between `lo` and `hi` along a wall,
 /// as `along` measures it.
@@ -2193,6 +2201,7 @@ mod material_tests {
                 ..Material::default()
             }),
             shininess: None,
+            repeat: None,
         });
         let mesh = Mesh::piece_alone(&piece, &model);
         let us: Vec<f32> = mesh.vertices.iter().map(|v| v.uv[0]).collect();
@@ -2202,6 +2211,55 @@ mod material_tests {
         assert!((span - 4.0).abs() < 1e-3, "{us:?}");
         assert!(mesh.vertices.iter().all(|v| v.kind == IMAGE_BASE));
         assert_eq!(mesh.images, ["marble.png"]);
+    }
+
+    #[test]
+    fn a_material_repeated_twice_draws_its_image_at_half_the_size_and_the_piece_unchanged() {
+        // A seat whose file maps its fabric once across it.
+        let model = ModelMesh {
+            positions: vec![[0.0, 4.0, 0.0], [60.0, 4.0, 0.0], [60.0, 4.0, 50.0]],
+            normals: vec![[0.0, 1.0, 0.0]; 3],
+            colors: vec![[1.0; 3]; 3],
+            finishable: vec![],
+            indices: vec![0, 2, 1],
+            uvs: vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
+            vertex_materials: vec![0; 3],
+            materials: vec![MeshMaterial {
+                name: "tecido".into(),
+                color: [1.0; 3],
+                alpha: 1.0,
+                texture: Some("trama.png".into()),
+                shininess: 0.0,
+            }],
+            parts: vec![],
+        };
+        let mut piece = Furniture {
+            width: 60.0,
+            depth: 50.0,
+            height: 4.0,
+            ..Furniture::default()
+        };
+        let before = Mesh::piece_alone(&piece, &model);
+        piece.materials.push(ModelMaterial {
+            name: "tecido".into(),
+            key: None,
+            color: None,
+            texture: None,
+            shininess: None,
+            repeat: Some(2.0),
+        });
+        let after = Mesh::piece_alone(&piece, &model);
+        let near = |x: &[f32], y: &[f32]| x.iter().zip(y).all(|(p, q)| (p - q).abs() < 1e-5);
+        for (a, b) in before.vertices.iter().zip(&after.vertices) {
+            assert!(near(&a.position, &b.position));
+            assert!(
+                near(&[a.uv[0] * 2.0, a.uv[1] * 2.0], &b.uv),
+                "{:?} {:?}",
+                a.uv,
+                b.uv
+            );
+        }
+        assert!(after.vertices.iter().any(|v| near(&v.uv, &[2.0, 2.0])));
     }
 }
 

@@ -175,6 +175,7 @@ fn image_overrides_and_changed_model_geometry_invalidate_views() {
                 color: None,
                 texture: Some(texture),
                 shininess: None,
+                repeat: None,
             });
         } else {
             piece.texture = Some(texture);

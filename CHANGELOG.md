@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `edit_model` `action=material` changes one material of an imported model by the name `model`
+  lists — `color`, `mat` (an image over it), `repeat` (its texture scale: 2 draws the image at
+  half size, the piece unchanged), `clear` — in one undo step. Per-material overrides existed
+  (a Sweet Home 3D import brings them) but no tool could set one, and a weave drawn too large
+  could only be fixed in the file.
+
 - `place model=…` takes `unit` (`m`, `cm`, `mm`, `in`) for the file's numbers, and the piece
   keeps it for `model` and `edit_model`. The unit was only guessed from the size — under 20 units
   meters, over 2000 millimeters — so a 5 cm knob drawn in centimeters came in 5 m wide, and an

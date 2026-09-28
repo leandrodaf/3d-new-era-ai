@@ -51,13 +51,14 @@ fn unit_of(
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct EditModelParams {
-    /// `replace`: put another file in the pieces, keeping each one's id and all the rest.
-    #[schemars(extend("enum" = ["replace"]))]
+    /// `replace` puts another file in the pieces, keeping each one's id and all the rest;
+    /// `material` changes one of their materials, by name.
+    #[schemars(extend("enum" = ["replace", "material"]))]
     action: String,
     /// Pieces whose model changes, e.g. `["f12"]`.
     ids: Vec<String>,
     /// replace: the new .obj/.gltf/.glb file.
-    file: String,
+    file: Option<String>,
     /// replace: also every other piece using the same file as `ids` (default: only `ids`).
     #[serde(default)]
     every: bool,
@@ -68,6 +69,17 @@ pub(crate) struct EditModelParams {
     rev: Option<u64>,
     /// replace: unit of the new file's numbers, `m`, `cm`, `mm` or `in` (default: guessed).
     unit: Option<String>,
+    /// material: which one, by the name `model` lists (`tecido`).
+    material: Option<String>,
+    /// material: its color `[r,g,b]`.
+    color: Option<[u8; 3]>,
+    /// material: an image over it, `img:trama.png`, or `none` for the file's own.
+    mat: Option<String>,
+    /// material: times its image repeats against the file's mapping (2 draws it at half size).
+    repeat: Option<f64>,
+    /// material: back to the file's own look.
+    #[serde(default)]
+    clear: bool,
 }
 
 /// A short, stable name for the bytes of a file: which version was loaded.
@@ -307,53 +319,158 @@ impl NewEraMcp {
 #[tool_router(router = edit_model_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Change the model file of placed pieces. replace swaps the file of ids (every=true: of every piece using the same file) in one undo step, keeping each piece's id, position, angle, storey, size (size=natural takes the file's), finish, material overrides, names and links; the new file is read first and nothing changes if it fails. rev refuses the change when the plan moved on since that revision. Reply ok with the ids, then a line per piece: old file → new, the version loaded (bytes, hash), overrides that no longer match a material, and what the new file does not draw. model inspects a file; place imports a new piece."
+        description = "Change the model of placed pieces. replace swaps the file of ids (every=true: of every piece using the same file) in one undo step, keeping each piece's id, position, angle, storey, size (size=natural takes the file's), finish, material overrides, names and links; the new file is read first and nothing changes if it fails. rev refuses the change when the plan moved on since that revision. Reply ok with the ids, then a line per piece: old file → new, the version loaded (bytes, hash), overrides that no longer match a material, and what the new file leaves out. material changes one of their materials by the name model lists — color, mat (an image over it), repeat, its texture scale (2 halves the image, the piece unchanged), clear. model inspects a file; place imports a new piece."
     )]
     pub(crate) fn edit_model(
         &self,
         Parameters(p): Parameters<EditModelParams>,
     ) -> Result<String, ErrorData> {
-        if p.action != "replace" {
-            return Err(invalid(format!("action `{}`: replace", p.action)));
+        match p.action.as_str() {
+            "replace" => self.replace_model(&p),
+            "material" => self.model_material(p),
+            other => Err(invalid(format!("action `{other}`: replace or material"))),
         }
+    }
+}
+
+/// The pieces `ids` names, each built from a model file.
+fn model_pieces(
+    doc: &newera_core::Document,
+    ids: &[String],
+) -> Result<Vec<newera_core::Furniture>, ErrorData> {
+    let mut out = Vec::new();
+    for raw in ids {
+        let id = raw
+            .parse::<newera_core::FurnitureId>()
+            .map_err(|e| invalid(format!("ids: {e}")))?;
+        let piece = doc
+            .home()
+            .find_piece(id)
+            .ok_or_else(|| invalid(format!("{raw} not found")))?;
+        if piece.model.is_none() {
+            return Err(invalid(format!(
+                "{raw} is built from the catalog (`{}`), not an imported model",
+                piece.catalog
+            )));
+        }
+        out.push(piece.clone());
+    }
+    if out.is_empty() {
+        return Err(invalid("ids: the pieces whose model changes"));
+    }
+    Ok(out)
+}
+
+/// Refuses a change prepared on another revision of the plan.
+fn at_revision(doc: &newera_core::Document, rev: Option<u64>) -> Result<(), ErrorData> {
+    match rev {
+        Some(rev) if rev != doc.revision() => Err(invalid(format!(
+            "the plan is at rev {} now, not {rev}: read it again (home ids=…) and decide on what is there",
+            doc.revision()
+        ))),
+        _ => Ok(()),
+    }
+}
+
+impl NewEraMcp {
+    fn model_material(&self, p: EditModelParams) -> Result<String, ErrorData> {
+        let name = p
+            .material
+            .ok_or_else(|| invalid("material: which one, by the name `model` lists"))?;
+        if !p.clear && p.color.is_none() && p.mat.is_none() && p.repeat.is_none() {
+            return Err(invalid("material: give color, mat, repeat or clear"));
+        }
+        if p.repeat.is_some_and(|r| !(r.is_finite() && r > 0.0)) {
+            return Err(invalid("repeat: a number above 0"));
+        }
+        let texture = match p.mat.as_deref() {
+            None => None,
+            Some(raw) => {
+                let m = crate::edit::material(raw).map_err(invalid)?;
+                if m.as_ref().is_some_and(|m| m.image.is_none()) {
+                    return Err(invalid(
+                        "mat: an image (`img:file 60x60`) or none; a plain color is `color`",
+                    ));
+                }
+                Some(m)
+            }
+        };
+        let mut doc = self.document.write();
+        at_revision(&doc, p.rev)?;
+        let pieces = model_pieces(&doc, &p.ids)?;
+        let mut commands = Vec::with_capacity(pieces.len());
+        for mut piece in pieces {
+            let file = piece.model.clone().unwrap_or_default();
+            let path = doc.resolve_asset(&file);
+            let loaded = newera_catalog::load_model(&path)
+                .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+            if !loaded.mesh.materials.iter().any(|m| m.name == name) {
+                let names: Vec<&str> = loaded
+                    .mesh
+                    .materials
+                    .iter()
+                    .map(|m| m.name.as_str())
+                    .collect();
+                return Err(invalid(format!(
+                    "{}: no material `{name}` in {file} ({})",
+                    piece.id,
+                    names.join(", ")
+                )));
+            }
+            let slot = piece.materials.iter().position(|m| m.name == name);
+            if p.clear {
+                if let Some(k) = slot {
+                    piece.materials.remove(k);
+                }
+            } else {
+                let k = slot.unwrap_or_else(|| {
+                    piece.materials.push(newera_core::ModelMaterial {
+                        name: name.clone(),
+                        key: None,
+                        color: None,
+                        texture: None,
+                        shininess: None,
+                        repeat: None,
+                    });
+                    piece.materials.len() - 1
+                });
+                let m = &mut piece.materials[k];
+                if let Some(c) = p.color {
+                    m.color = Some(c);
+                }
+                if let Some(t) = texture.clone() {
+                    m.texture = t;
+                }
+                if let Some(r) = p.repeat {
+                    m.repeat = ((r - 1.0).abs() > 1e-9).then_some(r);
+                }
+            }
+            commands.push(newera_core::Command::update(piece));
+        }
+        let ids = p.ids.clone();
+        doc.execute(newera_core::Command::Batch { commands })
+            .map_err(core)?;
+        Ok(ok(&doc, &ids))
+    }
+
+    fn replace_model(&self, p: &EditModelParams) -> Result<String, ErrorData> {
+        let file = p
+            .file
+            .clone()
+            .ok_or_else(|| invalid("replace: file, the new .obj/.gltf/.glb"))?;
         let natural = match p.size.as_deref() {
             None | Some("keep") => false,
             Some("natural") => true,
             Some(other) => return Err(invalid(format!("size `{other}`: keep or natural"))),
         };
         let mut doc = self.document.write();
-        if let Some(rev) = p.rev
-            && rev != doc.revision()
-        {
-            return Err(invalid(format!(
-                "the plan is at rev {} now, not {rev}: read it again (home ids=…) and decide on what is there",
-                doc.revision()
-            )));
-        }
-        let path = doc.resolve_asset(&p.file);
+        at_revision(&doc, p.rev)?;
+        let path = doc.resolve_asset(&file);
         let unit = unit_of(p.unit.as_deref(), None)?;
         let loaded = newera_catalog::load_model_in(&path, unit)
             .map_err(|e| invalid(format!("{}: {e} — nothing was replaced", path.display())))?;
+        let mut targets = model_pieces(&doc, &p.ids)?;
         let home = doc.home();
-        let mut targets: Vec<newera_core::Furniture> = Vec::new();
-        for raw in &p.ids {
-            let id = raw
-                .parse::<newera_core::FurnitureId>()
-                .map_err(|e| invalid(format!("ids: {e}")))?;
-            let piece = home
-                .find_piece(id)
-                .ok_or_else(|| invalid(format!("{raw} not found")))?;
-            if piece.model.is_none() {
-                return Err(invalid(format!(
-                    "{raw} is built from the catalog (`{}`), not an imported model",
-                    piece.catalog
-                )));
-            }
-            targets.push(piece.clone());
-        }
-        if targets.is_empty() {
-            return Err(invalid("ids: the pieces whose model changes"));
-        }
         if p.every {
             let files: Vec<Option<String>> = targets.iter().map(|t| t.model.clone()).collect();
             for piece in home
@@ -386,10 +503,10 @@ impl NewEraMcp {
         let mut commands = Vec::with_capacity(targets.len());
         let mut lines = Vec::with_capacity(targets.len());
         for mut piece in targets {
-            let old = piece.model.replace(p.file.clone()).unwrap_or_default();
+            let old = piece.model.replace(file.clone()).unwrap_or_default();
             // A name that was only the old file's is the new file's now.
             if stem(&old).as_deref() == Some(piece.name.as_str())
-                && let Some(new) = stem(&p.file)
+                && let Some(new) = stem(&file)
             {
                 piece.name = new;
             }
@@ -409,7 +526,7 @@ impl NewEraMcp {
                 piece.depth = loaded.size[1];
                 piece.height = loaded.size[2];
             }
-            let mut line = format!("{}: {old} → {} ({version})", piece.id, p.file);
+            let mut line = format!("{}: {old} → {file} ({version})", piece.id);
             let orphans: Vec<&str> = piece
                 .materials
                 .iter()
@@ -590,6 +707,7 @@ mod tests {
                 color: Some([0, 0, 255]),
                 texture: None,
                 shininess: None,
+                repeat: None,
             });
             s.document
                 .write()
@@ -879,6 +997,75 @@ mod tests {
             ))
             .unwrap_err();
         assert!(catalog.message.contains("for model="), "{catalog:?}");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_material_changes_by_name_and_its_weave_by_repeat() {
+        let dir =
+            std::env::temp_dir().join(format!("newera-model-material-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("win.obj"),
+            "mtllib win.mtl\nusemtl tecido\nv 0 0 0\nv 0.6 0 0\nv 0.6 0.8 0.5\nf 1 2 3\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("win.mtl"), "newmtl tecido\nKd 0.2 0.4 0.3\n").unwrap();
+        let file = dir.join("win.obj").display().to_string();
+        let s = server();
+        s.place(Parameters(
+            serde_json::from_str(&format!(r#"{{"items":[{{"model":"{file}","at":[0,0]}}]}}"#))
+                .unwrap(),
+        ))
+        .unwrap();
+        let edit = |json: &str| s.edit_model(Parameters(serde_json::from_str(json).unwrap()));
+        let overrides = || {
+            let doc = s.document.read();
+            doc.home()
+                .find_piece("f1".parse().unwrap())
+                .unwrap()
+                .materials
+                .clone()
+        };
+        let size = || {
+            let doc = s.document.read();
+            let p = doc.home().find_piece("f1".parse().unwrap()).unwrap();
+            format!("{:.1} {:.1} {:.1}", p.width, p.depth, p.height)
+        };
+        let before = size();
+        edit(r#"{"action":"material","ids":["f1"],"material":"tecido","color":[20,60,40],"repeat":2}"#).unwrap();
+        let set = overrides();
+        assert_eq!(
+            (set.len(), set[0].color, set[0].repeat),
+            (1, Some([20, 60, 40]), Some(2.0))
+        );
+        assert_eq!(size(), before, "the weave changes, the chair does not");
+        edit(r#"{"action":"material","ids":["f1"],"material":"tecido","mat":"img:trama.png 5x5"}"#)
+            .unwrap();
+        assert!(
+            overrides()[0]
+                .texture
+                .as_ref()
+                .is_some_and(|t| t.image.as_deref() == Some("trama.png"))
+        );
+        assert_eq!(
+            overrides()[0].color,
+            Some([20, 60, 40]),
+            "what was not given stays"
+        );
+        let unknown =
+            edit(r#"{"action":"material","ids":["f1"],"material":"couro","color":[0,0,0]}"#)
+                .unwrap_err();
+        assert!(
+            unknown.message.contains("no material `couro`") && unknown.message.contains("tecido"),
+            "{unknown:?}"
+        );
+        let pattern =
+            edit(r##"{"action":"material","ids":["f1"],"material":"tecido","mat":"#ff0000"}"##)
+                .unwrap_err();
+        assert!(pattern.message.contains("an image"), "{pattern:?}");
+        edit(r#"{"action":"material","ids":["f1"],"material":"tecido","clear":true}"#).unwrap();
+        assert!(overrides().is_empty());
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

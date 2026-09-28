@@ -936,6 +936,7 @@ impl<'g> Importer<'g> {
                     color: m.color("color"),
                     texture: self.texture(m.obj("texture"), None, shininess.unwrap_or(0.0)),
                     shininess,
+                    repeat: None,
                 }
             })
             .collect();
