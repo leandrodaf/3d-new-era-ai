@@ -57,7 +57,7 @@ uses the type.
   argument nobody declared is refused by name, with what the tool takes instead
   (`unknown_arguments_are_refused_by_name`). A misspelled `dry` would otherwise write.
 - An argument that belongs to some actions says so at the start of its description —
-  `For \`route\`: …`, `For \`cable\` and \`route\`: …`, or `rotate/mirror: …` — and the
+  ``For `route`: …``, ``For `cable` and `route`: …``, or `rotate/mirror: …` — and the
   same check refuses it with any other action, instead of answering as if it had been used.
 - A refusal is a tool result with `isError: true`, not a protocol error: the agent reads
   why and tries again. The reason says what to do next — the valid choices, and which
