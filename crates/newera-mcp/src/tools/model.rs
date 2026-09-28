@@ -141,6 +141,11 @@ mod tests {
     use super::*;
     use crate::tools::server;
 
+    /// A file's path to write inside JSON: `\\` would escape, `/` works everywhere.
+    fn path(p: &std::path::Path) -> String {
+        p.display().to_string().replace('\\', "/")
+    }
+
     fn call(s: &NewEraMcp, json: &str) -> Result<Value, ErrorData> {
         s.model(Parameters(serde_json::from_str(json).unwrap()))
             .map(|r| serde_json::from_str(&r).unwrap())
@@ -161,7 +166,7 @@ mod tests {
             "newmtl tecido\nKd 0.2 0.4 0.6\nmap_Kd trama.png\nnewmtl madeira\nKd 0.5 0.3 0.1\nmap_Bump veio.png\n",
         )
         .unwrap();
-        let file = dir.join("chair.obj").display().to_string();
+        let file = path(&dir.join("chair.obj"));
         let s = server();
         let seen = call(&s, &format!(r#"{{"file":"{file}"}}"#)).unwrap();
         assert_eq!(seen["unit"], "m", "{seen}");
