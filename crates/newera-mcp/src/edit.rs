@@ -1183,6 +1183,11 @@ pub(crate) fn rename(doc: &mut Document, spec: &RenameSpec) -> EditResult<()> {
 /// is, never where it is or how big — the group owns that and rebuilds it.
 const PART_FIELDS: [&str; 6] = ["id", "name", "brand", "model_name", "url", "layer"];
 
+/// What an item set into joinery — a sink bowl, a cooktop, an oven — takes
+/// besides: its own finish. It is not rebuilt with its host but carried
+/// whole, so a finish given to it stays.
+const EMBEDDED_FIELDS: [&str; 3] = ["color", "mat", "opacity"];
+
 /// A piece declared fixed or free-standing, or `""` to clear it.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, JsonSchema)]
 #[serde(untagged)]
@@ -1254,15 +1259,29 @@ fn rename_part(
     ) else {
         return Err(missing(home, id));
     };
+    let embedded = owner
+        .flatten()
+        .into_iter()
+        .any(|p| p.id == part && p.properties.contains_key(newera_joinery::EMBED_KEY));
+    let takes: Vec<&str> = PART_FIELDS
+        .iter()
+        .chain(if embedded { &EMBEDDED_FIELDS[..] } else { &[] })
+        .copied()
+        .collect();
     if let Some(bad) = spec
         .fields()
         .into_iter()
-        .find(|f| !PART_FIELDS.contains(&f.as_str()))
+        .find(|f| !takes.contains(&f.as_str()))
     {
         return Err(format!(
-            "{}; a part takes only {} on its own (`{bad}` belongs to the group)",
+            "{}; {} takes only {} on its own (`{bad}` belongs to the group)",
             missing(home, id),
-            PART_FIELDS[1..].join(", ")
+            if embedded {
+                "an item set into it"
+            } else {
+                "a part"
+            },
+            takes[1..].join(", ")
         ));
     }
     // Two parts of one group in one call edit the same copy of the group.
@@ -1290,6 +1309,13 @@ fn rename_part(
     piece.info.url = text(spec.url, piece.info.url.take());
     if let Some(layer) = &spec.layer {
         set_layer(piece, layer)?;
+    }
+    piece.color = spec.color.or(piece.color);
+    if let Some(raw) = &spec.mat {
+        piece.texture = material(raw)?;
+    }
+    if let Some(o) = spec.opacity {
+        piece.opacity = (o < 1.0).then_some(o.clamp(0.0, 1.0));
     }
     commands.push(Command::Update {
         element: Element::Furniture(group),

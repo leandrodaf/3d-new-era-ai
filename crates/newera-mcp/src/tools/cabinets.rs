@@ -547,4 +547,52 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn an_item_set_into_joinery_takes_its_own_finish() {
+        let s = server();
+        let joinery: JoineryParams = serde_json::from_str(
+            r#"{"kind":"countertop","p":{"length":120,"depth":55,"height":90},"at":[100,100]}"#,
+        )
+        .unwrap();
+        s.joinery(Parameters(joinery)).unwrap();
+        let top = s.document.read().home().furniture[0].id.to_string();
+        let p: EmbedParams =
+            serde_json::from_str(&format!(r#"{{"cat":"sink-bowl","host":"{top}"}}"#)).unwrap();
+        let reply: serde_json::Value =
+            serde_json::from_str(&s.embed(Parameters(p)).unwrap()).unwrap();
+        let bowl = reply["item"].as_str().unwrap().to_owned();
+        let update = |json: String| {
+            s.update(Parameters(serde_json::from_str(&json).unwrap()))
+                .map_err(|e| e.message.to_string())
+        };
+        update(format!(
+            r#"{{"items":[{{"id":"{bowl}","color":[20,20,20],"mat":"marble #202020 60"}}]}}"#
+        ))
+        .unwrap();
+        // A board the host builds is still the host's to change.
+        let board = s.document.read().home().furniture[0]
+            .children
+            .iter()
+            .find(|c| !c.properties.contains_key(newera_joinery::EMBED_KEY))
+            .unwrap()
+            .id
+            .to_string();
+        let refused = update(format!(
+            r#"{{"items":[{{"id":"{board}","color":[20,20,20]}}]}}"#
+        ))
+        .unwrap_err();
+        assert!(refused.contains("belongs to the group"), "{refused}");
+        // Rebuilt longer, the host carries the bowl with its finish.
+        let joinery: JoineryParams =
+            serde_json::from_str(&format!(r#"{{"id":"{top}","p":{{"length":150}}}}"#)).unwrap();
+        s.joinery(Parameters(joinery)).unwrap();
+        let doc = s.document.read();
+        let bowl = doc
+            .home()
+            .find_piece(bowl.parse().unwrap())
+            .expect("still in its host");
+        assert_eq!(bowl.color, Some([20, 20, 20]));
+        assert!(bowl.texture.as_ref().is_some_and(|t| t.pattern.is_some()));
+    }
 }
