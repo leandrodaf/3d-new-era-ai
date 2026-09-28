@@ -587,7 +587,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn a_piece_given_a_wall_stands_on_that_walls_storey() {
         let s = server();
