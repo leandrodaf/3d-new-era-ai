@@ -199,6 +199,11 @@ impl NewEraMcp {
         if let Some(at) = p.at {
             place.position = at;
         }
+        // A build stays on its storey; a new one lands on the storey being
+        // edited, and one backed onto a wall on that wall's storey.
+        let mut level = existing
+            .as_ref()
+            .map_or_else(|| doc.home().current_level(), |g| g.level);
         if let Some(wall) = &p.wall {
             let wall_id: newera_core::WallId = wall.parse().map_err(|e| invalid(format!("{e}")))?;
             let wall = doc
@@ -206,6 +211,7 @@ impl NewEraMcp {
                 .wall(wall_id)
                 .cloned()
                 .ok_or_else(|| invalid(format!("{wall} not found")))?;
+            level = doc.home().resolve_level(wall.level);
             let along = p
                 .along
                 .unwrap_or_else(|| wall.start.distance(wall.end) / 2.0);
@@ -243,7 +249,7 @@ impl NewEraMcp {
             (g.name != before.name).then(|| g.name.clone())
         });
         let mut group = newera_core::Furniture {
-            level: existing.as_ref().and_then(|g| g.level),
+            level,
             name: renamed.unwrap_or_else(|| group.name.clone()),
             ..group
         };
