@@ -75,11 +75,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- A door, a point or a cabinet put on a wall now stands on that wall's storey. Before, `place`,
-  `joinery` and `cabinet_run` put it on the storey shown: a door given a ground-floor wall while
-  the upper floor was selected was made upstairs, loose and opening nothing, and an outlet on
-  that wall was refused as having no wall to hold it. Fixed points are also judged against the
-  walls and ceilings of their own storey.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
