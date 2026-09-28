@@ -247,10 +247,7 @@ mod tests {
             let doc = s.document.read();
             doc.home().resolve_level(ground).unwrap().to_string()
         };
-        let (shown, rev) = {
-            let doc = s.document.read();
-            (doc.home().current_level(), doc.revision())
-        };
+        let shown = s.document.read().home().current_level();
         let level = format!(r#"{{"level":"{ground}"}}"#);
         let json = |text: String| -> serde_json::Value { serde_json::from_str(&text).unwrap() };
         let ergonomics = json(
