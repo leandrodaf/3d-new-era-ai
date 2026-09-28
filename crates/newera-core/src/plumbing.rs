@@ -1664,7 +1664,6 @@ mod tests {
     }
 
     #[test]
-
     fn a_fixture_is_named_with_its_own_article() {
         use crate::vocabulary::Language;
         let mut home = Home::default();
