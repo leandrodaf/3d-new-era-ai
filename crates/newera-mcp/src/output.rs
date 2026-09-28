@@ -990,6 +990,15 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
                 ("stderr", text("What it complained")),
                 ("edits", int("Changes it made")),
                 ("revision", int("Plan revision after it")),
+                (
+                    "usage",
+                    object("{peak_mb, cpu_s, measured}: what it used, where measurable"),
+                ),
+                ("limits", strings("Limits applied to its process")),
+                (
+                    "not_applied",
+                    strings("Limits it asked for that this system could not apply"),
+                ),
             ],
             &["ok", "stdout", "stderr", "edits", "revision"],
         ),

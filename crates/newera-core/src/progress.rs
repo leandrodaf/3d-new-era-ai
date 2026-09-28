@@ -75,6 +75,39 @@ pub fn cancelled() -> bool {
     LISTENING.with(|slot| slot.borrow().as_ref().is_some_and(|w| w.cancelled()))
 }
 
+/// Heavy work running now (a photo, a modeler run by a plugin): one at a
+/// time for the whole process, so the budget is shared and not
+/// multiplied by every caller.
+static HEAVY: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Holds the heavy-work slot until dropped.
+#[derive(Debug)]
+pub struct Heavy(());
+
+impl Drop for Heavy {
+    fn drop(&mut self) {
+        HEAVY
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+    }
+}
+
+/// Takes the heavy-work slot for `what`.
+///
+/// # Errors
+/// What holds it, when something does.
+pub fn heavy(what: &str) -> Result<Heavy, String> {
+    let mut slot = HEAVY
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(holder) = slot.as_ref() {
+        return Err(holder.clone());
+    }
+    *slot = Some(what.to_owned());
+    Ok(Heavy(()))
+}
+
 /// What work says when it was told to stop.
 pub const CANCELLED: &str = "cancelado";
 
