@@ -24,7 +24,7 @@ Plan axes: x right, y down. When the person has the editor open at \
 3dneweraai.com/app and signed in, calls reach it and every change appears there; \
 otherwise they work on the account's active project in the cloud, kept after every \
 change (projects lists them). Reads never change the plan; what changes it is a tool \
-of its own. show_plan shows the plan to the person.";
+of its own. show_plan shows the plan to the person; `rules` says what a review checks against.";
 
 /// Tools that only make sense on the person's own machine, never here
 /// (the directories' rules, and a server's filesystem): see D16.
@@ -107,26 +107,14 @@ fn failure(id: &Value, code: i32, message: &str) -> Value {
 
 /// What the tools that deal in files mean here, where the files are the
 /// account's projects and exports come back as links.
-const CLOUD_MEANING: [(&str, &str); 5] = [
+const CLOUD_MEANING: [(&str, &str); 2] = [
     (
-        "open_home",
-        "Open one of the account's projects by name (projects lists them); it becomes the active one.",
+        "file",
+        "Start, open or keep the account's projects. new {name?}: a new, empty project, made the active one. open {path}: one of the account's projects by name (projects lists them), made the active one. save {path?}: keeps the active project now — it is also kept after every change; path renames it.",
     ),
     (
-        "save_home",
-        "Keep the active project now — it is also kept after every change. path renames it.",
-    ),
-    (
-        "new_home",
-        "Start a new, empty project in the account and make it the active one; name is optional.",
-    ),
-    (
-        "export_plan",
-        "Export the active project by the extension of path: plan .pdf (A3; scale=50/100 or fit), .svg or .png; 3D model .glb or .obj. Reply: a link to the file, good for a day.",
-    ),
-    (
-        "export_cut_list",
-        "Write the cut list of joinery builds as .csv, or .dxf/.svg sheets (path gives the name and the format). Reply: a link to the file, good for a day.",
+        "export",
+        "Export the active project to a file, by the extension of path. what=plan (default): .pdf (A3; scale=50/100 or fit), .svg or .png, or the 3D model as .glb or .obj. what=cut_list: the joinery's cut list as .csv, or .dxf/.svg sheets. Reply: a link to the file, good for a day.",
     ),
 ];
 
@@ -141,16 +129,23 @@ fn hosted_tools() -> Vec<Value> {
     for tool in &mut tools {
         if let Some((_, meaning)) = CLOUD_MEANING.iter().find(|(n, _)| tool["name"] == *n) {
             tool["description"] = json!(meaning);
-            // Here a file comes back as a link, in an `ok` line.
-            if tool["name"] == "export_cut_list" {
-                tool["outputSchema"] = newera_mcp::output::ok_schema();
+            // A project here has a name of its own, given when it starts.
+            if tool["name"] == "file" {
+                tool["inputSchema"]["properties"]["name"] = json!({
+                    "type": "string",
+                    "description": "For `new`: the project's name",
+                });
+                tool["inputSchema"]["properties"]["path"] = json!({
+                    "type": "string",
+                    "description": "For `open` and `save`: a project's name — open takes one projects lists, save renames the active one",
+                });
             }
         }
     }
     tools.push(json!({
         "name": "projects",
         "title": "List your projects",
-        "description": "The projects kept in the account: rows [name, id, kb, updated, active], the space used and the plan's limits. open_home switches the active one; new_home starts one.",
+        "description": "The projects kept in the account: rows [name, id, kb, updated, active], the space used and the plan's limits. file action=open switches the active one; action=new starts one.",
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false},
         "annotations": {"title": "List your projects", "readOnlyHint": true, "openWorldHint": false},
         "outputSchema": {

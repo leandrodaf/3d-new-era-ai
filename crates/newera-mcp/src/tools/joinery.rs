@@ -261,7 +261,7 @@ impl NewEraMcp {
     }
     #[tool(
         name = "cut_list",
-        description = "Cut list of joinery builds, and of groups drawn by hand: each part of a drawn group up to 50 mm thick is a board at the size it was drawn (board is its finish and thickness, no edge banding), the groups are named in drawn and the parts that are not boards in skipped [[id,name]]. Rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. export_cut_list writes it as .csv, or .dxf/.svg (boards laid out on sheets). sources names the panel standards behind the boards: MDF is a dry-process fibreboard (NBR 15316), MDP a particleboard of 551 to 750 kg/m³ that holds screws better (NBR 14810)."
+        description = "Cut list of joinery builds, and of groups drawn by hand: each part of a drawn group up to 50 mm thick is a board at the size it was drawn (board is its finish and thickness, no edge banding), the groups are named in drawn and the parts that are not boards in skipped [[id,name]]. Rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. export what=cut_list writes it as .csv, or .dxf/.svg (boards laid out on sheets). sources names the panel standards behind the boards: MDF is a dry-process fibreboard (NBR 15316), MDP a particleboard of 551 to 750 kg/m³ that holds screws better (NBR 14810)."
     )]
     pub(crate) fn read_cut_list(
         &self,
@@ -269,14 +269,12 @@ impl NewEraMcp {
     ) -> Result<String, ErrorData> {
         if p.path.is_some() {
             return Err(invalid(
-                "cut_list only reads; export_cut_list writes the file",
+                "cut_list only reads; export (what=cut_list) writes the file",
             ));
         }
         self.cut_list(Parameters(p))
     }
-    #[tool(
-        description = "Write the cut list of joinery builds (and of groups drawn by hand) to a file: path .csv (spreadsheet), .dxf (boards laid out on sheets, for CNC) or .svg (sheets to view). ids: builds or drawn groups (default every one on this storey). The cut_list tool reads it."
-    )]
+    /// Writes the cut list to a file.
     pub(crate) fn export_cut_list(
         &self,
         Parameters(p): Parameters<CutListExportParams>,

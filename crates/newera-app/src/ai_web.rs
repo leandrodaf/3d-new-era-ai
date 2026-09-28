@@ -506,9 +506,9 @@ fn hold(
                 .map(|tool| {
                     serde_json::json!({
                         "name": tool.name,
-                        "description": if tool.name == "save_home" {
-                            "Download a .newera project backup in the browser. path supplies a filename only. Reports download_started (not disk confirmation) and autosave recovery status; no server file is written.".to_owned()
-                        } else if tool.name == "get_home" {
+                        "description": if tool.name == "file" {
+                            "Start or keep the project in this browser tab. new: an empty project in place of this one. save {path?}: downloads a .newera backup; path supplies a filename only; reports download_started (not disk confirmation) and autosave recovery status, and no server file is written. open reads files on a desktop only.".to_owned()
+                        } else if tool.name == "home" {
                             format!("{} Browser replies also include recovery state, current_revision, saved_revision or restored_from_revision, timestamp and any storage failure.", tool.description.as_deref().unwrap_or(""))
                         } else { tool.description.as_deref().unwrap_or("").to_owned() },
                         "inputSchema": tool.input_schema,
@@ -666,7 +666,7 @@ fn run(
     if TOO_SLOW_HERE.contains(&name) {
         return Err("A ferramenta video salva arquivos no aplicativo. No navegador, use Criar vídeo para baixar o AVI.".into());
     }
-    if name == "save_home" {
+    if name == "file" && args["action"] == "save" {
         let doc = document.read();
         let requested = args["path"].as_str().unwrap_or("projeto.newera");
         let basename = requested
@@ -688,7 +688,7 @@ fn run(
     }
     let result = newera_mcp::call(document.clone(), name, args)?;
     let mut result = serde_json::to_value(result).map_err(|e| e.to_string())?;
-    if name == "get_home"
+    if name == "home"
         && let Some(content) = result["content"].as_array_mut()
     {
         for item in content {

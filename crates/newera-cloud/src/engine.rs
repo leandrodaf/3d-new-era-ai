@@ -9,7 +9,7 @@
 //! server's.
 //!
 //! What a server cannot do is refused with a reason, and what means
-//! something else here is translated: `open_home`/`save_home`/`new_home` work
+//! something else here is translated: `file` (new, open, save) works
 //! on the account's projects by name, and exports come back as a link.
 
 use std::collections::{HashMap, HashSet};
@@ -26,7 +26,7 @@ use crate::secret;
 
 /// Tools that run for minutes of CPU: one at a time per account, and no more
 /// at once than the machine has cores to spare.
-const HEAVY: [&str; 4] = ["render_photo", "render_3d", "render_plan", "export_plan"];
+const HEAVY: [&str; 4] = ["render_photo", "render_3d", "render_plan", "export"];
 
 /// How long an export's link works.
 const FILE_HOURS: i32 = 24;
@@ -122,19 +122,24 @@ impl Engine {
     ) -> anyhow::Result<Value> {
         match name {
             "projects" => return self.list(db, account, plan).await,
-            "new_home" => return self.create(db, account, plan, args["name"].as_str()).await,
-            "open_home" => {
+            "file" if args["action"] == "new" => {
+                return self.create(db, account, plan, args["name"].as_str()).await;
+            }
+            "file" if args["action"] == "open" => {
                 let Some(wanted) = args["path"].as_str() else {
                     return Ok(refused(
-                        "open_home: path is the name of one of your projects (projects lists them)",
+                        "file action=open: path is the name of one of your projects (projects lists them)",
                     ));
                 };
                 return self.open(db, account, wanted).await;
             }
-            "save_home" => return self.keep(db, account, plan, args["path"].as_str()).await,
-            "set_background" => {
+            "file" if args["action"] == "save" => {
+                return self.keep(db, account, plan, args["path"].as_str()).await;
+            }
+            "file" => return Ok(refused("file: action is new, open or save")),
+            "edit_background" if args["action"] == "set" => {
                 return Ok(refused(
-                    "set_background reads an image file, and files cannot be sent to the cloud yet: use the editor at 3dneweraai.com/app or the desktop app to put a scanned plan under the drawing",
+                    "edit_background action=set reads an image file, and files cannot be sent to the cloud yet: use the editor at 3dneweraai.com/app or the desktop app to put a scanned plan under the drawing",
                 ));
             }
             "edit_video" if args["action"] == "render" => {
@@ -164,17 +169,17 @@ impl Engine {
         // Files go where the engine says, and come back as a link.
         let mut args = args;
         let export = match name {
-            "export_plan" | "export_cut_list" => {
+            "export" => {
                 let asked = args["path"].as_str().unwrap_or("export");
                 let ext = Path::new(asked)
                     .extension()
                     .and_then(|e| e.to_str())
                     .map_or_else(
                         || {
-                            if name == "export_plan" {
-                                "pdf".into()
-                            } else {
+                            if args["what"] == "cut_list" {
                                 "csv".into()
+                            } else {
+                                "pdf".into()
                             }
                         },
                         str::to_ascii_lowercase,
@@ -335,7 +340,7 @@ impl Engine {
         let most = plan.limits["projects"].as_i64().unwrap_or(0);
         if count >= most {
             return Ok(refused(format!(
-                "the {} plan keeps {most} projects; open one with open_home, or delete one from the account page",
+                "the {} plan keeps {most} projects; open one with file action=open, or delete one from the account page",
                 plan.name
             )));
         }

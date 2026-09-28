@@ -8,7 +8,7 @@
   Alexander's counter lengths, five work zones, sockets, gas ventilation, extraction);
   doors, ceiling heights, windows, minimum furniture and wheelchair turning.
 - People (occupants, children, elderly, wheelchair, stature cm, city, scope) given to the
-  call weigh that review only; `set_home(people=…)` keeps them with the project, and every
+  call weigh that review only; `edit_home(people=…)` keeps them with the project, and every
   review and dry run then scores for them.
 - `scope={electrical:false, plumbing:false}` scores architecture only; all findings remain
   visible, excluded ones weigh zero. `layout` includes the geometric checks on the active
@@ -21,11 +21,11 @@
   standard or utility spec that carries there) · B references (the same kind of source from
   somewhere else, or an association's guidance) · C doctrine, including a standard since
   withdrawn · D measured · E survey. It is why a finding is an error or only a tip. The same
-  source is A or B depending on the place, so `set_home(country=…, region=…, city=…)` is
+  source is A or B depending on the place, so `edit_home(country=…, region=…, city=…)` is
   what makes the ladder right.
 - `city`, e.g. `sao-paulo`, lets the municipal code judge instead of only advising; against
-  a standard the more restrictive one wins. Set it once with `set_home(city=…)` so dry runs
-  and check_layout weigh the same rules.
+  a standard the more restrictive one wins. Set it once with `edit_home(city=…)` so dry runs
+  and layout weigh the same rules.
 - `fix`, when present, is a checked change as tool arguments (move or update): apply one,
   then review again (fixes of one review may overlap).
 - `key` names the finding for `accept`: a finding accepted there stays in the report with

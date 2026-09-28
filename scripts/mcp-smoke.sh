@@ -48,7 +48,7 @@ SESSION=$(grep -i '^mcp-session-id:' "$LOG.headers" | awk '{print $2}' | tr -d '
 rpc '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
 
 reply=$(rpc '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
-for tool in get_home create update delete move split_wall set_home set_background render_plan export_plan save_home open_home new_home undo redo catalog place check_layout variants levels materials cameras video plugins sessions arrange trace_background joinery cabinet_run embed fit_roof cut_list ergonomics disciplines annotations render_3d render_photo; do
+for tool in home create update delete move edit_walls edit_home edit_background render_plan export file edit_history history catalog place layout variants levels materials cameras video plugins sessions arrange background joinery cabinet_run embed fit_roof cut_list ergonomics disciplines annotations render_3d render_photo rules; do
   check "tool $tool listed" "$reply" "\"name\":\"$tool\""
 done
 
@@ -60,7 +60,7 @@ check "create answers in one line" "$reply" 'ok rev=1 ids=w22,w23,w24,w25,r26,d2
 check "REST sees 9 walls (5 demo + 4 new)" "$(count w)" "9"
 check "room detected from walls" "$(count r)" "3"
 
-reply=$(call get_home '{"detail":"summary"}')
+reply=$(call home '{"detail":"summary"}')
 check "summary lists the kitchen" "$reply" 'Cozinha'
 
 reply=$(call update '{"items":[{"id":"w22","t":25},{"id":"t28","text":"Porta"}]}')
@@ -68,13 +68,13 @@ check "update several kinds" "$reply" 'ok rev=2'
 reply=$(call update '{"items":[{"id":"w22","text":"x"}]}')
 check "update rejects fields of other kinds" "$reply" 'does not apply'
 
-reply=$(call split_wall '{"id":"w23"}')
-check "split_wall returns the new wall" "$reply" 'ids=w29'
+reply=$(call edit_walls '{"action":"split","id":"w23"}')
+check "edit_walls split returns the new wall" "$reply" 'ids=w29'
 
 reply=$(call render_plan '{"w":320,"h":240}')
 check "render_plan returns a PNG image" "$reply" '"mimeType":"image/png"'
 
-reply=$(call undo '{}')
+reply=$(call edit_history '{"action":"undo"}')
 check "undo" "$reply" 'ok rev=4'
 check "undo reverted the split" "$(count w)" "9"
 
@@ -82,7 +82,7 @@ reply=$(call delete '{"ids":["w1","nope"]}')
 check "unknown id is rejected" "$reply" 'invalid id'
 check "failed delete changes nothing" "$(count w)" "9"
 check "a refusal is a tool result, not a protocol error" "$reply" '"isError":true'
-reply=$(call undo '{"zz":1}')
+reply=$(call edit_history '{"action":"undo","zz":1}')
 check "an unknown argument is refused by name" "$reply" 'unknown argument `zz`'
 check "and inside the result" "$reply" '"isError":true'
 check "the refused undo changes nothing" "$(count w)" "9"
@@ -91,10 +91,10 @@ reply=$(call catalog '{"q":"cama casal"}')
 check "catalog search finds the double bed" "$reply" 'bed-double'
 reply=$(call place '{"items":[{"cat":"window","wall":"w25"},{"cat":"bed-single","at":[1100,300]}]}')
 check "place answers with furniture ids" "$reply" 'ids=f30,f31'
-reply=$(call get_home '{}')
+reply=$(call home '{}')
 check "doors and windows report their wall" "$reply" '\"wall\":\"w25\"'
-reply=$(call check_layout '{}')
-check "check_layout reports issues as JSON" "$reply" '{'
+reply=$(call layout '{}')
+check "layout reports issues as JSON" "$reply" '{'
 reply=$(call render_plan '{"w":320,"h":240}')
 check "render_plan with furniture still works" "$reply" '"mimeType":"image/png"'
 
@@ -110,16 +110,16 @@ reply=$(call materials '{}')
 check "materials lists drywall" "$reply" 'drywall-95'
 reply=$(call update '{"items":[{"id":"w22","type":"drywall-95","sides":"tiles #ffffff 30"},{"id":"r26","floor_mat":"wood"}]}')
 check "wall type and finishes apply" "$reply" 'ok rev='
-reply=$(call get_home '{}')
+reply=$(call home '{}')
 check "wall reports its finish" "$reply" 'tiles #ffffff 30'
 
 TMP_PROJECT="$(mktemp -d)/casa"
-reply=$(call save_home '{"path":"'"$TMP_PROJECT"'"}')
-check "save_home adds the extension" "$reply" 'casa.newera'
-call new_home '{}' >/dev/null
-check "new_home clears" "$(count w)" "0"
-reply=$(call open_home '{"path":"'"$TMP_PROJECT"'.newera"}')
-check "open_home restores" "$(count w)" "9"
+reply=$(call file '{"action":"save","path":"'"$TMP_PROJECT"'"}')
+check "file save adds the extension" "$reply" 'casa.newera'
+call file '{"action":"new"}' >/dev/null
+check "file new clears" "$(count w)" "0"
+reply=$(call file '{"action":"open","path":"'"$TMP_PROJECT"'.newera"}')
+check "file open restores" "$(count w)" "9"
 rm -rf "$(dirname "$TMP_PROJECT")"
 
 reply=$(rpc '{"jsonrpc":"2.0","id":3,"method":"tools/list"}')

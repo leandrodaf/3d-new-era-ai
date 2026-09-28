@@ -62,7 +62,7 @@ All photos: `render_photo`, quality `good`, 1280 × 800, sun from the compass at
 
 About 60 MCP calls. The highlights:
 
-1. **Reference at real scale** — `set_background {path, cm_per_px: 2.4, offset}`, then
+1. **Reference at real scale** — `edit_background {action: set, path, cm_per_px: 2.4, offset}`, then
    `create {px: true, walls: [...]}` with coordinates read straight off the image
    (25 cm party walls, 12 cm partitions) and `render_plan {bg: 0.5}` to check the fit.
 2. **Openings and rooms** — `place` doors with `at` + `into` (they snap into the wall
@@ -75,7 +75,7 @@ About 60 MCP calls. The highlights:
    (drawers, sink under the window, cooktop, wall cabinets, blind corner); `joinery
    cove` for a plaster cove with LED strip in the living room.
 5. **Furniture** — `place` with real sizes and finishes (walnut, marble, fabric), then
-   `check_layout` until nothing overlaps, blocks a door or sits in a wall.
+   `layout` until nothing overlaps, blocks a door or sits in a wall.
 6. **Lighting** — `lighting {room, fill: "downlight" | "led-panel"}` per room: the
    lumen method gives a first count, photometry adds fixtures until the reference is met.
 7. **Photos** — `cameras store {x, y, z, look_at, fov}` per room and `render_photo`.

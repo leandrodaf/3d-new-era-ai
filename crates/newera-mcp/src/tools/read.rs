@@ -215,6 +215,7 @@ fn ndjson(out: &serde_json::Value) -> String {
 #[tool_router(router = read_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
+        name = "home",
         description = "Home state. detail=summary is cheapest. Ask for less instead of reading everything: ids=[…] resolves ids (group parts included), room=<id|name> and rect=[[x0,y0],[x1,y1]] read one place, kinds=[walls|rooms|dims|labels|furniture|polylines] and fields=[…] trim each row, parts=true opens groups, ndjson=true prints one element per line so a long answer can be read a slice at a time. Every piece carries bounds (plan box with angle applied) and faces (the side it opens toward). Ids share one counter per version (w1, r2, f3…) and are never reused, so a new version may start at any number."
     )]
     pub(crate) fn get_home(

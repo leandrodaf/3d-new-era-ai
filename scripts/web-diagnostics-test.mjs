@@ -32,7 +32,7 @@ function page() {
   c.neweraReady = true;
   c.neweraLog = ['error: panicked at no filesystem on this platform'];
   const render = c.neweraOperation('begin', null, 'render_plan', '42');
-  const read = c.neweraOperation('begin', null, 'get_home', '42');
+  const read = c.neweraOperation('begin', null, 'home', '42');
   c.neweraOperation('end', read);
   events.error({message:'Uncaught RuntimeError: unreachable https://relay/secret?token=secret authorization=secret Bearer secret {"tab_key":"secret"}'});
   const d = c.neweraDiagnostic;
@@ -67,7 +67,7 @@ console.log('Editor diagnostics: startup, runtime, concurrent operations and red
   for (const data of ['null','not JSON','{"type":"client"}']) socket.dispatchEvent(new MessageEvent('message',{data}));
   let rustCalls=0;
   socket.addEventListener('message',()=>rustCalls++);
-  socket.call(1,'get_home');
+  socket.call(1,'home');
   socket.send(JSON.stringify({type:'result',id:1,ok:true,result:{content:[]}}));
   socket.call(2,'render_plan');
   socket.call(3,'measure');
@@ -81,7 +81,7 @@ console.log('Editor diagnostics: startup, runtime, concurrent operations and red
   assert(!JSON.stringify(failure).includes('secret'));
   socket.send(JSON.stringify({type:'result',id:2,ok:true,result:{}}));
   assert.equal(socket.sent.length,3,'late WASM replies must not answer twice');
-  socket.call(4,'get_home');
+  socket.call(4,'home');
   assert.equal(socket.sent.length,4);
   assert.equal(rustCalls,3,'future calls must not enter the failed WASM handler');
   socket.readyState=3;

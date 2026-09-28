@@ -45,11 +45,11 @@ Each starts in a new conversation, signed in with the review account.
 
 | # | Prompt | Expected |
 |---|---|---|
-| 1 | "Start a new project called Test flat and draw a 4 × 5 m room." | `new_home`, then `create` with one closed wall loop; `show_plan` shows a 20 m² room. |
+| 1 | "Start a new project called Test flat and draw a 4 × 5 m room." | `file` (`action=new`), then `create` with one closed wall loop; `show_plan` shows a 20 m² room. |
 | 2 | "Add a door on the south wall and a double bed against the north wall." | `catalog` finds a door and a bed; `place` puts them; the plan shows both. |
 | 3 | "Show me this in 3D." | `render_3d` returns an image of the room with the door and the bed. |
 | 4 | "Render a daylight photo of the room." | `render_photo` at draft quality returns a photo. |
-| 5 | "Undo the last change." | `undo`; the bed (or the last thing added) is gone from the plan. |
+| 5 | "Undo the last change." | `edit_history` (`action=undo`); the bed (or the last thing added) is gone from the plan. |
 | 6 | "Which projects do I have?" | `projects` lists Test flat with its size and the plan's limits. |
 | 7 | "Check this bedroom for ergonomics." | `ergonomics` reports walkways and clearances around the bed. |
 

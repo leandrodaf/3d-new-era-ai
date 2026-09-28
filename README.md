@@ -206,7 +206,7 @@ image below came out of the editor. **[See how it was built →](docs/SHOWCASE.m
 ## Features
 
 - **Plans from anything.** Draw walls, arcs and sloping walls, or drop in a scanned plan
-  at real scale and let `trace_background` find the walls. Opens Sweet Home 3D (`.sh3d`)
+  at real scale and let `background` find the walls. Opens Sweet Home 3D (`.sh3d`)
   projects as they are.
 - **Joinery a workshop can build.** Parametric cabinets, wardrobes, slatted panels,
   countertops with exact sink and cooktop cutouts, plaster coves with LED and modular
@@ -241,33 +241,33 @@ run it without asking, and asks before each change.
 
 | Tool | What it does |
 |------|--------------|
-| `get_home` | Compact state (`detail=summary` for counts, bounds and room areas) |
+| `home` | Compact state (`detail=summary` for counts, bounds and room areas) |
 | `create` | Walls (polylines, arcs, sloping), rooms (polygon or detected from walls), dimensions, labels, roofs with skylights and solids, in one atomic call |
 | `update` / `move` / `delete` | Edit any element by id |
 | `arrange` | Copies in a row, rotate, mirror, group/ungroup, drawing order |
-| `split_wall` / `merge_walls` | Split a wall in two, or join walls on one line |
-| `set_home` | Project name, compass (north), the city whose building code applies and who lives there |
-| `set_background` | Scanned plan at real scale: calibration, X/Y scale, rotation |
-| `trace_background` / `trace_walls` | Find the walls in a scanned plan, and create them |
+| `edit_walls` | Split a wall in two, or join walls on one line |
+| `edit_home` | Project name, compass (north), the city whose building code applies and who lives there |
+| `background` / `edit_background` | Scanned plan at real scale (calibration, X/Y scale, rotation); find the walls in it, and create them |
 | `catalog` / `place` | Search the parametric catalog; place furniture, doors and windows (snapped into walls), beams, finishes and glass |
 | `joinery` | Parametric cabinets, slatted panels, countertops with cutouts, plaster coves, shadow gaps and modular sofas |
 | `cabinet_run` | Fill a wall with cabinets sized for it: even modules around corners, doors, windows, fridge and stove |
 | `embed` | Set a sink or cooktop into a countertop (exact cutout) or an oven into a cabinet niche |
 | `fit_roof` | Walls, glass and panels take the shape of the roof above and keep following it |
-| `cut_list` / `export_cut_list` | Boards, edge banding and hardware of the joinery, as CSV or DXF/SVG sheets |
-| `check_layout` | Overlaps, pieces in walls, blocked doors, pieces outside rooms, areas against references |
+| `cut_list` | Boards, edge banding and hardware of the joinery, as CSV or DXF/SVG sheets |
+| `layout` | Overlaps, pieces in walls, blocked doors, pieces outside rooms, areas against references |
 | `ergonomics` | Review for the people living there: circulation, occupancy, kitchen, doors, ceiling heights, windows, wheelchair use |
-| `lighting` / `fill_lighting` | Lux per room by photometry against NBR ISO/CIE 8995-1; place the fixtures a room needs |
+| `lighting` / `edit_lighting` | Lux per room by photometry against NBR ISO/CIE 8995-1; place the fixtures a room needs |
 | `electrical` / `plumbing` | Electrical and plumbing projects over the plan, changed through `edit_electrical` / `edit_plumbing` |
 | `measure` | Free floor around a piece, the gap between two, what a straight probe runs into, how far a piece can grow |
 | `accept` | Mark findings of any review as seen, with the reason |
+| `rules` | What a review checks against: the standards' tables, what each layout problem means, how ergonomics scores |
 | `materials` / `disciplines` / `annotations` | Finishes, visible projects and layers, dimension chains and schedules; `stale` finds notes that no longer match the drawing |
 | `levels` / `cameras` / `variants` / `video` | Storeys, points of view, plan versions and camera-path videos, each changed through its `edit_*` tool |
 | `render_plan` / `show_plan` | PNG of the plan as the user sees it; the plan inside the chat as an interactive viewer (MCP Apps) |
 | `render_3d` / `render_photo` | Software 3D views (aerial, visitor, cameras, elevations, sections); path-traced photos with sun and lamps |
-| `export_plan` | PDF, SVG or PNG plan; GLB or OBJ model |
-| `new_home` / `open_home` / `save_home` | Projects (`.newera`) and Sweet Home 3D import (`.sh3d`) |
-| `undo` / `redo` / `checkpoint` / `checkpoints` | Shared history with the user, and named points to come back to |
+| `export` | PDF, SVG or PNG plan; GLB or OBJ model; the cut list as CSV or DXF/SVG sheets |
+| `file` | New, open and save: projects (`.newera`) and Sweet Home 3D import (`.sh3d`) |
+| `edit_history` / `history` | Undo and redo, shared with the user, and named checkpoints to come back to |
 | `plugins` / `run_plugin` / `sessions` | External plugins and the people working on the project |
 | `feedback` | A note to the developers about what a tool could do better (desktop only) |
 

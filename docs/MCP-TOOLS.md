@@ -23,9 +23,19 @@ to [`tool-search.json`](../crates/newera-mcp/tests/fixtures/tool-search.json).
   and writes never share a tool: the client runs a read without asking and asks before
   every write, which only works while the hint is true for every action of the tool.
 - Verbs name operations on elements (`create`, `update`, `delete`, `move`, `place`,
-  `arrange`, `accept`). A read never starts with a write verb.
+  `arrange`, `accept`). A read never starts with a write verb. `edit_walls` changes a kind
+  of element that `home` reads (`READ_IN_HOME`).
+- Related changes are one tool with an `action` when their arguments barely overlap —
+  `file` (new, open, save), `edit_history` (undo, redo, checkpoint, revert), `edit_walls`
+  (split, merge), `edit_background` (set, trace), `export` (`what`: plan, cut list). Such a
+  tool declares its schema once (a struct that only describes, wrapped in `Raw`) and hands
+  the arguments on to the parameters each action always had (`take_action`, `forward` in
+  `reply.rs`). Intents whose arguments differ a lot stay apart (`render_plan`,
+  `render_3d`), so no tool becomes a bag of fields that apply one time in three.
 - Enforced by `names_say_what_a_tool_does`. A renamed tool's old name goes in
   `RETIRED`, and `descriptions_name_tools_that_exist` then finds it anywhere it was left.
+- The server instructions list every tool by what it is for: a client that defers tool
+  definitions shows the model those names and instructions, and nothing else.
 
 ## Descriptions
 

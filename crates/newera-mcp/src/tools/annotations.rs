@@ -102,7 +102,7 @@ pub(crate) struct DisciplineReadParams {
 impl NewEraMcp {
     #[tool(
         name = "disciplines",
-        description = "Electrical and plumbing projects and plan layers over the plan. active (default): {active, hidden, layers {key:{pieces, hidden}}} — the discipline new symbols go to, what is hidden, and the layers (lighting, appliances, joinery); get_home gives each piece its plan_layer. quantities: {electrical:[[kind,count,names?]], plumbing:[...], lines_cm:{...}} — grouped by catalog kind (every low outlet together), with the names of the points as the detail. Change what is shown with edit_disciplines."
+        description = "Electrical and plumbing projects and plan layers over the plan. active (default): {active, hidden, layers {key:{pieces, hidden}}} — the discipline new symbols go to, what is hidden, and the layers (lighting, appliances, joinery); home gives each piece its plan_layer. quantities: {electrical:[[kind,count,names?]], plumbing:[...], lines_cm:{...}} — grouped by catalog kind (every low outlet together), with the names of the points as the detail. Change what is shown with edit_disciplines."
     )]
     pub(crate) fn read_disciplines(
         &self,

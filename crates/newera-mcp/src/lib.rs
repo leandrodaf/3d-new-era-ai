@@ -146,19 +146,9 @@ fn run(
                 .edit_annotations(Parameters(params(args)?))
                 .map_err(reason)?,
         )),
-        "set_background" => Ok(said(
-            server
-                .set_background(Parameters(params(args)?))
-                .map_err(reason)?,
-        )),
-        "trace_background" => Ok(said(
+        "background" => Ok(said(
             server
                 .read_trace(Parameters(params(args)?))
-                .map_err(reason)?,
-        )),
-        "trace_walls" => Ok(said(
-            server
-                .trace_walls(Parameters(params(args)?))
                 .map_err(reason)?,
         )),
         "embed" => Ok(said(
@@ -190,7 +180,7 @@ fn run(
                 .map_err(reason)?,
         )),
         "ergonomics" => Ok(said(server.read_ergonomics(Parameters(params(args)?)))),
-        "check_layout" => Ok(said(
+        "layout" => Ok(said(
             server
                 .read_check_layout(Parameters(params(args)?))
                 .map_err(reason)?,
@@ -222,16 +212,6 @@ fn run(
                 .move_elements(Parameters(params(args)?))
                 .map_err(reason)?,
         )),
-        "split_wall" => Ok(said(
-            server
-                .split_wall(Parameters(params(args)?))
-                .map_err(reason)?,
-        )),
-        "merge_walls" => Ok(said(
-            server
-                .merge_walls(Parameters(params(args)?))
-                .map_err(reason)?,
-        )),
         "place" => Ok(said(
             server.place(Parameters(params(args)?)).map_err(reason)?,
         )),
@@ -244,11 +224,6 @@ fn run(
         "cut_list" => Ok(said(
             server
                 .read_cut_list(Parameters(params(args)?))
-                .map_err(reason)?,
-        )),
-        "export_cut_list" => Ok(said(
-            server
-                .export_cut_list(Parameters(params(args)?))
                 .map_err(reason)?,
         )),
         "levels" => Ok(said(
@@ -266,7 +241,7 @@ fn run(
                 .read_lighting(Parameters(params(args)?))
                 .map_err(reason)?,
         )),
-        "fill_lighting" => Ok(said(
+        "edit_lighting" => Ok(said(
             server
                 .fill_lighting(Parameters(params(args)?))
                 .map_err(reason)?,
@@ -284,20 +259,9 @@ fn run(
                 .edit_plumbing(Parameters(params(args)?))
                 .map_err(reason)?,
         )),
-        "set_home" => Ok(said(
+        "edit_home" => Ok(said(
             server.set_home(Parameters(params(args)?)).map_err(reason)?,
         )),
-        "save_home" => Ok(said(
-            server
-                .save_home(Parameters(params(args)?))
-                .map_err(reason)?,
-        )),
-        "open_home" => Ok(said(
-            server
-                .open_home(Parameters(params(args)?))
-                .map_err(reason)?,
-        )),
-        "new_home" => Ok(said(server.new_home())),
         "show_plan" => Ok(server.show_plan()),
         "plugins" => Ok(said(
             server
@@ -320,19 +284,12 @@ fn run(
                 .edit_variants(Parameters(params(args)?))
                 .map_err(reason)?,
         )),
-        "checkpoints" => Ok(said(
+        "history" => Ok(said(
             server
                 .list_checkpoints(Parameters(params(args)?))
                 .map_err(reason)?,
         )),
-        "checkpoint" => Ok(said(
-            server
-                .set_checkpoint(Parameters(params(args)?))
-                .map_err(reason)?,
-        )),
-        "undo" => Ok(said(server.undo().map_err(reason)?)),
-        "redo" => Ok(said(server.redo().map_err(reason)?)),
-        "get_home" => Ok(said(
+        "home" => Ok(said(
             server.get_home(Parameters(params(args)?)).map_err(reason)?,
         )),
         "materials" => Ok(said(server.materials())),
@@ -344,9 +301,25 @@ fn run(
         "render_photo" => server
             .render_photo(Parameters(params(args)?))
             .map_err(reason),
-        "export_plan" => Ok(said(
+        "file" => Ok(said(
+            server.file(Parameters(params(args)?)).map_err(reason)?,
+        )),
+        "edit_history" => Ok(said(
             server
-                .export_plan(Parameters(params(args)?))
+                .edit_history(Parameters(params(args)?))
+                .map_err(reason)?,
+        )),
+        "edit_walls" => Ok(said(
+            server
+                .edit_walls(Parameters(params(args)?))
+                .map_err(reason)?,
+        )),
+        "export" => Ok(said(
+            server.export(Parameters(params(args)?)).map_err(reason)?,
+        )),
+        "edit_background" => Ok(said(
+            server
+                .edit_background(Parameters(params(args)?))
                 .map_err(reason)?,
         )),
         "rules" => Ok(said(
@@ -363,7 +336,7 @@ fn run(
 }
 
 /// The analyses an agent asks the MCP tools for, without an MCP session:
-/// `check_layout`, `ergonomics`, `measure` and `annotations`, with the same
+/// `layout`, `ergonomics`, `measure` and `annotations`, with the same
 /// arguments and the same answer.
 ///
 /// A script that edits the plan over REST could not ask whether the edit
@@ -377,12 +350,9 @@ pub fn analysis(
 ) -> Result<String, String> {
     // Reads only: these four answer questions and change nothing, which is why
     // they are the ones a plain HTTP request may ask for.
-    if !matches!(
-        name,
-        "check_layout" | "ergonomics" | "measure" | "annotations"
-    ) {
+    if !matches!(name, "layout" | "ergonomics" | "measure" | "annotations") {
         return Err(format!(
-            "no analysis {name}: check_layout, ergonomics, measure or annotations"
+            "no analysis {name}: layout, ergonomics, measure or annotations"
         ));
     }
     let result = call(document, name, args)?;
@@ -440,7 +410,7 @@ mod call_tests {
         assert!(!made.content.is_empty());
         assert_eq!(document.read().home().walls.len(), 1);
 
-        let read = super::call(document, "get_home", serde_json::Value::Null).expect("read back");
+        let read = super::call(document, "home", serde_json::Value::Null).expect("read back");
         let text = super::said_in(&read);
         assert!(
             text.contains("400"),

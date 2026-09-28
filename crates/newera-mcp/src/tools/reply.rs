@@ -42,7 +42,7 @@ pub(super) fn background_scale(doc: &Document) -> Result<BackgroundScale, ErrorD
         .and_then(|id| home.level(id))
         .and_then(|l| l.background.as_ref())
         .or(home.background.as_ref())
-        .ok_or_else(|| invalid("`px` needs a background image (set_background)"))?;
+        .ok_or_else(|| invalid("`px` needs a background image (edit_background action=set)"))?;
     Ok(BackgroundScale {
         image: bg.clone(),
         scale: bg.cm_per_px,
@@ -302,7 +302,7 @@ pub(super) fn preview_with(
     if !after.accepted.is_empty() {
         let mut cleanup = Vec::new();
         for (review, orphaned) in [
-            ("check_layout", newera_core::Issue::orphaned(&after)),
+            ("layout", newera_core::Issue::orphaned(&after)),
             ("ergonomics", newera_ergonomics::orphaned(&after, &profile)),
             ("electrical", newera_core::electrical::orphaned(&after)),
             ("plumbing", newera_core::plumbing::orphaned(&after)),
@@ -405,6 +405,78 @@ pub(super) fn write_action<'a>(
             "`action` is required: {choices} (to read, use {reads_in})"
         ))),
     }
+}
+
+/// A tool's arguments as they came, described to the client by `T`.
+///
+/// A tool that joins a few actions (`file`, `edit_history`, `export`…) hands
+/// each one on to the parameters it always had: the schema is `T`, written
+/// once with every field, and the arguments go on untouched to whichever
+/// action was asked for. Unknown and misplaced arguments are refused before
+/// this, against that same schema (`crate::args`).
+pub(crate) struct Raw<T>(
+    pub(crate) serde_json::Map<String, serde_json::Value>,
+    pub(crate) std::marker::PhantomData<T>,
+);
+
+impl<'de, T> serde::Deserialize<'de> for Raw<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let map = Option::<serde_json::Map<String, serde_json::Value>>::deserialize(d)?;
+        Ok(Self(map.unwrap_or_default(), std::marker::PhantomData))
+    }
+}
+
+impl<T: schemars::JsonSchema> schemars::JsonSchema for Raw<T> {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        T::schema_name()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        T::json_schema(generator)
+    }
+}
+
+/// The action asked for, taken out of the arguments so the rest can go on to
+/// the parameters of that action.
+pub(super) fn take_action(
+    args: &mut serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    choices: &[&str],
+    default: Option<&str>,
+) -> Result<String, ErrorData> {
+    let named = match args.remove(key) {
+        Some(serde_json::Value::String(s)) => s,
+        Some(other) => {
+            return Err(invalid(format!(
+                "`{key}`: one of {} (not {other})",
+                choices.join(", ")
+            )));
+        }
+        None => match default {
+            Some(d) => d.to_owned(),
+            None => {
+                return Err(invalid(format!(
+                    "`{key}` is required: {}",
+                    choices.join(", ")
+                )));
+            }
+        },
+    };
+    if choices.contains(&named.as_str()) {
+        Ok(named)
+    } else {
+        Err(invalid(format!(
+            "unknown {key} `{named}`: {}",
+            choices.join(", ")
+        )))
+    }
+}
+
+/// The rest of the arguments, as the parameters of the action they go to.
+pub(super) fn forward<T: serde::de::DeserializeOwned>(
+    args: serde_json::Map<String, serde_json::Value>,
+) -> Result<T, ErrorData> {
+    serde_json::from_value(serde_json::Value::Object(args)).map_err(|e| invalid(e.to_string()))
 }
 
 pub(super) fn invalid(message: impl Into<String>) -> ErrorData {

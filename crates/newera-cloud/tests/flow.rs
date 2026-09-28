@@ -458,7 +458,7 @@ async fn an_ai_client_is_allowed_in_and_reaches_the_tab() {
     )
     .await;
     assert_eq!(drawn["isError"], false, "{drawn}");
-    let home = call(40, "get_home", json!({"detail": "summary"})).await;
+    let home = call(40, "home", json!({"detail": "summary"})).await;
     assert!(
         home["content"][0]["text"]
             .as_str()
@@ -499,7 +499,7 @@ async fn an_ai_client_is_allowed_in_and_reaches_the_tab() {
     );
 
     // An export comes back as a link, and the link is the file.
-    let exported = call(44, "export_plan", json!({"path": "/etc/casa.pdf"})).await;
+    let exported = call(44, "export", json!({"path": "/etc/casa.pdf"})).await;
     let text = exported["content"][0]["text"].as_str().unwrap().to_owned();
     let link = text.split_whitespace().nth(1).expect("a link").to_owned();
     assert!(link.starts_with(&format!("{base}/files/")), "{text}");
@@ -518,11 +518,21 @@ async fn an_ai_client_is_allowed_in_and_reaches_the_tab() {
     );
 
     // Projects by name: a new one, back to the first, renamed on save.
-    let made = call(45, "new_home", json!({"name": "Casa da praia"})).await;
+    let made = call(
+        45,
+        "file",
+        json!({"action": "new", "name": "Casa da praia"}),
+    )
+    .await;
     assert_eq!(made["isError"], false, "{made}");
-    let back = call(47, "open_home", json!({"path": "Projeto 1"})).await;
+    let back = call(47, "file", json!({"action": "open", "path": "Projeto 1"})).await;
     assert_eq!(back["isError"], false, "{back}");
-    let renamed = call(48, "save_home", json!({"path": "Apartamento.newera"})).await;
+    let renamed = call(
+        48,
+        "file",
+        json!({"action": "save", "path": "Apartamento.newera"}),
+    )
+    .await;
     assert_eq!(renamed["content"][0]["text"], "ok saved Apartamento");
     // "Open in the editor" is this project, which the site may fetch with the
     // person's cookie — and nobody else may.
@@ -561,7 +571,12 @@ async fn an_ai_client_is_allowed_in_and_reaches_the_tab() {
     assert!(fetched.bytes().await.unwrap().starts_with(b"PK"));
     let stranger = http.get(&project_url).send().await.unwrap();
     assert_ne!(stranger.status(), 200, "only its owner downloads a project");
-    let refused = call(49, "set_background", json!({"path": "/etc/passwd"})).await;
+    let refused = call(
+        49,
+        "edit_background",
+        json!({"action": "set", "path": "/etc/passwd"}),
+    )
+    .await;
     assert_eq!(refused["isError"], true);
 
     // A tab opens a room on the relay, signs in, and claims it.
@@ -630,7 +645,7 @@ async fn an_ai_client_is_allowed_in_and_reaches_the_tab() {
             mcp(
                 &base,
                 &access,
-                json!({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "get_home", "arguments": {}}}),
+                json!({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "home", "arguments": {}}}),
             )
             .await
         }
@@ -642,7 +657,7 @@ async fn an_ai_client_is_allowed_in_and_reaches_the_tab() {
             break value;
         }
     };
-    assert_eq!(work["name"], "get_home");
+    assert_eq!(work["name"], "home");
     socket
         .send(tokio_tungstenite::tungstenite::Message::text(
             json!({"type": "result", "id": work["id"], "ok": true, "result": {"content": [{"type": "text", "text": "w1"}]}}).to_string(),

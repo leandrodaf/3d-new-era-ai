@@ -244,6 +244,10 @@ const WRITE_VERBS: &[&str] = &[
     "open_", "save_", "export", "run_", "fill_", "split_", "merge_", "embed", "undo", "redo",
 ];
 
+/// Kinds of element an `edit_` tool may change that have no read of their
+/// own: `home` reads them, with every other element.
+const READ_IN_HOME: &[&str] = &["walls"];
+
 #[test]
 fn names_say_what_a_tool_does() {
     let tools = surface();
@@ -266,6 +270,9 @@ fn names_say_what_a_tool_does() {
             ));
         }
         if let Some(read) = name.strip_prefix("edit_") {
+            if READ_IN_HOME.contains(&read) {
+                continue;
+            }
             match by_name.get(read) {
                 Some(t) if is_read(t) => {}
                 Some(_) => wrong.push(format!("{name} edits `{read}`, which is not a read")),
@@ -288,7 +295,22 @@ const TOOL_PREFIXES: &[&str] = &[
 
 /// Names that once were tools. Any of them in a description, the server
 /// instructions or a skill sends an agent to a tool that is not there.
-const RETIRED: &[&str] = &[];
+const RETIRED: &[&str] = &[
+    "get_home",
+    "set_home",
+    "check_layout",
+    "trace_background",
+    "trace_walls",
+    "set_background",
+    "fill_lighting",
+    "split_wall",
+    "merge_walls",
+    "export_plan",
+    "export_cut_list",
+    "new_home",
+    "open_home",
+    "save_home",
+];
 
 /// A description names tools that exist. A rename that leaves the old name
 /// in another tool's description — or in the server instructions — sends

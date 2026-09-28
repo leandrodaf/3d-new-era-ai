@@ -2,7 +2,7 @@
 # Calls one MCP tool on a running editor/server and prints the text reply.
 #
 # Usage: scripts/mcp.sh <tool> ['{"json":"args"}']
-#   scripts/mcp.sh get_home
+#   scripts/mcp.sh home
 #   scripts/mcp.sh create_walls '{"points":[[0,0],[400,0]]}'
 # Env: NEWERA_ADDR (default 127.0.0.1:7878)
 set -euo pipefail

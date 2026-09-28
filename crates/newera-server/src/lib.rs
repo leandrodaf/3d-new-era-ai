@@ -703,7 +703,7 @@ async fn get_home(State(document): State<SharedDocument>) -> Json<serde_json::Va
 /// Which analysis a route answers.
 fn analysis_name(uri: &axum::http::Uri) -> &'static str {
     match uri.path().rsplit('/').next() {
-        Some("check") => "check_layout",
+        Some("check") => "layout",
         Some("ergonomics") => "ergonomics",
         Some("measure") => "measure",
         _ => "annotations",
@@ -817,7 +817,7 @@ mod tests {
             "jsonrpc": "2.0",
             "id": 2,
             "method": "tools/call",
-            "params": { "name": "get_home", "arguments": {} }
+            "params": { "name": "home", "arguments": {} }
         });
         let response = app
             .oneshot(
@@ -842,7 +842,7 @@ mod tests {
         assert_eq!(agents.calls(), 1);
         assert_eq!(
             agents.recent().last().map(|c| c.tool.as_str()),
-            Some("get_home")
+            Some("home")
         );
         assert_eq!(
             agents.recent().last().map(|c| c.agent.as_str()),

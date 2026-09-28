@@ -186,6 +186,21 @@ fn strings(description: &str) -> Value {
     json!({"type": "array", "items": {"type": "string"}, "description": description})
 }
 
+/// What a cut list answers, read or written.
+fn cut_list_fields() -> Vec<(&'static str, Value)> {
+    vec![
+        (
+            "rows",
+            list("[part, board, qty, length, width, thickness, edge, cutouts?]"),
+        ),
+        ("hardware", strings("Hardware by build: \"<id>: <item>\"")),
+        sources(),
+        ("drawn", strings("Hand-drawn builds left out")),
+        ("skipped", list("[id, name] left out")),
+        ("sheets", list(".dxf/.svg: [board, sheets]")),
+    ]
+}
+
 /// An object schema: its fields, and the ones every answer has.
 fn shape(fields: &[(&str, Value)], required: &[&str]) -> Value {
     let properties: Map<String, Value> = fields
@@ -394,7 +409,7 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
         "[id, name, m², average lx, minimum lx, uniformity, reference lx, fixtures, W/m², verdict]";
     Some(match name {
         // Reads.
-        "get_home" => shape(
+        "home" => shape(
             &[
                 ("rev", int("Plan revision")),
                 ("name", text("Project name")),
@@ -519,7 +534,7 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
             )],
             &["rows"],
         ),
-        "checkpoints" => shape(
+        "history" => shape(
             &[("checkpoints", list("[label, changes ago]"))],
             &["checkpoints"],
         ),
@@ -548,7 +563,7 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
             ],
             &[],
         ),
-        "check_layout" => {
+        "layout" => {
             let mut fields = issues();
             fields.push((
                 "orphaned",
@@ -577,7 +592,7 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
                 ),
                 (
                     "layout",
-                    object("Layout issues of the storey, as check_layout gives them"),
+                    object("Layout issues of the storey, as layout gives them"),
                 ),
                 ("coverage", object("What was checked and what was not")),
                 (
@@ -679,24 +694,17 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
             ],
             &[],
         ),
-        "trace_background" => shape(
+        "background" => shape(
             &[("rows", list("Walls found: [[x1,y1], [x2,y2], thickness]"))],
             &["rows"],
         ),
-        "cut_list" | "export_cut_list" => shape(
-            &[
-                (
-                    "rows",
-                    list("[part, board, qty, length, width, thickness, edge, cutouts?]"),
-                ),
-                ("hardware", strings("Hardware by build: \"<id>: <item>\"")),
-                sources(),
-                ("drawn", strings("Hand-drawn builds left out")),
-                ("skipped", list("[id, name] left out")),
-                ("sheets", list(".dxf/.svg: [board, sheets]")),
-            ],
-            &["rows", "hardware", "sources"],
-        ),
+        "cut_list" => shape(&cut_list_fields(), &["rows", "hardware", "sources"]),
+        // A plan answers an `ok` line; a cut list, its rows as written.
+        "export" => {
+            let mut fields = ok_fields();
+            fields.extend(cut_list_fields());
+            shape(&fields, &[])
+        }
         "render_plan" | "render_3d" | "render_photo" => image(),
         "show_plan" => shape(
             &[
@@ -708,9 +716,8 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
             &["name", "svg", "summary", "editor"],
         ),
         // Writes answering an `ok` line.
-        "create" | "split_wall" | "merge_walls" | "trace_walls" | "set_background"
-        | "edit_levels" | "edit_cameras" | "set_home" | "new_home" | "open_home" | "save_home"
-        | "export_plan" | "checkpoint" | "arrange" => ok_line(&[]),
+        "create" | "edit_walls" | "edit_background" | "edit_levels" | "edit_cameras"
+        | "edit_home" | "file" | "arrange" => ok_line(&[]),
         "delete" => ok_line(&[
             (
                 "labels_left",
@@ -724,7 +731,7 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
             ("accepted", int("Findings accepted")),
             ("removed", int("Acceptances removed")),
         ]),
-        "undo" | "redo" => {
+        "edit_history" => {
             let mut fields = diff_fields();
             fields.extend(ok_fields());
             shape(&fields, &["ok", "text"])
@@ -795,7 +802,7 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
             ],
             &["wall", "row", "modules", "removed", "notes"],
         ),
-        "fill_lighting" => shape(
+        "edit_lighting" => shape(
             &[
                 ("placed", strings("Fixtures placed")),
                 ("before", list(lighting_row)),
@@ -891,13 +898,6 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
         ),
         _ => return None,
     })
-}
-
-/// The schema of a plain `ok …` answer: what a tool says when all it hands
-/// back is the change made, or a link to a file.
-#[must_use]
-pub fn ok_schema() -> Value {
-    ok_line(&[])
 }
 
 /// Gives a tool its output schema.
@@ -1124,12 +1124,12 @@ mod tests {
                 "arrange",
                 json!({"action": "array", "ids": ["w1"], "n": 1, "dx": 10}),
             ),
-            ("split_wall", json!({"id": "w2"})),
-            ("undo", json!({})),
-            ("redo", json!({})),
-            ("get_home", json!({})),
-            ("get_home", json!({"detail": "summary"})),
-            ("get_home", json!({"ndjson": true})),
+            ("edit_walls", json!({"action": "split", "id": "w2"})),
+            ("edit_history", json!({"action": "undo"})),
+            ("edit_history", json!({"action": "redo"})),
+            ("home", json!({})),
+            ("home", json!({"detail": "summary"})),
+            ("home", json!({"ndjson": true})),
             ("materials", json!({})),
             ("catalog", json!({"q": "sofa"})),
             ("catalog", json!({})),
@@ -1139,20 +1139,23 @@ mod tests {
             ("edit_cameras", json!({"action": "store", "name": "A"})),
             ("video", json!({})),
             ("edit_video", json!({"action": "orbit"})),
-            ("checkpoint", json!({"label": "a"})),
-            ("checkpoints", json!({})),
+            (
+                "edit_history",
+                json!({"action": "checkpoint", "label": "a"}),
+            ),
+            ("history", json!({})),
             ("disciplines", json!({})),
-            ("check_layout", json!({})),
+            ("layout", json!({})),
             ("ergonomics", json!({})),
             ("electrical", json!({})),
             ("plumbing", json!({})),
             ("lighting", json!({})),
             (
-                "fill_lighting",
+                "edit_lighting",
                 json!({"room": "r5", "fixture": "downlight"}),
             ),
             (
-                "fill_lighting",
+                "edit_lighting",
                 json!({"room": "r5", "fixture": "downlight"}),
             ),
             ("annotations", json!({})),
@@ -1160,7 +1163,7 @@ mod tests {
             ("cabinet_run", json!({"wall": "w3"})),
             ("cut_list", json!({})),
             ("show_plan", json!({})),
-            ("set_home", json!({"name": "Casa"})),
+            ("edit_home", json!({"name": "Casa"})),
             ("delete", json!({"ids": ["w1"]})),
             ("levels", json!({})),
             ("edit_levels", json!({"action": "add", "name": "Superior"})),
@@ -1177,10 +1180,16 @@ mod tests {
             ("edit_annotations", json!({"dims": true, "legend": true})),
             ("edit_annotations", json!({"refs": true})),
             ("render_plan", json!({"w": 64, "h": 48})),
-            ("export_plan", json!({"path": dir.join("plan.svg")})),
-            ("save_home", json!({"path": dir.join("casa.newera")})),
-            ("open_home", json!({"path": dir.join("casa.newera")})),
-            ("new_home", json!({})),
+            ("export", json!({"path": dir.join("plan.svg")})),
+            (
+                "file",
+                json!({"action": "save", "path": dir.join("casa.newera")}),
+            ),
+            (
+                "file",
+                json!({"action": "open", "path": dir.join("casa.newera")}),
+            ),
+            ("file", json!({"action": "new"})),
         ];
         let mut failures = Vec::new();
         for (name, args) in calls {

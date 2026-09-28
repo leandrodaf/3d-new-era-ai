@@ -49,7 +49,7 @@ pub(crate) struct FillLightingParams {
 impl NewEraMcp {
     #[tool(
         name = "lighting",
-        description = "Lighting review: lux (illuminance) per room by photometry. Every fixture's flux (lm, or W × lamp efficacy), color temperature and distribution (bulb, spot beam, LED panel/strip) lights the work plane by the inverse-square cosine law, walls casting shadows, plus interreflection (split flux). Reply rooms [[id,name,m²,avg lx,min lx,uniformity,reference lx,fixtures,W/m²,verdict]] against ABNT NBR ISO/CIE 8995-1 residential references. fill_lighting places the fixtures a room needs. Set a piece's light with place/update light {lm|w,lamp,k,beam,area}."
+        description = "Lighting review: lux (illuminance) per room by photometry. Every fixture's flux (lm, or W × lamp efficacy), color temperature and distribution (bulb, spot beam, LED panel/strip) lights the work plane by the inverse-square cosine law, walls casting shadows, plus interreflection (split flux). Reply rooms [[id,name,m²,avg lx,min lx,uniformity,reference lx,fixtures,W/m²,verdict]] against ABNT NBR ISO/CIE 8995-1 residential references. edit_lighting places the fixtures a room needs. Set a piece's light with place/update light {lm|w,lamp,k,beam,area}."
     )]
     pub(crate) fn read_lighting(
         &self,
@@ -62,7 +62,8 @@ impl NewEraMcp {
         }))
     }
     #[tool(
-        description = "Fill a room with a grid of one fixture (downlight, led-panel, light-ceiling, pendant) until the work plane reaches the room's ABNT NBR ISO/CIE 8995-1 reference, or lux; the grid is checked by the same photometry as the lighting tool. Reply placed ids, and the room's rating before and after."
+        name = "edit_lighting",
+        description = "Fill a room with a grid of one fixture (downlight, led-panel, light-ceiling, pendant) until the work plane reaches the room's ABNT NBR ISO/CIE 8995-1 reference, or lux; the grid is checked by the same photometry as `lighting`. Reply placed ids, and the room's rating before and after."
     )]
     pub(crate) fn fill_lighting(
         &self,
