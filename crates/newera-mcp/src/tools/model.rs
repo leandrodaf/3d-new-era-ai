@@ -436,7 +436,7 @@ mod tests {
         // A material override and some metadata, set between versions.
         {
             let mut changed = piece("f1");
-            changed.info.brand = Some("Tok&Stok".into());
+            changed.info.brand = Some("Example Furniture".into());
             changed.materials.push(newera_core::ModelMaterial {
                 name: "tecido".into(),
                 key: None,
@@ -490,7 +490,7 @@ mod tests {
                 before.position,
                 before.angle,
                 before.width,
-                Some("Tok&Stok")
+                Some("Example Furniture")
             )
         );
         assert!(reply.contains(&format!("f1: {v3} → {v4} (")), "{reply}");
