@@ -198,7 +198,9 @@ impl NewEraMcp {
         }
         let layout = |count: usize| -> (Vec<newera_core::Furniture>, newera_core::RoomLighting) {
             // The whole grid, even a few more than asked: symmetric layouts.
-            let placed: Vec<newera_core::Furniture> = grid_positions(&room.points, count)
+            // Each fixture whole inside the room: its box never crosses a wall.
+            let clear = template.width.hypot(template.depth) / 2.0;
+            let placed: Vec<newera_core::Furniture> = grid_positions(&room.points, count, clear)
                 .into_iter()
                 .map(|at| {
                     let mut piece = template.clone();
@@ -242,6 +244,13 @@ impl NewEraMcp {
         while after.average + 0.5 < wanted && count < 60 {
             count += 1;
             (placed, after) = layout(count);
+        }
+        if placed.is_empty() {
+            return Err(invalid(format!(
+                "no spot in {} keeps a {cat} whole inside it ({} cm off every edge): a smaller fixture, or place it by hand",
+                room.id,
+                (template.width.hypot(template.depth) / 2.0).ceil()
+            )));
         }
         let mut ids = Vec::new();
         let mut commands = Vec::new();
@@ -346,5 +355,24 @@ mod tests {
             ))
             .is_err()
         );
+    }
+
+    #[test]
+    fn a_fill_with_no_room_for_the_fixture_places_nothing() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[80,0],[80,80],[0,80]],"closed":true}],"rooms":[{"name":"Despensa","at":[40,40]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let room = s.document.read().home().rooms[0].id.to_string();
+        let refused = s
+            .lighting(Parameters(
+                serde_json::from_str(&format!(r#"{{"room":"{room}","fill":"led-panel"}}"#))
+                    .unwrap(),
+            ))
+            .unwrap_err();
+        assert!(refused.message.contains("no spot"), "{}", refused.message);
+        assert!(s.document.read().home().furniture.is_empty());
     }
 }
