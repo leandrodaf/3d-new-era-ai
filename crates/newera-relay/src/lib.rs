@@ -108,6 +108,9 @@ enum FromTab {
         tools: Value,
         #[serde(default)]
         resources: Value,
+        /// What the server says about itself, as the tab's editor words it.
+        #[serde(default)]
+        instructions: Option<String>,
     },
     /// The answer to a call.
     Result {
@@ -134,6 +137,8 @@ struct Room {
     tools: Value,
     /// The pages this tab said it has, contents included, from its `hello`.
     resources: Value,
+    /// The instructions this tab's editor gives, from its `hello`.
+    instructions: Option<String>,
     /// Calls in flight, waiting on the tab.
     waiting: HashMap<u64, oneshot::Sender<Result<Value, String>>>,
     next_call: u64,
@@ -154,6 +159,7 @@ impl Room {
             outbox: None,
             tools: json!([]),
             resources: json!([]),
+            instructions: None,
             waiting: HashMap::new(),
             next_call: 0,
             orphaned_at: Some(Instant::now()),
@@ -520,9 +526,14 @@ async fn hold_tab(socket: WebSocket, rooms: Rooms, room: String) {
         };
         entry.touched = Instant::now();
         match from {
-            FromTab::Hello { tools, resources } => {
+            FromTab::Hello {
+                tools,
+                resources,
+                instructions,
+            } => {
                 entry.tools = tools;
                 entry.resources = resources;
+                entry.instructions = instructions;
             }
             FromTab::Result {
                 id,
@@ -660,6 +671,14 @@ pub async fn answer_in(rooms: &Rooms, room: &str, message: &Value) -> Option<Val
                     let _ = outbox.send(told);
                 }
             }
+            // The tab's editor words its own; an older one sent none.
+            let instructions = {
+                let held = rooms.0.lock().expect("rooms");
+                held.rooms
+                    .get(room)
+                    .and_then(|entry| entry.instructions.clone())
+                    .unwrap_or_else(|| INSTRUCTIONS.to_owned())
+            };
             Some(json!({
                 "jsonrpc": "2.0",
                 "id": id,
@@ -671,7 +690,7 @@ pub async fn answer_in(rooms: &Rooms, room: &str, message: &Value) -> Option<Val
                         "title": "3D New Era AI (browser)",
                         "version": env!("CARGO_PKG_VERSION"),
                     },
-                    "instructions": INSTRUCTIONS,
+                    "instructions": instructions,
                 }
             }))
         }
@@ -753,8 +772,9 @@ pub async fn answer_in(rooms: &Rooms, room: &str, message: &Value) -> Option<Val
     }
 }
 
-/// What the browser's MCP tells an agent about itself. The tools carry their
-/// own descriptions; this is the part about where it is.
+/// What the browser's MCP tells an agent about itself when the tab sent no
+/// words of its own (an editor older than the relay). A tab's `hello` carries
+/// `newera_mcp::surface::instructions`, which name every tool it offers.
 const INSTRUCTIONS: &str = "\
 Home design editor running in someone's browser tab, reached through a relay. \
 Units: cm. Plan axes: x right, y down. Everything you change appears on their \

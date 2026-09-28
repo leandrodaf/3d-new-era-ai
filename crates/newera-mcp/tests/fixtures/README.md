@@ -17,8 +17,9 @@ Review the JSON diff alongside the implementation, then run:
 cargo test -p newera-mcp
 ```
 
-Normal tests and CI never rewrite the snapshot. Browser-specific descriptions
-and transport behavior remain covered separately by the browser MCP E2E test.
+Normal tests and CI never rewrite the snapshot. What the browser tab and the
+hosted service offer and how they word it is `src/surface.rs`, with its own
+tests; the browser MCP E2E test runs it in a real tab.
 
 ## Budget and search
 

@@ -12,6 +12,7 @@ mod edit;
 mod hints;
 pub mod output;
 mod schema;
+pub mod surface;
 #[cfg(test)]
 mod surface_rules;
 mod tools;
@@ -19,6 +20,7 @@ mod trace;
 
 use newera_core::SharedDocument;
 
+pub use surface::Transport;
 pub use tools::NewEraMcp;
 
 // The transports need an operating system to talk through: a pipe, a socket.

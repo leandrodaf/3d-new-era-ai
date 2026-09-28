@@ -56,7 +56,8 @@ async fn an_ai_reaches_the_tab_and_the_tab_answers() {
         .send(tokio_tungstenite::tungstenite::Message::text(
             json!({
                 "type": "hello",
-                "tools": [{"name": "home", "description": "reads the plan", "inputSchema": {"type": "object"}}]
+                "tools": [{"name": "home", "description": "reads the plan", "inputSchema": {"type": "object"}}],
+                "instructions": "the tab's own words"
             })
             .to_string(),
         ))
@@ -78,6 +79,8 @@ async fn an_ai_reaches_the_tab_and_the_tab_answers() {
     .await;
     assert_eq!(status, 200);
     assert_eq!(hello["result"]["serverInfo"]["name"], "3d-new-era-ai");
+    // What the server says about itself is what the tab's editor sent.
+    assert_eq!(hello["result"]["instructions"], "the tab's own words");
 
     // The window is told who turned up, so it can say so on screen.
     let told = socket.next().await.expect("a message").expect("text");

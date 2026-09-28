@@ -86,6 +86,18 @@ has an output schema in `output.rs`, with a description on every field, and ever
 fits it (`every_answer_fits_its_schema`). The descriptions stay in that table and leave
 on the way out: the model reads the answer, and a client validates only the shape.
 
+## Where the tools are served
+
+The same tools reach agents three ways: the desktop (the window, `newera serve`,
+`newera mcp`), a browser tab through the relay, and the hosted service.
+[`src/surface.rs`](../crates/newera-mcp/src/surface.rs) is the one place that says what
+each offers (`Transport::offers`), what a tool means there when that differs (a save in a
+tab is a download), and the server instructions each gives. A place offers a tool only when
+it can run it: the ones that need the person's own disk or programs (`DESKTOP_ONLY`) are
+neither listed nor accepted in a tab or the hosted service. A new tool is offered everywhere
+unless it goes on that list, and needs a category in the instructions' map
+(`every_offered_tool_is_in_one_category`).
+
 ## Budget
 
 [`tool-budget.json`](../crates/newera-mcp/tests/fixtures/tool-budget.json) records what
