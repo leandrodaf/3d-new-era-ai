@@ -2920,7 +2920,6 @@ mod tests {
         assert!(!dark("door").is_empty(), "a wooden door is not a window");
     }
 
-
     #[test]
     fn a_vanity_with_two_bowls_is_a_bathroom_not_a_kitchen() {
         let mut home = Home::default();
