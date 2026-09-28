@@ -103,6 +103,9 @@ pub(crate) struct Render3dParams {
     cut: Option<f64>,
     /// `up` (default), `cutaway` or `down`.
     walls: Option<String>,
+    /// Storeys drawn: an id like `lv3` draws it and those below, `all`
+    /// every one (default: as the editor shows them).
+    level: Option<String>,
     /// Width px (default 480, 64..1600).
     w: Option<u32>,
     /// Height px (default 360, 64..1200).
@@ -288,7 +291,25 @@ impl NewEraMcp {
         #[allow(clippy::cast_precision_loss)]
         let aspect = w as f32 / h as f32;
         let doc = self.document.read();
-        let home = doc.home();
+        // The storeys drawn are this call's, not the editor's.
+        let mut home = doc.home().clone();
+        match p.level.as_deref() {
+            None => {}
+            Some("all") => home.environment.all_levels_visible = true,
+            Some(raw) => {
+                let id: newera_core::LevelId = raw.parse().map_err(|_| {
+                    invalid(format!("level: a storey id like lv3, or all (not {raw})"))
+                })?;
+                if home.level(id).is_none() {
+                    return Err(invalid(format!("no storey {raw} (`levels` lists them)")));
+                }
+                home.selected_level = Some(id);
+                home.environment.all_levels_visible = false;
+            }
+        }
+        let assets = doc.asset_dir();
+        drop(doc);
+        let home = &home;
         let view = match (p.cam, p.view.as_deref()) {
             (Some(i), _) => {
                 let camera = home
@@ -331,11 +352,8 @@ impl NewEraMcp {
             Some("down") => Some(newera_render::Cutaway::all(home)),
             Some(other) => return Err(invalid(format!("unknown walls `{other}`"))),
         };
-        let home = home.clone();
-        let assets = doc.asset_dir();
-        drop(doc);
         let image =
-            newera_render::render_home_cut(&home, &view, cutaway.as_ref(), w, h, assets.as_deref());
+            newera_render::render_home_cut(home, &view, cutaway.as_ref(), w, h, assets.as_deref());
         let mut png = Vec::new();
         image::DynamicImage::ImageRgba8(image)
             .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
@@ -521,6 +539,68 @@ mod tests {
             .is_err()
         );
     }
+    #[test]
+    fn render_3d_draws_the_storeys_it_is_told() {
+        let s = server();
+        let walls = r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}]}"#;
+        s.create(Parameters(serde_json::from_str(walls).unwrap()))
+            .unwrap();
+        let upper = {
+            let mut doc = s.document.write();
+            let upper = newera_core::ops::add_level(&mut doc, None, None).unwrap();
+            let ground = doc.home().base_level();
+            doc.select_level(ground);
+            upper
+        };
+        // Upstairs, a tall box that shows from the air.
+        s.create(Parameters(
+            serde_json::from_str(r#"{"walls":[{"pts":[[100,100],[300,100]],"h":250}]}"#).unwrap(),
+        ))
+        .unwrap();
+        {
+            let mut doc = s.document.write();
+            let id = doc.home().walls.last().unwrap().id;
+            let mut wall = doc.home().wall(id).unwrap().clone();
+            wall.level = Some(upper);
+            doc.execute(newera_core::Command::update(wall)).unwrap();
+        }
+        let shown = s.document.read().home().current_level();
+        let png = |level: Option<&str>| {
+            let result = s
+                .render_3d(Parameters(Render3dParams {
+                    level: level.map(Into::into),
+                    w: Some(96),
+                    h: Some(72),
+                    ..Render3dParams::default()
+                }))
+                .unwrap();
+            let ContentBlock::Image(image) = &result.content[0] else {
+                panic!("expected image")
+            };
+            image.data.clone()
+        };
+        let ground_only = png(None);
+        let all = png(Some("all"));
+        assert_ne!(all, ground_only, "the upper storey is drawn");
+        assert_eq!(
+            png(Some(&upper.to_string())),
+            all,
+            "the upper one and those below"
+        );
+        assert_eq!(
+            s.document.read().home().current_level(),
+            shown,
+            "the view stays"
+        );
+        assert!(
+            s.render_3d(Parameters(Render3dParams {
+                level: Some("lv999".into()),
+                ..Render3dParams::default()
+            }))
+            .is_err()
+        );
+    }
+
     #[test]
     fn render_3d_brings_the_walls_down() {
         let s = server();
