@@ -8,10 +8,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- `render_3d` takes `level`: a storey draws it and the ones below, `all` draws every one. It drew
-  what the editor showed — the selected storey and those below — so the same camera rendered the
-  stair's landing without the floor above it when the ground floor happened to be selected, and
-  checking the connection meant switching the person's view.
 - A `rules` tool answers what a review checks against — the NBR 5410, 16264, 5626 and 8160
   tables behind `electrical` and `plumbing`, what each `check_layout` problem means, how
   `ergonomics` scores — and the same texts are resources, `newera://rules/<topic>`.
