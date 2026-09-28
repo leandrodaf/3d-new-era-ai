@@ -2892,36 +2892,6 @@ mod tests {
     }
 
     #[test]
-    fn the_tv_is_judged_from_the_seats_that_face_it() {
-        let mut home = Home::default();
-        square(&mut home, "Estar", 500.0, 500.0);
-        let mut tv = piece(20, "tv", (250.0, 450.0), (124.0, 8.0, 72.0), 180.0);
-        tv.elevation = 100.0;
-        home.furniture = vec![
-            tv,
-            // The sofa watches it from 3 m.
-            piece(21, "sofa-3", (250.0, 150.0), (210.0, 90.0, 85.0), 0.0),
-            // A reading chair beside it, turned away from the screen.
-            piece(22, "armchair", (130.0, 400.0), (65.0, 65.0, 85.0), 180.0),
-        ];
-        let tip = |home: &Home| {
-            review(home, &Profile::default())
-                .findings
-                .iter()
-                .find(|f| f.key.starts_with("tv_distance"))
-                .map(|f| f.message.to_string())
-        };
-        assert_eq!(tip(&home), None, "the sofa is where it is watched from");
-        // Turned to the screen, the chair is the nearest seat watching it.
-        home.furniture[2].angle = 270.0;
-        assert!(
-            tip(&home).is_some_and(|t| t.contains("armchair")),
-            "{:?}",
-            tip(&home)
-        );
-    }
-
-    #[test]
     fn a_vanity_with_two_bowls_is_a_bathroom_not_a_kitchen() {
         let mut home = Home::default();
         square(&mut home, "Banho master", 250.0, 130.0);
@@ -3849,6 +3819,36 @@ mod tests {
         home.furniture[1].position.y = 230.0;
         let report = review(&home, &Profile::default());
         assert!(!says(&report, Severity::Dica, "da TV"), "{report:#?}");
+    }
+
+    #[test]
+    fn the_tv_is_judged_from_the_seats_that_face_it() {
+        let mut home = Home::default();
+        square(&mut home, "Estar", 500.0, 500.0);
+        let mut tv = piece(20, "tv", (250.0, 450.0), (124.0, 8.0, 72.0), 180.0);
+        tv.elevation = 100.0;
+        home.furniture = vec![
+            tv,
+            // The sofa watches it from 3 m.
+            piece(21, "sofa-3", (250.0, 150.0), (210.0, 90.0, 85.0), 0.0),
+            // A reading chair beside it, turned away from the screen.
+            piece(22, "armchair", (130.0, 400.0), (65.0, 65.0, 85.0), 180.0),
+        ];
+        let tip = |home: &Home| {
+            review(home, &Profile::default())
+                .findings
+                .iter()
+                .find(|f| f.key.starts_with("tv_distance"))
+                .map(|f| f.message.to_string())
+        };
+        assert_eq!(tip(&home), None, "the sofa is where it is watched from");
+        // Turned to the screen, the chair is the nearest seat watching it.
+        home.furniture[2].angle = 270.0;
+        assert!(
+            tip(&home).is_some_and(|t| t.contains("armchair")),
+            "{:?}",
+            tip(&home)
+        );
     }
 
     /// The false positive with a standard at its root: a dishwasher is an
