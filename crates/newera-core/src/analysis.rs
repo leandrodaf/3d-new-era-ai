@@ -311,6 +311,8 @@ const MIN_OVERLAP: f64 = 25.0;
 const WALL_TOLERANCE: f64 = 2.0;
 /// Pieces this thin (rugs, mats) never collide.
 const FLAT: f64 = 2.0;
+/// Less shared height than this, cm, and two pieces only touch.
+const TOUCH: f64 = 1.0;
 
 fn polygon(points: &[Point2]) -> Polygon<f64> {
     to_polygon(points)
@@ -319,6 +321,15 @@ fn polygon(points: &[Point2]) -> Polygon<f64> {
 fn heights_overlap(a: &Furniture, b: &Furniture) -> bool {
     let ((a0, a1), (b0, b1)) = (a.height_range(), b.height_range());
     a0 < b1 && b0 < a1
+}
+
+/// How much two height ranges share, cm (0 or less when apart or touching).
+fn shared_height((a0, a1): (f64, f64), (b0, b1): (f64, f64)) -> f64 {
+    a1.min(b1) - a0.max(b0)
+}
+
+fn round_mm(v: f64) -> f64 {
+    (v * 10.0).round() / 10.0
 }
 
 /// Height of a wall's top above the floor at a plan point.
@@ -448,6 +459,13 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
         .map(|f| polygon(&f.projected_footprint()))
         .collect();
 
+    // Heights in the building, for pieces of two storeys: a sofa downstairs
+    // and a bed upstairs share a plan, not a space.
+    let building = |i: usize| {
+        let floor = home.elevation_of(levels[i]);
+        let (lo, hi) = pieces[i].height_range();
+        (lo + floor, hi + floor)
+    };
     for (i, a) in pieces.iter().enumerate() {
         if a.is_opening() || a.height <= FLAT {
             continue;
@@ -460,6 +478,7 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
                 // Two storeys are checked against each other only for their
                 // heights in the building, not for their drawn elevations.
                 || (!cross_level && !heights_overlap(a, b))
+                || (cross_level && shared_height(building(i), building(j)) < TOUCH)
             {
                 continue;
             }
@@ -480,7 +499,10 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
             if !meet {
                 continue;
             }
-            let extent = extent_of(&shared, a, b);
+            let mut extent = extent_of(&shared, a, b);
+            if cross_level {
+                extent[2] = round_mm(shared_height(building(i), building(j)));
+            }
             let kind = if cross_level {
                 Overlap::CrossLevel
             } else if let Some(kind) = point_in_piece(a, b) {
@@ -1048,9 +1070,8 @@ fn extent_of(shared: &geo::MultiPolygon<f64>, a: &Furniture, b: &Furniture) -> [
     let plan = shared.bounding_rect().map_or([0.0, 0.0], |r| {
         [r.max().x - r.min().x, r.max().y - r.min().y]
     });
-    let ((a0, a1), (b0, b1)) = (a.height_range(), b.height_range());
-    let z = (a1.min(b1) - a0.max(b0)).max(0.0);
-    [plan[0], plan[1], z].map(|v| (v * 10.0).round() / 10.0)
+    let z = shared_height(a.height_range(), b.height_range()).max(0.0);
+    [plan[0], plan[1], z].map(round_mm)
 }
 
 /// When one of two overlapping pieces is a point of a project and the other
@@ -1522,6 +1543,60 @@ mod tests {
         layered.levels[0].set_reference(true);
         assert!(check_layout_in(&layered, Storeys::All).is_empty());
         assert_eq!(layered.stacked_levels(), Vec::new());
+    }
+
+    #[test]
+    fn pieces_of_two_storeys_overlap_only_where_they_share_height_in_the_building() {
+        use crate::elements::Level;
+        let mut home = Home::default();
+        home.levels = vec![
+            Level {
+                id: LevelId(1),
+                name: "Térreo".into(),
+                elevation: 0.0,
+                height: 280.0,
+                ..Level::default()
+            },
+            Level {
+                id: LevelId(2),
+                name: "Superior".into(),
+                elevation: 292.0,
+                height: 280.0,
+                elevation_index: 1,
+                ..Level::default()
+            },
+        ];
+        let piece = |id: u64, level: u64, elevation: f64, height: f64| Furniture {
+            id: FurnitureId(id),
+            catalog: "table".into(),
+            name: format!("f{id}"),
+            position: Point2::new(100.0, 100.0),
+            width: 140.0,
+            depth: 80.0,
+            height,
+            elevation,
+            level: Some(LevelId(level)),
+            ..Furniture::default()
+        };
+        // A table downstairs, one right above it upstairs, and a shelf whose
+        // top meets the upper floor: a plan shared, no space shared.
+        home.furniture = vec![
+            piece(1, 1, 0.0, 75.0),
+            piece(2, 2, 0.0, 75.0),
+            piece(3, 1, 212.0, 80.0),
+        ];
+        assert_eq!(check_layout_in(&home, Storeys::All), Vec::new());
+        // A cabinet reaching 18 cm above the upper floor does meet the table there.
+        home.furniture[2].height = 98.0;
+        assert_eq!(
+            check_layout_in(&home, Storeys::All),
+            vec![Issue::Overlap {
+                a: FurnitureId(2),
+                b: FurnitureId(3),
+                kind: Overlap::CrossLevel,
+                extent: [140.0, 80.0, 18.0],
+            }]
+        );
     }
 
     #[test]
