@@ -2330,11 +2330,13 @@ fn window_area(scene: &Scene<'_>, points: &[Point2]) -> f64 {
 }
 
 /// An opening that is glass from side to side: a window, a French window,
-/// or a sliding door, whose leaves the catalog makes of glass.
+/// or a sliding door, whose sliding leaves the catalog makes of glass (made
+/// to swing, the same door draws solid leaves).
 fn glazed(f: &newera_core::Furniture) -> bool {
     f.opening.as_ref().is_some_and(|o| {
         o.kind == OpeningKind::Window
-            || matches!(f.catalog.as_str(), "french-window" | "door-sliding")
+            || f.catalog == "french-window"
+            || (f.catalog == "door-sliding" && o.sliding)
     })
 }
 
@@ -2862,6 +2864,8 @@ mod tests {
         let dark = |catalog: &str| {
             let mut home = Home::default();
             square(&mut home, "Sala", 400.0, 400.0);
+            let swung = catalog == "door-sliding-swung";
+            let catalog = if swung { "door-sliding" } else { catalog };
             let mut door = piece(20, catalog, (200.0, 0.0), (220.0, 15.0, 220.0), 0.0);
             door.opening = Some(newera_core::Opening {
                 kind: if catalog == "french-window" {
@@ -2870,7 +2874,7 @@ mod tests {
                     OpeningKind::Door
                 },
                 leaves: 2,
-                sliding: catalog != "door",
+                sliding: catalog != "door" && !swung,
                 ..newera_core::Opening::default()
             });
             home.furniture.push(door);
@@ -2884,6 +2888,10 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(dark("door-sliding"), Vec::<String>::new());
+        assert!(
+            !dark("door-sliding-swung").is_empty(),
+            "made to swing, its leaves are solid"
+        );
         assert_eq!(dark("french-window"), Vec::<String>::new());
         assert!(!dark("door").is_empty(), "a wooden door is not a window");
     }
