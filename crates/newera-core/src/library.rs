@@ -277,11 +277,8 @@ mod tests {
         let (latest, model) = get(&library, "win", None).unwrap();
         assert_eq!((latest.version, model), (2, folder.join("win.obj")));
         assert_eq!(
-            latest.references[0].file,
-            folder
-                .join("referencias/00-frente.jpg")
-                .display()
-                .to_string()
+            Path::new(&latest.references[0].file),
+            folder.join("referencias").join("00-frente.jpg")
         );
         let (older, _) = get(&library, "win", Some(1)).unwrap();
         assert_eq!(older.notes.as_deref(), Some("primeira"));
