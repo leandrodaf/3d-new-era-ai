@@ -11,6 +11,9 @@
 
 use serde_json::{Value, json};
 
+/// Tools the hosted service adds of its own: the account's projects.
+pub const HOSTED_ONLY: [&str; 1] = ["projects"];
+
 /// Where the tools are served.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Transport {
@@ -49,7 +52,7 @@ impl Transport {
                 "Start or keep the project in this browser tab. new: an empty project in place of this one. save {path?}: downloads a .newera backup; path supplies a filename only; reports download_started (not disk confirmation) and autosave recovery status, and no server file is written. open reads files on a desktop only.",
             ),
             (Self::Cloud, "file") => Some(
-                "Start, open or keep the account's projects. new {name?}: a new, empty project, made the active one. open {path}: one of the account's projects by name (projects lists them), made the active one. save {path?}: keeps the active project now — it is also kept after every change; path renames it.",
+                "Start, open or keep the account's projects. new {name?}: a new, empty project, made the active one. open {path}: one of the account's projects by name (projects lists them), made the active one. save {path?}: keeps the active project now — it is also kept after every change; path renames it. With the editor open and signed in at 3dneweraai.com/app, calls reach that tab instead: save downloads a .newera backup there, and open reads files on a desktop only.",
             ),
             (Self::Cloud, "export") => Some(
                 "Export the active project to a file, by the extension of path. what=plan (default): .pdf (A3; scale=50/100 or fit), .svg or .png, or the 3D model as .glb or .obj. what=cut_list: the joinery's cut list as .csv, or .dxf/.svg sheets. Reply: a link to the file, good for a day.",
@@ -194,11 +197,15 @@ pub fn instructions(transport: Transport) -> String {
     let map: Vec<String> = CATEGORIES
         .iter()
         .filter_map(|(what, names)| {
-            let offered: Vec<&str> = names
+            let mut offered: Vec<&str> = names
                 .iter()
                 .copied()
                 .filter(|n| transport.offers(n))
                 .collect();
+            // The hosted service adds the account's project list.
+            if transport == Transport::Cloud && *what == "project" {
+                offered.push(HOSTED_ONLY[0]);
+            }
             (!offered.is_empty()).then(|| format!("{what}: {}", offered.join(", ")))
         })
         .collect();

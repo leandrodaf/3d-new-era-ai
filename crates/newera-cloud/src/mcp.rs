@@ -99,7 +99,7 @@ fn hosted_tools() -> Vec<Value> {
     // What the service offers and how it words it is the MCP crate's to say.
     let mut tools = newera_mcp::surface::tools(newera_mcp::Transport::Cloud);
     tools.push(json!({
-        "name": "projects",
+        "name": newera_mcp::surface::HOSTED_ONLY[0],
         "title": "List your projects",
         "description": "The projects kept in the account: rows [name, id, kb, updated, active], the space used and the plan's limits. file action=open switches the active one; action=new starts one.",
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false},
@@ -246,6 +246,21 @@ async fn answer(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The instructions name every tool the service lists, its own
+    /// `projects` included: a client that defers definitions shows the model
+    /// only the names and these words.
+    #[test]
+    fn the_instructions_name_every_hosted_tool() {
+        let said = newera_mcp::surface::instructions(newera_mcp::Transport::Cloud);
+        for tool in hosted_tools() {
+            let name = tool["name"].as_str().unwrap();
+            assert!(
+                said.contains(&format!(" {name}")),
+                "the instructions leave out {name}"
+            );
+        }
+    }
 
     /// No hosted tool works without the account, and each one says so.
     #[test]
