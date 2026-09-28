@@ -1011,7 +1011,7 @@ mod tests {
         )
         .unwrap();
         std::fs::write(dir.join("win.mtl"), "newmtl tecido\nKd 0.2 0.4 0.3\n").unwrap();
-        let file = dir.join("win.obj").display().to_string();
+        let file = path(&dir.join("win.obj"));
         let s = server();
         s.place(Parameters(
             serde_json::from_str(&format!(r#"{{"items":[{{"model":"{file}","at":[0,0]}}]}}"#))
