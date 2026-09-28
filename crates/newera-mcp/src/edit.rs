@@ -796,7 +796,7 @@ pub(crate) fn missing(home: &newera_core::Home, id: ElementId) -> String {
             .find(|p| p.id == piece)
             .map_or_else(String::new, |p| format!(" ({})", p.name));
         return format!(
-            "{id}{part} is a part of {}; edit {} instead — changing the group rebuilds its parts (a part takes only name, brand, model_name and url on its own)",
+            "{id}{part} is a part of {}; edit {} instead — changing the group rebuilds its parts",
             owner.id, owner.id
         );
     }

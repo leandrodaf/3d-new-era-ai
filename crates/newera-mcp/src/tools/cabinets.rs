@@ -583,6 +583,17 @@ mod tests {
         ))
         .unwrap_err();
         assert!(refused.contains("belongs to the group"), "{refused}");
+        assert!(
+            !refused.contains("mat, opacity"),
+            "a board takes no finish: {refused}"
+        );
+        // The item is told it takes its finish, and nothing else is said.
+        let told = update(format!(r#"{{"items":[{{"id":"{bowl}","w":10}}]}}"#)).unwrap_err();
+        assert!(
+            told.contains("takes only name, brand, model_name, url, layer, color, mat, opacity"),
+            "{told}"
+        );
+        assert_eq!(told.matches("takes only").count(), 1, "{told}");
         // Rebuilt longer, the host carries the bowl with its finish.
         let joinery: JoineryParams =
             serde_json::from_str(&format!(r#"{{"id":"{top}","p":{{"length":150}}}}"#)).unwrap();
