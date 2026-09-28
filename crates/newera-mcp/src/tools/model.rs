@@ -1691,7 +1691,7 @@ mod tests {
         ))
         .unwrap();
         let edit = |json: String| s.edit_model(Parameters(serde_json::from_str(&json).unwrap()));
-        let page = "https://www.tokstok.com.br/cadeira-ares";
+        let page = "https://example.com/cadeira-ares";
         edit(format!(
             r#"{{"action":"reference","ids":["f1"],"file":"{photo}","view":"front","source":"{page}","note":"frente"}}"#
         ))
