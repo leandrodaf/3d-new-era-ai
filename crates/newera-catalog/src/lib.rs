@@ -757,7 +757,7 @@ pub static CATALOG: &[CatalogItem] = &[
             [60.0, 50.0, 6.0],
             DARK,
             Model::Cooktop,
-            "cooktop cook top embutir fogao vidro",
+            "cooktop cook top embutir fogao vidro inducao induction eletrico electric",
         ),
         90.0,
     ),
@@ -2140,6 +2140,9 @@ mod tests {
         assert!(ids("sofa").contains(&"sofa-3"));
         assert!(ids("Sofá 2").contains(&"sofa-2"));
         assert_eq!(ids("geladeira").first(), Some(&"fridge"));
+        // An induction hob is a cooktop, not a charging outlet tower.
+        assert_eq!(ids("indução").first(), Some(&"cooktop"));
+        assert_eq!(ids("cooktop de indução").first(), Some(&"cooktop"));
         // Telecom points are found by what an agent or a client calls them.
         assert_eq!(ids("ponto de rede rj45").first(), Some(&"network-outlet"));
         assert_eq!(ids("wifi teto").first(), Some(&"wifi-point"));

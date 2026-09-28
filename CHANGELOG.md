@@ -75,6 +75,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `catalog` finds the cooktop when asked for an induction or electric one. "indução" answered only
+  outlet towers with wireless charging; an induction hob is the catalog's cooktop, named for what it
+  is when placed (`name` "Cooktop de indução"), which is what the reviews read its fuel from.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
