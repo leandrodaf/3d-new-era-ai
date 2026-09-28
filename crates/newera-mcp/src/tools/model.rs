@@ -1187,7 +1187,7 @@ mod tests {
             ]),
         )
         .unwrap();
-        let file = dir.join("win.obj").display().to_string();
+        let file = path(&dir.join("win.obj"));
         let s = server();
         s.place(Parameters(
             serde_json::from_str(&format!(
