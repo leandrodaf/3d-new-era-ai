@@ -50,8 +50,11 @@ impl NewEraMcp {
     )]
     pub(crate) fn read_plumbing(
         &self,
-        Parameters(_): Parameters<super::Nothing>,
+        Parameters(p): Parameters<super::StoreyParams>,
     ) -> Result<String, ErrorData> {
+        if let Some(scratch) = self.on_storey(p.level.as_deref())? {
+            return scratch.plumbing(Parameters(PlumbingParams::default()));
+        }
         self.plumbing(Parameters(PlumbingParams::default()))
     }
     #[tool(

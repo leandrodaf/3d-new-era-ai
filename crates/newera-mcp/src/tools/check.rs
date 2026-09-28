@@ -134,6 +134,15 @@ fn accepted_key(raw: &str) -> String {
     }
 }
 
+/// Who lives there, and the storey to review.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub(crate) struct ErgonomicsReadParams {
+    #[serde(flatten)]
+    pub(crate) people: People,
+    /// Storey to review, an id like `lv3` (default: the one shown).
+    pub(crate) level: Option<String>,
+}
+
 /// Who lives there, plus what has already been looked at.
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct ErgonomicsParams {
@@ -175,10 +184,17 @@ impl NewEraMcp {
         name = "ergonomics",
         description = "Ergonomics and habitability review for the people living there: room to walk beside beds and in front of kitchen equipment, beds, seats, bathrooms and wardrobes per person, the kitchen (work triangle, counter heights and lengths, work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. It advises and never blocks. Answers {score, score_basis, scope, scores:{architecture,electrical,plumbing}, layout, coverage, capacity, findings:[{sev, place, msg, key, weight, discipline, in_scope, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. weight is what the score gains if that finding goes; fix is a checked change as `move` or `update` arguments, to apply and review again; tier A–E is how much the source obliges where the project is. People and city given here weigh this call only; `edit_home` keeps them for every review. `accept` marks a finding right as drawn. How the score and the tiers work: `rules` topic=ergonomics."
     )]
-    pub(crate) fn read_ergonomics(&self, Parameters(people): Parameters<People>) -> String {
-        self.review(&ErgonomicsParams {
-            people,
+    pub(crate) fn read_ergonomics(
+        &self,
+        Parameters(p): Parameters<ErgonomicsReadParams>,
+    ) -> Result<String, ErrorData> {
+        let params = ErgonomicsParams {
+            people: p.people,
             ..ErgonomicsParams::default()
+        };
+        Ok(match self.on_storey(p.level.as_deref())? {
+            Some(scratch) => scratch.review(&params),
+            None => self.review(&params),
         })
     }
     #[tool(
@@ -1424,9 +1440,12 @@ mod tests {
         let before = rev();
 
         // A review for four people weighs them, and keeps nothing.
-        let four: serde_json::Value = serde_json::from_str(&s.read_ergonomics(Parameters(
-            serde_json::from_str(r#"{"occupants":4}"#).unwrap(),
-        )))
+        let four: serde_json::Value = serde_json::from_str(
+            &s.read_ergonomics(Parameters(
+                serde_json::from_str(r#"{"occupants":4}"#).unwrap(),
+            ))
+            .unwrap(),
+        )
         .unwrap();
         assert_eq!(rev(), before, "a review is a read");
         let layout: serde_json::Value = serde_json::from_str(
@@ -1442,8 +1461,11 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(rev(), before + 1);
-        let kept: serde_json::Value =
-            serde_json::from_str(&s.read_ergonomics(Parameters(People::default()))).unwrap();
+        let kept: serde_json::Value = serde_json::from_str(
+            &s.read_ergonomics(Parameters(ErgonomicsReadParams::default()))
+                .unwrap(),
+        )
+        .unwrap();
         assert_eq!(kept["score"], four["score"], "{kept}");
 
         // accept marks the clash by the key the check gave, ids in any order.

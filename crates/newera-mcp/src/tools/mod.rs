@@ -68,6 +68,14 @@ pub(crate) mod rules;
 #[serde(deny_unknown_fields)]
 pub(crate) struct Nothing {}
 
+/// A review of one storey.
+#[derive(Debug, Default, serde::Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct StoreyParams {
+    /// Storey to review, an id like `lv3` (default: the one shown).
+    pub(crate) level: Option<String>,
+}
+
 /// The MCP server. Cheap to clone: it only holds a handle to the document.
 #[derive(Debug, Clone)]
 pub struct NewEraMcp {
@@ -127,6 +135,29 @@ impl NewEraMcp {
             document,
             tool_router,
         }
+    }
+
+    /// This server over a copy of the project showing storey `level`, for
+    /// a review of that storey that leaves the one the person is looking at
+    /// alone; `None` without a level.
+    pub(crate) fn on_storey(&self, level: Option<&str>) -> Result<Option<Self>, rmcp::ErrorData> {
+        let Some(raw) = level else {
+            return Ok(None);
+        };
+        let doc = self.document.read();
+        let id: newera_core::LevelId = raw
+            .parse()
+            .map_err(|_| reply::invalid(format!("level: a storey id like lv3 (not {raw})")))?;
+        if doc.home().level(id).is_none() {
+            return Err(reply::invalid(format!(
+                "no storey {raw} (`levels` lists them)"
+            )));
+        }
+        let mut home = doc.home().clone();
+        home.selected_level = Some(id);
+        let mut scratch = self.clone();
+        scratch.document = SharedDocument::new(newera_core::Document::new(home));
+        Ok(Some(scratch))
     }
 
     /// The tools this server offers, with their schemas — the same list the

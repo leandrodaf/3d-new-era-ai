@@ -219,6 +219,91 @@ mod tests {
         assert!(all.get("warnings").is_none(), "and the warning goes: {all}");
     }
     #[test]
+    fn a_review_takes_a_storey_and_leaves_the_one_shown_alone() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}],
+                    "rooms":[{"name":"Cozinha","at":[200,150]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"sink-counter","wall":"w1","along":200},{"cat":"light-ceiling","at":[200,150]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let ground = s.document.read().home().walls[0].level;
+        s.levels(Parameters(LevelsParams {
+            action: Some("add".into()),
+            name: Some("Superior".into()),
+            ..LevelsParams::default()
+        }))
+        .unwrap();
+        let ground = {
+            let doc = s.document.read();
+            doc.home().resolve_level(ground).unwrap().to_string()
+        };
+        let (shown, rev) = {
+            let doc = s.document.read();
+            (doc.home().current_level(), doc.revision())
+        };
+        let level = format!(r#"{{"level":"{ground}"}}"#);
+        let json = |text: String| -> serde_json::Value { serde_json::from_str(&text).unwrap() };
+        let ergonomics = json(
+            s.read_ergonomics(Parameters(serde_json::from_str(&level).unwrap()))
+                .unwrap(),
+        );
+        assert_eq!(ergonomics["coverage"]["storey"], ground, "{ergonomics}");
+        let lighting = json(
+            s.read_lighting(Parameters(serde_json::from_str(&level).unwrap()))
+                .unwrap(),
+        );
+        assert_eq!(lighting["rooms"][0][1], "Cozinha", "{lighting}");
+        let plumbing = json(
+            s.read_plumbing(Parameters(serde_json::from_str(&level).unwrap()))
+                .unwrap(),
+        );
+        assert!(
+            plumbing.to_string().contains("pia de cozinha"),
+            "{plumbing}"
+        );
+        let electrical = json(
+            s.read_electrical(Parameters(serde_json::from_str(&level).unwrap()))
+                .unwrap(),
+        );
+        assert!(
+            electrical["points"]
+                .as_object()
+                .is_some_and(|p| !p.is_empty()),
+            "{electrical}"
+        );
+        // The upper storey, shown, has none of it.
+        let upstairs = json(
+            s.read_lighting(Parameters(serde_json::from_str("{}").unwrap()))
+                .unwrap_or_else(|e| format!(r#"{{"error":{:?}}}"#, e.message)),
+        );
+        assert!(!upstairs.to_string().contains("Cozinha"), "{upstairs}");
+        let doc = s.document.read();
+        assert_eq!(doc.home().current_level(), shown, "the storey shown stays");
+        assert_eq!(doc.revision(), rev, "a review is a read");
+        drop(doc);
+        let wrong = s
+            .read_plumbing(Parameters(
+                serde_json::from_str(r#"{"level":"lv999"}"#).unwrap(),
+            ))
+            .unwrap_err();
+        assert!(
+            wrong.message.contains("no storey lv999"),
+            "{}",
+            wrong.message
+        );
+    }
+
+    #[test]
     fn levels_scope_edits_and_reads_to_the_selected_storey() {
         let s = server();
         let walls = r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}]}"#;

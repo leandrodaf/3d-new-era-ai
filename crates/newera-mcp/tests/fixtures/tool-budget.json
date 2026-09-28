@@ -1,5 +1,5 @@
 {
-  "total": 110284,
+  "total": 110678,
   "tools": {
     "accept": {
       "total": 1360,
@@ -146,9 +146,9 @@
       "output": 203
     },
     "electrical": {
-      "total": 1989,
+      "total": 2091,
       "description": 930,
-      "input": 391,
+      "input": 493,
       "output": 463
     },
     "embed": {
@@ -158,9 +158,9 @@
       "output": 300
     },
     "ergonomics": {
-      "total": 2820,
+      "total": 2893,
       "description": 1003,
-      "input": 1289,
+      "input": 1362,
       "output": 345
     },
     "export": {
@@ -218,9 +218,9 @@
       "output": 76
     },
     "lighting": {
-      "total": 1176,
+      "total": 1278,
       "description": 554,
-      "input": 230,
+      "input": 332,
       "output": 211
     },
     "materials": {
@@ -254,9 +254,9 @@
       "output": 76
     },
     "plumbing": {
-      "total": 1221,
+      "total": 1338,
       "description": 702,
-      "input": 46,
+      "input": 163,
       "output": 274
     },
     "render_3d": {

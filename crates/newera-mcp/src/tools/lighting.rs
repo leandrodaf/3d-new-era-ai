@@ -31,6 +31,8 @@ pub(crate) struct LightingReadParams {
     room: Option<String>,
     /// Work plane height cm (default 75).
     plane: Option<f64>,
+    /// Storey to review, an id like `lv3` (default: the one shown).
+    level: Option<String>,
 }
 /// A room to fill with light.
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -55,11 +57,15 @@ impl NewEraMcp {
         &self,
         Parameters(p): Parameters<LightingReadParams>,
     ) -> Result<String, ErrorData> {
-        self.lighting(Parameters(LightingParams {
+        let params = LightingParams {
             room: p.room,
             plane: p.plane,
             ..LightingParams::default()
-        }))
+        };
+        match self.on_storey(p.level.as_deref())? {
+            Some(scratch) => scratch.lighting(Parameters(params)),
+            None => self.lighting(Parameters(params)),
+        }
     }
     #[tool(
         name = "edit_lighting",
