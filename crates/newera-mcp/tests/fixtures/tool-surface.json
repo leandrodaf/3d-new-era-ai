@@ -4344,6 +4344,10 @@
           "description": "Height px (default 360, 64..1200)",
           "type": "integer"
         },
+        "level": {
+          "description": "Storeys drawn: an id like `lv3` draws it and those below, `all` every one (default: the one shown and those below)",
+          "type": "string"
+        },
         "pitch": {
           "description": "Aerial height angle, degrees",
           "type": "number"
