@@ -2877,32 +2877,6 @@ mod tests {
     }
 
     #[test]
-    fn a_washer_stands_under_a_countertop_with_a_sink() {
-        let mut home = Home::default();
-        square(&mut home, "Lavanderia", 300.0, 200.0);
-        let mut top = piece(20, "group", (150.0, 41.0), (264.0, 67.0, 90.0), 0.0);
-        top.name = "Bancada 264 × 67 cm".into();
-        top.properties.insert(
-            "joinery:params".into(),
-            r#"{"kind":"countertop","length":264,"depth":67,"height":90,"thickness":3,"cutouts":[{"kind":"sink","x":200}]}"#.into(),
-        );
-        home.furniture = vec![
-            top,
-            piece(21, "washer", (60.0, 39.0), (60.0, 60.0, 85.0), 0.0),
-        ];
-        let clash = |home: &Home| {
-            review(home, &Profile::default())
-                .findings
-                .iter()
-                .any(|f| f.message.contains("Ocupa o mesmo lugar"))
-        };
-        assert!(!clash(&home), "under the slab");
-        // Taller than the space under the slab, it is in the countertop.
-        home.furniture[1].height = 95.0;
-        assert!(clash(&home), "through the slab");
-    }
-
-    #[test]
     fn a_vanity_with_two_bowls_is_a_bathroom_not_a_kitchen() {
         let mut home = Home::default();
         square(&mut home, "Banho master", 250.0, 130.0);
@@ -3885,6 +3859,32 @@ mod tests {
             !says(&report, Severity::Dica, "84,5 cm"),
             "read by name, it is still an appliance: {report:#?}"
         );
+    }
+
+    #[test]
+    fn a_washer_stands_under_a_countertop_with_a_sink() {
+        let mut home = Home::default();
+        square(&mut home, "Lavanderia", 300.0, 200.0);
+        let mut top = piece(20, "group", (150.0, 41.0), (264.0, 67.0, 90.0), 0.0);
+        top.name = "Bancada 264 × 67 cm".into();
+        top.properties.insert(
+            "joinery:params".into(),
+            r#"{"kind":"countertop","length":264,"depth":67,"height":90,"thickness":3,"cutouts":[{"kind":"sink","x":200}]}"#.into(),
+        );
+        home.furniture = vec![
+            top,
+            piece(21, "washer", (60.0, 39.0), (60.0, 60.0, 85.0), 0.0),
+        ];
+        let clash = |home: &Home| {
+            review(home, &Profile::default())
+                .findings
+                .iter()
+                .any(|f| f.message.contains("Ocupa o mesmo lugar"))
+        };
+        assert!(!clash(&home), "under the slab");
+        // Taller than the space under the slab, it is in the countertop.
+        home.furniture[1].height = 95.0;
+        assert!(clash(&home), "through the slab");
     }
 
     #[test]
