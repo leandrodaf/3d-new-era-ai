@@ -1931,37 +1931,49 @@ fn written_sizes(text: &str) -> Vec<Vec<f64>> {
         }
     }
 
-    let mut out: Vec<Vec<f64>> = Vec::new();
+    // Each group, and whether it says it is in meters ("7,40 × 3,00 m").
+    let mut out: Vec<(Vec<f64>, bool)> = Vec::new();
     let mut group: Vec<f64> = Vec::new();
     let mut linked = false;
-    let flush = |group: &mut Vec<f64>, out: &mut Vec<Vec<f64>>| {
+    let flush = |group: &mut Vec<f64>, meters: bool, out: &mut Vec<(Vec<f64>, bool)>| {
         if group.len() > 1 {
-            out.push(std::mem::take(group));
+            out.push((std::mem::take(group), meters));
         }
         group.clear();
     };
+    let in_meters = |unit: &str| unit.eq_ignore_ascii_case("m");
     for token in spaced.split_whitespace() {
         let clean = token.trim_matches(|c: char| !c.is_ascii_digit());
         if let Ok(value) = clean.replace(',', ".").parse::<f64>() {
             if !linked {
-                flush(&mut group, &mut out);
+                flush(&mut group, false, &mut out);
             }
             group.push(value);
             linked = false;
+            // A unit written onto the last number: `3,00m`.
+            let unit = token
+                .trim_start_matches(|c: char| !c.is_ascii_digit())
+                .trim_start_matches(|c: char| c.is_ascii_digit() || c == ',' || c == '.')
+                .trim_end_matches(|c: char| !c.is_alphabetic());
+            if !unit.is_empty() {
+                flush(&mut group, in_meters(unit), &mut out);
+            }
         } else if token == "×" {
             linked = true;
         } else {
-            flush(&mut group, &mut out);
+            let unit = token.trim_matches(|c: char| !c.is_alphabetic());
+            flush(&mut group, in_meters(unit), &mut out);
             linked = false;
         }
     }
-    flush(&mut group, &mut out);
+    flush(&mut group, false, &mut out);
 
-    // A note in meters ("0,80 × 0,65") describes the same piece in other
-    // units. Whole small numbers ("2 × 3 gavetas") are counts, not sizes.
+    // A note in meters ("0,80 × 0,65", "7,40 × 3,00 m") describes the same
+    // piece in other units. Whole small numbers ("2 × 3 gavetas") are counts,
+    // not sizes.
     out.into_iter()
-        .map(|g| {
-            if g.iter().all(|v| *v < 10.0 && v.fract() > 0.0) {
+        .map(|(g, meters)| {
+            if meters || g.iter().all(|v| *v < 10.0 && v.fract() > 0.0) {
                 g.into_iter().map(|v| v * 100.0).collect()
             } else {
                 g
@@ -2121,6 +2133,17 @@ mod stale_tests {
             vec![vec![58.0, 50.0, 63.0]]
         );
         assert_eq!(written_sizes("Bancada 0,80 × 0,65"), vec![vec![80.0, 65.0]]);
+        // Meters said: whole numbers too.
+        assert_eq!(
+            written_sizes("Piscina — 7,40 × 3,00 m"),
+            vec![vec![740.0, 300.0]]
+        );
+        assert_eq!(written_sizes("Deck 6 × 4m"), vec![vec![600.0, 400.0]]);
+        assert_eq!(
+            written_sizes("Painel 210 × 270 cm"),
+            vec![vec![210.0, 270.0]]
+        );
+        assert_eq!(written_sizes("Tampo 60 × 60 mm"), vec![vec![60.0, 60.0]]);
         // Numbers that are not sizes are left where they are.
         assert!(written_sizes("Cozinha: corredor 72 cm").is_empty());
         assert!(written_sizes("53A e 2 portas").is_empty());
