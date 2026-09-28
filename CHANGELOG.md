@@ -75,9 +75,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- A tall cabinet in a kitchen is its storage in `ergonomics`' five work zones. A joinery cabinet
-  taller than 1.5 m is read as a wardrobe (for its doors' clearance), which the zones did not count,
-  so a kitchen with a 235 cm pantry tower was told storage was missing.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
