@@ -1931,22 +1931,29 @@ fn written_sizes(text: &str) -> Vec<Vec<f64>> {
         }
     }
 
-    // Each group, and whether it says it is in meters ("7,40 × 3,00 m").
-    let mut out: Vec<(Vec<f64>, bool)> = Vec::new();
+    // Each group, and the unit written after it, if any, as centimeters per
+    // unit: 100 for meters ("7,40 × 3,00 m"), 0.1 for millimeters.
+    let mut out: Vec<(Vec<f64>, Option<f64>)> = Vec::new();
     let mut group: Vec<f64> = Vec::new();
     let mut linked = false;
-    let flush = |group: &mut Vec<f64>, meters: bool, out: &mut Vec<(Vec<f64>, bool)>| {
-        if group.len() > 1 {
-            out.push((std::mem::take(group), meters));
-        }
-        group.clear();
+    let flush =
+        |group: &mut Vec<f64>, unit: Option<f64>, out: &mut Vec<(Vec<f64>, Option<f64>)>| {
+            if group.len() > 1 {
+                out.push((std::mem::take(group), unit));
+            }
+            group.clear();
+        };
+    let unit_of = |word: &str| match word.to_lowercase().as_str() {
+        "m" => Some(100.0),
+        "cm" => Some(1.0),
+        "mm" => Some(0.1),
+        _ => None,
     };
-    let in_meters = |unit: &str| unit.eq_ignore_ascii_case("m");
     for token in spaced.split_whitespace() {
         let clean = token.trim_matches(|c: char| !c.is_ascii_digit());
         if let Ok(value) = clean.replace(',', ".").parse::<f64>() {
             if !linked {
-                flush(&mut group, false, &mut out);
+                flush(&mut group, None, &mut out);
             }
             group.push(value);
             linked = false;
@@ -1956,28 +1963,31 @@ fn written_sizes(text: &str) -> Vec<Vec<f64>> {
                 .trim_start_matches(|c: char| c.is_ascii_digit() || c == ',' || c == '.')
                 .trim_end_matches(|c: char| !c.is_alphabetic());
             if !unit.is_empty() {
-                flush(&mut group, in_meters(unit), &mut out);
+                flush(&mut group, unit_of(unit), &mut out);
             }
         } else if token == "×" {
             linked = true;
         } else {
             let unit = token.trim_matches(|c: char| !c.is_alphabetic());
-            flush(&mut group, in_meters(unit), &mut out);
+            flush(&mut group, unit_of(unit), &mut out);
             linked = false;
         }
     }
-    flush(&mut group, false, &mut out);
+    flush(&mut group, None, &mut out);
 
     // A note in meters ("0,80 × 0,65", "7,40 × 3,00 m") describes the same
     // piece in other units. Whole small numbers ("2 × 3 gavetas") are counts,
-    // not sizes.
+    // not sizes; a unit written says it outright.
     out.into_iter()
-        .map(|(g, meters)| {
-            if meters || g.iter().all(|v| *v < 10.0 && v.fract() > 0.0) {
-                g.into_iter().map(|v| v * 100.0).collect()
-            } else {
-                g
-            }
+        .map(|(g, unit)| {
+            let per = unit.unwrap_or_else(|| {
+                if g.iter().all(|v| *v < 10.0 && v.fract() > 0.0) {
+                    100.0
+                } else {
+                    1.0
+                }
+            });
+            g.into_iter().map(|v| v * per).collect()
         })
         .collect()
 }
@@ -2143,7 +2153,14 @@ mod stale_tests {
             written_sizes("Painel 210 × 270 cm"),
             vec![vec![210.0, 270.0]]
         );
-        assert_eq!(written_sizes("Tampo 60 × 60 mm"), vec![vec![60.0, 60.0]]);
+        assert_eq!(written_sizes("Tampo 600 × 600 mm"), vec![vec![60.0, 60.0]]);
+        // A unit written wins over the look of the numbers.
+        assert_eq!(
+            written_sizes("Recorte 0,80 × 0,65 cm"),
+            vec![vec![0.8, 0.65]]
+        );
+        let chapa = written_sizes("Chapa 8,5 × 6,5 mm");
+        assert!((chapa[0][0] - 0.85).abs() < 1e-9 && (chapa[0][1] - 0.65).abs() < 1e-9);
         // Numbers that are not sizes are left where they are.
         assert!(written_sizes("Cozinha: corredor 72 cm").is_empty());
         assert!(written_sizes("53A e 2 portas").is_empty());
