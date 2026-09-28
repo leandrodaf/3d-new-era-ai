@@ -75,10 +75,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- The catalog's straight flight keeps its steps a step high when it is resized. It always had 16,
-  so one resized to a 1.31 m landing, 2.24 m deep, climbed in 8 cm risers on 14 cm treads, in 3D
-  and in plan. Its risers now follow its height, the fewest that keep each at most 18 cm (NBR 9050
-  asks 16 to 18): 8 of 16.4 cm there, and still 16 at the catalog's 2.8 m.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
