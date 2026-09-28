@@ -804,6 +804,26 @@ impl Review<'_, '_> {
                     "abrir gavetas e ficar diante delas",
                 )),
                 // The cabinets under a countertop answer for it and for what is set in it.
+                // In a bathroom they are a vanity, used like the basin in it.
+                Use::Counter
+                    if !scene.countertop(i)
+                        && scene
+                            .spaces
+                            .iter()
+                            .any(|s| s.what == RoomUse::Bathroom && s.units.contains(&i)) =>
+                {
+                    found.extend(need(
+                        Side::Front,
+                        fig("clearance.basin.front"),
+                        0.0,
+                        (0.05, 0.95),
+                        if wheel {
+                            "aproximação frontal ao lavatório"
+                        } else {
+                            "uso do lavatório"
+                        },
+                    ));
+                }
                 Use::Fridge | Use::Stove | Use::Sink | Use::Counter | Use::Appliance
                     if !scene.countertop(i) && !scene.embedded_item(i) =>
                 {
@@ -856,17 +876,19 @@ impl Review<'_, '_> {
                         "uso do vaso"
                     },
                 )),
-                Use::Basin => found.extend(need(
-                    Side::Front,
-                    fig("clearance.basin.front"),
-                    0.0,
-                    whole,
-                    if wheel {
-                        "aproximação frontal ao lavatório"
-                    } else {
-                        "uso do lavatório"
-                    },
-                )),
+                Use::Basin if !scene.countertop(i) && !scene.embedded_item(i) => {
+                    found.extend(need(
+                        Side::Front,
+                        fig("clearance.basin.front"),
+                        0.0,
+                        whole,
+                        if wheel {
+                            "aproximação frontal ao lavatório"
+                        } else {
+                            "uso do lavatório"
+                        },
+                    ));
+                }
                 Use::Shower | Use::Bathtub => found.extend(need(
                     Side::Front,
                     self.fig("clearance.shower.front"),
@@ -1453,16 +1475,18 @@ impl Review<'_, '_> {
             .units
             .iter()
             .any(|u| matches!(u.what, Use::Outlet | Use::Switch));
-        // Kitchens, and living rooms with a kitchen in them.
+        // Kitchens, and living rooms with a kitchen in them — never a
+        // bathroom or a laundry, whatever stands in them.
         let cooks = |s: &&Space<'_>| {
             s.what == RoomUse::Kitchen
-                || s.units
-                    .iter()
-                    .filter(|&&i| {
-                        matches!(scene.units[i].what, Use::Fridge | Use::Stove | Use::Sink)
-                    })
-                    .count()
-                    >= 2
+                || !matches!(s.what, RoomUse::Bathroom | RoomUse::Laundry)
+                    && s.units
+                        .iter()
+                        .filter(|&&i| {
+                            matches!(scene.units[i].what, Use::Fridge | Use::Stove | Use::Sink)
+                        })
+                        .count()
+                        >= 2
         };
         let cooking: Vec<usize> = scene
             .spaces
@@ -2850,6 +2874,50 @@ mod tests {
         assert_eq!(Scene::new(&home).spaces[0].what, RoomUse::Other);
         home.rooms[0].usage = newera_core::RoomUse::Auto;
         assert_eq!(Scene::new(&home).spaces[0].what, RoomUse::Bathroom);
+    }
+
+    #[test]
+    fn a_vanity_with_two_bowls_is_a_bathroom_not_a_kitchen() {
+        let mut home = Home::default();
+        square(&mut home, "Banho master", 250.0, 130.0);
+        home.rooms[0].usage = newera_core::RoomUse::Bathroom;
+        home.furniture = vec![
+            piece(20, "toilet", (35.0, 88.0), (40.0, 68.0, 40.0), 180.0),
+            piece(21, "shower", (217.0, 65.0), (50.0, 100.0, 200.0), 0.0),
+            // A vanity against the wall, 65 cm clear in front, two bowls in it.
+            piece(22, "", (125.0, 32.5), (120.0, 50.0, 80.0), 0.0),
+            piece(23, "", (100.0, 32.5), (40.0, 35.0, 16.0), 0.0),
+            piece(24, "", (150.0, 32.5), (40.0, 35.0, 16.0), 0.0),
+        ];
+        home.furniture[2].name = "Gabinete suspenso".into();
+        for bowl in &mut home.furniture[3..] {
+            bowl.name = "Cuba de embutir".into();
+            bowl.elevation = 70.0;
+        }
+        // Deep bowls, sunk into the vanity they are set in.
+        for bowl in &mut home.furniture[3..] {
+            bowl.height = 24.0;
+            bowl.elevation = 62.0;
+        }
+        let report = review(&home, &Profile::default());
+        let said = |text: &str| report.findings.iter().any(|f| f.message.contains(text));
+        assert!(!said("Ocupa o mesmo lugar"), "{:#?}", report.findings);
+        assert!(!said("zonas de trabalho"), "{:#?}", report.findings);
+        assert!(!said("lavatório para testar"), "{:#?}", report.findings);
+        assert!(!said("bancada e equipamentos"), "{:#?}", report.findings);
+        // The basin's own 40 cm still holds it to account: a bench 30 cm away.
+        home.furniture
+            .push(piece(25, "", (125.0, 97.5), (100.0, 20.0, 45.0), 0.0));
+        home.furniture[5].name = "Banco".into();
+        let report = review(&home, &Profile::default());
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.message.contains("uso do lavatório")),
+            "{:#?}",
+            report.findings
+        );
     }
 
     fn square(home: &mut Home, name: &str, w: f64, d: f64) {

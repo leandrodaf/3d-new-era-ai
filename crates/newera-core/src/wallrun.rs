@@ -75,8 +75,8 @@ fn polygon(points: &[Point2]) -> Polygon<f64> {
 
 /// Measures the run on one face of `wall` for joinery `depth` cm deep
 /// between heights `z` (cm above the floor). `skip` leaves out pieces that
-/// the run itself will replace. Straight walls of the home's current level
-/// only; `None` for arcs or unknown walls.
+/// the run itself will replace, among what stands on the wall's own storey.
+/// Straight walls only; `None` for arcs or unknown walls.
 pub fn wall_run(
     home: &Home,
     wall: WallId,
@@ -85,7 +85,7 @@ pub fn wall_run(
     z: (f64, f64),
     skip: &dyn Fn(&Furniture) -> bool,
 ) -> Option<WallRun> {
-    let view = home.level_view(home.current_level());
+    let view = home.level_view(home.wall(wall)?.level);
     let w: &Wall = view.walls.iter().find(|w| w.id == wall)?;
     if w.is_arc() {
         return None;

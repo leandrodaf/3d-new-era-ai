@@ -311,6 +311,8 @@ const MIN_OVERLAP: f64 = 25.0;
 const WALL_TOLERANCE: f64 = 2.0;
 /// Pieces this thin (rugs, mats) never collide.
 const FLAT: f64 = 2.0;
+/// Less shared height than this, cm, and two pieces only touch.
+const TOUCH: f64 = 1.0;
 
 fn polygon(points: &[Point2]) -> Polygon<f64> {
     to_polygon(points)
@@ -319,6 +321,15 @@ fn polygon(points: &[Point2]) -> Polygon<f64> {
 fn heights_overlap(a: &Furniture, b: &Furniture) -> bool {
     let ((a0, a1), (b0, b1)) = (a.height_range(), b.height_range());
     a0 < b1 && b0 < a1
+}
+
+/// How much two height ranges share, cm (0 or less when apart or touching).
+fn shared_height((a0, a1): (f64, f64), (b0, b1): (f64, f64)) -> f64 {
+    a1.min(b1) - a0.max(b0)
+}
+
+fn round_mm(v: f64) -> f64 {
+    (v * 10.0).round() / 10.0
 }
 
 /// Height of a wall's top above the floor at a plan point.
@@ -448,6 +459,13 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
         .map(|f| polygon(&f.projected_footprint()))
         .collect();
 
+    // Heights in the building, for pieces of two storeys: a sofa downstairs
+    // and a bed upstairs share a plan, not a space.
+    let building = |i: usize| {
+        let floor = home.elevation_of(levels[i]);
+        let (lo, hi) = pieces[i].height_range();
+        (lo + floor, hi + floor)
+    };
     for (i, a) in pieces.iter().enumerate() {
         if a.is_opening() || a.height <= FLAT {
             continue;
@@ -460,6 +478,7 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
                 // Two storeys are checked against each other only for their
                 // heights in the building, not for their drawn elevations.
                 || (!cross_level && !heights_overlap(a, b))
+                || (cross_level && shared_height(building(i), building(j)) < TOUCH)
             {
                 continue;
             }
@@ -480,7 +499,10 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
             if !meet {
                 continue;
             }
-            let extent = extent_of(&shared, a, b);
+            let mut extent = extent_of(&shared, a, b);
+            if cross_level {
+                extent[2] = round_mm(shared_height(building(i), building(j)));
+            }
             let kind = if cross_level {
                 Overlap::CrossLevel
             } else if let Some(kind) = point_in_piece(a, b) {
@@ -796,6 +818,10 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
             .iter()
             .map(|r| (home.resolve_level(r.level), polygon(&r.points)))
             .collect();
+        // Outside, per group: a facade panel of 42 slats is one piece
+        // outside, said once, and a shelf of a cabinet sticking out is that
+        // shelf.
+        let mut outside: Vec<(usize, FurnitureId, bool)> = Vec::new();
         for (i, piece) in pieces.iter().enumerate() {
             if piece.is_opening() {
                 continue;
@@ -806,8 +832,32 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
                 .any(|(level, r)| *level == levels[i] && geo::Contains::contains(r, &center));
             // A storey with no rooms drawn yet has nothing to be outside of.
             let has_rooms = rooms.iter().any(|(level, _)| *level == levels[i]);
-            if has_rooms && !covered {
-                issues.push(Issue::OutsideRooms(piece.id));
+            outside.push((groups[i], piece.id, has_rooms && !covered));
+        }
+        // A part accepted as outside on its own, before groups were said
+        // once, keeps its group said part by part: the acceptance still
+        // answers to its finding.
+        let accepted_part = |group: usize| {
+            outside
+                .iter()
+                .any(|(g, id, _)| *g == group && Issue::OutsideRooms(*id).accepted(home).is_some())
+        };
+        let mut said: Vec<usize> = Vec::new();
+        for &(group, id, out) in &outside {
+            if !out {
+                continue;
+            }
+            let parts = outside.iter().filter(|(g, ..)| *g == group);
+            if parts.clone().count() > 1
+                && parts.clone().all(|(.., out)| *out)
+                && !accepted_part(group)
+            {
+                if !said.contains(&group) {
+                    said.push(group);
+                    issues.push(Issue::OutsideRooms(home.furniture[group].id));
+                }
+            } else {
+                issues.push(Issue::OutsideRooms(id));
             }
         }
     }
@@ -829,10 +879,13 @@ fn passage_hits(door: &Furniture, piece: &Furniture, footprint: &Polygon<f64>) -
 /// Sash operation and appliance ventilation require separate use checks.
 fn window_obstruction(window: &Furniture, piece: &Furniture) -> Option<[f64; 2]> {
     // Their bounding boxes are mostly air or transparent glass. Treating
-    // them as opaque cupboards would reject ordinary window-side decor.
+    // them as opaque cupboards would reject ordinary window-side decor —
+    // and a guard of bars or glass in front of a window, which is what
+    // guards are for.
     if piece.light.is_some()
         || matches!(piece.catalog.as_str(), "plant" | "shower-glass")
         || piece.opacity.is_some_and(|opacity| opacity < 0.5)
+        || crate::guard::guard_of(piece).is_some()
     {
         return None;
     }
@@ -1048,9 +1101,8 @@ fn extent_of(shared: &geo::MultiPolygon<f64>, a: &Furniture, b: &Furniture) -> [
     let plan = shared.bounding_rect().map_or([0.0, 0.0], |r| {
         [r.max().x - r.min().x, r.max().y - r.min().y]
     });
-    let ((a0, a1), (b0, b1)) = (a.height_range(), b.height_range());
-    let z = (a1.min(b1) - a0.max(b0)).max(0.0);
-    [plan[0], plan[1], z].map(|v| (v * 10.0).round() / 10.0)
+    let z = shared_height(a.height_range(), b.height_range()).max(0.0);
+    [plan[0], plan[1], z].map(round_mm)
 }
 
 /// When one of two overlapping pieces is a point of a project and the other
@@ -1525,6 +1577,60 @@ mod tests {
     }
 
     #[test]
+    fn pieces_of_two_storeys_overlap_only_where_they_share_height_in_the_building() {
+        use crate::elements::Level;
+        let mut home = Home::default();
+        home.levels = vec![
+            Level {
+                id: LevelId(1),
+                name: "Térreo".into(),
+                elevation: 0.0,
+                height: 280.0,
+                ..Level::default()
+            },
+            Level {
+                id: LevelId(2),
+                name: "Superior".into(),
+                elevation: 292.0,
+                height: 280.0,
+                elevation_index: 1,
+                ..Level::default()
+            },
+        ];
+        let piece = |id: u64, level: u64, elevation: f64, height: f64| Furniture {
+            id: FurnitureId(id),
+            catalog: "table".into(),
+            name: format!("f{id}"),
+            position: Point2::new(100.0, 100.0),
+            width: 140.0,
+            depth: 80.0,
+            height,
+            elevation,
+            level: Some(LevelId(level)),
+            ..Furniture::default()
+        };
+        // A table downstairs, one right above it upstairs, and a shelf whose
+        // top meets the upper floor: a plan shared, no space shared.
+        home.furniture = vec![
+            piece(1, 1, 0.0, 75.0),
+            piece(2, 2, 0.0, 75.0),
+            piece(3, 1, 212.0, 80.0),
+        ];
+        assert_eq!(check_layout_in(&home, Storeys::All), Vec::new());
+        // A cabinet reaching 18 cm above the upper floor does meet the table there.
+        home.furniture[2].height = 98.0;
+        assert_eq!(
+            check_layout_in(&home, Storeys::All),
+            vec![Issue::Overlap {
+                a: FurnitureId(2),
+                b: FurnitureId(3),
+                kind: Overlap::CrossLevel,
+                extent: [140.0, 80.0, 18.0],
+            }]
+        );
+    }
+
+    #[test]
     fn windows_reject_hoods_and_tall_furniture_but_allow_countertop_appliances() {
         use crate::furniture::OpeningKind;
         for angle in [0.0, 90.0, 37.0] {
@@ -1568,6 +1674,24 @@ mod tests {
             glass.opacity = None;
             glass.catalog = "plant".into();
             assert!(window_obstruction(&window, &glass).is_none());
+            // Bars or glass under a handrail, rising past the sill (a landing
+            // guard in front of a stair window).
+            let mut guard = hood.clone();
+            guard.elevation = 40.0;
+            guard.height = 110.0;
+            guard.width = 180.0;
+            guard.depth = 5.0;
+            assert!(window_obstruction(&window, &guard).is_some(), "a solid box");
+            for catalog in ["railing", "glass-railing", "balcony-glazing"] {
+                guard.catalog = catalog.into();
+                assert!(window_obstruction(&window, &guard).is_none(), "{catalog}");
+            }
+            guard.catalog = "box".into();
+            guard.name = "Guarda-corpo de barras do patamar".into();
+            assert!(
+                window_obstruction(&window, &guard).is_none(),
+                "named a guard"
+            );
             let mut fridge = hood.clone();
             fridge.elevation = 0.0;
             fridge.height = 180.0;
@@ -1689,6 +1813,19 @@ mod tests {
             .push(piece(22, (40.0, 180.0), (40.0, 40.0, 80.0))); // in the swing
         home.furniture
             .push(piece(23, (900.0, 900.0), (40.0, 40.0, 40.0))); // outside
+        // A panel of slats outside is one piece outside; a shelf of a
+        // cabinet sticking out of the room is that shelf.
+        let mut panel = piece(24, (900.0, 600.0), (100.0, 5.0, 200.0));
+        panel.children = [(25, 860.0), (26, 900.0), (27, 940.0)]
+            .map(|(id, x)| piece(id, (x, 600.0), (4.0, 5.0, 200.0)))
+            .to_vec();
+        home.furniture.push(panel);
+        let mut cabinet = piece(30, (100.0, 380.0), (100.0, 40.0, 200.0));
+        cabinet.children = vec![
+            piece(31, (100.0, 380.0), (100.0, 40.0, 200.0)),
+            piece(32, (100.0, 420.0), (100.0, 30.0, 2.0)),
+        ];
+        home.furniture.push(cabinet);
 
         let issues = check_layout(&home);
         assert!(
@@ -1699,6 +1836,28 @@ mod tests {
             issues.contains(&Issue::OutsideRooms(FurnitureId(23))),
             "{issues:?}"
         );
+        let outside: Vec<FurnitureId> = issues
+            .iter()
+            .filter_map(|i| match i {
+                Issue::OutsideRooms(f) => Some(*f),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            outside,
+            [FurnitureId(23), FurnitureId(24), FurnitureId(32)],
+            "{issues:?}"
+        );
+        // A slat accepted as outside before keeps the panel said slat by slat.
+        home.accepted
+            .insert("outside_rooms:f26".into(), "fachada".into());
+        let issues = check_layout(&home);
+        let panel: Vec<&Issue> = issues
+            .iter()
+            .filter(|i| matches!(i, Issue::OutsideRooms(f) if [24, 25, 26, 27].contains(&f.0)))
+            .collect();
+        assert_eq!(panel.len(), 3, "{issues:?}");
+        assert!(panel.iter().any(|i| i.accepted(&home) == Some("fachada")));
         let swing_side = door_swing(&home.furniture[1]).unwrap();
         assert!(
             swing_side.iter().all(|p| p.x >= -8.0),
