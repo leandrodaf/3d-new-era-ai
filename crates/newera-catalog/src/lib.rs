@@ -109,9 +109,10 @@ impl Category {
 /// 16 to 18). The 2.8 m catalog flight has 16 of 17.5 cm, and one resized to
 /// 1.31 m has 8 of 16.4 — not sixteen of 8 cm, as when the count was fixed.
 #[must_use]
-pub fn stair_risers(height: f64) -> u8 {
+pub fn stair_risers(height: f64) -> u32 {
+    // At least 2, and a count any height a plan can hold fits in.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let n = (height / 18.0).ceil().clamp(2.0, 255.0) as u8;
+    let n = (height / 18.0).ceil().clamp(2.0, f64::from(u32::MAX)) as u32;
     n
 }
 
@@ -1937,7 +1938,7 @@ mod tests {
     fn a_resized_flight_keeps_its_steps_a_step_high() {
         assert_eq!(stair_risers(280.0), 16, "the catalog flight is unchanged");
         assert_eq!(stair_risers(131.0), 8);
-        for h in [36.0, 90.0, 131.0, 262.0, 300.0, 450.0] {
+        for h in [36.0, 90.0, 131.0, 262.0, 300.0, 450.0, 6000.0] {
             let rise = h / f64::from(stair_risers(h));
             assert!(rise <= 18.0 + 1e-9, "{h}: {rise}");
         }

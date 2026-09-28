@@ -1401,7 +1401,7 @@ fn passage(ctx: &mut Ctx) {
     ctx.cube([-w / 2.0, w / 2.0], [h - 2.0, h], [-d / 2.0, d / 2.0], trim);
 }
 
-fn stairs(ctx: &mut Ctx, steps: u8) {
+fn stairs(ctx: &mut Ctx, steps: u32) {
     let (w, d, h, c) = (ctx.w, ctx.d, ctx.h, ctx.c);
     let n = f64::from(steps.max(2));
     let rise = h / n;
