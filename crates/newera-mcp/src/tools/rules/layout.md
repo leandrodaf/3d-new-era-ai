@@ -5,8 +5,10 @@ the `key` it is accepted by and the elements involved (name, bounds and z).
 
 - **overlap**: classified `collision` (a real clash, listed first), `nesting` (built in,
   resting on, tucked under), `served` (a project point inside a piece on purpose: the water
-  point in the basin, the outlet behind the fridge or set into a cabinet) or `cross_level`,
-  with extent [x,y,z] cm of the shared space; overlap_kinds counts them.
+  point in the basin, the outlet behind the fridge or set into a cabinet) or `cross_level`
+  (pieces of two storeys at the same height in the building: storeys drawn at one elevation,
+  or a piece reaching into the storey above), with extent [x,y,z] cm of the shared space;
+  overlap_kinds counts them.
 - **blocked**: a cabinet, fridge or wardrobe whose opening face is against a solid. It
   cannot be used, and `angle` alone does not show it.
 - **in_wall** `{key, piece, wall}`: a piece inside a wall.
