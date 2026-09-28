@@ -75,6 +75,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `embed` cuts the wooden top of the cabinet under the stone too. A bowl or a cooktop set into a
+  countertop got its hole in the stone, but the joinery cabinet below kept a whole top, so the
+  render showed the board through the bowl and no check noticed; each one had to be cut by hand
+  with `top_cutout`. The cabinets it cut come back as `cut_below`, in the same undoable step; one
+  whose top already has a cutout elsewhere is left alone and named in the notes.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every

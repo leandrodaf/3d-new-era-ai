@@ -181,6 +181,9 @@ pub fn embed(doc: &mut Document, request: &EmbedRequest) -> Result<Value, String
     let kind = fixture_of(&item);
     let local_of_item = host.to_local(item.position);
     let mut notes = Vec::new();
+    // What goes through the countertop, `(w, d, top)`: its hole, and the
+    // height of the stone it goes through.
+    let mut through: Option<(f64, f64, f64)> = None;
     let (new_build, place, detail): (Build, (f64, f64, f64), Value) = match build {
         Build::Countertop(mut top) => {
             let cut = match kind {
@@ -220,6 +223,7 @@ pub fn embed(doc: &mut Document, request: &EmbedRequest) -> Result<Value, String
             });
             let lift = if cut == CutoutKind::Sink { 0.5 } else { 0.6 };
             let place = (at - top.length / 2.0, 0.0, top.height - item.height + lift);
+            through = Some((w, d, host.elevation + top.height));
             let detail = json!({"cutout": [val(w), val(d)], "x": val(at)});
             (Build::Countertop(top), place, detail)
         }
@@ -375,6 +379,19 @@ pub fn embed(doc: &mut Document, request: &EmbedRequest) -> Result<Value, String
     };
     let output = generate(&new_build).map_err(|e| format!("Para embutir {}: {e}", kind.label()))?;
     notes.extend(output.notes.iter().cloned());
+    // The body goes on through the wooden top of the cabinet under the stone.
+    let below = match through {
+        Some((w, d, counter)) => {
+            let body = Furniture {
+                position: host.to_plan((place.0, place.1)),
+                angle: host.angle,
+                elevation: host.elevation + place.2,
+                ..item.clone()
+            };
+            cut_below(doc.home(), &host, &body, (w, d), counter, &mut notes)
+        }
+        None => Vec::new(),
+    };
     let reply = |item_id: &str| {
         let mut r = json!({
             "host": host.id.to_string(),
@@ -382,6 +399,14 @@ pub fn embed(doc: &mut Document, request: &EmbedRequest) -> Result<Value, String
             "kind": kind.name(),
             "notes": notes,
         });
+        if !below.is_empty() {
+            r["cut_below"] = json!(
+                below
+                    .iter()
+                    .map(|(c, _)| c.id.to_string())
+                    .collect::<Vec<_>>()
+            );
+        }
         if let (Some(obj), Some(extra)) = (r.as_object_mut(), detail.as_object()) {
             for (k, v) in extra {
                 obj.insert(k.clone(), v.clone());
@@ -392,27 +417,10 @@ pub fn embed(doc: &mut Document, request: &EmbedRequest) -> Result<Value, String
     if request.dry {
         return Ok(reply(""));
     }
-    let mut next = || doc.new_furniture_id();
-    let mut rebuilt = assemble(
-        &new_build,
-        &output,
-        host.id,
-        host.position,
-        host.angle,
-        host.elevation,
-        &mut next,
-    );
-    rebuilt.name.clone_from(&host.name);
-    rebuilt.level = host.level;
-    for (key, value) in &host.properties {
-        if key != PARAMS_KEY && key != KIND_KEY {
-            rebuilt.properties.insert(key.clone(), value.clone());
-        }
-    }
     // Other items embedded before stay; this one takes its new place.
     let mut others = host.clone();
     others.children.retain(|c| c.id != item.id);
-    carry_embedded(&others, &mut rebuilt);
+    let mut rebuilt = rebuild(doc, &others, &new_build, &output);
     item.position = rebuilt.to_plan((place.0, place.1));
     item.angle = host.angle;
     item.elevation = host.elevation + place.2;
@@ -425,9 +433,119 @@ pub fn embed(doc: &mut Document, request: &EmbedRequest) -> Result<Value, String
         commands.push(Command::remove(item_id));
     }
     commands.push(Command::update(rebuilt));
+    for (cabinet, params) in &below {
+        let build = Build::Cabinet(params.clone());
+        let output = generate(&build)?;
+        commands.push(Command::update(rebuild(doc, cabinet, &build, &output)));
+    }
     doc.execute(Command::Batch { commands })
         .map_err(|e| e.to_string())?;
     Ok(reply(&item_id.to_string()))
+}
+
+/// `group` built again from `build`, where it stands, keeping its name,
+/// storey, properties and the items embedded in it.
+fn rebuild(
+    doc: &mut Document,
+    group: &Furniture,
+    build: &Build,
+    output: &crate::Output,
+) -> Furniture {
+    let mut next = || doc.new_furniture_id();
+    let mut rebuilt = assemble(
+        build,
+        output,
+        group.id,
+        group.position,
+        group.angle,
+        group.elevation,
+        &mut next,
+    );
+    rebuilt.name.clone_from(&group.name);
+    rebuilt.level = group.level;
+    for (key, value) in &group.properties {
+        if key != PARAMS_KEY && key != KIND_KEY {
+            rebuilt.properties.insert(key.clone(), value.clone());
+        }
+    }
+    carry_embedded(group, &mut rebuilt);
+    rebuilt
+}
+
+/// The joinery cabinets under `countertop` whose wooden top `body` — a bowl
+/// or a cooktop set into the stone at `counter` cm — goes through, each with
+/// its top cut to the stone's hole `(w, d)`. Without it the render shows the
+/// board inside the bowl, and nothing else notices.
+fn cut_below(
+    home: &newera_core::Home,
+    countertop: &Furniture,
+    body: &Furniture,
+    (w, d): (f64, f64),
+    counter: f64,
+    notes: &mut Vec<String>,
+) -> Vec<(Furniture, CabinetParams)> {
+    let level = home.resolve_level(countertop.level);
+    let mut out = Vec::new();
+    for cabinet in home
+        .furniture
+        .iter()
+        .filter(|f| f.id != countertop.id && home.resolve_level(f.level) == level)
+    {
+        let Some(Ok(Build::Cabinet(mut p))) = cabinet
+            .properties
+            .get(PARAMS_KEY)
+            .map(|stored| merged(stored, &json!({})))
+        else {
+            continue;
+        };
+        // Under the stone, and reaching up to where the body hangs.
+        let top = cabinet.elevation + cabinet.height;
+        if top > counter + 0.5 || top <= body.elevation + 0.1 {
+            continue;
+        }
+        let (lx, ly) = cabinet.to_local(body.position);
+        if lx.abs() > cabinet.width / 2.0 || ly.abs() > cabinet.depth / 2.0 {
+            continue;
+        }
+        let turn = (body.angle - cabinet.angle).rem_euclid(180.0);
+        let (cw, cd) = if turn < 0.5 || turn > 179.5 {
+            (w, d)
+        } else if (turn - 90.0).abs() < 0.5 {
+            (d, w)
+        } else {
+            continue;
+        };
+        let x = lx + cabinet.width / 2.0 - cw / 2.0;
+        let y = ly + cabinet.depth / 2.0 - cd / 2.0;
+        let cut = [x, y, cw, cd].map(|v| (v * 10.0).round() / 10.0);
+        if let Some(old) = p.top_cutout {
+            let apart = old[0] + old[2] <= cut[0]
+                || cut[0] + cut[2] <= old[0]
+                || old[1] + old[3] <= cut[1]
+                || cut[1] + cut[3] <= old[1];
+            if old.iter().zip(cut).all(|(a, b)| (a - b).abs() < 0.05) {
+                continue;
+            }
+            if apart {
+                notes.push(format!(
+                    "O tampo de {} já tem um recorte em outro lugar e só leva um: recorte-o para {} com joinery id={} p.top_cutout.",
+                    cabinet.id,
+                    body.name,
+                    cabinet.id
+                ));
+                continue;
+            }
+        }
+        p.top_cutout = Some(cut);
+        match generate(&Build::Cabinet(p.clone())) {
+            Ok(_) => out.push((cabinet.clone(), p)),
+            Err(why) => notes.push(format!(
+                "{} atravessa o tampo de {} e o recorte não cabe nele: {why}",
+                body.name, cabinet.id
+            )),
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -538,6 +656,70 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("armário com nicho"), "{err}");
+    }
+
+    #[test]
+    fn a_bowl_set_into_the_stone_cuts_the_cabinet_top_under_it() {
+        let mut doc = Document::default();
+        // A vanity: a cabinet, and a stone countertop 3 cm over its top.
+        let cabinet = host(
+            &mut doc,
+            &Build::Cabinet(CabinetParams {
+                w: 80.0,
+                h: 87.0,
+                d: 57.0,
+                ..CabinetParams::default()
+            }),
+        );
+        let top = host(
+            &mut doc,
+            &Build::Countertop(CountertopParams {
+                length: 80.0,
+                depth: 57.0,
+                ..CountertopParams::default()
+            }),
+        );
+        let bowl = piece(&mut doc, "sink-bowl", "Cuba", [50.0, 40.0, 18.0]);
+        let request = |dry| EmbedRequest {
+            item: bowl.clone(),
+            existing: false,
+            host: top,
+            at: None,
+            z: None,
+            dry,
+        };
+        let dry = embed(&mut doc, &request(true)).unwrap();
+        assert_eq!(dry["cut_below"], json!([cabinet.to_string()]), "{dry}");
+        let reply = embed(&mut doc, &request(false)).unwrap();
+        assert_eq!(reply["cut_below"], json!([cabinet.to_string()]), "{reply}");
+        let group = doc
+            .home()
+            .furniture
+            .iter()
+            .find(|f| f.id == cabinet)
+            .unwrap();
+        let Ok(Build::Cabinet(p)) = merged(&group.properties[PARAMS_KEY], &json!({})) else {
+            panic!("still a cabinet");
+        };
+        // The stone's hole, centered over the 80 × 57 cabinet.
+        assert_eq!(p.top_cutout, Some([17.5, 11.0, 45.0, 35.0]));
+        assert!(
+            !group.children.iter().any(|c| c.name == "Tampo"),
+            "the whole board is gone"
+        );
+        // Embedded again, nothing more to cut.
+        let bowl_id = reply["item"].as_str().unwrap().parse().unwrap();
+        let again = doc.home().find_piece(bowl_id).unwrap().clone();
+        let reply = embed(
+            &mut doc,
+            &EmbedRequest {
+                item: again,
+                existing: true,
+                ..request(false)
+            },
+        )
+        .unwrap();
+        assert!(reply.get("cut_below").is_none(), "{reply}");
     }
 
     #[test]
