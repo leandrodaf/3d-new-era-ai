@@ -592,7 +592,6 @@ mod tests {
         assert_eq!(home.current_level(), upper);
     }
 
-
     #[test]
     fn an_item_set_into_joinery_takes_its_own_finish() {
         let s = server();
