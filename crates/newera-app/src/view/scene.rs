@@ -492,16 +492,10 @@ impl SceneView {
             far,
         );
         if self.built_for.as_ref() != Some(&key) {
-            let models = |piece: &newera_core::Furniture| {
-                piece.model.as_ref()?;
-                let file = piece
-                    .model_far
-                    .as_ref()
-                    .and_then(|far| far.file_at(Some(distance(piece))))
-                    .or(piece.model.as_deref())?;
+            let load = |file: &str| {
                 let path = newera_core::resolve_asset(project, file);
                 let mut cache = self.models.borrow_mut();
-                let mut mesh = cache
+                cache
                     .entry(path.clone())
                     .or_insert_with(|| match newera_catalog::load_model(&path) {
                         Ok(model) => Some(model.mesh),
@@ -510,7 +504,18 @@ impl SceneView {
                             None
                         }
                     })
-                    .clone()?;
+                    .clone()
+            };
+            let models = |piece: &newera_core::Furniture| {
+                let own = piece.model.as_deref()?;
+                // A lighter file that cannot be read leaves the piece drawn
+                // in full, never missing from afar.
+                let mut mesh = piece
+                    .model_far
+                    .as_ref()
+                    .and_then(|far| far.file_at(Some(distance(piece))))
+                    .and_then(load)
+                    .or_else(|| load(own))?;
                 mesh.rotate(piece.model_transform.rotation);
                 mesh.fit_to(piece.width, piece.depth, piece.height);
                 mesh.edit_parts(&piece.model_parts, true);

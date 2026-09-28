@@ -533,6 +533,14 @@ fn a_piece_far_from_the_camera_is_drawn_with_its_lighter_file() {
     review.model_far.as_mut().unwrap().off = true;
     assert_eq!(tris(Some(500.0), &review), 2);
     assert_eq!(tris(None, &piece), 2);
+    // A lighter file that is gone leaves the piece drawn in full.
+    let mut lost = piece.clone();
+    lost.model_far.as_mut().unwrap().file = "missing.obj".into();
+    assert_eq!(tris(Some(500.0), &lost), 2);
+    // And it travels with the project like the model does.
+    let mut home = newera_core::Home::default();
+    home.furniture.push(piece.clone());
+    assert!(home.asset_paths().contains(&"light.obj".to_owned()));
     // Distance from a camera, cm: 4 m in front of a piece standing at the origin.
     let home = newera_core::Home::default();
     let d = crate::camera_distance(&home, &piece, glam::Vec3::new(0.0, 0.1, 4.0));

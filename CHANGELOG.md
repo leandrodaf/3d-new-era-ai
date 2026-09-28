@@ -12,7 +12,8 @@ All notable changes to this project are documented here. The format follows
   `action=lod` (`file`, `beyond` cm from the camera, default 400) draws it in the 3D view, the
   previews and photos when the camera is farther than that, in the same box, its materials and
   parts answering by the same names; `detail=always` holds the detailed file for a close review,
-  and exports and top views always use it. `model` says where the triangles go — `cost {tris,
+  and exports and top views always use it. The lighter file travels with the project, and one
+  that cannot be read leaves the piece drawn in full. `model` says where the triangles go — `cost {tris,
   heaviest [[part, tris, %]], copies, in_project}` — and warns when a model over 50,000
   triangles has no lighter file. The Ares chair's weave was 69 % of its 89,718 triangles, and
   nothing said so.

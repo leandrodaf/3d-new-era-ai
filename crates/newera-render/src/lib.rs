@@ -300,12 +300,27 @@ impl ModelCache {
         assets: Option<&Path>,
         distance: Option<f64>,
     ) -> Option<newera_catalog::Mesh> {
-        piece.model.as_ref()?;
-        let file = piece
+        let own = piece.model.as_deref()?;
+        // A lighter file that cannot be read leaves the piece drawn in full,
+        // never missing from afar.
+        if let Some(far) = piece
             .model_far
             .as_ref()
             .and_then(|far| far.file_at(distance))
-            .or(piece.model.as_deref())?;
+            && let Some(mesh) = self.fitted(piece, assets, far)
+        {
+            return Some(mesh);
+        }
+        self.fitted(piece, assets, own)
+    }
+
+    /// The model `file` fitted to the piece: turned, sized, its parts edited.
+    fn fitted(
+        &self,
+        piece: &newera_core::Furniture,
+        assets: Option<&Path>,
+        file: &str,
+    ) -> Option<newera_catalog::Mesh> {
         let path = newera_core::resolve_asset(assets, file);
         let version = self.asset_version(&path);
         let mut cache = self.models.borrow_mut();
