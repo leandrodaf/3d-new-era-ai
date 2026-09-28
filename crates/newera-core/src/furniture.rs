@@ -738,7 +738,9 @@ impl Furniture {
     /// clash — and the two are impossible to tell apart from boxes alone,
     /// so this is the one place a layout check reads a name.
     pub fn is_seat(&self) -> bool {
-        const CATALOGS: [&str; 6] = [
+        const CATALOGS: [&str; 8] = [
+            "tokstok-win",
+            "tokstok-ares",
             "chair",
             "stool",
             "office-chair",

@@ -74,6 +74,8 @@ const ANY: Front = Front {
 /// either here or meant to be absent.
 const FRONTS: &[(&str, Front)] = &[
     // Living
+    ("tokstok-win", free("seat", "backrest")),
+    ("tokstok-ares", free("seat", "backrest")),
     ("sofa-3", wall("seat", "backrest")),
     ("sofa-2", wall("seat", "backrest")),
     ("sofa-l", wall("seat and chaise", "backrest")),

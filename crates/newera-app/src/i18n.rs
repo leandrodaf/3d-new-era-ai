@@ -1278,6 +1278,16 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
             "Canapé d'angle (méridienne)",
         ],
         "Poltrona" => ["Armchair", "Sillón", "Fauteuil"],
+        "Poltrona Win — Tok&Stok" => [
+            "Win armchair — Tok&Stok",
+            "Sillón Win — Tok&Stok",
+            "Fauteuil Win — Tok&Stok",
+        ],
+        "Cadeira Ares — Tok&Stok" => [
+            "Ares chair — Tok&Stok",
+            "Silla Ares — Tok&Stok",
+            "Chaise Ares — Tok&Stok",
+        ],
         "Mesa de centro" => ["Coffee table", "Mesa de centro", "Table basse"],
         "Mesa lateral" => ["Side table", "Mesa auxiliar", "Table d'appoint"],
         "Rack de TV" => ["TV unit", "Mueble de TV", "Meuble TV"],

@@ -881,6 +881,8 @@ fn movable(f: &Furniture) -> bool {
             | "sofa-2"
             | "sofa-3"
             | "sofa-l"
+            | "tokstok-win"
+            | "tokstok-ares"
             | "armchair"
             | "chair"
             | "stool"
