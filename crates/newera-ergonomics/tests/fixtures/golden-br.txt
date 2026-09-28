@@ -449,7 +449,7 @@ web/demo.newera [Versão 1] / família
   -  Dica city_not_declared:r14 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   -  Dica city_not_declared:r18 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
 docs/projects/upper-west-side-reviewed.newera [Versão 1] / casal
-  score=33 [architecture=93 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  score=33 [architecture=92 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   refs nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B coe-municipal=A nbr16264=A
   Alerta gas_window_not_vent:r14 ref=nbr13103 w=1 | Aparelho a gás: janela que fecha não é ventilação permanente. Preveja abertura permanente direta para o exterior (veneziana ou grelha, inferior e superior), como pedem a norma de aparelhos a gás e, em São Paulo, o Decreto 57.776 (3.M).
   Alerta elec:outlets:r14 ref=nbr5410 w=1 | 0 de 6 tomadas de uso geral: a norma pede um a cada 3,5 m de perímetro (17,9 m).
@@ -487,6 +487,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / casal
   Dica work_triangle_long:r14 ref=nkba w=0 | Triângulo geladeira–pia–fogão de 632,9 cm, lado maior 303,4 cm: a referência é até 792 cm no total e 274 cm por lado; aproxime os três.
   Dica city_not_declared:r14 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   Dica unused_corner:r14:f245+f64 ref=- w=0 | Possível canto ocioso junto a (454.0, 12.5) cm: 79.0 × 77.5 cm (0.61 m²), entre Módulo de cocção — forno embutido f245 e Geladeira f64. Há uma sobra delimitada pelos móveis e pelas paredes, com acesso estreito. Feedback de aproveitamento, não defeito confirmado: confira se é folga de ventilação, manutenção ou abertura antes de decidir usá-la. Nenhuma alteração automática.
+  Dica tv_distance:f157 ref=- w=0 | Poltrona f46 a 481 cm da TV de 56"; para essa tela o conforto fica entre 172 e 358 cm.
   Dica elec:network:r14 ref=nbr16264 w=0 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
   Dica elec:tv:r14 ref=nbr16264 w=0 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
   Dica elec:network:r15 ref=nbr16264 w=0 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
@@ -510,13 +511,13 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / casal
   Dica plumb:drain:r23 ref=nbr8160 w=0 | Sem ralo: a área do box pede um ralo sifonado (caixa sifonada), que também recebe o lavatório.
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
-  -  score=33 [architecture=93 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  -  score=33 [architecture=92 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   -  refs nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B coe-municipal=A nbr16264=A
   -  Dica city_not_declared:r14 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
-  +  score=33 [architecture=94 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  +  score=33 [architecture=93 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   +  refs nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B nbr16264=A coe-municipal=A
 docs/projects/upper-west-side-reviewed.newera [Versão 1] / cadeirante
-  score=15 [architecture=52 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  score=15 [architecture=51 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   refs nbr9050=A nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B coe-municipal=A nbr16264=A
   Alerta clearance:f60:front ref=nbr9050 w=1 | 107,5 cm livres à frente em 81,4 dos 180 cm (giro de cadeira de rodas: mínimo 150 cm); afaste Armário de cozinha (baixo) f155 43 cm. | fix={"dx":0.0,"dy":43.0,"ids":["f155"],"tool":"move"}
   Alerta clearance:f65:front ref=nbr9050 w=1 | 142,5 cm livres à frente (giro de cadeira de rodas: mínimo 150 cm); afaste Ilha de cozinha f66 8 cm. | fix={"dx":0.0,"dy":8.0,"ids":["f66"],"tool":"move"}
@@ -573,6 +574,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / cadeirante
   Dica wall_cabinet_high:f69 ref=nbr9050 w=0 | Topo do aéreo a 220 cm: a prateleira de cima fica fora do alcance (~120 cm); guarde ali o que se usa pouco.
   Dica city_not_declared:r14 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   Dica unused_corner:r14:f245+f64 ref=- w=0 | Possível canto ocioso junto a (454.0, 12.5) cm: 79.0 × 77.5 cm (0.61 m²), entre Módulo de cocção — forno embutido f245 e Geladeira f64. Há uma sobra delimitada pelos móveis e pelas paredes, com acesso estreito. Feedback de aproveitamento, não defeito confirmado: confira se é folga de ventilação, manutenção ou abertura antes de decidir usá-la. Nenhuma alteração automática.
+  Dica tv_distance:f157 ref=- w=0 | Poltrona f46 a 481 cm da TV de 56"; para essa tela o conforto fica entre 172 e 358 cm.
   Dica bed_height_wheelchair:f87 ref=nbr9050 w=0 | Cama a 55 cm do chão: a transferência da cadeira pede uns 46 cm.
   Dica bed_height_wheelchair:f72 ref=nbr9050 w=0 | Cama a 55 cm do chão: a transferência da cadeira pede uns 46 cm.
   Dica elec:network:r14 ref=nbr16264 w=0 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
@@ -598,13 +600,13 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / cadeirante
   Dica plumb:drain:r23 ref=nbr8160 w=0 | Sem ralo: a área do box pede um ralo sifonado (caixa sifonada), que também recebe o lavatório.
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
-  -  score=15 [architecture=52 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  -  score=15 [architecture=51 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   -  refs nbr9050=A nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B coe-municipal=A nbr16264=A
   -  Dica city_not_declared:r14 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
-  +  score=15 [architecture=53 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  +  score=15 [architecture=52 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   +  refs nbr9050=A nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B nbr16264=A coe-municipal=A
 docs/projects/upper-west-side-reviewed.newera [Versão 1] / família
-  score=12 [architecture=48 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  score=12 [architecture=47 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   refs ibge-adensamento=D nbr9050=A nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B blum-zonas=C panero-zelnik=C coe-municipal=A nbr16264=A
   Erro sleeping_places:casa ref=- w=12 | 7 moradores e 4 lugares para dormir: faltam 3 (camas de casal contam 2).
   Alerta bedroom_crowding:casa ref=ibge-adensamento w=1 | 3,5 moradores por dormitório: acima de 3 é adensamento excessivo; são necessários 3 dormitórios.
@@ -656,6 +658,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / família
   Dica wall_cabinet_high:f69 ref=panero-zelnik w=0 | Topo do aéreo a 220 cm: a prateleira de cima fica fora do alcance (~182 cm); guarde ali o que se usa pouco.
   Dica city_not_declared:r14 ref=coe-municipal w=0 | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
   Dica unused_corner:r14:f245+f64 ref=- w=0 | Possível canto ocioso junto a (454.0, 12.5) cm: 79.0 × 77.5 cm (0.61 m²), entre Módulo de cocção — forno embutido f245 e Geladeira f64. Há uma sobra delimitada pelos móveis e pelas paredes, com acesso estreito. Feedback de aproveitamento, não defeito confirmado: confira se é folga de ventilação, manutenção ou abertura antes de decidir usá-la. Nenhuma alteração automática.
+  Dica tv_distance:f157 ref=- w=0 | Poltrona f46 a 481 cm da TV de 56"; para essa tela o conforto fica entre 172 e 358 cm.
   Dica elec:network:r14 ref=nbr16264 w=0 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
   Dica elec:tv:r14 ref=nbr16264 w=0 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
   Dica elec:network:r15 ref=nbr16264 w=0 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
@@ -679,10 +682,10 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / família
   Dica plumb:drain:r23 ref=nbr8160 w=0 | Sem ralo: a área do box pede um ralo sifonado (caixa sifonada), que também recebe o lavatório.
   Dica plumb:grease ref=nbr8160 w=0 | Sem caixa de gordura: numa casa, uma pequena (18 L) ou simples (31 L) entre a pia e a rede; em prédio a pia desce por tubo de queda próprio até a caixa coletiva, e caixa individual no andar é vedada — nesse caso, aceite com esse motivo.
  @ são paulo
-  -  score=12 [architecture=48 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  -  score=12 [architecture=47 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   -  refs ibge-adensamento=D nbr9050=A nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B blum-zonas=C panero-zelnik=C coe-municipal=A nbr16264=A
   -  Dica city_not_declared:r14 ref=coe-municipal | Código de obras não informado: o círculo livre no piso e as áreas mínimas da cozinha variam por município — informe a cidade para que sejam verificados.
-  +  score=12 [architecture=49 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  +  score=12 [architecture=48 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   +  refs ibge-adensamento=D nbr9050=A nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B blum-zonas=C panero-zelnik=C nbr16264=A coe-municipal=A
 Quarto de três camas / casal
   score=50 [architecture=54 electrical=88 plumbing=100] capacity=Capacity { beds: 3, bedrooms: 1, bathrooms: 0, dining_seats: 0, living_seats: 0, wardrobe_cm: 0.0 }
@@ -3174,7 +3177,7 @@ Sala #2 / família
   Dica elec:network:r105 ref=nbr16264 w=1 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
   Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
 Sala #3 / casal
-  score=22 [architecture=34 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
+  score=23 [architecture=35 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
   refs nbr15575g=A nbr5410=A nbr16264=A
   Erro sleeping_places:casa ref=- w=12 | 2 moradores e 0 lugares para dormir: faltam 2 (camas de casal contam 2).
   Erro no_toilet:casa ref=- w=12 | Nenhum banheiro com vaso sanitário.
@@ -3187,11 +3190,10 @@ Sala #3 / casal
   Alerta elec:outlets:r105 ref=nbr5410 w=5 | 0 de 3 tomadas de uso geral: a norma pede um a cada 5 m de perímetro (12,3 m).
   Dica wardrobe_capacity:casa ref=- w=1 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
   Dica clearance:f109:front ref=nbr15575g w=1 | 34,6 cm livres à frente em 3 dos 48 cm (sentar, levantar e circular diante do assento: mínimo 50 cm); afaste 15,4 cm.
-  Dica tv_distance:f111 ref=- w=1 | sofa-2 f108 a 50 cm da TV de 59"; para essa tela o conforto fica entre 180 e 375 cm.
   Dica elec:network:r105 ref=nbr16264 w=1 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
   Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
 Sala #3 / cadeirante
-  score=17 [architecture=29 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
+  score=18 [architecture=30 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
   refs nbr15575g=A nbr9050=A nbr5410=A nbr16264=A
   Erro sleeping_places:casa ref=- w=12 | 2 moradores e 0 lugares para dormir: faltam 2 (camas de casal contam 2).
   Erro no_toilet:casa ref=- w=12 | Nenhum banheiro com vaso sanitário.
@@ -3205,11 +3207,10 @@ Sala #3 / cadeirante
   Alerta elec:outlets:r105 ref=nbr5410 w=5 | 0 de 3 tomadas de uso geral: a norma pede um a cada 5 m de perímetro (12,3 m).
   Dica wardrobe_capacity:casa ref=- w=1 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
   Dica clearance:f109:front ref=nbr15575g w=1 | 34,6 cm livres à frente em 3 dos 48 cm (sentar, levantar e circular diante do assento: mínimo 50 cm); afaste 15,4 cm.
-  Dica tv_distance:f111 ref=- w=1 | sofa-2 f108 a 50 cm da TV de 59"; para essa tela o conforto fica entre 180 e 375 cm.
   Dica elec:network:r105 ref=nbr16264 w=1 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
   Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
 Sala #3 / família
-  score=21 [architecture=33 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
+  score=22 [architecture=34 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
   refs nbr15575g=A nbr5410=A nbr16264=A
   Erro sleeping_places:casa ref=- w=12 | 7 moradores e 0 lugares para dormir: faltam 7 (camas de casal contam 2).
   Erro no_toilet:casa ref=- w=12 | Nenhum banheiro com vaso sanitário.
@@ -3223,11 +3224,10 @@ Sala #3 / família
   Dica living_seats:casa ref=- w=1 | 3 lugares na sala para 7 moradores: todos sentam juntos com mais 4 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=1 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 480 cm no total.
   Dica clearance:f109:front ref=nbr15575g w=1 | 34,6 cm livres à frente em 3 dos 48 cm (sentar, levantar e circular diante do assento: mínimo 50 cm); afaste 15,4 cm.
-  Dica tv_distance:f111 ref=- w=1 | sofa-2 f108 a 50 cm da TV de 59"; para essa tela o conforto fica entre 180 e 375 cm.
   Dica elec:network:r105 ref=nbr16264 w=1 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
   Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
 Sala #4 / casal
-  score=27 [architecture=39 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
+  score=28 [architecture=40 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   refs nbr15575g=A nbr5410=A nbr16264=A
   Erro sleeping_places:casa ref=- w=12 | 2 moradores e 0 lugares para dormir: faltam 2 (camas de casal contam 2).
   Erro no_toilet:casa ref=- w=12 | Nenhum banheiro com vaso sanitário.
@@ -3242,11 +3242,10 @@ Sala #4 / casal
   Dica clearance:f108:front ref=nbr15575g w=1 | 18,4 cm livres à frente em 68,6 dos 96 cm (sentar, levantar e circular diante do assento: mínimo 50 cm); afaste 31,6 cm.
   Dica clearance:f109:front ref=nbr15575g w=1 | 0,5 cm livres à frente em 8,2 dos 48 cm (sentar, levantar e circular diante do assento: mínimo 50 cm); afaste 49,5 cm.
   Dica room_narrow_side:r105 ref=nbr15575g w=1 | Menor lado de 220 cm; para sala a referência é pelo menos 240 cm.
-  Dica tv_distance:f111 ref=- w=1 | sofa-2 f108 a 44 cm da TV de 59"; para essa tela o conforto fica entre 180 e 375 cm.
   Dica elec:network:r105 ref=nbr16264 w=1 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
   Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
 Sala #4 / cadeirante
-  score=27 [architecture=39 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
+  score=28 [architecture=40 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   refs nbr15575g=A nbr5410=A nbr16264=A
   Erro sleeping_places:casa ref=- w=12 | 2 moradores e 0 lugares para dormir: faltam 2 (camas de casal contam 2).
   Erro no_toilet:casa ref=- w=12 | Nenhum banheiro com vaso sanitário.
@@ -3261,11 +3260,10 @@ Sala #4 / cadeirante
   Dica clearance:f108:front ref=nbr15575g w=1 | 18,4 cm livres à frente em 68,6 dos 96 cm (sentar, levantar e circular diante do assento: mínimo 50 cm); afaste 31,6 cm.
   Dica clearance:f109:front ref=nbr15575g w=1 | 0,5 cm livres à frente em 8,2 dos 48 cm (sentar, levantar e circular diante do assento: mínimo 50 cm); afaste 49,5 cm.
   Dica room_narrow_side:r105 ref=nbr15575g w=1 | Menor lado de 220 cm; para sala a referência é pelo menos 240 cm.
-  Dica tv_distance:f111 ref=- w=1 | sofa-2 f108 a 44 cm da TV de 59"; para essa tela o conforto fica entre 180 e 375 cm.
   Dica elec:network:r105 ref=nbr16264 w=1 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
   Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
 Sala #4 / família
-  score=25 [architecture=33 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
+  score=26 [architecture=34 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   refs nbr15575g=A nbr5410=A nbr16264=A
   Erro sleeping_places:casa ref=- w=12 | 7 moradores e 0 lugares para dormir: faltam 7 (camas de casal contam 2).
   Erro no_toilet:casa ref=- w=12 | Nenhum banheiro com vaso sanitário.
@@ -3282,7 +3280,6 @@ Sala #4 / família
   Dica clearance:f108:front ref=nbr15575g w=1 | 18,4 cm livres à frente em 68,6 dos 96 cm (sentar, levantar e circular diante do assento: mínimo 50 cm); afaste 31,6 cm.
   Dica clearance:f109:front ref=nbr15575g w=1 | 0,5 cm livres à frente em 8,2 dos 48 cm (sentar, levantar e circular diante do assento: mínimo 50 cm); afaste 49,5 cm.
   Dica room_narrow_side:r105 ref=nbr15575g w=1 | Menor lado de 220 cm; para sala a referência é pelo menos 240 cm.
-  Dica tv_distance:f111 ref=- w=1 | sofa-2 f108 a 44 cm da TV de 59"; para essa tela o conforto fica entre 180 e 375 cm.
   Dica elec:network:r105 ref=nbr16264 w=1 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
   Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
 Sala #5 / casal
@@ -3298,7 +3295,7 @@ Sala #5 / casal
   Alerta elec:outlets:r105 ref=nbr5410 w=5 | 0 de 4 tomadas de uso geral: a norma pede um a cada 5 m de perímetro (16,5 m).
   Dica wardrobe_capacity:casa ref=- w=1 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
   Dica window_area:r105 ref=coe-municipal w=1 | Janelas somam 1,36 m² para 16,48 m² de piso; o Código Sanitário de SP pede 1/8 do piso: 2,06 m², com metade abrindo para ventilar.
-  Dica tv_distance:f111 ref=- w=1 | sofa-3 f107 a 66 cm da TV de 59"; para essa tela o conforto fica entre 180 e 375 cm.
+  Dica tv_distance:f111 ref=- w=1 | armchair f108 a 421 cm da TV de 59"; para essa tela o conforto fica entre 180 e 375 cm.
   Dica elec:network:r105 ref=nbr16264 w=1 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
   Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
 Sala #5 / cadeirante
@@ -3314,7 +3311,7 @@ Sala #5 / cadeirante
   Alerta elec:outlets:r105 ref=nbr5410 w=5 | 0 de 4 tomadas de uso geral: a norma pede um a cada 5 m de perímetro (16,5 m).
   Dica wardrobe_capacity:casa ref=- w=1 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
   Dica window_area:r105 ref=coe-municipal w=1 | Janelas somam 1,36 m² para 16,48 m² de piso; o Código Sanitário de SP pede 1/8 do piso: 2,06 m², com metade abrindo para ventilar.
-  Dica tv_distance:f111 ref=- w=1 | sofa-3 f107 a 66 cm da TV de 59"; para essa tela o conforto fica entre 180 e 375 cm.
+  Dica tv_distance:f111 ref=- w=1 | armchair f108 a 421 cm da TV de 59"; para essa tela o conforto fica entre 180 e 375 cm.
   Dica elec:network:r105 ref=nbr16264 w=1 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
   Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
 Sala #5 / família
@@ -3332,7 +3329,7 @@ Sala #5 / família
   Dica living_seats:casa ref=- w=1 | 4 lugares na sala para 7 moradores: todos sentam juntos com mais 3 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=1 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 480 cm no total.
   Dica window_area:r105 ref=coe-municipal w=1 | Janelas somam 1,36 m² para 16,48 m² de piso; o Código Sanitário de SP pede 1/8 do piso: 2,06 m², com metade abrindo para ventilar.
-  Dica tv_distance:f111 ref=- w=1 | sofa-3 f107 a 66 cm da TV de 59"; para essa tela o conforto fica entre 180 e 375 cm.
+  Dica tv_distance:f111 ref=- w=1 | armchair f108 a 421 cm da TV de 59"; para essa tela o conforto fica entre 180 e 375 cm.
   Dica elec:network:r105 ref=nbr16264 w=1 | 0 de 2 pontos de rede RJ45: a norma de cabeamento residencial recomenda 2 neste cômodo, cada um com cabo de 4 pares até o distribuidor e uma tomada de energia ao lado.
   Dica elec:tv:r105 ref=nbr16264 w=1 | 0 de 1 pontos de TV: a norma de cabeamento residencial recomenda 1 neste cômodo (coaxial até 100 m do distribuidor).
 Área de serviço #0 / casal

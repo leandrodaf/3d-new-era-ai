@@ -1020,7 +1020,7 @@ web/demo.newera [Versão 1] / família
   +  Dica plumb:sewer:f98 ref=nbr8160
 docs/projects/upper-west-side-reviewed.newera [Versão 1] / casal
  @ miami
-  -  score=33 [architecture=93 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  -  score=33 [architecture=92 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   -  refs nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B coe-municipal=A nbr16264=A
   -  Alerta elec:outlets:r14 ref=nbr5410
   -  Alerta elec:outlets:r15 ref=nbr5410
@@ -1054,7 +1054,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / casal
   -  Alerta plumb:sewer:f315 ref=nbr8160
   -  Alerta plumb:cold:f317 ref=nbr5626
   -  Alerta plumb:sewer:f317 ref=nbr8160
-  +  score=85 [architecture=93 electrical=90 plumbing=90] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  +  score=85 [architecture=92 electrical=90 plumbing=90] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   +  refs nbr13103=B nkba=B coe-municipal=B nbr5410=B nbr16264=B nbr5626=B nbr8160=B
   +  Dica elec:outlets:r14 ref=nbr5410
   +  Dica elec:outlets:r15 ref=nbr5410
@@ -1089,7 +1089,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / casal
   +  Dica plumb:cold:f317 ref=nbr5626
   +  Dica plumb:sewer:f317 ref=nbr8160
  @ berlim
-  -  score=33 [architecture=93 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  -  score=33 [architecture=92 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   -  refs nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B coe-municipal=A nbr16264=A
   -  Alerta elec:outlets:r14 ref=nbr5410
   -  Alerta elec:outlets:r15 ref=nbr5410
@@ -1123,7 +1123,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / casal
   -  Alerta plumb:sewer:f315 ref=nbr8160
   -  Alerta plumb:cold:f317 ref=nbr5626
   -  Alerta plumb:sewer:f317 ref=nbr8160
-  +  score=85 [architecture=93 electrical=90 plumbing=90] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  +  score=85 [architecture=92 electrical=90 plumbing=90] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   +  refs nbr13103=B nkba=B coe-municipal=B nbr5410=B nbr16264=B nbr5626=B nbr8160=B
   +  Dica elec:outlets:r14 ref=nbr5410
   +  Dica elec:outlets:r15 ref=nbr5410
@@ -1159,7 +1159,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / casal
   +  Dica plumb:sewer:f317 ref=nbr8160
 docs/projects/upper-west-side-reviewed.newera [Versão 1] / cadeirante
  @ miami
-  -  score=15 [architecture=52 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  -  score=15 [architecture=51 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   -  refs nbr9050=A nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B coe-municipal=A nbr16264=A
   -  Alerta clearance:f167:front ref=nbr9050
   -  Alerta door_width_wheelchair:f37 ref=nbr9050
@@ -1204,7 +1204,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / cadeirante
   -  Alerta plumb:sewer:f315 ref=nbr8160
   -  Alerta plumb:cold:f317 ref=nbr5626
   -  Alerta plumb:sewer:f317 ref=nbr8160
-  +  score=46 [architecture=51 electrical=90 plumbing=90] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  +  score=46 [architecture=50 electrical=90 plumbing=90] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   +  refs nbr9050=B icc-a117=A nbr13103=B nkba=B coe-municipal=B nbr5410=B nbr16264=B nbr5626=B nbr8160=B
   +  Alerta clearance:f167:front ref=icc-a117
   +  Alerta door_width_wheelchair:f37 ref=icc-a117
@@ -1251,7 +1251,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / cadeirante
   +  Dica plumb:cold:f317 ref=nbr5626
   +  Dica plumb:sewer:f317 ref=nbr8160
  @ berlim
-  -  score=15 [architecture=52 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  -  score=15 [architecture=51 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   -  refs nbr9050=A nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B coe-municipal=A nbr16264=A
   -  Alerta elec:outlets:r14 ref=nbr5410
   -  Alerta elec:outlets:r15 ref=nbr5410
@@ -1285,7 +1285,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / cadeirante
   -  Alerta plumb:sewer:f315 ref=nbr8160
   -  Alerta plumb:cold:f317 ref=nbr5626
   -  Alerta plumb:sewer:f317 ref=nbr8160
-  +  score=47 [architecture=52 electrical=90 plumbing=90] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  +  score=47 [architecture=51 electrical=90 plumbing=90] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   +  refs nbr9050=B nbr13103=B nkba=B coe-municipal=B nbr5410=B nbr16264=B nbr5626=B nbr8160=B
   +  Dica elec:outlets:r14 ref=nbr5410
   +  Dica elec:outlets:r15 ref=nbr5410
@@ -1321,7 +1321,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / cadeirante
   +  Dica plumb:sewer:f317 ref=nbr8160
 docs/projects/upper-west-side-reviewed.newera [Versão 1] / família
  @ miami
-  -  score=12 [architecture=48 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  -  score=12 [architecture=47 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   -  refs ibge-adensamento=D nbr9050=A nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B blum-zonas=C panero-zelnik=C coe-municipal=A nbr16264=A
   -  Alerta door_width_wheelchair:f37 ref=nbr9050
   -  Alerta door_width_wheelchair:f38 ref=nbr9050
@@ -1363,7 +1363,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / família
   -  Alerta plumb:sewer:f315 ref=nbr8160
   -  Alerta plumb:cold:f317 ref=nbr5626
   -  Alerta plumb:sewer:f317 ref=nbr8160
-  +  score=44 [architecture=48 electrical=90 plumbing=90] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  +  score=44 [architecture=47 electrical=90 plumbing=90] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   +  refs ibge-adensamento=D icc-a117=A nbr13103=B nbr9050=B nkba=B blum-zonas=C panero-zelnik=C coe-municipal=B nbr5410=B nbr16264=B nbr5626=B nbr8160=B
   +  Alerta door_width_wheelchair:f37 ref=icc-a117
   +  Alerta door_width_wheelchair:f38 ref=icc-a117
@@ -1406,7 +1406,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / família
   +  Dica plumb:cold:f317 ref=nbr5626
   +  Dica plumb:sewer:f317 ref=nbr8160
  @ berlim
-  -  score=12 [architecture=48 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  -  score=12 [architecture=47 electrical=54 plumbing=51] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   -  refs ibge-adensamento=D nbr9050=A nbr13103=A nbr5410=A nbr5626=A nbr8160=A nkba=B blum-zonas=C panero-zelnik=C coe-municipal=A nbr16264=A
   -  Alerta elec:outlets:r14 ref=nbr5410
   -  Alerta elec:outlets:r15 ref=nbr5410
@@ -1440,7 +1440,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / família
   -  Alerta plumb:sewer:f315 ref=nbr8160
   -  Alerta plumb:cold:f317 ref=nbr5626
   -  Alerta plumb:sewer:f317 ref=nbr8160
-  +  score=44 [architecture=48 electrical=90 plumbing=90] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
+  +  score=44 [architecture=47 electrical=90 plumbing=90] capacity=Capacity { beds: 4, bedrooms: 2, bathrooms: 2, dining_seats: 8, living_seats: 8, wardrobe_cm: 520.0 }
   +  refs ibge-adensamento=D nbr9050=B nbr13103=B nkba=B blum-zonas=C panero-zelnik=C coe-municipal=B nbr5410=B nbr16264=B nbr5626=B nbr8160=B
   +  Dica elec:outlets:r14 ref=nbr5410
   +  Dica elec:outlets:r15 ref=nbr5410
@@ -4492,120 +4492,120 @@ Sala #2 / família
   +  Dica elec:mount:f117 ref=nbr5410
 Sala #3 / casal
  @ miami
-  -  score=22 [architecture=34 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
+  -  score=23 [architecture=35 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr5410=A nbr16264=A
   -  Alerta elec:light:r105 ref=nbr5410
   -  Alerta elec:outlets:r105 ref=nbr5410
-  +  score=30 [architecture=34 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
+  +  score=31 [architecture=35 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr5410=B nbr16264=B
   +  Dica elec:light:r105 ref=nbr5410
   +  Dica elec:outlets:r105 ref=nbr5410
  @ berlim
-  -  score=22 [architecture=34 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
+  -  score=23 [architecture=35 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr5410=A nbr16264=A
   -  Alerta elec:light:r105 ref=nbr5410
   -  Alerta elec:outlets:r105 ref=nbr5410
-  +  score=30 [architecture=34 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
+  +  score=31 [architecture=35 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr5410=B nbr16264=B
   +  Dica elec:light:r105 ref=nbr5410
   +  Dica elec:outlets:r105 ref=nbr5410
 Sala #3 / cadeirante
  @ miami
-  -  score=17 [architecture=29 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
+  -  score=18 [architecture=30 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr9050=A nbr5410=A nbr16264=A
   -  Alerta switch_outlet_reach:casa ref=nbr9050
   -  Alerta elec:light:r105 ref=nbr5410
   -  Alerta elec:outlets:r105 ref=nbr5410
-  +  score=25 [architecture=29 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
+  +  score=26 [architecture=30 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B icc-a117=A nbr5410=B nbr16264=B
   +  Alerta switch_outlet_reach:casa ref=icc-a117
   +  Dica elec:light:r105 ref=nbr5410
   +  Dica elec:outlets:r105 ref=nbr5410
  @ berlim
-  -  score=17 [architecture=29 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
+  -  score=18 [architecture=30 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr9050=A nbr5410=A nbr16264=A
   -  Alerta elec:light:r105 ref=nbr5410
   -  Alerta elec:outlets:r105 ref=nbr5410
-  +  score=25 [architecture=29 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
+  +  score=26 [architecture=30 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr9050=B nbr5410=B nbr16264=B
   +  Dica elec:light:r105 ref=nbr5410
   +  Dica elec:outlets:r105 ref=nbr5410
 Sala #3 / família
  @ miami
-  -  score=21 [architecture=33 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
+  -  score=22 [architecture=34 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr5410=A nbr16264=A
   -  Alerta elec:light:r105 ref=nbr5410
   -  Alerta elec:outlets:r105 ref=nbr5410
-  +  score=29 [architecture=33 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
+  +  score=30 [architecture=34 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr5410=B nbr16264=B
   +  Dica elec:light:r105 ref=nbr5410
   +  Dica elec:outlets:r105 ref=nbr5410
  @ berlim
-  -  score=21 [architecture=33 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
+  -  score=22 [architecture=34 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr5410=A nbr16264=A
   -  Alerta elec:light:r105 ref=nbr5410
   -  Alerta elec:outlets:r105 ref=nbr5410
-  +  score=29 [architecture=33 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
+  +  score=30 [architecture=34 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 10, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr5410=B nbr16264=B
   +  Dica elec:light:r105 ref=nbr5410
   +  Dica elec:outlets:r105 ref=nbr5410
 Sala #4 / casal
  @ miami
-  -  score=27 [architecture=39 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
+  -  score=28 [architecture=40 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr5410=A nbr16264=A
   -  Alerta elec:light:r105 ref=nbr5410
   -  Alerta elec:outlets:r105 ref=nbr5410
   -  Dica room_narrow_side:r105 ref=nbr15575g
-  +  score=36 [architecture=40 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
+  +  score=37 [architecture=41 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr5410=B nbr16264=B
   +  Dica elec:light:r105 ref=nbr5410
   +  Dica elec:outlets:r105 ref=nbr5410
  @ berlim
-  -  score=27 [architecture=39 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
+  -  score=28 [architecture=40 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr5410=A nbr16264=A
   -  Alerta elec:light:r105 ref=nbr5410
   -  Alerta elec:outlets:r105 ref=nbr5410
-  +  score=35 [architecture=39 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
+  +  score=36 [architecture=40 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr5410=B nbr16264=B
   +  Dica elec:light:r105 ref=nbr5410
   +  Dica elec:outlets:r105 ref=nbr5410
 Sala #4 / cadeirante
  @ miami
-  -  score=27 [architecture=39 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
+  -  score=28 [architecture=40 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr5410=A nbr16264=A
   -  Alerta elec:light:r105 ref=nbr5410
   -  Alerta elec:outlets:r105 ref=nbr5410
   -  Dica room_narrow_side:r105 ref=nbr15575g
-  +  score=36 [architecture=40 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
+  +  score=37 [architecture=41 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr5410=B nbr16264=B
   +  Dica elec:light:r105 ref=nbr5410
   +  Dica elec:outlets:r105 ref=nbr5410
  @ berlim
-  -  score=27 [architecture=39 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
+  -  score=28 [architecture=40 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr5410=A nbr16264=A
   -  Alerta elec:light:r105 ref=nbr5410
   -  Alerta elec:outlets:r105 ref=nbr5410
-  +  score=35 [architecture=39 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
+  +  score=36 [architecture=40 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr5410=B nbr16264=B
   +  Dica elec:light:r105 ref=nbr5410
   +  Dica elec:outlets:r105 ref=nbr5410
 Sala #4 / família
  @ miami
-  -  score=25 [architecture=33 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
+  -  score=26 [architecture=34 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr5410=A nbr16264=A
   -  Alerta elec:light:r105 ref=nbr5410
   -  Alerta elec:outlets:r105 ref=nbr5410
   -  Dica room_narrow_side:r105 ref=nbr15575g
-  +  score=30 [architecture=34 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
+  +  score=31 [architecture=35 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr5410=B nbr16264=B
   +  Dica elec:light:r105 ref=nbr5410
   +  Dica elec:outlets:r105 ref=nbr5410
  @ berlim
-  -  score=25 [architecture=33 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
+  -  score=26 [architecture=34 electrical=88 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   -  refs nbr15575g=A nbr5410=A nbr16264=A
   -  Alerta elec:light:r105 ref=nbr5410
   -  Alerta elec:outlets:r105 ref=nbr5410
-  +  score=29 [architecture=33 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
+  +  score=30 [architecture=34 electrical=96 plumbing=100] capacity=Capacity { beds: 0, bedrooms: 0, bathrooms: 0, dining_seats: 4, living_seats: 3, wardrobe_cm: 0.0 }
   +  refs nbr15575g=B nbr5410=B nbr16264=B
   +  Dica elec:light:r105 ref=nbr5410
   +  Dica elec:outlets:r105 ref=nbr5410
