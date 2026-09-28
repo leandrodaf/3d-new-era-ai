@@ -38,7 +38,8 @@ the `key` it is accepted by and the elements involved (name, bounds and z).
 - **outgrew_niche**: an appliance its host stopped holding after the joinery was resized
   around it, with how far it sticks out. Built-in pieces are left out of the overlap check
   by design, which is why nothing else notices.
-- **outside_rooms**: a piece outside every room.
+- **outside_rooms**: a piece outside every room; a group wholly outside (a facade panel of
+  slats) is one row, and a part of one sticking out is that part.
 - **loose**: a fixed point with nothing to be fixed to — loose in a room, on glass, in a
   door or window span, hanging under the ceiling — with why.
 - **above_ceiling**: compares the full luminaire footprint with the room ceiling surface the
