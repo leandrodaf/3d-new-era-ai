@@ -812,13 +812,24 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
             let has_rooms = rooms.iter().any(|(level, _)| *level == levels[i]);
             outside.push((groups[i], piece.id, has_rooms && !covered));
         }
+        // A part accepted as outside on its own, before groups were said
+        // once, keeps its group said part by part: the acceptance still
+        // answers to its finding.
+        let accepted_part = |group: usize| {
+            outside
+                .iter()
+                .any(|(g, id, _)| *g == group && Issue::OutsideRooms(*id).accepted(home).is_some())
+        };
         let mut said: Vec<usize> = Vec::new();
         for &(group, id, out) in &outside {
             if !out {
                 continue;
             }
             let parts = outside.iter().filter(|(g, ..)| *g == group);
-            if parts.clone().count() > 1 && parts.clone().all(|(.., out)| *out) {
+            if parts.clone().count() > 1
+                && parts.clone().all(|(.., out)| *out)
+                && !accepted_part(group)
+            {
                 if !said.contains(&group) {
                     said.push(group);
                     issues.push(Issue::OutsideRooms(home.furniture[group].id));
@@ -1741,6 +1752,16 @@ mod tests {
             [FurnitureId(23), FurnitureId(24), FurnitureId(32)],
             "{issues:?}"
         );
+        // A slat accepted as outside before keeps the panel said slat by slat.
+        home.accepted
+            .insert("outside_rooms:f26".into(), "fachada".into());
+        let issues = check_layout(&home);
+        let panel: Vec<&Issue> = issues
+            .iter()
+            .filter(|i| matches!(i, Issue::OutsideRooms(f) if [24, 25, 26, 27].contains(&f.0)))
+            .collect();
+        assert_eq!(panel.len(), 3, "{issues:?}");
+        assert!(panel.iter().any(|i| i.accepted(&home) == Some("fachada")));
         let swing_side = door_swing(&home.furniture[1]).unwrap();
         assert!(
             swing_side.iter().all(|p| p.x >= -8.0),
