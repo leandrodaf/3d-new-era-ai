@@ -2215,6 +2215,89 @@
     },
     "title": "Fill a room with light"
   },
+  "edit_model": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Replace a model file"
+    },
+    "description": "Change the model file of placed pieces. replace swaps the file of ids (every=true: of every piece using the same file) in one undo step, keeping each piece's id, position, angle, storey, size (size=natural takes the file's), finish, material overrides, names and links; the new file is read first and nothing changes if it fails. rev refuses the change when the plan moved on since that revision. Reply ok with the ids, then a line per piece: old file → new, the version loaded (bytes, hash), overrides that no longer match a material, and what the new file does not draw. model inspects a file; place imports a new piece.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "description": "`replace`: put another file in the pieces, keeping each one's id and all the rest",
+          "enum": [
+            "replace"
+          ],
+          "type": "string"
+        },
+        "every": {
+          "description": "replace: also every other piece using the same file as `ids` (default: only `ids`)",
+          "type": "boolean"
+        },
+        "file": {
+          "description": "replace: the new .obj/.gltf/.glb file",
+          "type": "string"
+        },
+        "ids": {
+          "description": "Pieces whose model changes, e.g. `[\"f12\"]`",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rev": {
+          "description": "Revision the change was prepared on; refused if the plan has moved on since",
+          "type": "integer"
+        },
+        "size": {
+          "description": "replace: `keep` each piece's w/d/h (default) or take the new file's `natural` size",
+          "enum": [
+            "keep",
+            "natural"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "ids",
+        "file"
+      ],
+      "type": "object"
+    },
+    "name": "edit_model",
+    "outputSchema": {
+      "properties": {
+        "ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "rev": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "v": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "text"
+      ],
+      "type": "object"
+    },
+    "title": "Replace a model file"
+  },
   "edit_plumbing": {
     "annotations": {
       "destructiveHint": true,

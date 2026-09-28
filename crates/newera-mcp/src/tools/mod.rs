@@ -16,7 +16,7 @@
 //! | [`render`] | `render_plan`, `show_plan`, `render_3d`, `render_photo`, `export` |
 //! | [`cameras`] | `cameras`, `edit_cameras`, `video`, `edit_video` |
 //! | [`measure`] | `measure` |
-//! | [`model`] | `model` |
+//! | [`model`] | `model`, `edit_model` |
 //! | [`check`] | `layout`, `ergonomics`, `accept` |
 //! | [`annotations`] | `annotations`, `edit_annotations`, `disciplines`, `edit_disciplines` |
 //! | [`background`] | `background`, `edit_background` |
@@ -97,6 +97,7 @@ impl NewEraMcp {
             Self::levels_router(),
             Self::measure_router(),
             Self::model_router(),
+            Self::edit_model_router(),
             Self::check_router(),
             Self::background_router(),
             Self::roof_router(),

@@ -748,7 +748,7 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
         ),
         // Writes answering an `ok` line.
         "create" | "edit_walls" | "edit_background" | "edit_levels" | "edit_cameras"
-        | "edit_home" | "file" | "arrange" => ok_line(&[]),
+        | "edit_home" | "file" | "arrange" | "edit_model" => ok_line(&[]),
         "delete" => ok_line(&[
             (
                 "labels_left",
@@ -1255,5 +1255,42 @@ mod tests {
         }
         let _ = std::fs::remove_dir_all(&dir);
         assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    /// `edit_model` needs a piece built from a file, which the plan above
+    /// has none of by the time it would run.
+    #[test]
+    fn a_replaced_model_answers_what_its_schema_says() {
+        use newera_core::{Document, SharedDocument};
+        let document = SharedDocument::new(Document::default());
+        let dir = std::env::temp_dir().join(format!("newera-mcp-replace-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("a.obj"),
+            "v 0 0 0\nv 50 0 0\nv 50 80 0\nv 0 0 40\nf 1 2 3\nf 1 3 4\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("b.obj"),
+            "v 0 0 0\nv 60 0 0\nv 60 80 0\nv 0 0 40\nf 1 2 3\nf 1 3 4\n",
+        )
+        .unwrap();
+        let placed = crate::call(
+            document.clone(),
+            "place",
+            json!({"items": [{"model": dir.join("a.obj"), "at": [0, 0]}]}),
+        )
+        .unwrap();
+        assert_ne!(placed.is_error, Some(true), "{placed:?}");
+        let result = crate::call(
+            document,
+            "edit_model",
+            json!({"action": "replace", "ids": ["f1"], "file": dir.join("b.obj")}),
+        )
+        .unwrap();
+        assert_ne!(result.is_error, Some(true), "{result:?}");
+        let structured = result.structured_content.expect("structured");
+        fits(&schema("edit_model").unwrap(), &structured, "edit_model").unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -130,6 +130,7 @@ const CATEGORIES: &[(&str, &[&str])] = &[
             "materials",
             "measure",
             "model",
+            "edit_model",
             "fit_roof",
             "background",
             "edit_background",

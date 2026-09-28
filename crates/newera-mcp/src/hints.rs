@@ -125,6 +125,7 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
     ("delete", "Delete elements", Effect::Change, false),
     ("arrange", "Copy, align and group", Effect::Change, false),
     ("edit_walls", "Split or merge walls", Effect::Change, false),
+    ("edit_model", "Replace a model file", Effect::Change, false),
     ("joinery", "Build joinery", Effect::Change, false),
     (
         "cabinet_run",
