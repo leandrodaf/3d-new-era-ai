@@ -277,12 +277,11 @@ fn in_a_room(view: &Home, at: Point2) -> bool {
         .any(|r| r.points.len() >= 3 && crate::electrical::inside(&r.points, at))
 }
 
-/// The storey a piece is judged on: its own, or — one not placed yet — the
-/// storey being edited, where it will land.
+/// The storey a piece is judged on: its own (`None` is the lowest one, as
+/// for every stored element). A piece about to be placed says its storey
+/// before it is judged.
 fn storey_of(home: &Home, piece: &Furniture) -> Option<crate::LevelId> {
-    piece
-        .level
-        .map_or_else(|| home.current_level(), |l| home.resolve_level(Some(l)))
+    home.resolve_level(piece.level)
 }
 
 /// Seats a fixed point where it is fixed: a wall point onto the face of the
@@ -1085,6 +1084,41 @@ mod tests {
             Some(FurnitureId(4))
         );
         assert!(host_of(&home, &tower(510.0)).is_none());
+    }
+
+    #[test]
+    fn a_stored_point_is_judged_on_its_own_storey_whichever_is_shown() {
+        use crate::elements::Level;
+        use crate::ids::LevelId;
+        let mut home = Home::default();
+        home.levels = vec![
+            Level {
+                id: LevelId(1),
+                elevation: 0.0,
+                height: 280.0,
+                ..Level::default()
+            },
+            Level {
+                id: LevelId(2),
+                elevation: 292.0,
+                height: 280.0,
+                elevation_index: 1,
+                ..Level::default()
+            },
+        ];
+        // A ground-floor wall and its outlet, stored without a storey: the lowest.
+        home.walls.push(Wall::new(
+            WallId(1),
+            Point2::new(0.0, 0.0),
+            Point2::new(400.0, 0.0),
+        ));
+        let point = outlet(30.0, (300.0, 9.5));
+        assert!(blocked(&home, &point).is_none(), "on its wall");
+        home.selected_level = Some(LevelId(2));
+        assert!(
+            blocked(&home, &point).is_none(),
+            "still on its wall upstairs shown"
+        );
     }
 
     #[test]
