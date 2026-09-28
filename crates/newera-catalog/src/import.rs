@@ -28,6 +28,25 @@ pub struct ImportedModel {
     pub mesh: Mesh,
     /// Width, depth, height in cm, after unit detection.
     pub size: [f64; 3],
+    /// How the file was read, and what of it was left out.
+    pub report: ImportReport,
+}
+
+/// What an import made of a file: the unit it took, and what in the file
+/// is not drawn — a missing texture, a normal map, an extension — so "it
+/// loaded" is not mistaken for "it looks as it should".
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ImportReport {
+    /// `obj`, `gltf` or `glb`.
+    pub format: String,
+    /// Meshes (OBJ objects, glTF primitives) read.
+    pub meshes: usize,
+    /// Width, depth, height in the file's own units.
+    pub raw_size: [f64; 3],
+    /// The unit taken for those numbers: `m`, `cm` or `mm`.
+    pub unit: &'static str,
+    /// What was left out or could not be found, one sentence each.
+    pub warnings: Vec<String>,
 }
 
 const DEFAULT_COLOR: Rgb = [0.78, 0.76, 0.72];
@@ -40,9 +59,13 @@ pub fn load_model(path: &Path) -> Result<ImportedModel, ImportError> {
         .and_then(|e| e.to_str())
         .unwrap_or_default()
         .to_ascii_lowercase();
+    let mut report = ImportReport {
+        format: ext.clone(),
+        ..ImportReport::default()
+    };
     let mut mesh = match ext.as_str() {
-        "obj" => load_obj(path)?,
-        "gltf" | "glb" => load_gltf(path)?,
+        "obj" => load_obj(path, &mut report)?,
+        "gltf" | "glb" => load_gltf(path, &mut report)?,
         other => return Err(ImportError::Format(other.to_owned())),
     };
     let (min, max) = mesh.bounds().ok_or(ImportError::Empty)?;
@@ -52,19 +75,21 @@ pub fn load_model(path: &Path) -> Result<ImportedModel, ImportError> {
         f64::from(max[1] - min[1]),
     ];
     let largest = raw.iter().copied().fold(0.0, f64::max);
-    let to_cm = if largest < 20.0 {
-        100.0
+    let (to_cm, unit) = if largest < 20.0 {
+        (100.0, "m")
     } else if largest > 2000.0 {
-        0.1
+        (0.1, "mm")
     } else {
-        1.0
+        (1.0, "cm")
     };
+    report.raw_size = raw;
+    report.unit = unit;
     let size = raw.map(|v| (v * to_cm).max(1.0));
     mesh.fit_to(size[0], size[1], size[2]);
-    Ok(ImportedModel { mesh, size })
+    Ok(ImportedModel { mesh, size, report })
 }
 
-fn load_obj(path: &Path) -> Result<Mesh, ImportError> {
+fn load_obj(path: &Path, report: &mut ImportReport) -> Result<Mesh, ImportError> {
     let text = newera_core::vfs::read(path)?;
     let has_library = text
         .split(|&b| b == b'\n')
@@ -81,6 +106,7 @@ fn load_obj(path: &Path) -> Result<Mesh, ImportError> {
         .lines()
         .filter_map(|l| l.trim().strip_prefix("usemtl").map(|n| n.trim().to_owned()))
         .collect();
+    let unread = std::cell::RefCell::new(Vec::new());
     let (models, materials) = tobj::load_obj_buf(
         &mut std::io::Cursor::new(source),
         &tobj::GPU_LOAD_OPTIONS,
@@ -88,13 +114,33 @@ fn load_obj(path: &Path) -> Result<Mesh, ImportError> {
             if mtl == Path::new("__defaults__.mtl") {
                 return tobj::load_mtl_buf(&mut std::io::Cursor::new(default_library(&used)));
             }
-            let bytes = newera_core::vfs::read(&dir.join(mtl))
-                .map_err(|_| tobj::LoadError::OpenFileFailed)?;
-            tobj::load_mtl_buf(&mut std::io::Cursor::new(bytes))
+            let Ok(bytes) = newera_core::vfs::read(&dir.join(mtl)) else {
+                unread.borrow_mut().push(format!(
+                    "material library {} not found: the model is drawn gray",
+                    mtl.display()
+                ));
+                return Err(tobj::LoadError::OpenFileFailed);
+            };
+            tobj::load_mtl_buf(&mut std::io::Cursor::new(bytes)).inspect_err(|e| {
+                unread.borrow_mut().push(format!(
+                    "material library {} could not be read ({e}): the model is drawn gray",
+                    mtl.display()
+                ));
+            })
         },
     )?;
+    report.warnings.extend(unread.into_inner());
+    if !has_library && !used.is_empty() {
+        report.warnings.push(
+            "no material library (mtllib): colors are guessed from the material names".to_owned(),
+        );
+    }
     // Missing or broken material files leave the model gray rather than failing.
     let materials = materials.unwrap_or_default();
+    for m in &materials {
+        obj_material_warnings(m, &dir, &mut report.warnings);
+    }
+    report.meshes = models.len();
     let mut mesh = Mesh {
         materials: materials
             .iter()
@@ -164,6 +210,42 @@ fn load_obj(path: &Path) -> Result<Mesh, ImportError> {
         return Err(ImportError::Empty);
     }
     Ok(mesh)
+}
+
+/// What of an MTL material is not drawn, or not found.
+fn obj_material_warnings(m: &tobj::Material, dir: &Path, warnings: &mut Vec<String>) {
+    let name = &m.name;
+    if let Some(file) = m.diffuse_texture.as_deref().map(str::trim)
+        && !file.is_empty()
+        && !newera_core::vfs::exists(&dir.join(file))
+    {
+        warnings.push(format!(
+            "texture {file} of material {name} not found: drawn in its plain color"
+        ));
+    }
+    let maps = [
+        (&m.normal_texture, "normal/bump map"),
+        (&m.specular_texture, "specular map"),
+        (&m.shininess_texture, "shininess map"),
+        (&m.dissolve_texture, "opacity map (map_d)"),
+        (&m.ambient_texture, "ambient map"),
+    ];
+    for (map, what) in maps {
+        if map.as_deref().is_some_and(|f| !f.trim().is_empty()) {
+            warnings.push(format!("{what} of material {name} is not drawn"));
+        }
+    }
+    let mut unknown: Vec<&String> = m
+        .unknown_param
+        .keys()
+        .filter(|k| {
+            k.starts_with("map_") || matches!(k.as_str(), "norm" | "disp" | "bump" | "refl")
+        })
+        .collect();
+    unknown.sort();
+    for key in unknown {
+        warnings.push(format!("{key} of material {name} is not drawn"));
+    }
 }
 
 /// Standard base64 (glTF data URIs).
@@ -263,7 +345,7 @@ fn transform_vector(m: &Mat4, v: [f32; 3]) -> [f32; 3] {
     std::array::from_fn(|r| m[0][r] * v[0] + m[1][r] * v[1] + m[2][r] * v[2])
 }
 
-fn load_gltf(path: &Path) -> Result<Mesh, ImportError> {
+fn load_gltf(path: &Path, report: &mut ImportReport) -> Result<Mesh, ImportError> {
     let gltf::Gltf { document, blob } = gltf::Gltf::from_slice(&newera_core::vfs::read(path)?)?;
     let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
     // Buffers: the GLB chunk, embedded data URIs or files next to the model.
@@ -287,6 +369,7 @@ fn load_gltf(path: &Path) -> Result<Mesh, ImportError> {
         })
         .collect::<Result<_, ImportError>>()?;
     let images = gltf_images(&document, &buffers, path);
+    gltf_warnings(&document, &images, &mut report.warnings);
     let mut mesh = Mesh {
         materials: document
             .materials()
@@ -303,6 +386,7 @@ fn load_gltf(path: &Path) -> Result<Mesh, ImportError> {
     let scene = document
         .default_scene()
         .or_else(|| document.scenes().next());
+    let mut skipped = 0;
     let mut stack: Vec<(gltf::Node<'_>, Mat4)> = scene
         .map(|s| s.nodes().map(|n| (n, identity)).collect())
         .unwrap_or_default();
@@ -311,8 +395,10 @@ fn load_gltf(path: &Path) -> Result<Mesh, ImportError> {
         if let Some(node_mesh) = node.mesh() {
             for primitive in node_mesh.primitives() {
                 if primitive.mode() != gltf::mesh::Mode::Triangles {
+                    skipped += 1;
                     continue;
                 }
+                report.meshes += 1;
                 let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
                 let Some(positions) = reader.read_positions() else {
                     continue;
@@ -378,10 +464,67 @@ fn load_gltf(path: &Path) -> Result<Mesh, ImportError> {
         }
         stack.extend(node.children().map(|child| (child, world)));
     }
+    if skipped > 0 {
+        report.warnings.push(format!(
+            "{skipped} primitives of lines or points are not drawn"
+        ));
+    }
     if mesh.indices.is_empty() {
         return Err(ImportError::Empty);
     }
     Ok(mesh)
+}
+
+/// What of a glTF file is not drawn: textures other than the base color,
+/// emission, alpha masks, animation and extensions.
+fn gltf_warnings(
+    document: &gltf::Document,
+    images: &[Option<std::path::PathBuf>],
+    warnings: &mut Vec<String>,
+) {
+    for extension in document.extensions_used() {
+        warnings.push(format!("extension {extension} is not supported"));
+    }
+    for (k, image) in images.iter().enumerate() {
+        match image {
+            Some(file) if !newera_core::vfs::exists(file) => warnings.push(format!(
+                "image {} not found: its materials are drawn in their plain color",
+                file.display()
+            )),
+            None => warnings.push(format!("image {k} could not be read")),
+            Some(_) => {}
+        }
+    }
+    for m in document.materials() {
+        let name = m.name().map_or_else(
+            || format!("material{}", m.index().unwrap_or_default()),
+            str::to_owned,
+        );
+        let maps = [
+            (m.normal_texture().is_some(), "normal map"),
+            (m.occlusion_texture().is_some(), "occlusion map"),
+            (m.emissive_texture().is_some(), "emissive map"),
+            (
+                m.pbr_metallic_roughness()
+                    .metallic_roughness_texture()
+                    .is_some(),
+                "metallic-roughness map",
+            ),
+            (m.emissive_factor().iter().any(|c| *c > 0.0), "emission"),
+            (
+                m.alpha_mode() == gltf::material::AlphaMode::Mask,
+                "alpha mask (drawn opaque)",
+            ),
+        ];
+        for (present, what) in maps {
+            if present {
+                warnings.push(format!("{what} of material {name} is not drawn"));
+            }
+        }
+    }
+    if document.animations().next().is_some() || document.skins().next().is_some() {
+        warnings.push("animations and skins are ignored: the model is drawn at rest".to_owned());
+    }
 }
 
 /// The file of each glTF image: a file next to the model, or — for images
@@ -585,6 +728,11 @@ mod memory_tests {
     /// A GLB: one triangle with UVs, a named material whose color is an
     /// image stored in the binary chunk.
     pub(crate) fn textured_glb(image: &[u8]) -> Vec<u8> {
+        glb_with(image, "", "")
+    }
+
+    /// [`textured_glb`] with more JSON in its material and at its root.
+    pub(crate) fn glb_with(image: &[u8], material: &str, root: &str) -> Vec<u8> {
         let mut bin = Vec::new();
         for v in [[0.0f32, 0.0, 0.0], [100.0, 0.0, 0.0], [0.0, 100.0, 0.0]] {
             bin.extend(v.iter().flat_map(|c| c.to_le_bytes()));
@@ -598,9 +746,9 @@ mod memory_tests {
             bin.push(0);
         }
         let json = format!(
-            r#"{{"asset":{{"version":"2.0"}},"scene":0,"scenes":[{{"nodes":[0]}}],"nodes":[{{"mesh":0,"name":"assento"}}],
+            r#"{{"asset":{{"version":"2.0"}},{root}"scene":0,"scenes":[{{"nodes":[0]}}],"nodes":[{{"mesh":0,"name":"assento"}}],
             "meshes":[{{"primitives":[{{"attributes":{{"POSITION":0,"TEXCOORD_0":1}},"material":0}}]}}],
-            "materials":[{{"name":"tecido","pbrMetallicRoughness":{{"baseColorTexture":{{"index":0}}}}}}],
+            "materials":[{{"name":"tecido",{material}"pbrMetallicRoughness":{{"baseColorTexture":{{"index":0}}}}}}],
             "textures":[{{"source":0}}],"images":[{{"bufferView":2,"mimeType":"image/png"}}],
             "buffers":[{{"byteLength":{len}}}],
             "bufferViews":[{{"buffer":0,"byteLength":36}},{{"buffer":0,"byteOffset":36,"byteLength":24}},{{"buffer":0,"byteOffset":{image_at},"byteLength":{image_len}}}],
@@ -725,6 +873,75 @@ mod memory_tests {
             assert!(load_model(&dir.join("buffer.gltf")).is_err(), "{uri}");
         }
         newera_core::vfs::unmount(Path::new("/virtual/catalog-escape"));
+    }
+
+    #[test]
+    fn the_report_says_what_was_not_drawn() {
+        let dir = Path::new("/virtual/catalog-report-test");
+        newera_core::vfs::mount(
+            dir,
+            [
+                (
+                    "lost.obj".to_owned(),
+                    b"mtllib gone.mtl\nusemtl wood\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n".to_vec(),
+                ),
+                (
+                    "maps.obj".to_owned(),
+                    b"mtllib maps.mtl\nusemtl wood\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n".to_vec(),
+                ),
+                (
+                    "maps.mtl".to_owned(),
+                    b"newmtl wood\nmap_Kd missing.png\nmap_Bump wood-n.png\nmap_Pr rough.png\n"
+                        .to_vec(),
+                ),
+                (
+                    "pbr.glb".to_owned(),
+                    glb_with(
+                        b"png",
+                        r#""normalTexture":{"index":0},"alphaMode":"MASK","#,
+                        r#""extensionsUsed":["KHR_materials_transmission"],"#,
+                    ),
+                ),
+            ],
+        );
+        // A missing library is said, and the geometry still comes in.
+        let lost = load_model(&dir.join("lost.obj")).unwrap();
+        assert_eq!(lost.mesh.indices.len(), 3);
+        assert_eq!(lost.report.format, "obj");
+        assert_eq!(lost.report.unit, "m");
+        assert!(
+            lost.report.warnings[0].contains("gone.mtl not found"),
+            "{:?}",
+            lost.report.warnings
+        );
+
+        let maps = load_model(&dir.join("maps.obj")).unwrap().report.warnings;
+        for said in [
+            "texture missing.png of material wood not found",
+            "normal/bump map of material wood is not drawn",
+            "map_Pr of material wood is not drawn",
+        ] {
+            assert!(maps.iter().any(|w| w.contains(said)), "{said}: {maps:?}");
+        }
+
+        let pbr = load_model(&dir.join("pbr.glb")).unwrap().report;
+        assert_eq!(pbr.meshes, 1);
+        for said in [
+            "extension KHR_materials_transmission is not supported",
+            "normal map of material tecido is not drawn",
+            "alpha mask (drawn opaque) of material tecido is not drawn",
+        ] {
+            assert!(
+                pbr.warnings.iter().any(|w| w.contains(said)),
+                "{said}: {pbr:?}"
+            );
+        }
+        // A clean file says nothing.
+        newera_core::vfs::mount(dir, [("clean.glb".to_owned(), textured_glb(b"png"))]);
+        let clean = load_model(&dir.join("clean.glb")).unwrap().report;
+        assert!(clean.warnings.is_empty(), "{clean:?}");
+        assert_eq!((clean.format.as_str(), clean.unit), ("glb", "cm"));
+        newera_core::vfs::unmount(dir);
     }
 
     #[test]

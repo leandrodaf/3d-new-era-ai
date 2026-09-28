@@ -255,6 +255,9 @@ fn run(
         "measure" => Ok(said(
             server.measure(Parameters(params(args)?)).map_err(reason)?,
         )),
+        "model" => Ok(said(
+            server.model(Parameters(params(args)?)).map_err(reason)?,
+        )),
         "plumbing" => Ok(said(
             server
                 .read_plumbing(Parameters(params(args)?))

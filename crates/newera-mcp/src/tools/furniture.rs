@@ -133,10 +133,17 @@ impl NewEraMcp {
         }
         let mut doc = self.document.write();
         on_variant(&mut doc, p.v)?;
-        let (ids, turned) = edit::place_noting(&mut doc, items).map_err(invalid)?;
-        // `ids=` stays last: it is what callers split the reply on.
-        let note = faces_note(&doc, &ids, &turned);
-        Ok(format!("{}{note} ids={}", ok(&doc, &[]), ids.join(",")))
+        let placed = edit::place_noting(&mut doc, items).map_err(invalid)?;
+        // `ids=` stays last on the first line: it is what callers split the
+        // reply on. What an import left out follows, a line per model.
+        let note = faces_note(&doc, &placed.ids, &placed.turned);
+        let mut reply = format!("{}{note} ids={}", ok(&doc, &[]), placed.ids.join(","));
+        for line in &placed.imported {
+            reply.push_str("\nimported ");
+            reply.push_str(line);
+            reply.push_str(" — `model` lists what it kept");
+        }
+        Ok(reply)
     }
 
     #[tool(

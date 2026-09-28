@@ -981,9 +981,17 @@ impl NewEraApp {
                 if let Some(id) = placed {
                     self.selection = std::iter::once(ElementId::from(id)).collect();
                     self.set_tool(Tool::Select);
-                    self.set_status(crate::i18n::tr(
+                    let mut status = crate::i18n::tr(
                         "Modelo importado. Ajuste medidas com Enter ou pelas alças.",
-                    ));
+                    )
+                    .to_owned();
+                    // What of the file is not drawn: "it loaded" is not
+                    // "it looks as it should".
+                    if !model.report.warnings.is_empty() {
+                        status.push_str(" ⚠ ");
+                        status.push_str(&model.report.warnings.join("; "));
+                    }
+                    self.set_status(status);
                 }
             }
             Err(err) => self.set_status(format!("⚠ {err}")),

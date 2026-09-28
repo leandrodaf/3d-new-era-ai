@@ -470,6 +470,37 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
             ],
             &[],
         ),
+        "model" => shape(
+            &[
+                ("file", text("The model file")),
+                ("format", text("obj, gltf or glb")),
+                (
+                    "unit",
+                    text("Unit taken for the file's numbers: m, cm or mm"),
+                ),
+                ("raw", list("[w, d, h] in the file's units")),
+                ("size", list("Natural [w, d, h] cm")),
+                ("tris", int("Triangles")),
+                ("meshes", int("Meshes read")),
+                (
+                    "materials",
+                    list("[name, #rrggbb, image or null, triangles]"),
+                ),
+                ("images", int("Images its materials use")),
+                ("uv", flag("Whether it has texture coordinates")),
+                ("warnings", strings("What is not drawn as the file says")),
+                ("piece", object("With id: {id, size cm, scale per axis}")),
+            ],
+            &[
+                "file",
+                "format",
+                "unit",
+                "size",
+                "tris",
+                "materials",
+                "warnings",
+            ],
+        ),
         "measure" => shape(
             &[
                 ("spans", list("Probe: [from, to, id, name] along the axis")),
@@ -1097,6 +1128,11 @@ mod tests {
         let document = SharedDocument::new(Document::default());
         let dir = std::env::temp_dir().join(format!("newera-mcp-output-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("box.obj"),
+            "v 0 0 0\nv 50 0 0\nv 50 80 0\nv 0 0 40\nf 1 2 3\nf 1 3 4\n",
+        )
+        .unwrap();
         let calls: Vec<(&str, Value)> = vec![
             (
                 "create",
@@ -1138,6 +1174,7 @@ mod tests {
             ("catalog", json!({"q": "sofa"})),
             ("catalog", json!({})),
             ("measure", json!({"from": "w1", "to": "w2"})),
+            ("model", json!({"file": dir.join("box.obj")})),
             ("sessions", json!({})),
             ("cameras", json!({})),
             ("edit_cameras", json!({"action": "store", "name": "A"})),
