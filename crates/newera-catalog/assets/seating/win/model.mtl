@@ -1,0 +1,46 @@
+# Blender 4.2.0 MTL File: 'poltrona-win-v4.blend'
+# www.blender.org
+
+newmtl English_green_—_trama_fotografica_algodao_PET
+Ns 6.399997
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+Kd 1.000000 1.000000 1.000000
+map_Kd tecido-foto.png
+map_Bump tecido-foto-normal.png
+
+newmtl Forro_inferior_preto
+Ns 0.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.015000 0.015000 0.012000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+
+newmtl Linha_de_costura_verde_escura
+Ns 0.399999
+Ka 1.000000 1.000000 1.000000
+Kd 0.044000 0.049000 0.031000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+
+newmtl Pinus_nozes_—_textura_fotografica
+Ns 409.599976
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+Kd 1.000000 1.000000 1.000000
+map_Kd madeira-foto.png
+map_Bump madeira-foto-normal.png

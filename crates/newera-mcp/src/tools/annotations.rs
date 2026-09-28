@@ -1413,7 +1413,7 @@ mod tests {
         let ids = s.place(Parameters(place)).unwrap();
         let id = ids.rsplit('=').next().unwrap().to_owned();
         let spec: UpdateSpec = serde_json::from_str(&format!(
-            r#"{{"id":"{id}","brand":"Tok&Stok","url":"https://example.com/sofa"}}"#
+            r#"{{"id":"{id}","brand":"Example Furniture","url":"https://example.com/sofa"}}"#
         ))
         .unwrap();
         s.update(Parameters(UpdateParams {
@@ -1438,7 +1438,7 @@ mod tests {
             .unwrap();
         assert!(reply.contains(r#""rooms":[["Sala",[[1,"#), "{reply}");
         assert!(
-            reply.contains("Tok&Stok") && reply.contains(r#""dims":true"#),
+            reply.contains("Example Furniture") && reply.contains(r#""dims":true"#),
             "{reply}"
         );
         let png = s.render_plan(Parameters(RenderParams {

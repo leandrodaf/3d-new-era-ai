@@ -132,13 +132,13 @@ fn classify(piece: &Furniture, params: Option<&serde_json::Value>) -> Use {
         "sofa-2" => Use::Sofa(2),
         "sofa-3" => Use::Sofa(3),
         "sofa-l" => Use::Sofa(4),
-        "armchair" => Use::Armchair,
+        "armchair" | "win" => Use::Armchair,
         "coffee-table" | "side-table" => Use::CoffeeTable,
         "dining-table-4" | "round-table" => Use::DiningTable(4),
         "dining-table-6" => Use::DiningTable(6),
         "dining-set-4" => Use::DiningSet(4),
         "dining-set-6" => Use::DiningSet(6),
-        "chair" => Use::Chair,
+        "chair" | "ares" => Use::Chair,
         "stool" => Use::Stool,
         "fridge" => Use::Fridge,
         "stove" => Use::Stove,
@@ -1229,5 +1229,18 @@ mod role_tests {
             .insert(Furniture::ROLE_KEY.into(), "counter".into());
         piece.name = "Ilha de preparo".into();
         assert_eq!(classify(&piece, None), Use::Counter);
+    }
+
+    #[test]
+    fn branded_seats_keep_their_role_when_renamed() {
+        for (catalog, expected) in [("win", Use::Armchair), ("ares", Use::Chair)] {
+            let piece = Furniture {
+                catalog: catalog.into(),
+                name: "Renamed product".into(),
+                ..Furniture::default()
+            };
+            assert_eq!(classify(&piece, None), expected);
+            assert!(piece.is_seat());
+        }
     }
 }
