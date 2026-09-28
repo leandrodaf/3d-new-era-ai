@@ -20,7 +20,8 @@ All notable changes to this project are documented here. The format follows
   and white, and the way out was re-exporting it as OBJ. It now keeps each material (its name, the
   base color image and, for `BLEND`, its alpha) and the texture coordinates of the set the image
   uses; images inside the GLB or in data URIs are read like any texture file, and one next to a
-  `.gltf` is found by its URI, `%20` and all. The materials keep their names, as an OBJ's do,
+  `.gltf` is found by its URI, `%20` and all — a URI that would leave the model's folder
+  (`..`, an absolute path, a scheme) is refused, for buffers as well. The materials keep their names, as an OBJ's do,
   so a per-material override (from a Sweet Home 3D import) finds them.
 
 ## [2.0.0] - 2026-09-28

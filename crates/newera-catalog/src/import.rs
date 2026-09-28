@@ -275,7 +275,14 @@ fn load_gltf(path: &Path) -> Result<Mesh, ImportError> {
                 Some((_, data)) if uri.starts_with("data:") => {
                     decode_base64(data).ok_or_else(|| std::io::Error::other("bad data URI").into())
                 }
-                _ => newera_core::vfs::read(&dir.join(uri)).map_err(ImportError::from),
+                _ => {
+                    let file = beside(&dir, uri).ok_or_else(|| {
+                        std::io::Error::other(format!(
+                            "buffer `{uri}` is outside the model's folder"
+                        ))
+                    })?;
+                    newera_core::vfs::read(&file).map_err(ImportError::from)
+                }
             },
         })
         .collect::<Result<_, ImportError>>()?;
@@ -417,7 +424,7 @@ fn gltf_images(
                         let mime = head.strip_prefix("data:");
                         (decode_base64(data)?, ext(mime))
                     }
-                    _ => return Some(dir.join(percent_decode(uri))),
+                    _ => return beside(&dir, uri),
                 },
                 (None, None) => return None,
             };
@@ -431,6 +438,25 @@ fn gltf_images(
         newera_core::vfs::mount(&dir, mounted);
     }
     images
+}
+
+/// A glTF URI as a file next to the model: relative, and never leaving
+/// its folder. A model that names `../../.ssh/id_rsa` or `/etc/passwd` as
+/// a texture would otherwise have it read, drawn and embedded in exports.
+fn beside(dir: &Path, uri: &str) -> Option<std::path::PathBuf> {
+    let decoded = percent_decode(uri);
+    let path = Path::new(&decoded);
+    let plain = path.components().all(|c| {
+        matches!(
+            c,
+            std::path::Component::Normal(_) | std::path::Component::CurDir
+        )
+    });
+    // `C:` and `file:` would be schemes, not folders.
+    let scheme = decoded
+        .split_once(':')
+        .is_some_and(|(head, _)| !head.contains('/'));
+    (plain && !scheme && !decoded.is_empty()).then(|| dir.join(path))
 }
 
 /// `%20` and the like in a glTF URI.
@@ -651,6 +677,54 @@ mod memory_tests {
             Some(dir.join("tecido azul.png").as_path())
         );
         newera_core::vfs::unmount(dir);
+    }
+
+    #[test]
+    fn a_gltf_cannot_name_a_file_outside_its_folder() {
+        let dir = Path::new("/virtual/catalog-escape/models");
+        for uri in [
+            "../secret.png",
+            "%2E%2E/secret.png",
+            "/etc/passwd",
+            "file:///etc/passwd",
+            "C:secret.png",
+        ] {
+            let glb = textured_glb(b"");
+            let len = u32::from_le_bytes(glb[12..16].try_into().unwrap()) as usize;
+            let json = String::from_utf8(glb[20..20 + len].to_vec())
+                .unwrap()
+                .replace(
+                    r#"{"bufferView":2,"mimeType":"image/png"}"#,
+                    &format!(r#"{{"uri":"{uri}"}}"#),
+                );
+            let bin = &glb[20 + len + 8..];
+            newera_core::vfs::mount(
+                dir,
+                [
+                    (
+                        "chair.gltf".to_owned(),
+                        json.replace(
+                            r#""buffers":[{"byteLength""#,
+                            r#""buffers":[{"uri":"chair.bin","byteLength""#,
+                        )
+                        .into_bytes(),
+                    ),
+                    ("chair.bin".to_owned(), bin.to_vec()),
+                    (
+                        "buffer.gltf".to_owned(),
+                        json.replace(
+                            r#""buffers":[{"byteLength""#,
+                            &format!(r#""buffers":[{{"uri":"{uri}","byteLength""#),
+                        )
+                        .into_bytes(),
+                    ),
+                ],
+            );
+            let model = load_model(&dir.join("chair.gltf")).unwrap();
+            assert_eq!(model.mesh.materials[0].texture, None, "{uri}");
+            assert!(load_model(&dir.join("buffer.gltf")).is_err(), "{uri}");
+        }
+        newera_core::vfs::unmount(Path::new("/virtual/catalog-escape"));
     }
 
     #[test]
