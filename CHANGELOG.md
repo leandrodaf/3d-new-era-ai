@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Win armchair and Ares cane chair in the living and dining catalogs, with
+  product dimensions, orientation, model metadata and bundled textured models. Models
+  and their textures travel with saved projects; placement uses the existing catalog
+  and MCP tools. Product proportions are preserved when resizing.
+
 ## [2.0.0] - 2026-09-28
 
 ### Added

@@ -19,7 +19,7 @@ fn hash_tree(path: &Path, hash: &mut impl Hasher) {
 
 fn main() {
     let mut hash = std::collections::hash_map::DefaultHasher::new();
-    for path in ["src", "Cargo.toml", "build.rs"] {
+    for path in ["src", "assets", "Cargo.toml", "build.rs"] {
         println!("cargo:rerun-if-changed={path}");
         hash_tree(Path::new(path), &mut hash);
     }

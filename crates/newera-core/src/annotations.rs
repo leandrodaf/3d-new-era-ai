@@ -482,7 +482,7 @@ mod tests {
                 ..Furniture::default()
             });
         }
-        home.furniture[0].info.brand = Some("Tok&Stok".into());
+        home.furniture[0].info.brand = Some("Example Furniture".into());
         let refs = room_references(&home);
         assert_eq!(refs.len(), 2);
         assert_eq!(refs[0].name, "Sala de estar");
@@ -492,7 +492,7 @@ mod tests {
             .map(|i| (i.tag, i.name.as_str()))
             .collect();
         assert_eq!(names, vec![(1, "Poltrona"), (2, "Sofá")]);
-        assert_eq!(refs[0].items[1].brand.as_deref(), Some("Tok&Stok"));
+        assert_eq!(refs[0].items[1].brand.as_deref(), Some("Example Furniture"));
         assert_eq!((refs[1].name.as_str(), refs[1].items[0].tag), ("Outros", 3));
     }
 }
