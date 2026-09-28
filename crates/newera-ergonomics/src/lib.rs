@@ -2239,6 +2239,8 @@ fn glass_by_room(scene: &Scene<'_>) -> std::collections::BTreeMap<newera_core::R
                 .filter(|f| {
                     f.visible
                         && f.opacity.is_some_and(|o| o < 1.0)
+                        // Already counted as a window.
+                        && !glazed(f)
                         && near_outline(&room.points, f.position, f.depth.max(15.0) + 5.0)
                 })
                 .map(|f| f.width * f.height)
@@ -2322,15 +2324,18 @@ fn window_area(scene: &Scene<'_>, points: &[Point2]) -> f64 {
         .home
         .furniture
         .iter()
-        .filter(|f| {
-            f.visible
-                && f.opening
-                    .as_ref()
-                    .is_some_and(|o| o.kind == OpeningKind::Window || f.catalog == "french-window")
-                && near_outline(points, f.position, f.depth.max(15.0))
-        })
+        .filter(|f| f.visible && glazed(f) && near_outline(points, f.position, f.depth.max(15.0)))
         .map(|f| f.width * f.height)
         .sum()
+}
+
+/// An opening that is glass from side to side: a window, a French window,
+/// or a sliding door, whose leaves the catalog makes of glass.
+fn glazed(f: &newera_core::Furniture) -> bool {
+    f.opening.as_ref().is_some_and(|o| {
+        o.kind == OpeningKind::Window
+            || matches!(f.catalog.as_str(), "french-window" | "door-sliding")
+    })
 }
 
 /// Lengths of the continuous worktop runs in a space, cm. Cabinets that
@@ -2850,6 +2855,37 @@ mod tests {
         assert_eq!(Scene::new(&home).spaces[0].what, RoomUse::Other);
         home.rooms[0].usage = newera_core::RoomUse::Auto;
         assert_eq!(Scene::new(&home).spaces[0].what, RoomUse::Bathroom);
+    }
+
+    #[test]
+    fn a_glass_sliding_door_lights_the_room_like_a_window() {
+        let dark = |catalog: &str| {
+            let mut home = Home::default();
+            square(&mut home, "Sala", 400.0, 400.0);
+            let mut door = piece(20, catalog, (200.0, 0.0), (220.0, 15.0, 220.0), 0.0);
+            door.opening = Some(newera_core::Opening {
+                kind: if catalog == "french-window" {
+                    OpeningKind::Window
+                } else {
+                    OpeningKind::Door
+                },
+                leaves: 2,
+                sliding: catalog != "door",
+                ..newera_core::Opening::default()
+            });
+            home.furniture.push(door);
+            review(&home, &Profile::default())
+                .findings
+                .iter()
+                .filter(|f| {
+                    f.key.starts_with("room_without_window") || f.key.starts_with("window_area")
+                })
+                .map(|f| f.message.to_string())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(dark("door-sliding"), Vec::<String>::new());
+        assert_eq!(dark("french-window"), Vec::<String>::new());
+        assert!(!dark("door").is_empty(), "a wooden door is not a window");
     }
 
     fn square(home: &mut Home, name: &str, w: f64, d: f64) {
