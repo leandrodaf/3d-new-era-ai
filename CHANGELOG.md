@@ -75,10 +75,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- A guard in front of a window no longer blocks it in `layout`. A bar railing, a glass
-  balustrade or a balcony closure was measured by its box, as if it were a solid panel, so a
-  landing guard across a stair window came out as `blocks_window`. Guards are now left out, like
-  plants and glass already were.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
