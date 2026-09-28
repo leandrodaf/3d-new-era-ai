@@ -2413,7 +2413,25 @@ pub(crate) fn place_noting(doc: &mut Document, items: Vec<PlaceSpec>) -> EditRes
     let mut placed_here: Vec<newera_core::Furniture> = Vec::new();
     let count = items.len();
     let mut refused: Vec<String> = Vec::new();
-    let mut one = |spec: PlaceSpec| -> EditResult<()> {
+    let mut one = |mut spec: PlaceSpec| -> EditResult<()> {
+        // `library:<name>@<v>`: that version's file, at the size, in the
+        // unit and with the photos and measurements it was published with.
+        let library = match spec
+            .model
+            .as_deref()
+            .and_then(crate::tools::library::resolve)
+        {
+            Some(found) => Some(found?),
+            None => None,
+        };
+        if let Some((entry, path)) = &library {
+            spec.model = Some(path.clone());
+            spec.unit = spec.unit.take().or_else(|| entry.unit.clone());
+            if spec.w.is_none() && spec.d.is_none() && spec.h.is_none() {
+                [spec.w, spec.d, spec.h] = entry.size.map(Some);
+                spec.stretch = Some(true);
+            }
+        }
         if spec.cat == "beam" && (spec.a.is_some() || spec.b.is_some()) {
             let (Some(a), Some(b)) = (spec.a, spec.b) else {
                 return Err("a beam needs `a` and `b` as [x,y,z]".into());
@@ -2562,6 +2580,13 @@ pub(crate) fn place_noting(doc: &mut Document, items: Vec<PlaceSpec>) -> EditRes
         piece.pitch = spec.pitch.unwrap_or(piece.pitch);
         piece.roll = spec.roll.unwrap_or(piece.roll);
         piece.name = spec.name.unwrap_or(piece.name);
+        if let Some((entry, _)) = library {
+            piece.info.model_name = piece.info.model_name.take().or(entry.title);
+            piece.info.brand = piece.info.brand.take().or(entry.brand);
+            piece.info.url = piece.info.url.take().or(entry.source);
+            piece.references = entry.references;
+            piece.measures = entry.measures;
+        }
         piece.color = spec.color.or(piece.color);
         if let Some(raw) = &spec.mat {
             finish(&mut piece, raw, spec.color.is_some())?;

@@ -470,6 +470,22 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
             ],
             &[],
         ),
+        "library" => shape(
+            &[
+                (
+                    "rows",
+                    list("[name, latest version, title, brand, versions]"),
+                ),
+                ("name", text("name=: the entry")),
+                (
+                    "versions",
+                    list(
+                        "name=: [v, title, size, unit, source, fidelity, notes, photos, measures]",
+                    ),
+                ),
+            ],
+            &[],
+        ),
         "model" => shape(
             &[
                 ("file", text("The model file")),
@@ -801,7 +817,7 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
         ),
         // Writes answering an `ok` line.
         "create" | "edit_walls" | "edit_background" | "edit_levels" | "edit_cameras"
-        | "edit_home" | "file" | "arrange" | "edit_model" => ok_line(&[]),
+        | "edit_home" | "file" | "arrange" | "edit_model" | "edit_library" => ok_line(&[]),
         "delete" => ok_line(&[
             (
                 "labels_left",

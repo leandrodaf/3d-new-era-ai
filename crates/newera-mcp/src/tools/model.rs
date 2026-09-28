@@ -466,7 +466,7 @@ impl NewEraMcp {
 #[tool_router(router = edit_model_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Change the imported model of placed pieces (ids), one undo step each; rev refuses a change if the plan moved on. replace swaps the file (every=true: on every piece using it), keeping id, place, size (size=natural takes the file's), finish, overrides and links; the new file is read first, and the reply gives the version loaded, overrides left matching nothing and what the file leaves out. material changes one material by the name model lists: color, mat (an image), repeat (texture scale: 2 halves it), clear. part hides, moves (offset cm: x across, y to the front, z up) or resizes one part by name — the back cushion alone. lod adds a lighter file drawn beyond a camera distance (beyond cm, default 400); detail=always holds the full one. reference keeps a product photo (file, view, part, source) that render_3d ref= shows beside the model; measure keeps a product size (dimension: width|depth|height|<part>.height, cm, source, confirmed) that model compares with the drawing. model inspects; place imports."
+        description = "Change the imported model of placed pieces (ids), one undo step each; rev refuses a change if the plan moved on. replace swaps the file (library:<name>@<v> too; every=true: on every piece using it), keeping id, place, size (size=natural takes the file's), finish, overrides and links; the new file is read first, and the reply gives the version loaded, overrides left matching nothing and what the file leaves out. material changes one material by the name model lists: color, mat (an image), repeat (texture scale: 2 halves it), clear. part hides, moves (offset cm: x across, y to the front, z up) or resizes one part by name — the back cushion alone. lod adds a lighter file drawn beyond a camera distance (beyond cm, default 400); detail=always holds the full one. reference keeps a product photo (file, view, part, source) that render_3d ref= shows beside the model; measure keeps a product size (dimension: width|depth|height|<part>.height, cm, source, confirmed) that model compares with the drawing. model inspects; place imports."
     )]
     pub(crate) fn edit_model(
         &self,
@@ -890,6 +890,14 @@ impl NewEraMcp {
             .file
             .clone()
             .ok_or_else(|| invalid("replace: file, the new .obj/.gltf/.glb"))?;
+        // A library version: its file, in the unit it was published with.
+        let (file, library_unit) = match super::library::resolve(&file) {
+            Some(found) => {
+                let (entry, path) = found.map_err(invalid)?;
+                (path, entry.unit)
+            }
+            None => (file, None),
+        };
         let natural = match p.size.as_deref() {
             None | Some("keep") => false,
             Some("natural") => true,
@@ -898,7 +906,7 @@ impl NewEraMcp {
         let mut doc = self.document.write();
         at_revision(&doc, p.rev)?;
         let path = doc.resolve_asset(&file);
-        let unit = unit_of(p.unit.as_deref(), None)?;
+        let unit = unit_of(p.unit.as_deref().or(library_unit.as_deref()), None)?;
         let loaded = newera_catalog::load_model_in(&path, unit)
             .map_err(|e| invalid(format!("{}: {e} — nothing was replaced", path.display())))?;
         let mut targets = model_pieces(&doc, &p.ids)?;

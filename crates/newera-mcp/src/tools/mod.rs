@@ -17,6 +17,7 @@
 //! | [`cameras`] | `cameras`, `edit_cameras`, `video`, `edit_video` |
 //! | [`measure`] | `measure` |
 //! | [`model`] | `model`, `edit_model` |
+//! | [`library`] | `library`, `edit_library` |
 //! | [`check`] | `layout`, `ergonomics`, `accept` |
 //! | [`annotations`] | `annotations`, `edit_annotations`, `disciplines`, `edit_disciplines` |
 //! | [`background`] | `background`, `edit_background` |
@@ -50,6 +51,7 @@ mod feedback;
 mod furniture;
 mod joinery;
 mod levels;
+pub(crate) mod library;
 mod lighting;
 mod measure;
 mod model;
@@ -98,6 +100,7 @@ impl NewEraMcp {
             Self::measure_router(),
             Self::model_router(),
             Self::edit_model_router(),
+            Self::library_router(),
             Self::check_router(),
             Self::background_router(),
             Self::roof_router(),

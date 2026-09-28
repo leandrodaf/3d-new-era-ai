@@ -1,5 +1,5 @@
 {
-  "total": 120128,
+  "total": 122400,
   "tools": {
     "accept": {
       "total": 1360,
@@ -115,6 +115,12 @@
       "input": 749,
       "output": 203
     },
+    "edit_library": {
+      "total": 1406,
+      "description": 316,
+      "input": 655,
+      "output": 203
+    },
     "edit_lighting": {
       "total": 1095,
       "description": 284,
@@ -122,8 +128,8 @@
       "output": 191
     },
     "edit_model": {
-      "total": 4748,
-      "description": 1015,
+      "total": 4772,
+      "description": 1039,
       "input": 3317,
       "output": 203
     },
@@ -222,6 +228,12 @@
       "description": 174,
       "input": 46,
       "output": 76
+    },
+    "library": {
+      "total": 840,
+      "description": 386,
+      "input": 155,
+      "output": 109
     },
     "lighting": {
       "total": 1278,

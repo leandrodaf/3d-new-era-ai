@@ -28,6 +28,7 @@ pub mod images;
 mod joins;
 mod layers;
 mod levels;
+pub mod library;
 pub mod lighting;
 mod materials;
 pub mod measure;

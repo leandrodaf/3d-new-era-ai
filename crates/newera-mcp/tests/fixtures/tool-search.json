@@ -55,6 +55,8 @@
     ["seat height of the product page compared with the model", "model"],
     ["how heavy is a photo render cpu threads budget", "render_photo"],
     ["cancel the render that is running", "render_photo"],
+    ["publish the approved version to the asset library", "edit_library"],
+    ["versions of a model in the library", "library"],
     ["lux illuminance per room", "lighting"],
     ["add light fixtures to reach lux", "edit_lighting"],
     ["electrical circuits breakers", "electrical"],
@@ -109,7 +111,7 @@
     ["how the ergonomics score is weighed", "rules"]
   ],
   "alike": [
-    ["model", "edit_model", "a read and the write that changes it: separate tools so a client runs the read without asking"],
+    ["library", "edit_library", "a read and the write that changes it: separate tools so a client runs the read without asking"],
     ["annotations", "edit_annotations", "a read and the write that changes it: separate tools so a client runs the read without asking"],
     ["cameras", "edit_cameras", "a read and the write that changes it: separate tools so a client runs the read without asking"],
     ["history", "edit_history", "a read and the write that changes it: separate tools so a client runs the read without asking"],

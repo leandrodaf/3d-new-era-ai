@@ -53,6 +53,7 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
     ),
     ("measure", "Measure the plan", Effect::Read, false),
     ("model", "Inspect an imported model", Effect::Read, false),
+    ("library", "List the model library", Effect::Read, false),
     ("sessions", "List who is editing", Effect::Read, false),
     ("cameras", "List points of view", Effect::Read, false),
     ("video", "Read the video path", Effect::Read, false),
@@ -126,6 +127,12 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
     ("arrange", "Copy, align and group", Effect::Change, false),
     ("edit_walls", "Split or merge walls", Effect::Change, false),
     ("edit_model", "Replace a model file", Effect::Change, false),
+    (
+        "edit_library",
+        "Publish to the model library",
+        Effect::Add,
+        false,
+    ),
     ("joinery", "Build joinery", Effect::Change, false),
     (
         "cabinet_run",
