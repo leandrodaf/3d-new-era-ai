@@ -486,6 +486,7 @@ impl SceneView {
                     .clone()?;
                 mesh.rotate(piece.model_transform.rotation);
                 mesh.fit_to(piece.width, piece.depth, piece.height);
+                mesh.edit_parts(&piece.model_parts, true);
                 Some(mesh)
             };
             let mesh = Mesh::from_home_cut(home, selection, &models, key.2.as_ref());

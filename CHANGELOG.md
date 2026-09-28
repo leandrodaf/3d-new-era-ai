@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `edit_model` `action=part` hides, moves (`offset`, cm: x across, y to the front, z up) or
+  resizes (`scale`, about its center) one named part of an imported model — the back cushion
+  alone, the arms where they were — and `clear` puts it back. Every view draws it that way, and
+  `model id=…` lists the parts as drawn (a hidden one marked `hidden`, and left out of
+  `check=clashes`), so seat and arm heights read on their own. Moving one cushion meant a new
+  file.
+
 - `edit_model` `action=material` changes one material of an imported model by the name `model`
   lists — `color`, `mat` (an image over it), `repeat` (its texture scale: 2 draws the image at
   half size, the piece unchanged), `clear` — in one undo step. Per-material overrides existed

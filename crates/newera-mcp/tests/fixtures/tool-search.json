@@ -45,6 +45,8 @@
     ["import model drawn in centimeters unit mm inches", "place"],
     ["change the fabric color of an imported chair material", "edit_model"],
     ["texture scale of an imported material too big", "edit_model"],
+    ["move back only the back cushion of the imported armchair", "edit_model"],
+    ["hide a part of an imported model", "edit_model"],
     ["lux illuminance per room", "lighting"],
     ["add light fixtures to reach lux", "edit_lighting"],
     ["electrical circuits breakers", "electrical"],

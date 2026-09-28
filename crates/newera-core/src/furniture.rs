@@ -172,6 +172,21 @@ pub struct ModelMaterial {
     pub repeat: Option<f64>,
 }
 
+/// A change to one named part of an imported model (the names `model`
+/// lists), in cm of the piece: x across its width, y toward its front, z up.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+pub struct ModelPart {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub hidden: bool,
+    /// Moved by `[x, y, z]` cm.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub offset: [f64; 3],
+    /// Scaled about its center, per axis `[x, y, z]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale: Option<[f64; 3]>,
+}
+
 /// Descriptive data that doesn't affect geometry.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct PieceInfo {
@@ -347,6 +362,9 @@ pub struct Furniture {
     pub shape: Option<SolidShape>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub materials: Vec<ModelMaterial>,
+    /// Parts of its imported model hidden, moved or resized.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub model_parts: Vec<ModelPart>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub light: Option<Light>,
     /// Pieces of a group, positioned in plan coordinates like top-level ones.
@@ -402,6 +420,7 @@ impl Default for Furniture {
             opacity: None,
             shape: None,
             materials: Vec::new(),
+            model_parts: Vec::new(),
             light: None,
             children: Vec::new(),
             drop_on_top: 1.0,

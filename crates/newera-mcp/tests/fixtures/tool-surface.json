@@ -2222,20 +2222,21 @@
       "readOnlyHint": false,
       "title": "Replace a model file"
     },
-    "description": "Change the model of placed pieces. replace swaps the file of ids (every=true: of every piece using the same file) in one undo step, keeping each piece's id, position, angle, storey, size (size=natural takes the file's), finish, material overrides, names and links; the new file is read first and nothing changes if it fails. rev refuses the change when the plan moved on since that revision. Reply ok with the ids, then a line per piece: old file → new, the version loaded (bytes, hash), overrides that no longer match a material, and what the new file leaves out. material changes one of their materials by the name model lists — color, mat (an image over it), repeat, its texture scale (2 halves the image, the piece unchanged), clear. model inspects a file; place imports a new piece.",
+    "description": "Change the model of placed pieces. replace swaps the file of ids (every=true: of every piece using the same file) in one undo step, keeping each piece's id, position, angle, storey, size (size=natural takes the file's), finish, material overrides, names and links; the new file is read first and nothing changes if it fails. rev refuses the change when the plan moved on since that revision. Reply ok with the ids, then a line per piece: old file → new, the version loaded (bytes, hash), overrides that no longer match a material, and what the new file leaves out. part hides, moves (offset cm: x across, y to the front, z up) or resizes one of their parts by the name model lists — the back cushion alone, the arms unchanged. material changes one of their materials by the name model lists — color, mat (an image over it), repeat, its texture scale (2 halves the image, the piece unchanged), clear. model inspects a file; place imports a new piece.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
         "action": {
-          "description": "`replace` puts another file in the pieces, keeping each one's id and all the rest; `material` changes one of their materials, by name",
+          "description": "`replace` puts another file in the pieces, keeping each one's id and all the rest; `material` changes one of their materials, `part` one of their parts, by name",
           "enum": [
             "replace",
-            "material"
+            "material",
+            "part"
           ],
           "type": "string"
         },
         "clear": {
-          "description": "material: back to the file's own look",
+          "description": "material/part: back to the file's own",
           "type": "boolean"
         },
         "color": {
@@ -2255,6 +2256,10 @@
           "description": "replace: the new .obj/.gltf/.glb file",
           "type": "string"
         },
+        "hide": {
+          "description": "part: hide it (true) or show it again (false)",
+          "type": "boolean"
+        },
         "ids": {
           "description": "Pieces whose model changes, e.g. `[\"f12\"]`",
           "items": {
@@ -2270,6 +2275,19 @@
           "description": "material: which one, by the name `model` lists (`tecido`)",
           "type": "string"
         },
+        "offset": {
+          "description": "part: move it by `[x across, y to the front, z up]` cm from where the file has it",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "part": {
+          "description": "part: which one, by the name `model` lists (`almofada_encosto`)",
+          "type": "string"
+        },
         "repeat": {
           "description": "material: times its image repeats against the file's mapping (2 draws it at half size)",
           "type": "number"
@@ -2277,6 +2295,15 @@
         "rev": {
           "description": "Revision the change was prepared on; refused if the plan has moved on since",
           "type": "integer"
+        },
+        "scale": {
+          "description": "part: resize it about its center, `[x, y, z]` factors",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
         },
         "size": {
           "description": "replace: `keep` each piece's w/d/h (default) or take the new file's `natural` size",

@@ -52,8 +52,8 @@ fn unit_of(
 #[serde(deny_unknown_fields)]
 pub(crate) struct EditModelParams {
     /// `replace` puts another file in the pieces, keeping each one's id and all the rest;
-    /// `material` changes one of their materials, by name.
-    #[schemars(extend("enum" = ["replace", "material"]))]
+    /// `material` changes one of their materials, `part` one of their parts, by name.
+    #[schemars(extend("enum" = ["replace", "material", "part"]))]
     action: String,
     /// Pieces whose model changes, e.g. `["f12"]`.
     ids: Vec<String>,
@@ -77,9 +77,17 @@ pub(crate) struct EditModelParams {
     mat: Option<String>,
     /// material: times its image repeats against the file's mapping (2 draws it at half size).
     repeat: Option<f64>,
-    /// material: back to the file's own look.
+    /// material/part: back to the file's own.
     #[serde(default)]
     clear: bool,
+    /// part: which one, by the name `model` lists (`almofada_encosto`).
+    part: Option<String>,
+    /// part: hide it (true) or show it again (false).
+    hide: Option<bool>,
+    /// part: move it by `[x across, y to the front, z up]` cm from where the file has it.
+    offset: Option<[f64; 3]>,
+    /// part: resize it about its center, `[x, y, z]` factors.
+    scale: Option<[f64; 3]>,
 }
 
 /// A short, stable name for the bytes of a file: which version was loaded.
@@ -108,12 +116,12 @@ fn cm(v: f64) -> f64 {
 }
 
 /// The named parts of a model: `[name, triangles, [x, y, z] min, [x, y, z]
-/// max, materials]`, in cm of the piece — x across its width from the
-/// center, y from the center to its front, z up from its bottom — scaled
-/// by `scale` (the piece's size over the file's).
+/// max, materials, "hidden"?]`, in cm of the mesh — for a piece, fitted to
+/// it: x across its width from the center, y from the center to its front,
+/// z up from its bottom.
 pub(crate) fn parts(
     mesh: &newera_catalog::Mesh,
-    scale: [f64; 3],
+    hidden: &[String],
     only: Option<&str>,
 ) -> Vec<Value> {
     let words: Vec<String> = only
@@ -133,9 +141,9 @@ pub(crate) fn parts(
             // Mesh axes: x width, y up, z depth (front +z).
             let at = |v: [f32; 3]| {
                 [
-                    cm(f64::from(v[0]) * scale[0]),
-                    cm(f64::from(v[2]) * scale[1]),
-                    cm(f64::from(v[1]) * scale[2]),
+                    cm(f64::from(v[0])),
+                    cm(f64::from(v[2])),
+                    cm(f64::from(v[1])),
                 ]
             };
             let mut materials: Vec<&str> = mesh
@@ -146,20 +154,24 @@ pub(crate) fn parts(
                 .collect();
             materials.sort_unstable();
             materials.dedup();
-            Some(json!([p.name, p.count, at(min), at(max), materials]))
+            let mut row = json!([p.name, p.count, at(min), at(max), materials]);
+            if hidden.contains(&p.name) {
+                row.as_array_mut().expect("row").push(json!("hidden"));
+            }
+            Some(row)
         })
         .collect()
 }
 
 /// Answers `check=clashes`: the parts whose surfaces cross, where and how
 /// deep, the faces with no area, and what was and was not looked at.
-fn check(out: &mut Value, mesh: &newera_catalog::Mesh, scale: [f64; 3], tol: f32) {
+fn check(out: &mut Value, mesh: &newera_catalog::Mesh, tol: f32) {
     let name = |k: usize| mesh.parts.get(k).map_or("(no part)", |p| p.name.as_str());
     let at = |v: [f32; 3]| {
         [
-            cm(f64::from(v[0]) * scale[0]),
-            cm(f64::from(v[2]) * scale[1]),
-            cm(f64::from(v[1]) * scale[2]),
+            cm(f64::from(v[0])),
+            cm(f64::from(v[2])),
+            cm(f64::from(v[1])),
         ]
     };
     let clashes: Vec<Value> = newera_catalog::clashes(mesh, tol)
@@ -232,7 +244,7 @@ pub(crate) fn report(file: &str, loaded: &newera_catalog::ImportedModel) -> Valu
         "materials": materials,
         "images": images.len(),
         "uv": mesh.uvs.iter().any(|uv| *uv != [0.0, 0.0]),
-        "parts": parts(mesh, [1.0; 3], None),
+        "parts": parts(mesh, &[], None),
         "warnings": r.warnings,
     })
 }
@@ -272,22 +284,33 @@ impl NewEraMcp {
         let loaded = newera_catalog::load_model_in(&path, unit)
             .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
         let mut out = report(&file, &loaded);
-        let scale = piece.as_ref().map_or([1.0; 3], |piece| {
-            [piece.width, piece.depth, piece.height]
-                .iter()
-                .zip(loaded.size)
-                .map(|(s, natural)| s / natural)
-                .collect::<Vec<_>>()
-                .try_into()
-                .unwrap_or([1.0; 3])
-        });
-        out["parts"] = json!(parts(&loaded.mesh, scale, p.part.as_deref()));
+        // A piece's model as it is drawn: turned, fitted to its box, its
+        // parts moved and resized; hidden ones listed, but not checked.
+        let (listed, drawn, hidden) = match &piece {
+            Some(piece) => {
+                let mut fitted = loaded.mesh.clone();
+                fitted.rotate(piece.model_transform.rotation);
+                fitted.fit_to(piece.width, piece.depth, piece.height);
+                let mut listed = fitted.clone();
+                listed.edit_parts(&piece.model_parts, false);
+                fitted.edit_parts(&piece.model_parts, true);
+                let hidden: Vec<String> = piece
+                    .model_parts
+                    .iter()
+                    .filter(|e| e.hidden)
+                    .map(|e| e.name.clone())
+                    .collect();
+                (listed, fitted, hidden)
+            }
+            None => (loaded.mesh.clone(), loaded.mesh.clone(), Vec::new()),
+        };
+        out["parts"] = json!(parts(&listed, &hidden, p.part.as_deref()));
         match p.check.as_deref() {
             None => {}
             Some("clashes") => {
                 #[allow(clippy::cast_possible_truncation)]
                 let tol = p.tol.unwrap_or(0.05).max(0.0) as f32;
-                check(&mut out, &loaded.mesh, scale, tol);
+                check(&mut out, &drawn, tol);
             }
             Some(other) => return Err(invalid(format!("check `{other}`: clashes"))),
         }
@@ -319,7 +342,7 @@ impl NewEraMcp {
 #[tool_router(router = edit_model_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Change the model of placed pieces. replace swaps the file of ids (every=true: of every piece using the same file) in one undo step, keeping each piece's id, position, angle, storey, size (size=natural takes the file's), finish, material overrides, names and links; the new file is read first and nothing changes if it fails. rev refuses the change when the plan moved on since that revision. Reply ok with the ids, then a line per piece: old file → new, the version loaded (bytes, hash), overrides that no longer match a material, and what the new file leaves out. material changes one of their materials by the name model lists — color, mat (an image over it), repeat, its texture scale (2 halves the image, the piece unchanged), clear. model inspects a file; place imports a new piece."
+        description = "Change the model of placed pieces. replace swaps the file of ids (every=true: of every piece using the same file) in one undo step, keeping each piece's id, position, angle, storey, size (size=natural takes the file's), finish, material overrides, names and links; the new file is read first and nothing changes if it fails. rev refuses the change when the plan moved on since that revision. Reply ok with the ids, then a line per piece: old file → new, the version loaded (bytes, hash), overrides that no longer match a material, and what the new file leaves out. part hides, moves (offset cm: x across, y to the front, z up) or resizes one of their parts by the name model lists — the back cushion alone, the arms unchanged. material changes one of their materials by the name model lists — color, mat (an image over it), repeat, its texture scale (2 halves the image, the piece unchanged), clear. model inspects a file; place imports a new piece."
     )]
     pub(crate) fn edit_model(
         &self,
@@ -328,7 +351,10 @@ impl NewEraMcp {
         match p.action.as_str() {
             "replace" => self.replace_model(&p),
             "material" => self.model_material(p),
-            other => Err(invalid(format!("action `{other}`: replace or material"))),
+            "part" => self.model_part(&p),
+            other => Err(invalid(format!(
+                "action `{other}`: replace, material or part"
+            ))),
         }
     }
 }
@@ -373,6 +399,83 @@ fn at_revision(doc: &newera_core::Document, rev: Option<u64>) -> Result<(), Erro
 }
 
 impl NewEraMcp {
+    fn model_part(&self, p: &EditModelParams) -> Result<String, ErrorData> {
+        let name = p
+            .part
+            .clone()
+            .ok_or_else(|| invalid("part: which one, by the name `model` lists"))?;
+        if !p.clear && p.hide.is_none() && p.offset.is_none() && p.scale.is_none() {
+            return Err(invalid("part: give hide, offset, scale or clear"));
+        }
+        if p.scale
+            .is_some_and(|s| s.iter().any(|v| !(v.is_finite() && *v > 0.0)))
+        {
+            return Err(invalid("scale: three numbers above 0"));
+        }
+        let mut doc = self.document.write();
+        at_revision(&doc, p.rev)?;
+        let pieces = model_pieces(&doc, &p.ids)?;
+        let mut commands = Vec::with_capacity(pieces.len());
+        for mut piece in pieces {
+            let file = piece.model.clone().unwrap_or_default();
+            let path = doc.resolve_asset(&file);
+            let unit = unit_of(None, Some(&piece))?;
+            let loaded = newera_catalog::load_model_in(&path, unit)
+                .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+            if !loaded.mesh.parts.iter().any(|q| q.name == name) {
+                let names: Vec<&str> = loaded.mesh.parts.iter().map(|q| q.name.as_str()).collect();
+                return Err(invalid(format!(
+                    "{}: no part `{name}` in {file} ({})",
+                    piece.id,
+                    if names.is_empty() {
+                        "it has no named parts".to_owned()
+                    } else {
+                        names.join(", ")
+                    }
+                )));
+            }
+            let slot = piece.model_parts.iter().position(|q| q.name == name);
+            if p.clear {
+                if let Some(k) = slot {
+                    piece.model_parts.remove(k);
+                }
+            } else {
+                let k = slot.unwrap_or_else(|| {
+                    piece.model_parts.push(newera_core::ModelPart {
+                        name: name.clone(),
+                        ..newera_core::ModelPart::default()
+                    });
+                    piece.model_parts.len() - 1
+                });
+                let edit = &mut piece.model_parts[k];
+                if let Some(hide) = p.hide {
+                    edit.hidden = hide;
+                }
+                if let Some(offset) = p.offset {
+                    edit.offset = offset;
+                }
+                if let Some(scale) = p.scale {
+                    edit.scale = scale
+                        .iter()
+                        .any(|v| (v - 1.0).abs() > 1e-9)
+                        .then_some(scale);
+                }
+                if *edit
+                    == (newera_core::ModelPart {
+                        name: name.clone(),
+                        ..Default::default()
+                    })
+                {
+                    piece.model_parts.remove(k);
+                }
+            }
+            commands.push(newera_core::Command::update(piece));
+        }
+        doc.execute(newera_core::Command::Batch { commands })
+            .map_err(core)?;
+        Ok(ok(&doc, &p.ids))
+    }
+
     fn model_material(&self, p: EditModelParams) -> Result<String, ErrorData> {
         let name = p
             .material
@@ -1066,6 +1169,73 @@ mod tests {
         assert!(pattern.message.contains("an image"), "{pattern:?}");
         edit(r#"{"action":"material","ids":["f1"],"material":"tecido","clear":true}"#).unwrap();
         assert!(overrides().is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn the_back_cushion_moves_back_and_the_arms_stay_where_they_are() {
+        let dir = std::env::temp_dir().join(format!("newera-model-part-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // x across, y up, z toward the front, cm: arms, seat, back cushion.
+        std::fs::write(
+            dir.join("win.obj"),
+            boxes(&[
+                ("braco_esquerdo", [0.0, 0.0, 0.0], [10.0, 60.0, 80.0]),
+                ("braco_direito", [70.0, 0.0, 0.0], [80.0, 60.0, 80.0]),
+                ("assento", [10.0, 0.0, 10.0], [70.0, 45.0, 80.0]),
+                ("almofada_encosto", [10.0, 45.0, 10.0], [70.0, 85.0, 25.0]),
+            ]),
+        )
+        .unwrap();
+        let file = dir.join("win.obj").display().to_string();
+        let s = server();
+        s.place(Parameters(
+            serde_json::from_str(&format!(
+                r#"{{"items":[{{"model":"{file}","at":[0,0],"unit":"cm"}}]}}"#
+            ))
+            .unwrap(),
+        ))
+        .unwrap();
+        let edit = |json: &str| s.edit_model(Parameters(serde_json::from_str(json).unwrap()));
+        let part = |name: &str| {
+            let seen = call(&s, &format!(r#"{{"id":"f1","part":"{name}"}}"#)).unwrap();
+            seen["parts"][0].clone()
+        };
+        let arm = part("braco_direito");
+        let back = part("almofada_encosto");
+        edit(r#"{"action":"part","ids":["f1"],"part":"almofada_encosto","offset":[0,-5,0]}"#)
+            .unwrap();
+        let moved = part("almofada_encosto");
+        let front = |row: &Value| row[2][1].as_f64().unwrap();
+        assert!(
+            (front(&moved) - (front(&back) - 5.0)).abs() < 1e-6,
+            "{moved}"
+        );
+        assert_eq!(part("braco_direito"), arm, "the arms stay");
+        // Seat and arm heights read on their own, whatever the total height.
+        assert_eq!(part("assento")[3][2], json!(45.0));
+        assert_eq!(arm[3][2], json!(60.0));
+
+        edit(r#"{"action":"part","ids":["f1"],"part":"braco_direito","hide":true}"#).unwrap();
+        assert_eq!(part("braco_direito")[5], json!("hidden"));
+        let unknown =
+            edit(r#"{"action":"part","ids":["f1"],"part":"pe","hide":true}"#).unwrap_err();
+        assert!(
+            unknown.message.contains("no part `pe`") && unknown.message.contains("assento"),
+            "{unknown:?}"
+        );
+        edit(r#"{"action":"part","ids":["f1"],"part":"almofada_encosto","clear":true}"#).unwrap();
+        edit(r#"{"action":"part","ids":["f1"],"part":"braco_direito","hide":false}"#).unwrap();
+        assert_eq!(part("almofada_encosto"), back);
+        let doc = s.document.read();
+        assert!(
+            doc.home()
+                .find_piece("f1".parse().unwrap())
+                .unwrap()
+                .model_parts
+                .is_empty()
+        );
+        drop(doc);
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
