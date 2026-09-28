@@ -8,10 +8,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- `ergonomics`, `electrical`, `plumbing` and `lighting` take `level`, the storey to review, as
-  `layout` and `home` already did. They reviewed only the storey shown in the editor, so an agent
-  had to switch the person's view to review another floor, and a review of the upper floor, left
-  shown, quietly became the review of the house. The storey shown is left as it was.
 - A `rules` tool answers what a review checks against — the NBR 5410, 16264, 5626 and 8160
   tables behind `electrical` and `plumbing`, what each `check_layout` problem means, how
   `ergonomics` scores — and the same texts are resources, `newera://rules/<topic>`.
