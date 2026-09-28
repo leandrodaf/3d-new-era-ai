@@ -75,6 +75,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
+  listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
+  so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
+  tool it offers by what it is for; a tab sends its own through the relay.
 - Tool descriptions that told agents something untrue: `electrical` promised that `wifi` writes
   the access points' standard (only `edit_electrical` does), `render_3d` listed two of its seven
   views, `open_home` called its required `path` optional, and `check_layout` left `backwards`

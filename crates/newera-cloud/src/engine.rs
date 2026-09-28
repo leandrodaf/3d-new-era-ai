@@ -137,16 +137,6 @@ impl Engine {
                 return self.keep(db, account, plan, args["path"].as_str()).await;
             }
             "file" => return Ok(refused("file: action is new, open or save")),
-            "edit_background" if args["action"] == "set" => {
-                return Ok(refused(
-                    "edit_background action=set reads an image file, and files cannot be sent to the cloud yet: use the editor at 3dneweraai.com/app or the desktop app to put a scanned plan under the drawing",
-                ));
-            }
-            "edit_video" if args["action"] == "render" => {
-                return Ok(refused(
-                    "videos render in the desktop app; the path itself can be edited here",
-                ));
-            }
             _ => {}
         }
         // A photo counts against the plan by the quality asked for.

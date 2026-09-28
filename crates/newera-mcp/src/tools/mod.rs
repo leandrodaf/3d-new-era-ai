@@ -61,33 +61,6 @@ mod reply;
 mod roof;
 pub(crate) mod rules;
 
-const INSTRUCTIONS: &str = "\
-Home design editor, live in the user's window. Units: cm. Plan axes: x right, y down. \
-Points are [x,y]. Id prefixes: w wall, r room, d dimension, t label, f furniture/door/window, lv storey. \
-All kinds share one id counter, and composite pieces (roofs, joinery, cabinet runs) also number their \
-parts, so ids have gaps: use the ids a reply returns, never guess the next one. \
-Reads omit defaults (wall t=15 h=250). Writes reply `ok rev=N [ids=...]`; don't re-read \
-unless needed. Every change is one undoable step. \
-Tools, by what they are for — most reads are nouns, and a read that can be changed has an edit_<noun> beside it; file, export and the element verbs (create, update, place…) are named for what they do: \
-project: home, file, edit_home, history, edit_history, variants, edit_variants, levels, edit_levels, sessions; \
-drawing: create, update, delete, move, edit_walls, place, arrange, catalog, materials, measure, fit_roof, \
-background, edit_background; \
-joinery: joinery, cabinet_run, embed, cut_list; \
-reviews: layout, ergonomics, electrical, plumbing, lighting, accept, rules; \
-projects on the plan: edit_electrical, edit_plumbing, edit_lighting, annotations, edit_annotations, disciplines, \
-edit_disciplines; \
-images and files: render_plan, render_3d, render_photo, show_plan, cameras, edit_cameras, video, edit_video, export; \
-plugins, run_plugin, feedback. \
-Furniture has a front (seat, doors, foot of the bed; catalog names it): place facing= says which \
-way it looks, or wall=<id> puts its back on a wall; layout lists pieces turned to face a wall as backwards. \
-Spots, panels and pendants are kept on the ceiling for you: a pendant takes elev (shade height) or h (drop). \
-render_plan shows the plan to you. A project can hold several plan versions; tools act on the active one. \
-Finishes are short strings: `#rrggbb` paint, a pattern like `tiles #ffffff 60x60 r45` \
-(tint, tile cm, rotation) or `img:path 90x90`; `none` clears. \
-When a tool answers less than you asked, makes you take a detour, or leads you to a wrong conclusion \
-before the right one, report it with feedback as it happens, with the whole case (the call, the literal \
-reply, what was true, what it cost, the change that would help and what must not get worse) — then carry on.";
-
 /// The arguments of a read that takes none. Anything given is refused by
 /// name: a write's argument sent to its read would otherwise be dropped in
 /// silence, and the agent would think it had changed something.
@@ -271,7 +244,9 @@ impl ServerHandler for NewEraMcp {
                 .with_website_url(crate::output::WEBSITE)
                 .with_icons(crate::output::icons()),
         )
-        .with_instructions(INSTRUCTIONS)
+        .with_instructions(crate::surface::instructions(
+            crate::surface::Transport::Native,
+        ))
     }
 }
 
@@ -375,6 +350,38 @@ mod tests {
             .join("tests/fixtures/tool-surface.json");
         let json = serde_json::to_string_pretty(&tool_surface()).unwrap();
         std::fs::write(path, format!("{json}\n")).unwrap();
+    }
+
+    /// The table at the top of this file names every tool once, and only
+    /// tools: it went stale once, listing a third of the surface.
+    #[test]
+    fn the_module_table_names_every_tool() {
+        let mut listed: Vec<String> = include_str!("mod.rs")
+            .lines()
+            .take_while(|line| line.starts_with("//!"))
+            .filter(|line| line.starts_with("//! | [`"))
+            .flat_map(|line| {
+                line.rsplit('|')
+                    .nth(1)
+                    .unwrap_or_default()
+                    .split(',')
+                    .map(|name| name.trim().trim_matches('`').to_owned())
+                    .filter(|name| !name.is_empty() && !name.contains(' '))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        listed.sort();
+        let before = listed.len();
+        listed.dedup();
+        assert_eq!(before, listed.len(), "a tool is in the table twice");
+        let mut tools: Vec<String> = server()
+            .tool_router
+            .list_all()
+            .iter()
+            .map(|t| t.name.to_string())
+            .collect();
+        tools.sort();
+        assert_eq!(listed, tools, "update the table at the top of tools/mod.rs");
     }
 
     #[test]

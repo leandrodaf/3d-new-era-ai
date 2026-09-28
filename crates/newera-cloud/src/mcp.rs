@@ -18,18 +18,6 @@ use crate::{AppState, oauth};
 /// Protocol versions this endpoint speaks, newest first.
 const VERSIONS: [&str; 3] = ["2025-11-25", "2025-06-18", "2025-03-26"];
 
-const INSTRUCTIONS: &str = "\
-Home design editor (3D New Era AI), acting for the signed-in account. Units: cm. \
-Plan axes: x right, y down. When the person has the editor open at \
-3dneweraai.com/app and signed in, calls reach it and every change appears there; \
-otherwise they work on the account's active project in the cloud, kept after every \
-change (projects lists them). Reads never change the plan; what changes it is a tool \
-of its own. show_plan shows the plan to the person; `rules` says what a review checks against.";
-
-/// Tools that only make sense on the person's own machine, never here
-/// (the directories' rules, and a server's filesystem): see D16.
-const LOCAL_ONLY: [&str; 3] = ["feedback", "plugins", "run_plugin"];
-
 /// The 401 that sends a client to the metadata, and from there to sign-in.
 fn unauthorized(app: &AppState) -> Response {
     let mut response = (
@@ -105,45 +93,13 @@ fn failure(id: &Value, code: i32, message: &str) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}})
 }
 
-/// What the tools that deal in files mean here, where the files are the
-/// account's projects and exports come back as links.
-const CLOUD_MEANING: [(&str, &str); 2] = [
-    (
-        "file",
-        "Start, open or keep the account's projects. new {name?}: a new, empty project, made the active one. open {path}: one of the account's projects by name (projects lists them), made the active one. save {path?}: keeps the active project now — it is also kept after every change; path renames it.",
-    ),
-    (
-        "export",
-        "Export the active project to a file, by the extension of path. what=plan (default): .pdf (A3; scale=50/100 or fit), .svg or .png, or the 3D model as .glb or .obj. what=cut_list: the joinery's cut list as .csv, or .dxf/.svg sheets. Reply: a link to the file, good for a day.",
-    ),
-];
-
 /// The tools a client sees: the editor's, minus what is only for a desktop,
 /// with the file tools saying what they do here, and the projects list.
 fn hosted_tools() -> Vec<Value> {
-    let mut tools: Vec<Value> = newera_mcp::tools()
-        .into_iter()
-        .filter(|t| !LOCAL_ONLY.contains(&t.name.as_ref()))
-        .filter_map(|t| serde_json::to_value(t).ok())
-        .collect();
-    for tool in &mut tools {
-        if let Some((_, meaning)) = CLOUD_MEANING.iter().find(|(n, _)| tool["name"] == *n) {
-            tool["description"] = json!(meaning);
-            // A project here has a name of its own, given when it starts.
-            if tool["name"] == "file" {
-                tool["inputSchema"]["properties"]["name"] = json!({
-                    "type": "string",
-                    "description": "For `new`: the project's name",
-                });
-                tool["inputSchema"]["properties"]["path"] = json!({
-                    "type": "string",
-                    "description": "For `open` and `save`: a project's name — open takes one projects lists, save renames the active one",
-                });
-            }
-        }
-    }
+    // What the service offers and how it words it is the MCP crate's to say.
+    let mut tools = newera_mcp::surface::tools(newera_mcp::Transport::Cloud);
     tools.push(json!({
-        "name": "projects",
+        "name": newera_mcp::surface::HOSTED_ONLY[0],
         "title": "List your projects",
         "description": "The projects kept in the account: rows [name, id, kb, updated, active], the space used and the plan's limits. file action=open switches the active one; action=new starts one.",
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false},
@@ -199,7 +155,7 @@ async fn answer(
                         "websiteUrl": newera_mcp::output::WEBSITE,
                         "icons": newera_mcp::output::icons(),
                     },
-                    "instructions": INSTRUCTIONS,
+                    "instructions": newera_mcp::surface::instructions(newera_mcp::Transport::Cloud),
                 }),
             ))
         }
@@ -222,7 +178,7 @@ async fn answer(
                 .get("name")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
-            if LOCAL_ONLY.contains(&name) {
+            if name != "projects" && !newera_mcp::Transport::Cloud.offers(name) {
                 return Some(result(
                     &id,
                     json!({"content": [{"type": "text", "text": format!("{name} runs only in the desktop app")}], "isError": true}),
@@ -290,6 +246,21 @@ async fn answer(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The instructions name every tool the service lists, its own
+    /// `projects` included: a client that defers definitions shows the model
+    /// only the names and these words.
+    #[test]
+    fn the_instructions_name_every_hosted_tool() {
+        let said = newera_mcp::surface::instructions(newera_mcp::Transport::Cloud);
+        for tool in hosted_tools() {
+            let name = tool["name"].as_str().unwrap();
+            assert!(
+                said.contains(&format!(" {name}")),
+                "the instructions leave out {name}"
+            );
+        }
+    }
 
     /// No hosted tool works without the account, and each one says so.
     #[test]

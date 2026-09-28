@@ -26,9 +26,6 @@ const RELAY: &str = "https://mcp.3dneweraai.com";
 /// somebody's AI client, and losing it on a refresh is losing the setup.
 const REMEMBERED: &str = "newera-mcp-room";
 
-/// Tools the browser does not offer: they would hold the window for minutes.
-const TOO_SLOW_HERE: [&str; 2] = ["video", "edit_video"];
-
 /// Where this tab is in the business of being reachable.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) enum Link {
@@ -500,27 +497,13 @@ fn hold(
         let ctx = ctx.clone();
         let url = format!("{base}{}", room.mcp_path);
         Closure::<dyn FnMut()>::new(move || {
-            let tools: Vec<serde_json::Value> = newera_mcp::tools()
-                .iter()
-                .filter(|tool| !TOO_SLOW_HERE.contains(&tool.name.as_ref()))
-                .map(|tool| {
-                    serde_json::json!({
-                        "name": tool.name,
-                        "description": if tool.name == "file" {
-                            "Start or keep the project in this browser tab. new: an empty project in place of this one. save {path?}: downloads a .newera backup; path supplies a filename only; reports download_started (not disk confirmation) and autosave recovery status, and no server file is written. open reads files on a desktop only.".to_owned()
-                        } else if tool.name == "home" {
-                            format!("{} Browser replies also include recovery state, current_revision, saved_revision or restored_from_revision, timestamp and any storage failure.", tool.description.as_deref().unwrap_or(""))
-                        } else { tool.description.as_deref().unwrap_or("").to_owned() },
-                        "inputSchema": tool.input_schema,
-                        "title": tool.title,
-                        "annotations": tool.annotations,
-                        "_meta": tool.meta,
-                    })
-                })
-                .collect();
+            // What a tab offers, and how it words it, is the MCP crate's to
+            // say: the relay hands the same answer to every agent.
+            let tools = newera_mcp::surface::tools(newera_mcp::Transport::Browser);
             let hello = serde_json::json!({
                 "type": "hello",
                 "tools": tools,
+                "instructions": newera_mcp::surface::instructions(newera_mcp::Transport::Browser),
                 "resources": newera_mcp::app::resources(),
             });
             let _ = socket.send_with_str(&hello.to_string());
@@ -663,8 +646,10 @@ fn run(
     name: &str,
     args: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    if TOO_SLOW_HERE.contains(&name) {
-        return Err("A ferramenta video salva arquivos no aplicativo. No navegador, use Criar vídeo para baixar o AVI.".into());
+    if !newera_mcp::Transport::Browser.offers(name) {
+        return Err(format!(
+            "{name} runs in the desktop app: it needs files on the person's own disk"
+        ));
     }
     if name == "file" && args["action"] == "save" {
         let doc = document.read();
