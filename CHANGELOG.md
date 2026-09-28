@@ -75,6 +75,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `place` with several items says every one it refuses, and that nothing was placed. It stopped
+  at the first refusal, so a batch of lights with two misplaced ones took two calls to learn about
+  both, and the refusal did not say whether the others had gone in. A single item is refused in the
+  same words as before.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every

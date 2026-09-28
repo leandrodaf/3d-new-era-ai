@@ -2308,7 +2308,9 @@ pub(crate) fn place_noting(
     let mut commands = Vec::with_capacity(items.len());
     let mut ids = Vec::with_capacity(items.len());
     let mut placed_here: Vec<newera_core::Furniture> = Vec::new();
-    for spec in items {
+    let count = items.len();
+    let mut refused: Vec<String> = Vec::new();
+    let mut one = |spec: PlaceSpec| -> EditResult<()> {
         if spec.cat == "beam" && (spec.a.is_some() || spec.b.is_some()) {
             let (Some(a), Some(b)) = (spec.a, spec.b) else {
                 return Err("a beam needs `a` and `b` as [x,y,z]".into());
@@ -2321,7 +2323,7 @@ pub(crate) fn place_noting(
             piece.color = spec.color.or(Some([176, 132, 92]));
             ids.push(piece.id.to_string());
             commands.push(Command::insert(piece));
-            continue;
+            return Ok(());
         }
         // The two ways an agent reaches for a piece already in the project
         // before finding `copy`: the model path `catalog(scope=project)`
@@ -2564,6 +2566,29 @@ pub(crate) fn place_noting(
         placed_here.push(piece.clone());
         ids.push(piece.id.to_string());
         commands.push(Command::insert(piece));
+        Ok(())
+    };
+    // Every item is looked at, so a batch says all it cannot place at once;
+    // one refused and none of them is placed.
+    for (k, spec) in items.into_iter().enumerate() {
+        let what = spec.copy.clone().unwrap_or_else(|| spec.cat.clone());
+        if let Err(why) = one(spec) {
+            refused.push(if count == 1 {
+                why
+            } else {
+                format!("items[{k}] `{what}`: {why}")
+            });
+        }
+    }
+    match refused.len() {
+        0 => {}
+        _ if count == 1 => return Err(refused.remove(0)),
+        n => {
+            return Err(format!(
+                "nothing placed: {n} of the {count} items refused, the others are fine as given — {}",
+                refused.join(" | ")
+            ));
+        }
     }
     doc.execute(Command::Batch { commands }).map_err(core)?;
     Ok((ids, turned))
@@ -2625,6 +2650,40 @@ fn back_against_nearest_wall(
 #[cfg(test)]
 mod place_tests {
     use super::*;
+
+    #[test]
+    fn a_batch_says_every_item_it_refuses_and_places_none() {
+        let mut doc = Document::default();
+        let spec = |cat: &str, x: f64| PlaceSpec {
+            cat: cat.into(),
+            at: Some(Point2::new(x, 100.0)),
+            ..PlaceSpec::default()
+        };
+        let before = doc.home().furniture.len();
+        let why = place(
+            &mut doc,
+            vec![
+                spec("bed-double", 100.0),
+                spec("no-such-thing", 300.0),
+                spec("outlet-low", 500.0),
+            ],
+        )
+        .unwrap_err();
+        assert!(
+            why.starts_with("nothing placed: 2 of the 3 items refused"),
+            "{why}"
+        );
+        assert!(
+            why.contains("items[1] `no-such-thing`: unknown catalog id"),
+            "{why}"
+        );
+        assert!(why.contains("items[2] `outlet-low`: "), "{why}");
+        assert!(!why.contains("items[0]"), "{why}");
+        assert_eq!(doc.home().furniture.len(), before, "none placed");
+        // Alone, an item is refused in its own words.
+        let alone = place(&mut doc, vec![spec("no-such-thing", 300.0)]).unwrap_err();
+        assert!(alone.starts_with("unknown catalog id"), "{alone}");
+    }
 
     #[test]
     fn doors_snap_to_the_nearest_wall_and_swing_into_a_chosen_side() {
