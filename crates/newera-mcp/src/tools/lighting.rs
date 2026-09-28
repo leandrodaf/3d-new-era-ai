@@ -110,7 +110,7 @@ impl NewEraMcp {
                 (r.uniformity * 100.0).round() / 100.0,
                 wanted,
                 r.fixtures,
-                (r.watts_per_m2 * 10.0).round() / 10.0,
+                (r.watts_per_m2 * 10.0).round() / 10.0 + 0.0,
                 verdict,
             ])
         };
@@ -157,8 +157,9 @@ impl NewEraMcp {
             return Ok(serde_json::json!({
                 "rooms": rows,
                 "fixtures": lights.len(),
-                "lm": lumens.round(),
-                "W": watts.round(),
+                // `+ 0.0` turns the empty sum (-0.0) into 0.0.
+                "lm": lumens.round() + 0.0,
+                "W": watts.round() + 0.0,
                 "sources": super::sources(&codes, &home.compass.place()),
             })
             .to_string());
@@ -374,5 +375,25 @@ mod tests {
             .unwrap_err();
         assert!(refused.message.contains("no spot"), "{}", refused.message);
         assert!(s.document.read().home().furniture.is_empty());
+    }
+
+    #[test]
+    fn a_room_with_no_light_totals_zero_not_minus_zero() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[300,0],[300,300],[0,300]],"closed":true}],"rooms":[{"name":"Quarto","at":[150,150]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let lighting = s
+            .lighting(Parameters(serde_json::from_str("{}").unwrap()))
+            .unwrap();
+        assert!(!lighting.contains("-0"), "{lighting}");
+        let circuits = s
+            .electrical(Parameters(
+                serde_json::from_str(r#"{"action":"circuits"}"#).unwrap(),
+            ))
+            .unwrap();
+        assert!(!circuits.contains("-0"), "{circuits}");
     }
 }

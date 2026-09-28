@@ -1727,9 +1727,11 @@ impl Review<'_, '_> {
             // --- Blum: the five zones, in the order of the work ---
             let zones = [
                 ("mantimentos", any(|u| matches!(u, Use::Fridge))),
+                // A tall cabinet in a kitchen — read as a wardrobe for its
+                // doors — is its pantry.
                 (
                     "armazenagem",
-                    any(|u| matches!(u, Use::WallCabinet | Use::Storage)),
+                    any(|u| matches!(u, Use::WallCabinet | Use::Storage | Use::Wardrobe)),
                 ),
                 ("lavagem", any(|u| matches!(u, Use::Sink))),
                 ("preparo", any(|u| matches!(u, Use::Counter | Use::Island))),
@@ -1926,10 +1928,25 @@ impl Review<'_, '_> {
                 let screen = scene.units[tv].piece;
                 // Embedded TVs sit inside a panel group: use the group position.
                 let diagonal = screen.width.hypot(screen.height);
+                // The seats that can watch it: not turned away from the
+                // screen — a reading chair beside the TV, its back to it, is
+                // not where anyone watches from.
+                let watches = |i: usize| {
+                    let seat = scene.units[i].frame();
+                    let ahead = seat.to_plan((0.0, 1.0));
+                    let front = (ahead.x - seat.position.x, ahead.y - seat.position.y);
+                    let to = (
+                        screen.position.x - seat.position.x,
+                        screen.position.y - seat.position.y,
+                    );
+                    let length = to.0.hypot(to.1);
+                    length > 1e-6 && front.0 * to.0 + front.1 * to.1 >= 0.0
+                };
                 let Some(sofa) = space
                     .units
                     .iter()
                     .filter(|&&i| matches!(scene.units[i].what, Use::Sofa(_) | Use::Armchair))
+                    .filter(|&&i| watches(i))
                     .min_by(|a, b| {
                         let d = |i: usize| scene.units[i].piece.position.distance(screen.position);
                         d(**a).total_cmp(&d(**b))
@@ -2285,6 +2302,8 @@ fn glass_by_room(scene: &Scene<'_>) -> std::collections::BTreeMap<newera_core::R
                 .filter(|f| {
                     f.visible
                         && f.opacity.is_some_and(|o| o < 1.0)
+                        // Already counted as a window.
+                        && !glazed(f)
                         && near_outline(&room.points, f.position, f.depth.max(15.0) + 5.0)
                 })
                 .map(|f| f.width * f.height)
@@ -2368,15 +2387,20 @@ fn window_area(scene: &Scene<'_>, points: &[Point2]) -> f64 {
         .home
         .furniture
         .iter()
-        .filter(|f| {
-            f.visible
-                && f.opening
-                    .as_ref()
-                    .is_some_and(|o| o.kind == OpeningKind::Window || f.catalog == "french-window")
-                && near_outline(points, f.position, f.depth.max(15.0))
-        })
+        .filter(|f| f.visible && glazed(f) && near_outline(points, f.position, f.depth.max(15.0)))
         .map(|f| f.width * f.height)
         .sum()
+}
+
+/// An opening that is glass from side to side: a window, a French window,
+/// or a sliding door, whose sliding leaves the catalog makes of glass (made
+/// to swing, the same door draws solid leaves).
+fn glazed(f: &newera_core::Furniture) -> bool {
+    f.opening.as_ref().is_some_and(|o| {
+        o.kind == OpeningKind::Window
+            || f.catalog == "french-window"
+            || (f.catalog == "door-sliding" && o.sliding)
+    })
 }
 
 /// Lengths of the continuous worktop runs in a space, cm. Cabinets that
@@ -3935,6 +3959,36 @@ mod tests {
         assert!(!says(&report, Severity::Dica, "da TV"), "{report:#?}");
     }
 
+    #[test]
+    fn the_tv_is_judged_from_the_seats_that_face_it() {
+        let mut home = Home::default();
+        square(&mut home, "Estar", 500.0, 500.0);
+        let mut tv = piece(20, "tv", (250.0, 450.0), (124.0, 8.0, 72.0), 180.0);
+        tv.elevation = 100.0;
+        home.furniture = vec![
+            tv,
+            // The sofa watches it from 3 m.
+            piece(21, "sofa-3", (250.0, 150.0), (210.0, 90.0, 85.0), 0.0),
+            // A reading chair beside it, turned away from the screen.
+            piece(22, "armchair", (130.0, 400.0), (65.0, 65.0, 85.0), 180.0),
+        ];
+        let tip = |home: &Home| {
+            review(home, &Profile::default())
+                .findings
+                .iter()
+                .find(|f| f.key.starts_with("tv_distance"))
+                .map(|f| f.message.to_string())
+        };
+        assert_eq!(tip(&home), None, "the sofa is where it is watched from");
+        // Turned to the screen, the chair is the nearest seat watching it.
+        home.furniture[2].angle = 270.0;
+        assert!(
+            tip(&home).is_some_and(|t| t.contains("armchair")),
+            "{:?}",
+            tip(&home)
+        );
+    }
+
     /// The false positive with a standard at its root: a dishwasher is an
     /// appliance in a niche (EN 1116), so its lid is never read as the height
     /// of the worktop it hides under.
@@ -4473,6 +4527,33 @@ mod tests {
     }
 
     #[test]
+    fn a_pantry_tower_is_the_kitchens_storage() {
+        let mut home = Home::default();
+        square(&mut home, "Cozinha", 500.0, 300.0);
+        let mut tower = piece(24, "group", (460.0, 37.5), (70.0, 60.0, 235.0), 0.0);
+        tower.name = "Armário 70 × 60 × 235 cm".into();
+        tower.properties.insert(
+            "joinery:params".into(),
+            r#"{"kind":"cabinet","w":70,"h":235,"d":60}"#.into(),
+        );
+        home.furniture = vec![
+            piece(20, "fridge", (50.0, 43.5), (70.0, 72.0, 180.0), 0.0),
+            piece(21, "sink-counter", (160.0, 37.5), (120.0, 60.0, 90.0), 0.0),
+            piece(22, "base-cabinet", (270.0, 37.5), (100.0, 60.0, 90.0), 0.0),
+            piece(23, "stove", (360.0, 37.5), (60.0, 60.0, 90.0), 0.0),
+        ];
+        let lacks_storage = |home: &Home| {
+            review(home, &Profile::default())
+                .findings
+                .iter()
+                .any(|f| f.message.contains("zonas de trabalho falta armazenagem"))
+        };
+        assert!(lacks_storage(&home), "no storage at all");
+        home.furniture.push(tower);
+        assert!(!lacks_storage(&home), "the pantry tower is storage");
+    }
+
+    #[test]
     fn a_kitchen_spread_too_wide_and_missing_a_zone_is_reported() {
         let mut home = Home::default();
         square(&mut home, "Cozinha", 600.0, 300.0);
@@ -4605,6 +4686,43 @@ mod tests {
             ),
             "{closed:#?}"
         );
+    }
+
+    #[test]
+    fn a_glass_sliding_door_lights_the_room_like_a_window() {
+        let dark = |catalog: &str| {
+            let mut home = Home::default();
+            square(&mut home, "Sala", 400.0, 400.0);
+            let swung = catalog == "door-sliding-swung";
+            let catalog = if swung { "door-sliding" } else { catalog };
+            let mut door = piece(20, catalog, (200.0, 0.0), (220.0, 15.0, 220.0), 0.0);
+            door.opening = Some(newera_core::Opening {
+                kind: if catalog == "french-window" {
+                    OpeningKind::Window
+                } else {
+                    OpeningKind::Door
+                },
+                leaves: 2,
+                sliding: catalog != "door" && !swung,
+                ..newera_core::Opening::default()
+            });
+            home.furniture.push(door);
+            review(&home, &Profile::default())
+                .findings
+                .iter()
+                .filter(|f| {
+                    f.key.starts_with("room_without_window") || f.key.starts_with("window_area")
+                })
+                .map(|f| f.message.to_string())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(dark("door-sliding"), Vec::<String>::new());
+        assert!(
+            !dark("door-sliding-swung").is_empty(),
+            "made to swing, its leaves are solid"
+        );
+        assert_eq!(dark("french-window"), Vec::<String>::new());
+        assert!(!dark("door").is_empty(), "a wooden door is not a window");
     }
 
     /// A dishwasher under the stone is 6 cm lower than the stone, by design.

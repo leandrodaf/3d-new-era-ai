@@ -236,7 +236,8 @@ impl NewEraMcp {
                     .filter(|pt| pt.kind == electrical::PointKind::Automation)
                     .map(|pt| pt.va)
                     .sum();
-                let mut reply = serde_json::json!({"circuits": rows, "total_va": total});
+                // `+ 0.0` turns the empty sum (-0.0) into 0.0.
+                let mut reply = serde_json::json!({"circuits": rows, "total_va": total + 0.0});
                 if standby > 0.0 {
                     reply["standby_w"] = compact::num(standby);
                 }
