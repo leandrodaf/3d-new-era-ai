@@ -818,6 +818,10 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
             .iter()
             .map(|r| (home.resolve_level(r.level), polygon(&r.points)))
             .collect();
+        // Outside, per group: a facade panel of 42 slats is one piece
+        // outside, said once, and a shelf of a cabinet sticking out is that
+        // shelf.
+        let mut outside: Vec<(usize, FurnitureId, bool)> = Vec::new();
         for (i, piece) in pieces.iter().enumerate() {
             if piece.is_opening() {
                 continue;
@@ -828,8 +832,32 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
                 .any(|(level, r)| *level == levels[i] && geo::Contains::contains(r, &center));
             // A storey with no rooms drawn yet has nothing to be outside of.
             let has_rooms = rooms.iter().any(|(level, _)| *level == levels[i]);
-            if has_rooms && !covered {
-                issues.push(Issue::OutsideRooms(piece.id));
+            outside.push((groups[i], piece.id, has_rooms && !covered));
+        }
+        // A part accepted as outside on its own, before groups were said
+        // once, keeps its group said part by part: the acceptance still
+        // answers to its finding.
+        let accepted_part = |group: usize| {
+            outside
+                .iter()
+                .any(|(g, id, _)| *g == group && Issue::OutsideRooms(*id).accepted(home).is_some())
+        };
+        let mut said: Vec<usize> = Vec::new();
+        for &(group, id, out) in &outside {
+            if !out {
+                continue;
+            }
+            let parts = outside.iter().filter(|(g, ..)| *g == group);
+            if parts.clone().count() > 1
+                && parts.clone().all(|(.., out)| *out)
+                && !accepted_part(group)
+            {
+                if !said.contains(&group) {
+                    said.push(group);
+                    issues.push(Issue::OutsideRooms(home.furniture[group].id));
+                }
+            } else {
+                issues.push(Issue::OutsideRooms(id));
             }
         }
     }
@@ -851,10 +879,13 @@ fn passage_hits(door: &Furniture, piece: &Furniture, footprint: &Polygon<f64>) -
 /// Sash operation and appliance ventilation require separate use checks.
 fn window_obstruction(window: &Furniture, piece: &Furniture) -> Option<[f64; 2]> {
     // Their bounding boxes are mostly air or transparent glass. Treating
-    // them as opaque cupboards would reject ordinary window-side decor.
+    // them as opaque cupboards would reject ordinary window-side decor —
+    // and a guard of bars or glass in front of a window, which is what
+    // guards are for.
     if piece.light.is_some()
         || matches!(piece.catalog.as_str(), "plant" | "shower-glass")
         || piece.opacity.is_some_and(|opacity| opacity < 0.5)
+        || crate::guard::guard_of(piece).is_some()
     {
         return None;
     }
@@ -1643,6 +1674,24 @@ mod tests {
             glass.opacity = None;
             glass.catalog = "plant".into();
             assert!(window_obstruction(&window, &glass).is_none());
+            // Bars or glass under a handrail, rising past the sill (a landing
+            // guard in front of a stair window).
+            let mut guard = hood.clone();
+            guard.elevation = 40.0;
+            guard.height = 110.0;
+            guard.width = 180.0;
+            guard.depth = 5.0;
+            assert!(window_obstruction(&window, &guard).is_some(), "a solid box");
+            for catalog in ["railing", "glass-railing", "balcony-glazing"] {
+                guard.catalog = catalog.into();
+                assert!(window_obstruction(&window, &guard).is_none(), "{catalog}");
+            }
+            guard.catalog = "box".into();
+            guard.name = "Guarda-corpo de barras do patamar".into();
+            assert!(
+                window_obstruction(&window, &guard).is_none(),
+                "named a guard"
+            );
             let mut fridge = hood.clone();
             fridge.elevation = 0.0;
             fridge.height = 180.0;
@@ -1764,6 +1813,19 @@ mod tests {
             .push(piece(22, (40.0, 180.0), (40.0, 40.0, 80.0))); // in the swing
         home.furniture
             .push(piece(23, (900.0, 900.0), (40.0, 40.0, 40.0))); // outside
+        // A panel of slats outside is one piece outside; a shelf of a
+        // cabinet sticking out of the room is that shelf.
+        let mut panel = piece(24, (900.0, 600.0), (100.0, 5.0, 200.0));
+        panel.children = [(25, 860.0), (26, 900.0), (27, 940.0)]
+            .map(|(id, x)| piece(id, (x, 600.0), (4.0, 5.0, 200.0)))
+            .to_vec();
+        home.furniture.push(panel);
+        let mut cabinet = piece(30, (100.0, 380.0), (100.0, 40.0, 200.0));
+        cabinet.children = vec![
+            piece(31, (100.0, 380.0), (100.0, 40.0, 200.0)),
+            piece(32, (100.0, 420.0), (100.0, 30.0, 2.0)),
+        ];
+        home.furniture.push(cabinet);
 
         let issues = check_layout(&home);
         assert!(
@@ -1774,6 +1836,28 @@ mod tests {
             issues.contains(&Issue::OutsideRooms(FurnitureId(23))),
             "{issues:?}"
         );
+        let outside: Vec<FurnitureId> = issues
+            .iter()
+            .filter_map(|i| match i {
+                Issue::OutsideRooms(f) => Some(*f),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            outside,
+            [FurnitureId(23), FurnitureId(24), FurnitureId(32)],
+            "{issues:?}"
+        );
+        // A slat accepted as outside before keeps the panel said slat by slat.
+        home.accepted
+            .insert("outside_rooms:f26".into(), "fachada".into());
+        let issues = check_layout(&home);
+        let panel: Vec<&Issue> = issues
+            .iter()
+            .filter(|i| matches!(i, Issue::OutsideRooms(f) if [24, 25, 26, 27].contains(&f.0)))
+            .collect();
+        assert_eq!(panel.len(), 3, "{issues:?}");
+        assert!(panel.iter().any(|i| i.accepted(&home) == Some("fachada")));
         let swing_side = door_swing(&home.furniture[1]).unwrap();
         assert!(
             swing_side.iter().all(|p| p.x >= -8.0),
