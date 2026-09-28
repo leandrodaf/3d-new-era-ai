@@ -614,6 +614,15 @@ impl<'a> Scene<'a> {
                 }
             });
         }
+        // A bowl in a bathroom is a basin, whatever it is called or set in:
+        // a "cuba" in a vanity top is washed at, not cooked beside.
+        for space in spaces.iter().filter(|s| s.what == RoomUse::Bathroom) {
+            for &i in &space.units {
+                if units[i].what == Use::Sink {
+                    units[i].what = Use::Basin;
+                }
+            }
+        }
         let swings = home
             .furniture
             .iter()
