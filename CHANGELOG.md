@@ -75,6 +75,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A finish that is only a color — `mat:"#c8b89a"` on `place`, `update` or a solid — paints the
+  piece. It was stored as a finish the 3D does not draw (a piece draws a pattern or an image), so
+  the call was accepted and nothing changed on screen; it now sets the piece's color, unless a
+  `color` is given in the same call.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
