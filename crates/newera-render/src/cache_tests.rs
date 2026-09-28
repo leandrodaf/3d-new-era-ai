@@ -288,3 +288,110 @@ fn cache_publication_hides_partial_writes_and_cleans_failed_encodes() {
             .is_some_and(|ext| ext == "tmp")
     }));
 }
+
+/// A GLB floor tile, 2 × 2 units, whose color is a PNG in its binary chunk.
+fn textured_glb(png: &[u8]) -> Vec<u8> {
+    let mut bin = Vec::new();
+    for v in [
+        [-1.0f32, 0.0, -1.0],
+        [-1.0, 0.0, 1.0],
+        [1.0, 0.0, 1.0],
+        [1.0, 0.0, -1.0],
+    ] {
+        bin.extend(v.iter().flat_map(|c| c.to_le_bytes()));
+    }
+    for t in [[0.0f32, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]] {
+        bin.extend(t.iter().flat_map(|c| c.to_le_bytes()));
+    }
+    for i in [0u16, 1, 2, 0, 2, 3] {
+        bin.extend(i.to_le_bytes());
+    }
+    let image_at = bin.len();
+    bin.extend_from_slice(png);
+    while bin.len() % 4 != 0 {
+        bin.push(0);
+    }
+    let mut json = format!(
+        r#"{{"asset":{{"version":"2.0"}},"scene":0,"scenes":[{{"nodes":[0]}}],"nodes":[{{"mesh":0}}],
+        "meshes":[{{"primitives":[{{"attributes":{{"POSITION":0,"TEXCOORD_0":1}},"indices":2,"material":0}}]}}],
+        "materials":[{{"name":"body","pbrMetallicRoughness":{{"baseColorTexture":{{"index":0}}}}}}],
+        "textures":[{{"source":0}}],"images":[{{"bufferView":3,"mimeType":"image/png"}}],
+        "buffers":[{{"byteLength":{}}}],
+        "bufferViews":[{{"buffer":0,"byteLength":48}},{{"buffer":0,"byteOffset":48,"byteLength":32}},
+                       {{"buffer":0,"byteOffset":80,"byteLength":12}},{{"buffer":0,"byteOffset":{image_at},"byteLength":{}}}],
+        "accessors":[{{"bufferView":0,"componentType":5126,"count":4,"type":"VEC3","min":[-1,0,-1],"max":[1,0,1]}},
+                     {{"bufferView":1,"componentType":5126,"count":4,"type":"VEC2"}},
+                     {{"bufferView":2,"componentType":5123,"count":6,"type":"SCALAR"}}]}}"#,
+        bin.len(),
+        png.len(),
+    )
+    .into_bytes();
+    while json.len() % 4 != 0 {
+        json.push(b' ');
+    }
+    let chunk = |kind: &[u8; 4], data: &[u8]| {
+        let mut out = u32::try_from(data.len()).unwrap().to_le_bytes().to_vec();
+        out.extend_from_slice(kind);
+        out.extend_from_slice(data);
+        out
+    };
+    let body = [chunk(b"JSON", &json), chunk(b"BIN\0", &bin)].concat();
+    let mut glb = b"glTF".to_vec();
+    glb.extend(2u32.to_le_bytes());
+    glb.extend(u32::try_from(12 + body.len()).unwrap().to_le_bytes());
+    glb.extend(body);
+    glb
+}
+
+#[test]
+fn a_glb_is_drawn_with_the_image_inside_it() {
+    let assets = Assets::new();
+    let pixels = image::RgbaImage::from_pixel(2, 2, image::Rgba([220, 20, 20, 255]));
+    let mut png = std::io::Cursor::new(Vec::new());
+    pixels.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    assets.mount("chair.glb", &textured_glb(&png.into_inner()));
+    let piece = Furniture {
+        model: Some("chair.glb".into()),
+        ..Assets::piece()
+    };
+    let views = TopViews::new(assets.0.join("png"), Some(assets.0.clone()), true);
+    let top = image::open(views.image_for(&piece).unwrap())
+        .unwrap()
+        .to_rgba8();
+    let drawn: Vec<_> = top.pixels().filter(|p| p[3] > 0).collect();
+    assert!(!drawn.is_empty());
+    assert!(
+        drawn.iter().all(|p| p[0] > p[1].saturating_add(80)),
+        "the tile shows its red image, not the plain material color"
+    );
+}
+
+#[test]
+fn a_textured_piece_exported_as_glb_comes_back_with_its_image() {
+    let assets = Assets::new();
+    let pixels = image::RgbaImage::from_pixel(2, 2, image::Rgba([220, 20, 20, 255]));
+    let mut png = std::io::Cursor::new(Vec::new());
+    pixels.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    assets.mount("red.png", &png.into_inner());
+    assets.mount(
+        "test.obj",
+        b"mtllib test.mtl\nv -1 0 -1\nv 1 0 -1\nv 1 0 1\nv -1 0 1\nvt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nusemtl body\nf 1/1 4/4 3/3\nf 1/1 3/3 2/2\n",
+    );
+    assets.mount("test.mtl", b"newmtl body\nmap_Kd red.png\n");
+    let mut home = newera_core::Home::default();
+    home.furniture.push(Assets::piece());
+    let out = assets.0.join("export");
+    std::fs::create_dir_all(&out).unwrap();
+    crate::export_home(&home, &out.join("sala.glb"), Some(&assets.0)).unwrap();
+    let loaded = newera_catalog::load_model(&out.join("sala.glb")).unwrap();
+    let texture = loaded
+        .mesh
+        .materials
+        .iter()
+        .find_map(|m| m.texture.as_ref())
+        .expect("the exported image is read back");
+    let image = newera_core::images::decode(&vfs::read(texture).unwrap())
+        .unwrap()
+        .to_rgba8();
+    assert_eq!(image.get_pixel(0, 0).0, [220, 20, 20, 255]);
+}

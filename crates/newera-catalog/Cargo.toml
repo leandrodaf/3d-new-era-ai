@@ -9,7 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-gltf = { version = "1.4.1", default-features = false, features = ["import", "utils"] }
+gltf = { version = "1.4.1", default-features = false, features = ["import", "names", "utils"] }
 newera-core.workspace = true
 thiserror.workspace = true
 tobj = { version = "4.0.5", default-features = false }

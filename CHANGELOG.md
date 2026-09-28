@@ -13,6 +13,16 @@ All notable changes to this project are documented here. The format follows
   and their textures travel with saved projects; placement uses the existing catalog
   and MCP tools. Product proportions are preserved when resizing.
 
+### Fixed
+
+- A glTF/GLB model keeps its textures. The importer read positions, normals and the base color
+  factor only, so a chair whose wood and fabric were images inside its GLB came in as flat gray
+  and white, and the way out was re-exporting it as OBJ. It now keeps each material (its name, the
+  base color image and, for `BLEND`, its alpha) and the texture coordinates of the set the image
+  uses; images inside the GLB or in data URIs are read like any texture file, and one next to a
+  `.gltf` is found by its URI, `%20` and all. The materials also answer by name to `update`'s
+  material overrides, as an OBJ's do.
+
 ## [2.0.0] - 2026-09-28
 
 ### Added

@@ -279,7 +279,14 @@ fn load_gltf(path: &Path) -> Result<Mesh, ImportError> {
             },
         })
         .collect::<Result<_, ImportError>>()?;
-    let mut mesh = Mesh::default();
+    let images = gltf_images(&document, &buffers, path);
+    let mut mesh = Mesh {
+        materials: document
+            .materials()
+            .map(|m| gltf_material(&m, &images))
+            .collect(),
+        ..Mesh::default()
+    };
     let identity: Mat4 = [
         [1.0, 0.0, 0.0, 0.0],
         [0.0, 1.0, 0.0, 0.0],
@@ -319,11 +326,47 @@ fn load_gltf(path: &Path) -> Result<Mesh, ImportError> {
                     .iter()
                     .map(|t| [t[0], t[1], t[2]])
                     .collect();
-                let [r, g, b, _] = primitive
-                    .material()
+                let material = primitive.material();
+                let [r, g, b, _] = material.pbr_metallic_roughness().base_color_factor();
+                // glTF puts the texture origin at the top left; meshes keep
+                // OBJ's bottom-up v, which the renderers flip.
+                let set = material
                     .pbr_metallic_roughness()
-                    .base_color_factor();
+                    .base_color_texture()
+                    .map_or(0, |t| t.tex_coord());
+                let uvs: Vec<[f32; 2]> = reader
+                    .read_tex_coords(set)
+                    .map(|t| t.into_f32().map(|[u, v]| [u, 1.0 - v]).collect())
+                    .unwrap_or_default();
+                // Primitives without a material use glTF's default one, kept
+                // as a gray material of its own after the file's.
+                let index = material.index().unwrap_or_else(|| {
+                    let fallback = document.materials().len();
+                    if mesh.materials.len() == fallback {
+                        mesh.materials.push(MeshMaterial {
+                            name: "default".to_owned(),
+                            color: [1.0; 3],
+                            alpha: 1.0,
+                            texture: None,
+                            shininess: 0.0,
+                        });
+                    }
+                    fallback
+                });
+                let material = u16::try_from(index).unwrap_or(u16::MAX);
+                let start = mesh.positions.len();
                 append_triangles(&mut mesh, &positions, &normals, &triangles, [r, g, b]);
+                mesh.uvs.resize(start, [0.0, 0.0]);
+                for tri in &triangles {
+                    if tri.iter().all(|&k| (k as usize) < positions.len()) {
+                        mesh.uvs.extend(
+                            tri.iter()
+                                .map(|&k| uvs.get(k as usize).copied().unwrap_or([0.0, 0.0])),
+                        );
+                    }
+                }
+                mesh.vertex_materials.resize(start, u16::MAX);
+                mesh.vertex_materials.resize(mesh.positions.len(), material);
             }
         }
         stack.extend(node.children().map(|child| (child, world)));
@@ -332,6 +375,107 @@ fn load_gltf(path: &Path) -> Result<Mesh, ImportError> {
         return Err(ImportError::Empty);
     }
     Ok(mesh)
+}
+
+/// The file of each glTF image: a file next to the model, or — for images
+/// inside the GLB or in data URIs — the bytes mounted beside the model as
+/// `<model>#<index>.<ext>`, so every renderer reads them like any texture.
+fn gltf_images(
+    document: &gltf::Document,
+    buffers: &[Vec<u8>],
+    path: &Path,
+) -> Vec<Option<std::path::PathBuf>> {
+    let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    let file = path
+        .file_name()
+        .map_or_else(|| "model".to_owned(), |n| n.to_string_lossy().into_owned());
+    let json = document.as_json();
+    let mut mounted = Vec::new();
+    let images = document
+        .images()
+        .map(|image| {
+            let raw = json.images.get(image.index())?;
+            let ext = |mime: Option<&str>| match mime {
+                Some("image/jpeg") => "jpg",
+                _ => "png",
+            };
+            let (bytes, ext) = match (&raw.buffer_view, raw.uri.as_deref()) {
+                (Some(_), _) => {
+                    // A buffer view image must say its type; without it the
+                    // decoder still recognizes PNG and JPEG by their bytes.
+                    let view = document.views().nth(raw.buffer_view?.value())?;
+                    let data = buffers.get(view.buffer().index())?;
+                    let bytes =
+                        data.get(view.offset()..view.offset().checked_add(view.length())?)?;
+                    (
+                        bytes.to_vec(),
+                        ext(raw.mime_type.as_ref().map(|m| m.0.as_str())),
+                    )
+                }
+                (None, Some(uri)) => match uri.split_once(";base64,") {
+                    Some((head, data)) if uri.starts_with("data:") => {
+                        let mime = head.strip_prefix("data:");
+                        (decode_base64(data)?, ext(mime))
+                    }
+                    _ => return Some(dir.join(percent_decode(uri))),
+                },
+                (None, None) => return None,
+            };
+            let name = format!("{file}#{}.{ext}", image.index());
+            let target = dir.join(&name);
+            mounted.push((name, bytes));
+            Some(target)
+        })
+        .collect();
+    if !mounted.is_empty() {
+        newera_core::vfs::mount(&dir, mounted);
+    }
+    images
+}
+
+/// `%20` and the like in a glTF URI.
+fn percent_decode(uri: &str) -> String {
+    let bytes = uri.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = bytes
+            .get(i + 1..i + 3)
+            .and_then(|h| std::str::from_utf8(h).ok())
+            .and_then(|h| u8::from_str_radix(h, 16).ok());
+        match (bytes[i], hex) {
+            (b'%', Some(byte)) => {
+                out.push(byte);
+                i += 3;
+            }
+            (byte, _) => {
+                out.push(byte);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn gltf_material(m: &gltf::Material<'_>, images: &[Option<std::path::PathBuf>]) -> MeshMaterial {
+    let pbr = m.pbr_metallic_roughness();
+    let [r, g, b, a] = pbr.base_color_factor();
+    MeshMaterial {
+        name: m.name().map_or_else(
+            || format!("material{}", m.index().unwrap_or_default()),
+            str::to_owned,
+        ),
+        color: [r, g, b],
+        alpha: if m.alpha_mode() == gltf::material::AlphaMode::Blend {
+            a.clamp(0.0, 1.0)
+        } else {
+            1.0
+        },
+        texture: pbr
+            .base_color_texture()
+            .and_then(|t| images.get(t.texture().source().index())?.clone()),
+        shininess: 0.0,
+    }
 }
 
 /// Appends triangles as flat-shaded faces when normals are missing.
@@ -411,6 +555,103 @@ mod tests {
 #[cfg(test)]
 mod memory_tests {
     use super::*;
+
+    /// A GLB: one triangle with UVs, a named material whose color is an
+    /// image stored in the binary chunk.
+    pub(crate) fn textured_glb(image: &[u8]) -> Vec<u8> {
+        let mut bin = Vec::new();
+        for v in [[0.0f32, 0.0, 0.0], [100.0, 0.0, 0.0], [0.0, 100.0, 0.0]] {
+            bin.extend(v.iter().flat_map(|c| c.to_le_bytes()));
+        }
+        for t in [[0.0f32, 0.0], [1.0, 0.0], [0.0, 0.25]] {
+            bin.extend(t.iter().flat_map(|c| c.to_le_bytes()));
+        }
+        let image_at = bin.len();
+        bin.extend_from_slice(image);
+        while bin.len() % 4 != 0 {
+            bin.push(0);
+        }
+        let json = format!(
+            r#"{{"asset":{{"version":"2.0"}},"scene":0,"scenes":[{{"nodes":[0]}}],"nodes":[{{"mesh":0,"name":"assento"}}],
+            "meshes":[{{"primitives":[{{"attributes":{{"POSITION":0,"TEXCOORD_0":1}},"material":0}}]}}],
+            "materials":[{{"name":"tecido","pbrMetallicRoughness":{{"baseColorTexture":{{"index":0}}}}}}],
+            "textures":[{{"source":0}}],"images":[{{"bufferView":2,"mimeType":"image/png"}}],
+            "buffers":[{{"byteLength":{len}}}],
+            "bufferViews":[{{"buffer":0,"byteLength":36}},{{"buffer":0,"byteOffset":36,"byteLength":24}},{{"buffer":0,"byteOffset":{image_at},"byteLength":{image_len}}}],
+            "accessors":[{{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[100,100,0]}},
+                         {{"bufferView":1,"componentType":5126,"count":3,"type":"VEC2"}}]}}"#,
+            len = bin.len(),
+            image_len = image.len(),
+        );
+        let mut json = json.into_bytes();
+        while json.len() % 4 != 0 {
+            json.push(b' ');
+        }
+        let chunk = |kind: &[u8; 4], data: &[u8]| {
+            let mut out = u32::try_from(data.len()).unwrap().to_le_bytes().to_vec();
+            out.extend_from_slice(kind);
+            out.extend_from_slice(data);
+            out
+        };
+        let body = [chunk(b"JSON", &json), chunk(b"BIN\0", &bin)].concat();
+        let mut glb = b"glTF".to_vec();
+        glb.extend(2u32.to_le_bytes());
+        glb.extend(u32::try_from(12 + body.len()).unwrap().to_le_bytes());
+        glb.extend(body);
+        glb
+    }
+
+    #[test]
+    fn a_glb_keeps_its_uvs_and_the_images_inside_it() {
+        let dir = Path::new("/virtual/catalog-glb-texture-test");
+        let image = b"\x89PNG\r\n\x1a\nnot really decoded here".to_vec();
+        newera_core::vfs::mount(dir, [("chair.glb".to_owned(), textured_glb(&image))]);
+        let model = load_model(&dir.join("chair.glb")).unwrap();
+        let mesh = &model.mesh;
+        assert_eq!(mesh.materials.len(), 1);
+        assert_eq!(mesh.materials[0].name, "tecido");
+        let texture = mesh.materials[0]
+            .texture
+            .as_ref()
+            .expect("the image is kept");
+        assert_eq!(newera_core::vfs::read(texture).unwrap(), image);
+        assert_eq!(mesh.vertex_materials, vec![0; 3]);
+        // v is flipped to OBJ's bottom-up convention.
+        assert_eq!(mesh.uvs, vec![[0.0, 1.0], [1.0, 1.0], [0.0, 0.75]]);
+        newera_core::vfs::unmount(dir);
+    }
+
+    #[test]
+    fn a_gltf_image_next_to_the_model_is_found_by_its_uri() {
+        let dir = Path::new("/virtual/catalog-gltf-uri-test");
+        let glb = textured_glb(b"");
+        // Same file as JSON with the image in a file named with a space.
+        let len = u32::from_le_bytes(glb[12..16].try_into().unwrap()) as usize;
+        let json = String::from_utf8(glb[20..20 + len].to_vec())
+            .unwrap()
+            .replace(
+                r#"{"bufferView":2,"mimeType":"image/png"}"#,
+                r#"{"uri":"tecido%20azul.png"}"#,
+            );
+        let bin = &glb[20 + len + 8..];
+        let json = json.replace(
+            r#""buffers":[{"byteLength""#,
+            r#""buffers":[{"uri":"chair.bin","byteLength""#,
+        );
+        newera_core::vfs::mount(
+            dir,
+            [
+                ("chair.gltf".to_owned(), json.into_bytes()),
+                ("chair.bin".to_owned(), bin.to_vec()),
+            ],
+        );
+        let model = load_model(&dir.join("chair.gltf")).unwrap();
+        assert_eq!(
+            model.mesh.materials[0].texture.as_deref(),
+            Some(dir.join("tecido azul.png").as_path())
+        );
+        newera_core::vfs::unmount(dir);
+    }
 
     #[test]
     fn models_load_from_mounted_files_with_their_materials() {
