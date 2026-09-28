@@ -104,7 +104,7 @@ pub(crate) struct Render3dParams {
     /// `up` (default), `cutaway` or `down`.
     walls: Option<String>,
     /// Storeys drawn: an id like `lv3` draws it and those below, `all`
-    /// every one (default: the one shown and those below).
+    /// every one (default: as the editor shows them).
     level: Option<String>,
     /// Width px (default 480, 64..1600).
     w: Option<u32>,

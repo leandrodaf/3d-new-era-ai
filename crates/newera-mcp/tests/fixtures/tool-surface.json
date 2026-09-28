@@ -4345,7 +4345,7 @@
           "type": "integer"
         },
         "level": {
-          "description": "Storeys drawn: an id like `lv3` draws it and those below, `all` every one (default: the one shown and those below)",
+          "description": "Storeys drawn: an id like `lv3` draws it and those below, `all` every one (default: as the editor shows them)",
           "type": "string"
         },
         "pitch": {
