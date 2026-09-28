@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `ergonomics`, `electrical`, `plumbing` and `lighting` take `level`, the storey to review, as
+  `layout` and `home` already did. They reviewed only the storey shown in the editor, so an agent
+  had to switch the person's view to review another floor, and a review of the upper floor, left
+  shown, quietly became the review of the house. The storey shown is left as it was.
+- `render_3d` takes `level`: a storey draws it and the ones below, `all` draws every one. It drew
+  what the editor showed — the selected storey and those below — so the same camera rendered the
+  stair's landing without the floor above it when the ground floor happened to be selected, and
+  checking the connection meant switching the person's view.
+- A flight of stairs built by hand is a stair: `update(role="stair")` on the group or the solid
+  that draws it opens its hole in the floor of the storey it climbs to, as the catalog's flight
+  does. Before, only the catalog's did, so a staircase of drawn treads and landings meant cutting
+  the upper room's outline around it by hand.
 - A `rules` tool answers what a review checks against — the NBR 5410, 16264, 5626 and 8160
   tables behind `electrical` and `plumbing`, what each `check_layout` problem means, how
   `ergonomics` scores — and the same texts are resources, `newera://rules/<topic>`.
@@ -75,6 +87,102 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A door, a point or a cabinet put on a wall now stands on that wall's storey. Before, `place`,
+  `joinery` and `cabinet_run` put it on the storey shown: a door given a ground-floor wall while
+  the upper floor was selected was made upstairs, loose and opening nothing, and an outlet on
+  that wall was refused as having no wall to hold it. Fixed points are also judged against the
+  walls and ceilings of their own storey.
+- `layout(level="all")` no longer lists every piece that stands over another on the storey
+  below. Pieces of two storeys were an overlap wherever their plans crossed — a sofa downstairs
+  and a bed upstairs, a roof over the furniture — which buried a real problem under hundreds of
+  `cross_level` rows with no height shared. They are now one only where they share height in the
+  building (storeys drawn at the same elevation, a piece reaching into the storey above), and
+  the extent's z is that shared height.
+- `ergonomics` judges a bathroom as a bathroom. A bowl set into a vanity — a "cuba" — was read as
+  a kitchen sink wherever it stood, so a bathroom with a countertop and a bowl, or a double vanity,
+  was reviewed as a kitchen (the five work zones, 366 cm of counter) and still said to have no
+  basin. A bowl in a bathroom is now a basin; a bathroom or a laundry is never reviewed as a
+  kitchen; and the cabinet under a vanity asks the basin's 40 cm in front, not a kitchen's 85.
+- `ergonomics` counts the whole house for what it says of the house. Beds, bedrooms, bathrooms,
+  seats at the table and wardrobes were counted on the storey shown only, so reviewing the upper
+  floor of a house said there was no seat at the table and no bathroom — and advised adding them.
+  `capacity` and the occupancy findings now add up every storey being designed.
+- A glass sliding door lights and airs its room in `ergonomics`, as the French window already
+  did. The catalog's `door-sliding` is drawn with glass leaves, but only windows were counted, so
+  a living room opening onto its balcony through a 220 × 220 cm glass door was said to have no
+  window.
+- `edit_lighting` keeps every fixture it places whole inside the room. It kept only the centers
+  inside, so in an L-shaped room a column of the grid could fall a few centimeters from the inner
+  corner's edge and the fixtures there crossed into the next room (`layout` then called them
+  `outside_rooms`). A fixture now stands at least half its diagonal off every edge.
+- A guard in front of a window no longer blocks it in `layout`. A bar railing, a glass
+  balustrade or a balcony closure was measured by its box, as if it were a solid panel, so a
+  landing guard across a stair window came out as `blocks_window`. Guards are now left out, like
+  plants and glass already were.
+- `home` says a piece's finish, as `mat`, in the words `place` and `update` take it. It said a
+  wall's and a floor's, never a piece's, so a finish set on a cabinet front could not be read back
+  to check it had taken — and a dry run of a new finish answered that nothing changed.
+- A finish that is only a color — `mat:"#c8b89a"` on `place`, `update` or a solid — paints the
+  piece. It was stored as a finish the 3D does not draw (a piece draws a pattern or an image), so
+  the call was accepted and nothing changed on screen; it now sets the piece's color, unless a
+  `color` is given in the same call.
+- An item set into joinery — a sink bowl, a cooktop, an oven — takes its own `color`, `mat` and
+  `opacity` in `update`. It was refused like a board the host builds, so repainting a bathroom
+  meant leaving the bowl as it was or changing the countertop around it. The item is carried whole
+  when its host is rebuilt, and its finish with it; the host's own parts still refuse.
+- `layout` says a group outside every room once. Each of its parts was a row, so a facade panel
+  of 42 slats was 43 `outside_rooms` rows next to the four parapets; a group partly outside still
+  names the parts that are.
+- `plumbing` reads a bowl by the room it is in. Every "cuba" was a basin — a 40 mm branch, one
+  fixture unit — so the kitchen sink was asked for a basin's drain and no grease trap, and the
+  laundry's bowl the same. A bowl in a kitchen (or a gourmet area) is now a kitchen sink, 50 mm and
+  a grease trap as NBR 8160 asks, and in a laundry a laundry sink; in a bathroom, and anywhere
+  else, it is still a basin.
+- `plumbing` names each fixture with its own article: "a pia de cozinha", "a máquina de lavar",
+  "a banheira" — it said "o" for all of them — and a missing cold-water point reads "não tem de onde
+  receber água", which agrees with either. Keys, and acceptances given before, are unchanged.
+- `ergonomics` lets a washer, a dryer or a dishwasher stand under a countertop with a sink in it.
+  A countertop was measured by its box, which reaches the floor, and one with a sink cutout no
+  longer counted as the cabinetry things go under — so the laundry's washer and dryer, set under
+  its counter, were each an error, "ocupa o mesmo lugar", with nowhere to move. A countertop is now
+  its slab; a piece that reaches into the slab still clashes with it.
+- A tall cabinet in a kitchen is its storage in `ergonomics`' five work zones. A joinery cabinet
+  taller than 1.5 m is read as a wardrobe (for its doors' clearance), which the zones did not count,
+  so a kitchen with a 235 cm pantry tower was told storage was missing.
+- `embed` cuts the wooden top of the cabinet under the stone too. A bowl or a cooktop set into a
+  countertop got its hole in the stone, but the joinery cabinet below kept a whole top, so the
+  render showed the board through the bowl and no check noticed; each one had to be cut by hand
+  with `top_cutout`. The cabinets it cut come back as `cut_below`, in the same undoable step; one
+  whose top already has a cutout elsewhere is left alone and named in the notes. `cabinet_run`
+  cuts the tops of its sink and cooktop cabinets the same way.
+- `place` with several items says every one it refuses, and that nothing was placed. It stopped
+  at the first refusal, so a batch of lights with two misplaced ones took two calls to learn about
+  both, and the refusal did not say whether the others had gone in. A single item is refused in the
+  same words as before.
+- `home` gives `elev` for every piece off the floor. It left it out when it matched the catalog's
+  default, which `catalog` does not say, so a LED strip placed without `elev` — 140 cm up, for under
+  a cabinet — read as if it were anywhere, and a profile meant for the ceiling was found hanging in
+  the render instead.
+- The catalog's straight flight keeps its steps a step high when it is resized. It always had 16,
+  so one resized to a 1.31 m landing, 2.24 m deep, climbed in 8 cm risers on 14 cm treads, in 3D
+  and in plan. Its risers now follow its height, the fewest that keep each at most 18 cm (NBR 9050
+  asks 16 to 18): 8 of 16.4 cm there, and still 16 at the catalog's 2.8 m.
+- The ceiling under a stair's void is open. A stair climbing to the storey above opened its hole in
+  that storey's floor, but the ceiling of the room it climbs from stayed closed over it — in 3D, to
+  the lighting and to the ceiling checks — so seeing the stair from either floor meant turning that
+  room's whole ceiling off. The same void is now cut from it.
+- `annotations(stale=true)` reads a size written in meters as meters when it says so. "Piscina —
+  7,40 × 3,00 m" was taken for 7.4 × 3 cm — a group was read as meters only when every number had
+  a fraction — and reported stale against its own 740 × 300 cm. A unit written after a group (or
+  onto its last number) now says how to read it: `m` meters, `cm` centimeters, `mm` millimeters
+  ("600 × 600 mm" was read as 6 m).
+- `ergonomics` measures a TV from the seats that can watch it. It took the nearest sofa or
+  armchair whichever way it faced, so a reading chair beside the TV, its back to it, was "121 cm
+  from a 56-inch TV" while the sofa facing it sat at a comfortable 3.1 m. Seats turned away from the
+  screen are left out.
+- An empty total is 0, not -0.0: `electrical(action=circuits)`'s `total_va` with no circuits yet, and
+  `lighting`'s `lm`, `W` and W/m² for a storey or a room with no light — the sum of nothing in
+  floating point is negative zero, and it went out as such.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every

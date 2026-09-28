@@ -270,6 +270,10 @@ pub(crate) fn piece(
     if let Some(color) = f.color {
         v["color"] = json!(color);
     }
+    // The finish, as `mat` takes it: what was written can be read back.
+    if let Some(mat) = &f.texture {
+        v["mat"] = json!(mat.to_string());
+    }
     if f.mirrored {
         v["mirror"] = json!(true);
     }

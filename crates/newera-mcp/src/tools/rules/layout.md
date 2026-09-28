@@ -5,16 +5,19 @@ the `key` it is accepted by and the elements involved (name, bounds and z).
 
 - **overlap**: classified `collision` (a real clash, listed first), `nesting` (built in,
   resting on, tucked under), `served` (a project point inside a piece on purpose: the water
-  point in the basin, the outlet behind the fridge or set into a cabinet) or `cross_level`,
-  with extent [x,y,z] cm of the shared space; overlap_kinds counts them.
+  point in the basin, the outlet behind the fridge or set into a cabinet) or `cross_level`
+  (pieces of two storeys at the same height in the building: storeys drawn at one elevation,
+  or a piece reaching into the storey above), with extent [x,y,z] cm of the shared space;
+  overlap_kinds counts them.
 - **blocked**: a cabinet, fridge or wardrobe whose opening face is against a solid. It
   cannot be used, and `angle` alone does not show it.
 - **in_wall** `{key, piece, wall}`: a piece inside a wall.
 - **blocks_door** `{key, door, by}`: includes a 60 cm approach on either face, even for
   sliding doors and passages.
 - **blocks_window**: nearby tall or elevated solids masking the window, with extent
-  [width,height] cm; compact countertop objects are exempt, so this does not certify sash
-  operation or ventilation.
+  [width,height] cm; compact countertop objects, plants, lights, glass and guards (bar
+  railings, glass balustrades, balcony glazing) are exempt, so this does not certify sash
+  operation, ventilation or protection against falls.
 - **no_door**: a bedroom or bathroom (by name) with no door — only open passages, listed,
   or no way in at all — said once the storey has doors somewhere; a living room, kitchen or
   balcony left open is not.
@@ -36,7 +39,8 @@ the `key` it is accepted by and the elements involved (name, bounds and z).
 - **outgrew_niche**: an appliance its host stopped holding after the joinery was resized
   around it, with how far it sticks out. Built-in pieces are left out of the overlap check
   by design, which is why nothing else notices.
-- **outside_rooms**: a piece outside every room.
+- **outside_rooms**: a piece outside every room; a group wholly outside (a facade panel of
+  slats) is one row, and a part of one sticking out is that part.
 - **loose**: a fixed point with nothing to be fixed to — loose in a room, on glass, in a
   door or window span, hanging under the ceiling — with why.
 - **above_ceiling**: compares the full luminaire footprint with the room ceiling surface the
