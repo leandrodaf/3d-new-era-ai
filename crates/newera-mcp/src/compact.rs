@@ -258,7 +258,7 @@ pub(crate) fn piece(
     }
     // Said whenever it is off the floor: the catalog's default elevation is
     // nowhere to be read (a LED strip is at 140 cm by itself).
-    if f.elevation.abs() > 0.05 {
+    if f.elevation.abs() >= 0.05 {
         v["elev"] = num(f.elevation);
     }
     if item.map(|i| i.name) != Some(f.name.as_str()) {
