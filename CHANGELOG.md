@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A piece keeps photos and measurements of the product it reproduces, with where they came
+  from. `edit_model` `action=reference` adds a photo (`file`, `view`, `part`, `source`, `note`;
+  `remove`, `clear`), which travels with the project; `render_3d piece=… ref=i` puts it beside
+  the model, drawn from the photo's side and part. `action=measure` keeps a product size
+  (`dimension`: `width`, `depth`, `height` or `<part>.height`; `cm`, `source`, `confirmed`), and
+  `model id=…` lists each against what is drawn, warning when they differ by more than a
+  centimeter — a seat at 49.5 cm checked apart from the chair's overall height. Photos had to
+  be downloaded and compared by hand, and a size's source and meaning were not kept.
+
 - `render_3d` `piece=<id>` draws that piece alone — no walls, rooms or other pieces — seen from
   its own front, back, left, right or top (`aerial` is three-quarter), with `zoom`; the same call
   frames the same view wherever the piece stands. `part=<name>` frames one part of its model,

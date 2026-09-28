@@ -114,6 +114,9 @@ pub(crate) struct Render3dParams {
     piece: Option<String>,
     /// With piece: frame this part of its model (`model` lists them).
     part: Option<String>,
+    /// With piece: its reference photo at this index, beside the render, from the photo's side and part.
+    #[serde(rename = "ref")]
+    reference: Option<usize>,
 }
 /// Plan options as the user sees them: backgrounds, and top views for
 /// imported models.
@@ -282,7 +285,7 @@ impl NewEraMcp {
         result
     }
     #[tool(
-        description = "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations — front looks from the plan's bottom edge (large y) toward y=0, back from y=0 toward large y, left from x=0, right from large x; cut=cm makes a section keeping only what is beyond that plane from the viewer (front cut=200 keeps y<200, so the wall at y=0 stays as the backdrop; to remove it look from back), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). walls=cutaway drops the walls between the eye and a room to 40 cm, walls=down drops them all; either hides ceilings, roofs and the doors, windows and wall pieces of lowered walls, to see the furniture from the side. piece=<id> draws it alone, seen from its own side (view; aerial is three-quarter), framed the same wherever it stands; part=<name> frames one part of its model. Keep w/h small."
+        description = "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations — front looks from the plan's bottom edge (large y) toward y=0, back from y=0 toward large y, left from x=0, right from large x; cut=cm makes a section keeping only what is beyond that plane from the viewer (front cut=200 keeps y<200, so the wall at y=0 stays as the backdrop; to remove it look from back), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). walls=cutaway drops the walls between the eye and a room to 40 cm, walls=down drops them all; either hides ceilings, roofs and the doors, windows and wall pieces of lowered walls, to see the furniture from the side. piece=<id> draws it alone, seen from its own side (view; aerial is three-quarter), framed the same wherever it stands; part=<name> frames one part of its model; ref=i puts its reference photo beside it, from the photo's side. Keep w/h small."
     )]
     pub(crate) fn render_3d(
         &self,
@@ -314,6 +317,7 @@ impl NewEraMcp {
         let assets = doc.asset_dir();
         drop(doc);
         let isolated;
+        let mut photo: Option<String> = None;
         let (home, framed) = match &p.piece {
             Some(raw) => {
                 let id: newera_core::FurnitureId =
@@ -321,10 +325,30 @@ impl NewEraMcp {
                 let piece = home
                     .find_piece(id)
                     .ok_or_else(|| invalid(format!("no piece {raw}")))?;
+                let reference = p
+                    .reference
+                    .map(|i| {
+                        piece.references.get(i).cloned().ok_or_else(|| {
+                            invalid(format!(
+                                "{raw} has {} reference photos (`model id={raw}` lists them)",
+                                piece.references.len()
+                            ))
+                        })
+                    })
+                    .transpose()?;
+                let part = p
+                    .part
+                    .clone()
+                    .or_else(|| reference.as_ref().and_then(|r| r.part.clone()));
                 let (alone, bounds) =
-                    newera_render::isolated(&home, piece, p.part.as_deref(), assets.as_deref())
+                    newera_render::isolated(&home, piece, part.as_deref(), assets.as_deref())
                         .map_err(invalid)?;
-                let side = match p.view.as_deref() {
+                let wanted = p
+                    .view
+                    .clone()
+                    .or_else(|| reference.as_ref().and_then(|r| r.view.clone()));
+                photo = reference.map(|r| r.file);
+                let side = match wanted.as_deref() {
                     None | Some("aerial") => None,
                     Some("front") => Some(newera_render::Side::Front),
                     Some("back") => Some(newera_render::Side::Back),
@@ -342,7 +366,9 @@ impl NewEraMcp {
                 isolated = alone;
                 (&isolated, Some(view))
             }
-            None if p.part.is_some() => return Err(invalid("part: give the piece it belongs to")),
+            None if p.part.is_some() || p.reference.is_some() => {
+                return Err(invalid("part and ref: give the piece they belong to"));
+            }
             None => (&home, None),
         };
         let view = match (framed, p.cam, p.view.as_deref()) {
@@ -390,8 +416,35 @@ impl NewEraMcp {
             Some("down") => Some(newera_render::Cutaway::all(home)),
             Some(other) => return Err(invalid(format!("unknown walls `{other}`"))),
         };
-        let image =
+        let mut image =
             newera_render::render_home_cut(home, &view, cutaway.as_ref(), w, h, assets.as_deref());
+        // The product photo on the left, the model as drawn on the right.
+        if let Some(file) = photo {
+            let path = newera_core::resolve_asset(assets.as_deref(), &file);
+            let reference = newera_core::vfs::read(&path)
+                .map_err(|e| e.to_string())
+                .and_then(|b| newera_core::images::decode(&b).map_err(|e| e.to_string()))
+                .map_err(|e| invalid(format!("{file}: {e}")))?
+                .to_rgba8();
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                clippy::cast_precision_loss
+            )]
+            let width = ((reference.width() as f32 * h as f32 / reference.height().max(1) as f32)
+                .round() as u32)
+                .clamp(1, 1600);
+            let left = image::imageops::resize(
+                &reference,
+                width,
+                h,
+                image::imageops::FilterType::Triangle,
+            );
+            let mut both = image::RgbaImage::from_pixel(width + w, h, image::Rgba([255; 4]));
+            image::imageops::overlay(&mut both, &left, 0, 0);
+            image::imageops::overlay(&mut both, &image, i64::from(width), 0);
+            image = both;
+        }
         let mut png = Vec::new();
         image::DynamicImage::ImageRgba8(image)
             .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)

@@ -209,6 +209,40 @@ impl FarModel {
     }
 }
 
+/// A photo of the product a piece reproduces, kept with the project so a
+/// review can put the model next to it again.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+pub struct Reference {
+    /// The image file; it travels with the project.
+    pub file: String,
+    /// The side it shows: `front`, `back`, `left`, `right`, `top`, `aerial`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<String>,
+    /// The part of the model it shows up close.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<String>,
+    /// Where it came from: a product page, a catalog.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+/// A measurement of the product, with where it came from: what the model
+/// is checked against, apart from the box it was fitted to.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+pub struct Measure {
+    /// `width`, `depth`, `height`, or `<part>.height` (its top above the floor).
+    pub what: String,
+    pub cm: f64,
+    /// Where it came from: a product page, a drawing, a tape.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// Measured or stated by the maker, not estimated.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub confirmed: bool,
+}
+
 /// Descriptive data that doesn't affect geometry.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct PieceInfo {
@@ -390,6 +424,12 @@ pub struct Furniture {
     /// A lighter file for its imported model, drawn from afar.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_far: Option<FarModel>,
+    /// Photos of the product it reproduces.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub references: Vec<Reference>,
+    /// Measurements of the product, with their source.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub measures: Vec<Measure>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub light: Option<Light>,
     /// Pieces of a group, positioned in plan coordinates like top-level ones.
@@ -447,6 +487,8 @@ impl Default for Furniture {
             materials: Vec::new(),
             model_parts: Vec::new(),
             model_far: None,
+            references: Vec::new(),
+            measures: Vec::new(),
             light: None,
             children: Vec::new(),
             drop_on_top: 1.0,

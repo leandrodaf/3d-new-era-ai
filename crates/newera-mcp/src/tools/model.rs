@@ -53,12 +53,13 @@ fn unit_of(
 pub(crate) struct EditModelParams {
     /// `replace` puts another file in the pieces, keeping each one's id and all the rest;
     /// `material` changes one of their materials, `part` one of their parts, by name;
-    /// `lod` gives them a lighter file drawn from afar.
-    #[schemars(extend("enum" = ["replace", "material", "part", "lod"]))]
+    /// `lod` gives them a lighter file drawn from afar; `reference` keeps a photo of the
+    /// product with them, `measure` a measurement of it.
+    #[schemars(extend("enum" = ["replace", "material", "part", "lod", "reference", "measure"]))]
     action: String,
     /// Pieces whose model changes, e.g. `["f12"]`.
     ids: Vec<String>,
-    /// replace/lod: the new .obj/.gltf/.glb file (lod: the lighter one).
+    /// replace/lod/reference: the new .obj/.gltf/.glb file (lod: the lighter one; reference: the photo).
     file: Option<String>,
     /// replace: also every other piece using the same file as `ids` (default: only `ids`).
     #[serde(default)]
@@ -94,6 +95,22 @@ pub(crate) struct EditModelParams {
     /// lod: `always` draws the detailed file however far (a close review); `auto` switches again.
     #[schemars(extend("enum" = ["auto", "always"]))]
     detail: Option<String>,
+    /// reference: the side the photo shows.
+    #[schemars(extend("enum" = ["front", "back", "left", "right", "top", "aerial"]))]
+    view: Option<String>,
+    /// reference/measure: where it came from (a product page).
+    source: Option<String>,
+    /// reference: what it shows.
+    note: Option<String>,
+    /// reference: take out the one at this index (`model id=` lists them).
+    remove: Option<usize>,
+    /// measure: `width`, `depth`, `height` or `<part>.height` (its top above the floor).
+    dimension: Option<String>,
+    /// measure: the product's value, cm.
+    cm: Option<f64>,
+    /// measure: measured or stated by the maker, not estimated.
+    #[serde(default)]
+    confirmed: bool,
 }
 
 /// A short, stable name for the bytes of a file: which version was loaded.
@@ -206,6 +223,60 @@ fn check(out: &mut Value, mesh: &newera_catalog::Mesh, tol: f32) {
             ""
         }
     ));
+}
+
+/// A piece's reference photos, and its product measurements against what
+/// is drawn: `[what, product cm, drawn cm, source, confirmed]`, with a
+/// warning for each more than a centimeter off.
+fn provenance(out: &mut Value, piece: &newera_core::Furniture, drawn: &newera_catalog::Mesh) {
+    if !piece.references.is_empty() {
+        out["references"] = json!(
+            piece
+                .references
+                .iter()
+                .enumerate()
+                .map(|(i, r)| json!([i, r.file, r.view, r.part, r.source, r.note]))
+                .collect::<Vec<_>>()
+        );
+    }
+    if piece.measures.is_empty() {
+        return;
+    }
+    let value = |what: &str| -> Option<f64> {
+        match what {
+            "width" => Some(piece.width),
+            "depth" => Some(piece.depth),
+            "height" => Some(piece.height),
+            _ => {
+                let part = what.strip_suffix(".height")?;
+                let found = drawn.parts.iter().find(|p| p.name == part)?;
+                let (_, max) = drawn.part_bounds(found)?;
+                Some(piece.elevation + f64::from(max[1]))
+            }
+        }
+    };
+    let mut rows = Vec::new();
+    for m in &piece.measures {
+        let now = value(&m.what).map(cm);
+        if let Some(now) = now
+            && (now - m.cm).abs() > 1.0
+        {
+            out["warnings"]
+                .as_array_mut()
+                .expect("list")
+                .push(json!(format!(
+                    "{} drawn {now} cm, the product's is {} cm{}",
+                    m.what,
+                    cm(m.cm),
+                    m.source
+                        .as_ref()
+                        .map(|s| format!(" ({s})"))
+                        .unwrap_or_default()
+                )));
+        }
+        rows.push(json!([m.what, m.cm, now, m.source, m.confirmed]));
+    }
+    out["measures"] = json!(rows);
 }
 
 /// Triangles in a model before it is worth a lighter file for afar.
@@ -352,6 +423,9 @@ impl NewEraMcp {
             None => (loaded.mesh.clone(), loaded.mesh.clone(), Vec::new()),
         };
         out["parts"] = json!(parts(&listed, &hidden, p.part.as_deref()));
+        if let Some(piece) = &piece {
+            provenance(&mut out, piece, &listed);
+        }
         match p.check.as_deref() {
             None => {}
             Some("clashes") => {
@@ -392,7 +466,7 @@ impl NewEraMcp {
 #[tool_router(router = edit_model_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Change the model of placed pieces. replace swaps the file of ids (every=true: of every piece using the same file) in one undo step, keeping each piece's id, position, angle, storey, size (size=natural takes the file's), finish, material overrides, names and links; the new file is read first and nothing changes if it fails. rev refuses the change when the plan moved on since that revision. Reply ok with the ids, then a line per piece: old file → new, the version loaded (bytes, hash), overrides that no longer match a material, and what the new file leaves out. lod gives them a lighter file (file) drawn beyond a distance from the camera (beyond cm, default 400) — same box, materials and parts by name — and detail=always holds the detailed one for a close review. part hides, moves (offset cm: x across, y to the front, z up) or resizes one of their parts by the name model lists — the back cushion alone, the arms unchanged. material changes one of their materials by the name model lists — color, mat (an image over it), repeat, its texture scale (2 halves the image, the piece unchanged), clear. model inspects a file; place imports a new piece."
+        description = "Change the imported model of placed pieces (ids), one undo step each; rev refuses a change if the plan moved on. replace swaps the file (every=true: on every piece using it), keeping id, place, size (size=natural takes the file's), finish, overrides and links; the new file is read first, and the reply gives the version loaded, overrides left matching nothing and what the file leaves out. material changes one material by the name model lists: color, mat (an image), repeat (texture scale: 2 halves it), clear. part hides, moves (offset cm: x across, y to the front, z up) or resizes one part by name — the back cushion alone. lod adds a lighter file drawn beyond a camera distance (beyond cm, default 400); detail=always holds the full one. reference keeps a product photo (file, view, part, source) that render_3d ref= shows beside the model; measure keeps a product size (dimension: width|depth|height|<part>.height, cm, source, confirmed) that model compares with the drawing. model inspects; place imports."
     )]
     pub(crate) fn edit_model(
         &self,
@@ -403,8 +477,10 @@ impl NewEraMcp {
             "material" => self.model_material(p),
             "part" => self.model_part(&p),
             "lod" => self.model_lod(&p),
+            "reference" => self.model_reference(&p),
+            "measure" => self.model_measure(&p),
             other => Err(invalid(format!(
-                "action `{other}`: replace, material, part or lod"
+                "action `{other}`: replace, material, part, lod, reference or measure"
             ))),
         }
     }
@@ -449,7 +525,129 @@ fn at_revision(doc: &newera_core::Document, rev: Option<u64>) -> Result<(), Erro
     }
 }
 
+/// The named parts of a piece's model, as the file has them.
+fn part_names(
+    doc: &newera_core::Document,
+    piece: &newera_core::Furniture,
+) -> Result<Vec<String>, ErrorData> {
+    let file = piece.model.clone().unwrap_or_default();
+    let path = doc.resolve_asset(&file);
+    let loaded = newera_catalog::load_model_in(&path, unit_of(None, Some(piece))?)
+        .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+    Ok(loaded.mesh.parts.iter().map(|p| p.name.clone()).collect())
+}
+
+/// Refuses a part a piece's model does not have, naming the ones it has.
+fn known_part(
+    doc: &newera_core::Document,
+    piece: &newera_core::Furniture,
+    part: &str,
+) -> Result<(), ErrorData> {
+    let names = part_names(doc, piece)?;
+    if names.iter().any(|n| n == part) {
+        Ok(())
+    } else {
+        Err(invalid(format!(
+            "{}: no part `{part}` ({})",
+            piece.id,
+            if names.is_empty() {
+                "its model has no named parts".to_owned()
+            } else {
+                names.join(", ")
+            }
+        )))
+    }
+}
+
 impl NewEraMcp {
+    fn model_reference(&self, p: &EditModelParams) -> Result<String, ErrorData> {
+        let mut doc = self.document.write();
+        at_revision(&doc, p.rev)?;
+        let pieces = model_pieces(&doc, &p.ids)?;
+        let mut commands = Vec::with_capacity(pieces.len());
+        for mut piece in pieces {
+            if p.clear {
+                piece.references.clear();
+            } else if let Some(k) = p.remove {
+                if k >= piece.references.len() {
+                    return Err(invalid(format!(
+                        "{} has {} references (0..{})",
+                        piece.id,
+                        piece.references.len(),
+                        piece.references.len().saturating_sub(1)
+                    )));
+                }
+                piece.references.remove(k);
+            } else {
+                let file = p
+                    .file
+                    .clone()
+                    .ok_or_else(|| invalid("reference: file, the photo (or remove=<i>, clear)"))?;
+                if !newera_core::vfs::exists(&doc.resolve_asset(&file)) {
+                    return Err(invalid(format!("reference: {file} not found")));
+                }
+                if let Some(part) = &p.part {
+                    known_part(&doc, &piece, part)?;
+                }
+                piece.references.push(newera_core::Reference {
+                    file,
+                    view: p.view.clone(),
+                    part: p.part.clone(),
+                    source: p.source.clone(),
+                    note: p.note.clone(),
+                });
+            }
+            commands.push(newera_core::Command::update(piece));
+        }
+        doc.execute(newera_core::Command::Batch { commands })
+            .map_err(core)?;
+        Ok(ok(&doc, &p.ids))
+    }
+
+    fn model_measure(&self, p: &EditModelParams) -> Result<String, ErrorData> {
+        let mut doc = self.document.write();
+        at_revision(&doc, p.rev)?;
+        let pieces = model_pieces(&doc, &p.ids)?;
+        let mut commands = Vec::with_capacity(pieces.len());
+        for mut piece in pieces {
+            match (&p.dimension, p.clear) {
+                (what, true) => piece
+                    .measures
+                    .retain(|m| what.as_ref().is_some_and(|w| *w != m.what)),
+                (None, false) => {
+                    return Err(invalid(
+                        "measure: dimension (width, depth, height or <part>.height) and cm",
+                    ));
+                }
+                (Some(what), false) => {
+                    let cm =
+                        p.cm.filter(|v| v.is_finite() && *v > 0.0)
+                            .ok_or_else(|| invalid("measure: cm, the product's value, above 0"))?;
+                    match what.rsplit_once('.') {
+                        None if ["width", "depth", "height"].contains(&what.as_str()) => {}
+                        Some((part, "height")) => known_part(&doc, &piece, part)?,
+                        _ => {
+                            return Err(invalid(format!(
+                                "measure `{what}`: width, depth, height or <part>.height"
+                            )));
+                        }
+                    }
+                    piece.measures.retain(|m| m.what != *what);
+                    piece.measures.push(newera_core::Measure {
+                        what: what.clone(),
+                        cm,
+                        source: p.source.clone(),
+                        confirmed: p.confirmed,
+                    });
+                }
+            }
+            commands.push(newera_core::Command::update(piece));
+        }
+        doc.execute(newera_core::Command::Batch { commands })
+            .map_err(core)?;
+        Ok(ok(&doc, &p.ids))
+    }
+
     fn model_lod(&self, p: &EditModelParams) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
         at_revision(&doc, p.rev)?;
@@ -1463,6 +1661,115 @@ mod tests {
         assert!(far("f1").is_none());
         assert_eq!(far("f2").map(|f| f.beyond), Some(350.0));
         drop(doc);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn photos_and_measurements_of_the_product_stay_with_the_piece_and_check_it() {
+        let dir = std::env::temp_dir().join(format!("newera-model-refs-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("cadeira.obj"),
+            boxes(&[
+                ("perna", [0.0, 0.0, 0.0], [4.0, 40.0, 4.0]),
+                ("assento", [0.0, 40.0, 0.0], [47.0, 47.0, 50.0]),
+                ("encosto", [0.0, 47.0, 0.0], [47.0, 81.0, 4.0]),
+            ]),
+        )
+        .unwrap();
+        image::RgbaImage::from_pixel(40, 20, image::Rgba([200, 30, 30, 255]))
+            .save(dir.join("frente.png"))
+            .unwrap();
+        let file = dir.join("cadeira.obj").display().to_string();
+        let photo = dir.join("frente.png").display().to_string();
+        let s = server();
+        s.place(Parameters(
+            serde_json::from_str(&format!(
+                r#"{{"items":[{{"model":"{file}","at":[0,0],"unit":"cm"}}]}}"#
+            ))
+            .unwrap(),
+        ))
+        .unwrap();
+        let edit = |json: String| s.edit_model(Parameters(serde_json::from_str(&json).unwrap()));
+        let page = "https://www.tokstok.com.br/cadeira-ares";
+        edit(format!(
+            r#"{{"action":"reference","ids":["f1"],"file":"{photo}","view":"front","source":"{page}","note":"frente"}}"#
+        ))
+        .unwrap();
+        assert!(
+            edit(r#"{"action":"reference","ids":["f1"],"file":"nada.png"}"#.to_owned()).is_err()
+        );
+        assert!(
+            edit(format!(
+                r#"{{"action":"reference","ids":["f1"],"file":"{photo}","part":"braco"}}"#
+            ))
+            .unwrap_err()
+            .message
+            .contains("assento")
+        );
+        for (what, value) in [("height", 81.0), ("assento.height", 49.5)] {
+            edit(format!(
+                r#"{{"action":"measure","ids":["f1"],"dimension":"{what}","cm":{value},"source":"{page}","confirmed":true}}"#
+            ))
+            .unwrap();
+        }
+        assert!(
+            edit(r#"{"action":"measure","ids":["f1"],"dimension":"altura","cm":3}"#.to_owned())
+                .is_err()
+        );
+        let seen = call(&s, r#"{"id":"f1"}"#).unwrap();
+        assert_eq!(
+            seen["references"][0],
+            json!([0, photo, "front", null, page, "frente"])
+        );
+        assert_eq!(
+            seen["measures"],
+            json!([
+                ["height", 81.0, 81.0, page, true],
+                ["assento.height", 49.5, 47.0, page, true]
+            ])
+        );
+        assert!(
+            seen["warnings"]
+                .to_string()
+                .contains("assento.height drawn 47 cm, the product's is 49.5 cm"),
+            "{seen}"
+        );
+        // Side by side: the photo, scaled to the render's height, then the render.
+        let result = s
+            .render_3d(Parameters(
+                serde_json::from_str(r#"{"piece":"f1","ref":0,"w":96,"h":72}"#).unwrap(),
+            ))
+            .unwrap();
+        let rmcp::model::ContentBlock::Image(image) = &result.content[0] else {
+            panic!("expected image")
+        };
+        let png = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &image.data)
+            .unwrap();
+        let both = image::load_from_memory(&png).unwrap().to_rgba8();
+        assert_eq!(both.dimensions(), (144 + 96, 72));
+        assert_eq!(both.get_pixel(10, 10).0, [200, 30, 30, 255]);
+        // Saved and opened again, they are still there.
+        let saved = dir.join("estudo.newera");
+        let file_call = |args: Value| crate::call(s.document.clone(), "file", args).unwrap();
+        file_call(json!({"action": "save", "path": saved}));
+        file_call(json!({"action": "new"}));
+        file_call(json!({"action": "open", "path": saved}));
+        let back = call(&s, r#"{"id":"f1"}"#).unwrap();
+        assert_eq!(back["measures"].as_array().unwrap().len(), 2, "{back}");
+        let kept = back["references"][0][1].as_str().unwrap().to_owned();
+        let doc = s.document.read();
+        assert!(
+            newera_core::vfs::exists(&doc.resolve_asset(&kept)),
+            "{kept}"
+        );
+        drop(doc);
+        edit(r#"{"action":"reference","ids":["f1"],"remove":0}"#.to_owned()).unwrap();
+        edit(r#"{"action":"measure","ids":["f1"],"dimension":"height","clear":true}"#.to_owned())
+            .unwrap();
+        let after = call(&s, r#"{"id":"f1"}"#).unwrap();
+        assert!(after.get("references").is_none(), "{after}");
+        assert_eq!(after["measures"].as_array().unwrap().len(), 1);
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

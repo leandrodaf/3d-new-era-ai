@@ -506,6 +506,14 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
                     object("{tris, heaviest [[part, tris, %]], copies, in_project}"),
                 ),
                 (
+                    "references",
+                    list("With id: [index, file, view, part, source, note]"),
+                ),
+                (
+                    "measures",
+                    list("With id: [what, product cm, drawn cm, source, confirmed]"),
+                ),
+                (
                     "clashes",
                     list("check: [part, part, triangle pairs, at [x,y,z], depth] cm"),
                 ),
