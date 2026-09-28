@@ -75,10 +75,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- `ergonomics` counts the whole house for what it says of the house. Beds, bedrooms, bathrooms,
-  seats at the table and wardrobes were counted on the storey shown only, so reviewing the upper
-  floor of a house said there was no seat at the table and no bathroom — and advised adding them.
-  `capacity` and the occupancy findings now add up every storey being designed.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
