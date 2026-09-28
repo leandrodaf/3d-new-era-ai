@@ -92,6 +92,8 @@ struct Planned {
     neighbors: Vec<String>,
     /// Items embedded in replaced hosts, to put in the new ones.
     carry: Vec<Furniture>,
+    /// The wall's storey, where the modules stand.
+    level: Option<newera_core::LevelId>,
 }
 
 fn joinery_kind(f: &Furniture) -> Option<String> {
@@ -834,6 +836,7 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
         notes,
         neighbors,
         carry,
+        level: home.resolve_level(wall.level),
     })
 }
 
@@ -934,6 +937,7 @@ fn commands(doc: &mut Document, planned: &Planned) -> Result<(Vec<Command>, Valu
             m.elevation,
             &mut next,
         );
+        group.level = planned.level;
         group.properties.insert(RUN_KEY.into(), tag.clone());
         group.properties.insert(REQUEST_KEY.into(), stored.clone());
         rows.push(json!([
