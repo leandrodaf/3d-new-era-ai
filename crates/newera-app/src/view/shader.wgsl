@@ -13,6 +13,9 @@ var image_sampler: sampler;
 
 // Must match `IMAGE_BASE` in mesh.rs.
 const IMAGE_BASE: u32 = 100u;
+// Must match `MASK_FLAG` in mesh.rs: an image whose alpha cuts holes, the
+// cutoff in bits 24-30 (127ths).
+const MASK_FLAG: u32 = 0x80000000u;
 
 struct VertexIn {
     @location(0) position: vec3<f32>,
@@ -229,13 +232,18 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     // Sample unconditionally: derivatives must be taken in uniform control flow.
     let d = fwidth(in.uv);
     pixel = max(d.x, d.y);
-    let layer = select(0u, in.kind - IMAGE_BASE, in.kind >= IMAGE_BASE);
-    let texel = textureSample(images, image_sampler, vec2<f32>(in.uv.x, -in.uv.y), layer).rgb;
+    let kind = in.kind & 0x00ffffffu;
+    let layer = select(0u, kind - IMAGE_BASE, kind >= IMAGE_BASE);
+    let sampled = textureSample(images, image_sampler, vec2<f32>(in.uv.x, -in.uv.y), layer);
+    let texel = sampled.rgb;
+    if ((in.kind & MASK_FLAG) != 0u && sampled.a < f32((in.kind >> 24u) & 0x7fu) / 127.0) {
+        discard;
+    }
     var albedo = in.color.rgb;
-    if (in.kind >= IMAGE_BASE) {
+    if (kind >= IMAGE_BASE) {
         albedo = in.color.rgb * texel;
-    } else if (in.kind > 0u) {
-        albedo = in.color.rgb * pattern_shade(in.kind, in.uv);
+    } else if (kind > 0u) {
+        albedo = in.color.rgb * pattern_shade(kind, in.uv);
     }
     let n = normalize(in.normal);
     let diffuse = max(dot(n, -u.light_dir), 0.0);

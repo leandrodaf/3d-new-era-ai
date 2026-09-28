@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A texture's alpha can cut holes: a glTF material with `alphaMode: MASK` (and its
+  `alphaCutoff`), or an MTL whose `map_d` is its color image, has holes wherever the image's
+  alpha is under the cutoff — in the 3D view, the previews and top views, and photos, where
+  rays and sunlight pass through them — and is seen from both sides when the file says so (an
+  MTL mask always is). Exports keep it: GLB as `MASK`, OBJ as `map_d`. A cane weave had to be
+  modeled strand by strand: 62,256 of the Ares chair's 89,718 triangles.
+
 - `edit_model` `action=part` hides, moves (`offset`, cm: x across, y to the front, z up) or
   resizes (`scale`, about its center) one named part of an imported model — the back cushion
   alone, the arms where they were — and `clear` puts it back. Every view draws it that way, and

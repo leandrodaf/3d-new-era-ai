@@ -1,5 +1,5 @@
 {
-  "total": 117326,
+  "total": 117313,
   "tools": {
     "accept": {
       "total": 1360,
@@ -242,8 +242,8 @@
       "output": 302
     },
     "model": {
-      "total": 2660,
-      "description": 1129,
+      "total": 2647,
+      "description": 1116,
       "input": 754,
       "output": 583
     },

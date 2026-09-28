@@ -47,12 +47,38 @@ pub struct Vertex {
     pub color: [f32; 4],
     /// Texture coordinates in tiles.
     pub uv: [f32; 2],
-    /// 0 plain, `1..` procedural pattern, [`IMAGE_BASE`]`+n` image layer `n`.
+    /// 0 plain, `1..` procedural pattern, [`IMAGE_BASE`]`+n` image layer `n`;
+    /// with [`MASK_FLAG`], an image whose alpha cuts holes ([`kind_cutoff`]).
     pub kind: u32,
 }
 
 /// Material kinds at or above this sample image layer `kind - IMAGE_BASE`.
 pub const IMAGE_BASE: u32 = 100;
+
+/// Set on an image kind whose alpha cuts holes: where the image's alpha is
+/// under the cutoff in bits 24–30 (in 127ths), nothing is drawn.
+pub const MASK_FLAG: u32 = 1 << 31;
+
+/// The pattern or image layer of a kind, without its alpha mask.
+#[must_use]
+pub fn kind_layer(kind: u32) -> u32 {
+    kind & 0x00FF_FFFF
+}
+
+/// The alpha under which an image kind has a hole, if it is masked.
+#[must_use]
+pub fn kind_cutoff(kind: u32) -> Option<f32> {
+    #[allow(clippy::cast_precision_loss)]
+    (kind & MASK_FLAG != 0).then(|| ((kind >> 24) & 0x7F) as f32 / 127.0)
+}
+
+/// An image kind cut where its alpha is under `cutoff` (0..1).
+#[must_use]
+pub fn masked(kind: u32, cutoff: f32) -> u32 {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let bits = (cutoff.clamp(0.0, 1.0) * 127.0).round() as u32;
+    kind_layer(kind) | MASK_FLAG | (bits << 24)
+}
 
 #[derive(Debug, Default)]
 pub struct Mesh {
@@ -1308,6 +1334,9 @@ impl Mesh {
                 } else if let Some(layer) = layer {
                     color = [1.0; 3];
                     kind = *layer;
+                    if let Some(cutoff) = local.material_of(k).and_then(|m| m.cutoff) {
+                        kind = masked(kind, cutoff);
+                    }
                     uv = match planar {
                         Some(size) => planar_uv(position, normal, *size),
                         // The shader flips v, matching OBJ's bottom-up convention.
@@ -1348,6 +1377,25 @@ impl Mesh {
                 &mut self.indices
             };
             target.extend(order.map(|i| base + i));
+            // A sheet seen from both sides (a cane weave) gets its back as
+            // faces of their own, facing the other way.
+            if local
+                .material_of(tri[0] as usize)
+                .is_some_and(|m| m.double_sided)
+            {
+                let back = self.next_index();
+                for &i in order.iter().rev() {
+                    let mut v = self.vertices[(base + i) as usize];
+                    v.normal = v.normal.map(|c| -c);
+                    self.vertices.push(v);
+                }
+                let target = if clear {
+                    &mut self.transparent
+                } else {
+                    &mut self.indices
+                };
+                target.extend([back, back + 1, back + 2]);
+            }
         }
     }
 
@@ -2182,6 +2230,8 @@ mod material_tests {
                 alpha: 1.0,
                 texture: None,
                 shininess: 0.0,
+                cutoff: None,
+                double_sided: false,
             }],
             parts: vec![],
         };
@@ -2230,6 +2280,8 @@ mod material_tests {
                 alpha: 1.0,
                 texture: Some("trama.png".into()),
                 shininess: 0.0,
+                cutoff: None,
+                double_sided: false,
             }],
             parts: vec![],
         };

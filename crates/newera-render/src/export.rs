@@ -17,20 +17,24 @@ struct Look {
     image: Option<usize>,
     color: [f32; 3],
     alpha: f32,
+    /// Alpha mask cutoff of the image, when it cuts holes.
+    cutoff: Option<f32>,
 }
 
-type LookKey = (Option<usize>, [u32; 4]);
+type LookKey = (Option<usize>, [u32; 4], Option<u32>);
 
 /// Encoded bytes and file extension of an image layer.
 pub type ImageSource<'a> = &'a dyn Fn(&str) -> Option<(Vec<u8>, String)>;
 
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn key(v: &Vertex) -> LookKey {
-    let image = (v.kind >= IMAGE_BASE).then(|| (v.kind - IMAGE_BASE) as usize);
+    let layer = crate::mesh::kind_layer(v.kind);
+    let image = (layer >= IMAGE_BASE).then(|| (layer - IMAGE_BASE) as usize);
     let q = |c: f32| (c.clamp(0.0, 1.0) * 255.0).round() as u32;
     (
         image,
         [q(v.color[0]), q(v.color[1]), q(v.color[2]), q(v.color[3])],
+        crate::mesh::kind_cutoff(v.kind).map(q),
     )
 }
 
@@ -55,6 +59,7 @@ fn look(key: &LookKey) -> Look {
         image: key.0,
         color: [key.1[0], key.1[1], key.1[2]].map(|c| c as f32 / 255.0),
         alpha: key.1[3] as f32 / 255.0,
+        cutoff: key.2.map(|c| c as f32 / 255.0),
     }
 }
 
@@ -185,6 +190,9 @@ pub fn glb(mesh: &Mesh, images: ImageSource<'_>) -> Vec<u8> {
             let _ = write!(material, r#","baseColorTexture":{{"index":{t}}}"#);
         }
         material.push('}');
+        if let (Some(cutoff), Some(_)) = (l.cutoff, texture) {
+            let _ = write!(material, r#","alphaMode":"MASK","alphaCutoff":{cutoff}"#);
+        }
         if l.alpha < 0.99 {
             material.push_str(r#","alphaMode":"BLEND","doubleSided":true"#);
         }
@@ -275,6 +283,10 @@ fn obj(mesh: &Mesh, path: &Path, images: ImageSource<'_>) -> Result<(), ExportEr
             });
             if let Some(file) = file {
                 let _ = writeln!(mtl, "map_Kd {file}");
+                // Its own alpha cuts the holes, as the importer reads it back.
+                if l.cutoff.is_some() {
+                    let _ = writeln!(mtl, "map_d {file}");
+                }
             }
         }
         let _ = writeln!(obj, "usemtl {name}");
