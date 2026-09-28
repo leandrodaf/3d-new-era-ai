@@ -223,6 +223,13 @@ impl NewEraMcp {
         // one until the room reaches the reference.
         let mut count = fixtures_needed(wanted, area, fixture_lm).clamp(1, 60);
         let (mut placed, mut after) = layout(count);
+        if placed.is_empty() {
+            return Err(invalid(format!(
+                "no spot in {} keeps a {cat} whole inside it ({} cm off every edge): a smaller fixture, or place it by hand",
+                room.id,
+                (template.width.hypot(template.depth) / 2.0).ceil()
+            )));
+        }
         #[allow(clippy::cast_precision_loss)]
         let gain = (after.average - before.average) / count as f64;
         if gain > 0.0 {
@@ -339,5 +346,24 @@ mod tests {
             ))
             .is_err()
         );
+    }
+
+    #[test]
+    fn a_fill_with_no_room_for_the_fixture_places_nothing() {
+        let s = server();
+        let params: CreateParams = serde_json::from_str(
+            r#"{"walls":[{"pts":[[0,0],[80,0],[80,80],[0,80]],"closed":true}],"rooms":[{"name":"Despensa","at":[40,40]}]}"#,
+        )
+        .unwrap();
+        s.create(Parameters(params)).unwrap();
+        let room = s.document.read().home().rooms[0].id.to_string();
+        let refused = s
+            .lighting(Parameters(
+                serde_json::from_str(&format!(r#"{{"room":"{room}","fill":"led-panel"}}"#))
+                    .unwrap(),
+            ))
+            .unwrap_err();
+        assert!(refused.message.contains("no spot"), "{}", refused.message);
+        assert!(s.document.read().home().furniture.is_empty());
     }
 }

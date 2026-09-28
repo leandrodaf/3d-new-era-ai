@@ -692,7 +692,11 @@ pub fn grid_positions(points: &[Point2], count: usize, clear: f64) -> Vec<Point2
         }
         want += count - grid.len();
     }
-    vec![crate::polygon_centroid(points).unwrap_or(lo)]
+    // The middle, if even that keeps the fixture in; else nowhere does.
+    crate::polygon_centroid(points)
+        .filter(|c| inside(points, *c) && edge_distance(points, *c) >= clear)
+        .into_iter()
+        .collect()
 }
 
 /// Distance from `p` to the nearest edge of the outline, cm.
@@ -821,6 +825,11 @@ mod tests {
                 assert!(edge_distance(&l, *p) >= 30.0, "{count}: {p:?} on the edge");
             }
         }
+        // A room too small for the fixture has no spot for it, not a wrong one.
+        let closet =
+            [(0.0, 0.0), (40.0, 0.0), (40.0, 40.0), (0.0, 40.0)].map(|(x, y)| Point2::new(x, y));
+        assert!(grid_positions(&closet, 1, 30.0).is_empty());
+        assert_eq!(grid_positions(&closet, 1, 10.0).len(), 1);
     }
 
     #[test]
