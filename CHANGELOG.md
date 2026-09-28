@@ -75,11 +75,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- `annotations(stale=true)` reads a size written in meters as meters when it says so. "Piscina —
-  7,40 × 3,00 m" was taken for 7.4 × 3 cm — a group was read as meters only when every number had
-  a fraction — and reported stale against its own 740 × 300 cm. A unit written after a group (or
-  onto its last number) now says how to read it: `m` meters, `cm` centimeters, `mm` millimeters
-  ("600 × 600 mm" was read as 6 m).
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
