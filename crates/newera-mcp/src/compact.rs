@@ -256,7 +256,9 @@ pub(crate) fn piece(
     if default_size != Some([f.width, f.depth, f.height]) {
         v["wdh"] = json!([num(f.width), num(f.depth), num(f.height)]);
     }
-    if (item.map_or(0.0, |i| i.elevation) - f.elevation).abs() > 0.05 {
+    // Said whenever it is off the floor: the catalog's default elevation is
+    // nowhere to be read (a LED strip is at 140 cm by itself).
+    if f.elevation.abs() >= 0.05 {
         v["elev"] = num(f.elevation);
     }
     if item.map(|i| i.name) != Some(f.name.as_str()) {

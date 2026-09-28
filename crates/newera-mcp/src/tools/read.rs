@@ -570,4 +570,28 @@ mod tests {
         .unwrap();
         assert_eq!(dry["changed"][0]["to"]["mat"], "wood", "{dry}");
     }
+
+    #[test]
+    fn a_raised_piece_says_its_elevation_even_when_it_is_the_catalogs() {
+        let s = server();
+        s.place(Parameters(
+            serde_json::from_str(
+                r#"{"items":[{"cat":"led-strip","at":[100,100]},{"cat":"bed-double","at":[300,300]}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let read: serde_json::Value = serde_json::from_str(
+            &s.get_home(Parameters(
+                serde_json::from_str(r#"{"kinds":["furniture"],"fields":["elev"]}"#).unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let rows = read["furniture"].as_array().unwrap();
+        let strip = s.document.read().home().furniture[0].elevation;
+        assert!(strip > 0.0, "the strip is raised by its catalog");
+        assert_eq!(rows[0]["elev"].as_f64(), Some(strip), "{read}");
+        assert!(rows[1].get("elev").is_none(), "on the floor: {read}");
+    }
 }
