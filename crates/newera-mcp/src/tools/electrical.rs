@@ -86,6 +86,8 @@ pub(crate) struct ElectricalReadParams {
     action: Option<String>,
     /// For `wifi`: the band the suggestion aims at, `2.4`, `5` (default) or `6`.
     band: Option<String>,
+    /// Storey to review, an id like `lv3` (default: the one shown).
+    level: Option<String>,
 }
 
 #[tool_router(router = electrical_router, vis = "pub(crate)")]
@@ -106,11 +108,15 @@ impl NewEraMcp {
                 )));
             }
         };
-        self.electrical(Parameters(ElectricalParams {
+        let params = ElectricalParams {
             action: Some(action.to_owned()),
             band: p.band,
             ..ElectricalParams::default()
-        }))
+        };
+        match self.on_storey(p.level.as_deref())? {
+            Some(scratch) => scratch.electrical(Parameters(params)),
+            None => self.electrical(Parameters(params)),
+        }
     }
     #[tool(
         description = "Change the electrical and telecom project (`electrical` reads it); each action is one undoable step. assign {ids, circuit, va?}, or circuits {\"C1\": [ids], …} for the whole division, writes circuits, power and volts (127|220; a 220 V outlet makes its circuit 220 V) on points; on automation points it takes standby_w, on a dimmer max_w, on a panel modules. voltage {volts?, short_ka?, earthing?}. cable {kind, pts} draws a run by hand (with ids or circuit instead of pts it is a route). route {kind, ids? | circuit?, via?: ceiling|floor|wall|tape, cat?, from?} lays the run as it is built, from the nearest panel along and inside the walls, replacing the earlier run of the circuit, and answers {via, suggested, length_m, by_premise_m, bends, materials: [[item, qty, unit]]}; without via it takes the cheapest premise that can be built. via=tape is surface flat wiring, power only (`rules` topic=electrical). wifi {ids, standard?, poe?, uplink?, bands?} writes those on access points."

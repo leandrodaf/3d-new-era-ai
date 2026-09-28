@@ -2606,6 +2606,10 @@
         "band": {
           "description": "For `wifi`: the band the suggestion aims at, `2.4`, `5` (default) or `6`",
           "type": "string"
+        },
+        "level": {
+          "description": "Storey to review, an id like `lv3` (default: the one shown)",
+          "type": "string"
         }
       },
       "type": "object"
@@ -2782,7 +2786,6 @@
           "type": "object"
         }
       },
-      "additionalProperties": false,
       "properties": {
         "children": {
           "description": "Of them, children (sleep in single beds or cribs)",
@@ -2795,6 +2798,10 @@
         "elderly": {
           "description": "Of them, elderly people",
           "type": "integer"
+        },
+        "level": {
+          "description": "Storey to review, an id like `lv3` (default: the one shown)",
+          "type": "string"
         },
         "occupants": {
           "description": "People living in the home (default 2)",
@@ -3547,6 +3554,10 @@
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "level": {
+          "description": "Storey to review, an id like `lv3` (default: the one shown)",
+          "type": "string"
+        },
         "plane": {
           "description": "Work plane height cm (default 75)",
           "type": "number"
@@ -4287,6 +4298,12 @@
     "description": "Plumbing review, NBR 5626 (cold and hot water) and NBR 8160 (sewer): points are the catalog's plumbing pieces (water and sewer points, valves, drains, traps, grease trap, inspection box, meter, gas, vent) and fixtures are the pieces that use water. Answers {points:{kind:count}, pipes_m, findings:[[sev, place, msg, src, key, accepted?]], pending, orphaned, sources}: water and sewer points by every fixture, discharge diameters, floor drains and traps in wet rooms, grease trap, where the water comes from and the sewer goes, points no pipe reaches. The drain models and what each check demands: `rules` topic=plumbing. Pipe runs are laid with `edit_plumbing`; `accept` marks a finding right as drawn.",
     "inputSchema": {
       "additionalProperties": false,
+      "properties": {
+        "level": {
+          "description": "Storey to review, an id like `lv3` (default: the one shown)",
+          "type": "string"
+        }
+      },
       "type": "object"
     },
     "name": "plumbing",

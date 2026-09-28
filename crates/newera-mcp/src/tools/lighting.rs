@@ -31,6 +31,8 @@ pub(crate) struct LightingReadParams {
     room: Option<String>,
     /// Work plane height cm (default 75).
     plane: Option<f64>,
+    /// Storey to review, an id like `lv3` (default: the one shown).
+    level: Option<String>,
 }
 /// A room to fill with light.
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -55,11 +57,15 @@ impl NewEraMcp {
         &self,
         Parameters(p): Parameters<LightingReadParams>,
     ) -> Result<String, ErrorData> {
-        self.lighting(Parameters(LightingParams {
+        let params = LightingParams {
             room: p.room,
             plane: p.plane,
             ..LightingParams::default()
-        }))
+        };
+        match self.on_storey(p.level.as_deref())? {
+            Some(scratch) => scratch.lighting(Parameters(params)),
+            None => self.lighting(Parameters(params)),
+        }
     }
     #[tool(
         name = "edit_lighting",
@@ -143,6 +149,9 @@ impl NewEraMcp {
                 .collect();
             codes.sort_unstable();
             codes.dedup();
+            // The totals are the storey's, like its rooms.
+            let shown = home.current_level();
+            let lights: Vec<_> = lights.iter().filter(|e| e.level == shown).collect();
             let lumens: f64 = lights.iter().map(|e| e.flux).sum();
             let watts: f64 = lights.iter().map(|e| e.watts).sum();
             return Ok(serde_json::json!({

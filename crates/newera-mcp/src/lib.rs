@@ -181,7 +181,11 @@ fn run(
                 .edit_video(Parameters(params(args)?))
                 .map_err(reason)?,
         )),
-        "ergonomics" => Ok(said(server.read_ergonomics(Parameters(params(args)?)))),
+        "ergonomics" => Ok(said(
+            server
+                .read_ergonomics(Parameters(params(args)?))
+                .map_err(reason)?,
+        )),
         "layout" => Ok(said(
             server
                 .read_check_layout(Parameters(params(args)?))
