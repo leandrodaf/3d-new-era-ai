@@ -10,7 +10,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use super::NewEraMcp;
-use super::reply::{background_scale, core, invalid, ok};
+use super::reply::{Raw, background_scale, core, forward, invalid, ok, take_action};
 use crate::compact;
 use crate::edit::{self, BackgroundParams};
 
@@ -36,11 +36,63 @@ pub(crate) struct TraceParams {
     /// Wall height cm when creating (default 250).
     h: Option<f64>,
 }
+/// What `edit_background` takes; each action goes on to its own parameters.
+#[derive(JsonSchema)]
+#[allow(dead_code)] // a schema, never built
+pub(crate) struct EditBackgroundSchema {
+    /// What to do with the scanned plan.
+    #[schemars(extend("enum" = ["set", "trace"]))]
+    action: String,
+    /// For `set`: image file (png/jpg/webp/bmp); required when there is no background yet.
+    path: Option<String>,
+    /// For `set`: the scale, cm per image pixel.
+    cm_per_px: Option<f64>,
+    /// For `set`: the vertical scale, when it differs.
+    cm_per_px_y: Option<f64>,
+    /// For `set`: two pixels with a known real distance, `{a, b, cm}`.
+    calibrate: Option<edit::Calibration>,
+    /// For `set`: several known distances, fitting X and Y scales apart.
+    calibrations: Option<Vec<edit::Calibration>>,
+    /// For `set`: clockwise turn of the image, degrees.
+    angle: Option<f64>,
+    /// For `set`: plan position cm of the image's top-left corner.
+    offset: Option<Point2>,
+    /// For `set`: how opaque the image is drawn, 0..1.
+    opacity: Option<f64>,
+    /// For `set`: show or hide the image without removing it.
+    visible: Option<bool>,
+    /// For `set`: remove the background.
+    clear: Option<bool>,
+    /// For `trace`: luminance 0..255 below which a gray pixel is ink (default 128).
+    threshold: Option<u8>,
+    /// For `trace`: shortest wall kept, cm (default 60).
+    min_len: Option<f64>,
+    /// For `trace`: thinnest wall kept, cm (default 5).
+    t_min: Option<f64>,
+    /// For `trace`: thickest wall kept, cm (default 45).
+    t_max: Option<f64>,
+    /// For `trace`: doors and windows up to this wide don't split a wall, cm (default 130).
+    max_gap: Option<f64>,
+    /// For `trace`: only this part of the plan `[x0, y0, x1, y1]` cm.
+    region: Option<[f64; 4]>,
+    /// For `trace`: wall height cm (default 250).
+    h: Option<f64>,
+}
 #[tool_router(router = background_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Set a scanned plan as background at real scale: path, then cm_per_px (+cm_per_px_y), calibrate {a,b px, cm} or calibrations [{a,b,cm}…] (fits X/Y scales), angle (clockwise °); offset/opacity/visible; clear=true removes."
+        description = "Put a scanned plan under the drawing at real scale, or turn it into walls. set {path, then cm_per_px (+cm_per_px_y), calibrate {a,b px, cm} or calibrations [{a,b,cm}…] to fit X/Y scales; angle (clockwise °); offset, opacity, visible; clear=true removes it}. trace creates, in one undo step, the walls `background` detects (same arguments, plus h). Check with `render_plan` bg=0.5."
     )]
+    pub(crate) fn edit_background(
+        &self,
+        Parameters(Raw(mut args, _)): Parameters<Raw<EditBackgroundSchema>>,
+    ) -> Result<String, ErrorData> {
+        match take_action(&mut args, "action", &["set", "trace"], None)?.as_str() {
+            "set" => self.set_background(Parameters(forward(args)?)),
+            _ => self.trace_walls(Parameters(forward(args)?)),
+        }
+    }
+    /// Puts a scanned plan under the drawing.
     pub(crate) fn set_background(
         &self,
         Parameters(p): Parameters<BackgroundParams>,
@@ -57,8 +109,8 @@ impl NewEraMcp {
         Ok(ok(&doc, &[]))
     }
     #[tool(
-        name = "trace_background",
-        description = "Trace walls from the background image (set_background first): thick dark or gray bands across or down the image become walls (colored areas — lawn, plants, furniture — are ignored; collinear pieces split by doors/windows up to max_gap join; region limits the search). Returns rows [[x1,y1],[x2,y2],t] in plan cm; trace_walls adds them as walls. Check with render_plan bg=0.5."
+        name = "background",
+        description = "Walls detected in the scanned plan under the drawing (`edit_background` action=set puts it there): thick dark or gray bands across or down the image become walls, colored areas (lawn, plants, furniture) are ignored, and pieces split by doors or windows up to max_gap join; region limits the search. Returns rows [[x1,y1],[x2,y2],t] in plan cm without drawing; `edit_background` action=trace creates them. Check with `render_plan` bg=0.5."
     )]
     pub(crate) fn read_trace(
         &self,
@@ -66,14 +118,12 @@ impl NewEraMcp {
     ) -> Result<String, ErrorData> {
         if p.create {
             return Err(invalid(
-                "trace_background only lists; trace_walls creates them",
+                "background only lists; edit_background (action=trace) creates them",
             ));
         }
         self.trace_background(Parameters(p))
     }
-    #[tool(
-        description = "Trace walls from the background image, as trace_background does, and create them in one undo step (h: wall height cm, default 250). Check with render_plan bg=0.5."
-    )]
+    /// Traces the walls and creates them.
     pub(crate) fn trace_walls(
         &self,
         Parameters(mut p): Parameters<TraceParams>,

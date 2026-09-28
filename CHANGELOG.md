@@ -37,6 +37,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **Breaking: the MCP tools have new names, and some are one tool now** (59 → 53, the server
+  instructions list them all by what they are for). A read is a noun and the tool that changes it is
+  `edit_<noun>`: `get_home` → `home`, `set_home` → `edit_home`, `check_layout` → `layout`,
+  `trace_background` → `background`, `fill_lighting` → `edit_lighting`, `checkpoints` → `history`.
+  `new_home`, `open_home` and `save_home` are `file` with `action`; `undo`, `redo` and `checkpoint` are
+  `edit_history`; `split_wall` and `merge_walls` are `edit_walls`; `set_background` and `trace_walls`
+  are `edit_background`; `export_plan` and `export_cut_list` are `export` (`what=cut_list` for the
+  cut list). The skills, the hosted service and the browser tab speak the new names; an agent that
+  calls an old one is told the tool does not exist.
 - The tool list an agent reads on every conversation is a quarter smaller (149 KB to 113 KB): the
   reviews' descriptions say what they answer and point to `rules` for the tables, output schemas go
   out without their field descriptions, and defaults that only restate absence are left out. The

@@ -8,7 +8,7 @@ saying what it does and how to run it.
 
 | Script | What it does |
 |---|---|
-| `mcp.sh` | Calls one MCP tool on a running editor or server and prints the reply (`make mcp TOOL=get_home`). |
+| `mcp.sh` | Calls one MCP tool on a running editor or server and prints the reply (`make mcp TOOL=home`). |
 | `make-icons.py` | Renders every icon the project ships (macOS, Windows, Linux) from one mark (`make icons`). |
 
 ## Tests

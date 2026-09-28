@@ -12,7 +12,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use super::NewEraMcp;
-use super::reply::invalid;
+use super::reply::{Raw, forward, invalid, take_action};
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct RenderParams {
@@ -33,6 +33,24 @@ pub(crate) struct RenderParams {
     /// Background image opacity for this render (e.g. 0.5 to compare the
     /// drawing with the scanned reference; 0 hides it).
     pub(crate) bg: Option<f64>,
+}
+/// What `export` takes; each kind of file goes on to its own parameters.
+#[derive(JsonSchema)]
+#[allow(dead_code)] // a schema, never built
+pub(crate) struct ExportSchema {
+    /// The file to write; its extension picks the format.
+    path: String,
+    /// Default `plan`: the drawing or the 3D model. `cut_list`: the boards of the joinery.
+    #[schemars(extend("enum" = ["plan", "cut_list"]))]
+    what: Option<String>,
+    /// For `plan`, `.png` only: width px (default 1600).
+    w: Option<u32>,
+    /// For `plan`, `.png` only: height px (default 1200).
+    h: Option<u32>,
+    /// For `plan`, `.pdf`: scale denominator (50 → 1:50); omitted fits the sheet.
+    scale: Option<f64>,
+    /// For `cut_list`: builds or drawn groups (default every one on this storey).
+    ids: Option<Vec<String>>,
 }
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct ExportParams {
@@ -388,8 +406,18 @@ impl NewEraMcp {
         )]))
     }
     #[tool(
-        description = "Export to a file by extension: plan .pdf (A3; scale=50/100 or fit), .svg (true scale) or .png; 3D model .glb or .obj."
+        description = "Export to a file, by its extension. what=plan (default): the plan as .pdf (A3; scale=50/100 or fit), .svg (true scale) or .png, or the 3D model as .glb or .obj. what=cut_list: the joinery's cut list (and that of groups drawn by hand) as .csv (spreadsheet), .dxf (boards laid out on sheets, for CNC) or .svg (sheets to view); `cut_list` reads it."
     )]
+    pub(crate) fn export(
+        &self,
+        Parameters(Raw(mut args, _)): Parameters<Raw<ExportSchema>>,
+    ) -> Result<String, ErrorData> {
+        match take_action(&mut args, "what", &["plan", "cut_list"], Some("plan"))?.as_str() {
+            "cut_list" => self.export_cut_list(Parameters(forward(args)?)),
+            _ => self.export_plan(Parameters(forward(args)?)),
+        }
+    }
+    /// Writes the plan, or the 3D model, to a file.
     pub(crate) fn export_plan(
         &self,
         Parameters(p): Parameters<ExportParams>,

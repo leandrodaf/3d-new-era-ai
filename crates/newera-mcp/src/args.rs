@@ -35,6 +35,9 @@ fn scope<'a>(description: &'a str, actions: &[&str]) -> Option<Vec<&'a str>> {
     (!names.is_empty() && names.iter().all(|n| actions.contains(n))).then_some(names)
 }
 
+/// The arguments that pick what a tool does, in the order they are looked for.
+const SELECTORS: [&str; 2] = ["action", "what"];
+
 /// An argument given with an action it does not belong to. Ignored, it
 /// would answer as if it had been used: the agent asked for a pivot and got
 /// the rotation about the centre, and never learns why. With no action given
@@ -42,23 +45,30 @@ fn scope<'a>(description: &'a str, actions: &[&str]) -> Option<Vec<&'a str>> {
 /// with no default, the argument says which actions it is for.
 fn out_of_scope(schema: &Value, args: &Value) -> Option<String> {
     let props = schema.get("properties")?.as_object()?;
-    let selector = props.get("action")?;
+    // What picks the action: `action`, or `what` where a tool writes one of
+    // a few kinds of thing (`export`).
+    let (key, selector) = SELECTORS.iter().find_map(|key| {
+        props
+            .get(*key)
+            .filter(|s| s.get("enum").is_some())
+            .map(|s| (*key, s))
+    })?;
     let actions: Vec<&str> = selector
         .get("enum")?
         .as_array()?
         .iter()
         .filter_map(Value::as_str)
         .collect();
-    let given = args.get("action").and_then(Value::as_str);
+    let given = args.get(key).and_then(Value::as_str);
     let action = match given {
         Some(a) if actions.contains(&a) => Some(a),
         // An action that does not exist is the tool's to refuse, by name.
         Some(_) => return None,
         None => default_choice(selector, &actions),
     };
-    for key in args.as_object()?.keys() {
+    for arg in args.as_object()?.keys() {
         let Some(description) = props
-            .get(key)
+            .get(arg)
             .and_then(|p| p.get("description"))
             .and_then(Value::as_str)
         else {
@@ -74,13 +84,13 @@ fn out_of_scope(schema: &Value, args: &Value) -> Option<String> {
             .join(" and ");
         match (action, given) {
             (Some(a), _) if belongs.contains(&a) => {}
-            (Some(a), Some(_)) => return Some(format!("`{key}` is for {listed}, not `{a}`")),
+            (Some(a), Some(_)) => return Some(format!("`{arg}` is for {listed}, not `{a}`")),
             (Some(a), None) => {
                 return Some(format!(
-                    "`{key}` is for {listed}, and the default action is `{a}`: give action"
+                    "`{arg}` is for {listed}, and the default {key} is `{a}`: give {key}"
                 ));
             }
-            (None, _) => return Some(format!("`{key}` is for {listed}: give action")),
+            (None, _) => return Some(format!("`{arg}` is for {listed}: give {key}")),
         }
     }
     None

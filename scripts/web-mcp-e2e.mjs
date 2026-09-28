@@ -164,7 +164,7 @@ try {
 
     const before = await rpc(mcpUrl, {
       jsonrpc: "2.0", id: 3, method: "tools/call",
-      params: { name: "get_home", arguments: {} },
+      params: { name: "home", arguments: {} },
     });
     const made = await rpc(mcpUrl, {
       jsonrpc: "2.0", id: 4, method: "tools/call",
@@ -176,7 +176,7 @@ try {
 
     const after = await rpc(mcpUrl, {
       jsonrpc: "2.0", id: 5, method: "tools/call",
-      params: { name: "get_home", arguments: {} },
+      params: { name: "home", arguments: {} },
     });
     const beforePlan=JSON.parse(before.result.content[0].text);
     const afterPlan=JSON.parse(after.result.content[0].text);
@@ -187,21 +187,21 @@ try {
     // The ceiling mode is an AI-editable property, independent of visibility.
     const roomId=afterPlan.rooms?.[0]?.id;
     const originalCeilingMode=afterPlan.rooms?.[0]?.ceiling_flat;
-    if (!roomId || typeof originalCeilingMode !== 'boolean') throw new Error('ceiling mode is missing from get_home');
+    if (!roomId || typeof originalCeilingMode !== 'boolean') throw new Error('ceiling mode is missing from home');
     let ceilingCallId=180;
     const ceilingCall=async(name,args={})=>{
       const reply=await rpc(mcpUrl,{jsonrpc:'2.0',id:ceilingCallId++,method:'tools/call',params:{name,arguments:args}});
       if (reply.error || reply.result?.isError) throw new Error('ceiling MCP call failed: '+JSON.stringify(reply));
       return reply.result.content.find(c=>c.type==='text').text;
     };
-    const ceilingHome=async()=>JSON.parse(await ceilingCall('get_home',{kinds:['rooms']}));
+    const ceilingHome=async()=>JSON.parse(await ceilingCall('home',{kinds:['rooms']}));
     await ceilingCall('update',{items:[{id:roomId,ceiling_flat:!originalCeilingMode}]});
     const inclined=await ceilingHome();
     if (inclined.rooms.find(r=>r.id===roomId)?.ceiling_flat !== !originalCeilingMode) throw new Error('ceiling mode did not change in the browser');
     await ceilingCall('update',{items:[{id:roomId,ceiling_flat:originalCeilingMode}],dry:true});
     const simulated=await ceilingHome();
     if (simulated.rev !== inclined.rev || simulated.rooms.find(r=>r.id===roomId)?.ceiling_flat !== !originalCeilingMode) throw new Error('ceiling dry-run changed the document');
-    await ceilingCall('undo');
+    await ceilingCall('edit_history',{action:'undo'});
     if ((await ceilingHome()).rooms.find(r=>r.id===roomId)?.ceiling_flat !== originalCeilingMode) throw new Error('undo did not restore the ceiling mode');
     ok('MCP reads and edits ceiling mode in the browser; dry-run and undo preserve the document');
 
@@ -266,7 +266,7 @@ try {
       writeFileSync(process.env.RENDER_SHOT, Buffer.from(shot.result.data, "base64"));
     }
     const began = Date.now();
-    const during = await rpc(mcpUrl, {jsonrpc:"2.0",id:32,method:"tools/call",params:{name:"get_home",arguments:{}}});
+    const during = await rpc(mcpUrl, {jsonrpc:"2.0",id:32,method:"tools/call",params:{name:"home",arguments:{}}});
     if (!during.result || Date.now()-began>3000) throw new Error("MCP blocked behind a render");
     await evaluate("window.lastRenderWorker.dispatchEvent(new ErrorEvent('error',{message:'e2e render failure'}))");
     const stopped = await pendingPhoto;
@@ -368,7 +368,7 @@ try {
     ok("Create video opened from the menu and downloaded a valid AVI");
     const undone = await rpc(mcpUrl, {
       jsonrpc: "2.0", id: 21, method: "tools/call",
-      params: { name: "undo", arguments: {} },
+      params: { name: "edit_history", arguments: {action: "undo"} },
     });
     if (undone?.error || undone?.result?.isError || !undone?.result?.content) {
       throw new Error("editing stopped working after rendering");
@@ -383,11 +383,11 @@ try {
 
     const readHome = async () => {
       const response = await rpc(mcpUrl, {jsonrpc:"2.0",id:40,method:"tools/call",
-        params:{name:"get_home",arguments:{}}});
+        params:{name:"home",arguments:{}}});
       return JSON.parse(response.result.content.find(c=>c.type==='text').text);
     };
     await rpc(mcpUrl,{jsonrpc:"2.0",id:41,method:"tools/call",
-      params:{name:"set_home",arguments:{name:"Recovery confirmed"}}});
+      params:{name:"edit_home",arguments:{name:"Recovery confirmed"}}});
     let savedHome;
     for (let i=0;i<30;i++) {
       await frames(2); savedHome=await readHome();
@@ -403,7 +403,7 @@ try {
       };
     })()`);
     await rpc(mcpUrl,{jsonrpc:"2.0",id:42,method:"tools/call",
-      params:{name:"set_home",arguments:{name:"Recovery after quota"}}});
+      params:{name:"edit_home",arguments:{name:"Recovery after quota"}}});
     let failedHome;
     for (let i=0;i<30;i++) {
       await frames(2); failedHome=await readHome();
@@ -416,11 +416,11 @@ try {
     }
     await evaluate('Storage.prototype.setItem = window.storageSetItem');
     const exported = await rpc(mcpUrl,{jsonrpc:"2.0",id:43,method:"tools/call",
-      params:{name:"save_home",arguments:{path:"recovery-backup.newera"}}});
+      params:{name:"file",arguments:{action:"save",path:"recovery-backup.newera"}}});
     const backupReply=JSON.parse(exported.result.content[0].text);
     const backupPath=join(downloads,'recovery-backup.newera');
     for (let i=0;i<30 && !existsSync(backupPath);i++) await frames(1);
-    if (!backupReply.download_started || !existsSync(backupPath)) throw new Error('MCP save_home did not download the backup');
+    if (!backupReply.download_started || !existsSync(backupPath)) throw new Error('MCP file save did not download the backup');
     const project=JSON.parse(execFileSync('python3',['-c','import zipfile,sys; print(zipfile.ZipFile(sys.argv[1]).read("project.json").decode())',backupPath],{encoding:'utf8'}));
     if (project.variants[project.active].home.name !== 'Recovery after quota') throw new Error('downloaded backup contains the wrong project');
     const beforeReload=await readHome();
@@ -437,7 +437,7 @@ try {
       await frames(3);
       const again = await rpc(mcpUrl, {
         jsonrpc: "2.0", id: 8, method: "tools/call",
-        params: { name: "get_home", arguments: {} },
+        params: { name: "home", arguments: {} },
       });
       backAgain = Boolean(again?.result?.content) && again?.result?.isError !== true;
     }
@@ -579,7 +579,7 @@ try {
       for (let i = 0; i < 20 && !closed; i++) {
         const afterOff = await rpc(mcpUrl, {
           jsonrpc: "2.0", id: 6, method: "tools/call",
-          params: { name: "get_home", arguments: {} },
+          params: { name: "home", arguments: {} },
         });
         closed = afterOff?.result?.isError === true || Boolean(afterOff?.error);
         if (!closed) await sleep(300);
@@ -612,16 +612,16 @@ try {
       window.testRelaySocket.onmessage=() => {window.failedRuntimeCalls++; trap();};
     })()`);
     const failureStart=Date.now();
-    const trapped=await rpc(mcpUrl,{jsonrpc:'2.0',id:50,method:'tools/call',params:{name:'get_home',arguments:{}}});
+    const trapped=await rpc(mcpUrl,{jsonrpc:'2.0',id:50,method:'tools/call',params:{name:'home',arguments:{}}});
     if (!trapped.result?.isError) throw new Error('a WASM trap did not return an MCP tool error');
     const diagnostic=JSON.parse(trapped.result.content[0].text);
     if (diagnostic.kind !== 'editor_runtime_failure'
         || diagnostic.diagnostic.phase !== 'runtime'
-        || diagnostic.diagnostic.operations[0]?.tool !== 'get_home'
+        || diagnostic.diagnostic.operations[0]?.tool !== 'home'
         || !diagnostic.diagnostic.build || diagnostic.diagnostic.backend === 'unknown'
         || !diagnostic.diagnostic.cause.includes('unreachable')
         || Date.now()-failureStart > 10000) throw new Error('the emergency reply lost context or waited for the relay timeout');
-    const afterTrap=await rpc(mcpUrl,{jsonrpc:'2.0',id:51,method:'tools/call',params:{name:'get_home',arguments:{}}});
+    const afterTrap=await rpc(mcpUrl,{jsonrpc:'2.0',id:51,method:'tools/call',params:{name:'home',arguments:{}}});
     if (!afterTrap.result?.isError || await evaluate('window.failedRuntimeCalls') !== 1
         || JSON.stringify(JSON.parse(afterTrap.result.content[0].text)) !== JSON.stringify(diagnostic)) {
       throw new Error('future calls re-entered the failed runtime or lost the original failure');
@@ -638,7 +638,7 @@ try {
     for (let i = 0; i < 40 && !gone; i++) {
       const afterGone = await rpc(mcpUrl, {
         jsonrpc: "2.0", id: 7, method: "tools/call",
-        params: { name: "get_home", arguments: {} },
+        params: { name: "home", arguments: {} },
       });
       const disconnectText=afterGone?.result?.content?.[0]?.text ?? '';
       gone = afterGone?.result?.isError === true && /tab (?:is not connected|went away)/.test(disconnectText);

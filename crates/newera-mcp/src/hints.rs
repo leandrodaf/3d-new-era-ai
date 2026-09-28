@@ -38,7 +38,7 @@ enum Effect {
 /// something to the developers or starts another program.
 const HINTS: &[(&str, &str, Effect, bool)] = &[
     // Reads.
-    ("get_home", "Read the home", Effect::Read, false),
+    ("home", "Read the home", Effect::Read, false),
     (
         "materials",
         "List wall types and finishes",
@@ -57,7 +57,7 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
     ("video", "Read the video path", Effect::Read, false),
     ("levels", "List storeys", Effect::Read, false),
     ("variants", "List plan versions", Effect::Read, false),
-    ("checkpoints", "List checkpoints", Effect::Read, false),
+    ("history", "List checkpoints", Effect::Read, false),
     ("plugins", "List plugins", Effect::Read, false),
     (
         "disciplines",
@@ -65,7 +65,7 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
         Effect::Read,
         false,
     ),
-    ("check_layout", "Check the layout", Effect::Read, false),
+    ("layout", "Check the layout", Effect::Read, false),
     (
         "rules",
         "Read the rules behind a review",
@@ -92,12 +92,7 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
         Effect::Read,
         false,
     ),
-    (
-        "trace_background",
-        "Find walls in a scan",
-        Effect::Read,
-        false,
-    ),
+    ("background", "Find walls in a scan", Effect::Read, false),
     ("cut_list", "Cut list", Effect::Read, false),
     ("render_plan", "Render the floor plan", Effect::Read, false),
     ("show_plan", "Show the plan", Effect::Read, false),
@@ -111,9 +106,8 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
         Effect::Add,
         false,
     ),
-    ("trace_walls", "Trace walls from a scan", Effect::Add, false),
     (
-        "fill_lighting",
+        "edit_lighting",
         "Fill a room with light",
         Effect::Add,
         false,
@@ -129,8 +123,7 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
     ("move", "Move elements", Effect::Change, false),
     ("delete", "Delete elements", Effect::Change, false),
     ("arrange", "Copy, align and group", Effect::Change, false),
-    ("split_wall", "Split a wall", Effect::Change, false),
-    ("merge_walls", "Merge walls", Effect::Change, false),
+    ("edit_walls", "Split or merge walls", Effect::Change, false),
     ("joinery", "Build joinery", Effect::Change, false),
     (
         "cabinet_run",
@@ -173,26 +166,21 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
     ),
     ("edit_plumbing", "Lay a pipe run", Effect::Change, false),
     ("accept", "Accept findings", Effect::Change, false),
-    ("set_home", "Project settings", Effect::Change, false),
+    ("edit_home", "Project settings", Effect::Change, false),
     (
-        "set_background",
-        "Set a scanned plan",
+        "edit_background",
+        "Set or trace a scanned plan",
         Effect::Change,
         false,
     ),
-    ("checkpoint", "Remember or go back", Effect::Change, false),
-    ("undo", "Undo", Effect::Change, false),
-    ("redo", "Redo", Effect::Change, false),
-    ("new_home", "New project", Effect::Change, false),
-    ("open_home", "Open a project", Effect::Change, false),
-    ("save_home", "Save the project", Effect::Change, false),
-    ("export_plan", "Export the plan", Effect::Change, false),
     (
-        "export_cut_list",
-        "Write the cut list",
+        "edit_history",
+        "Undo, redo, checkpoints",
         Effect::Change,
         false,
     ),
+    ("file", "New, open or save", Effect::Change, false),
+    ("export", "Export to a file", Effect::Change, false),
     // Beyond the project.
     ("run_plugin", "Run a plugin", Effect::Change, true),
     ("feedback", "Report to the developers", Effect::Add, true),
@@ -323,7 +311,7 @@ mod tests {
             ("levels", serde_json::json!({"action": "add"})),
             ("video", serde_json::json!({"action": "clear"})),
             ("variants", serde_json::json!({"action": "new"})),
-            ("checkpoints", serde_json::json!({"label": "a"})),
+            ("history", serde_json::json!({"label": "a"})),
             ("plugins", serde_json::json!({"name": "x"})),
             ("plumbing", serde_json::json!({"action": "route"})),
             ("disciplines", serde_json::json!({"d": "plumbing"})),
@@ -333,9 +321,9 @@ mod tests {
             ),
             ("lighting", serde_json::json!({"fill": "downlight"})),
             ("annotations", serde_json::json!({"anchor": true})),
-            ("check_layout", serde_json::json!({"prune": true})),
+            ("layout", serde_json::json!({"prune": true})),
             ("ergonomics", serde_json::json!({"accept": [["k", "r"]]})),
-            ("trace_background", serde_json::json!({"create": true})),
+            ("background", serde_json::json!({"create": true})),
             ("cut_list", serde_json::json!({"path": "/tmp/x.csv"})),
         ] {
             let why =

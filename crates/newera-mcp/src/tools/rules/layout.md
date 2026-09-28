@@ -1,6 +1,6 @@
 # Layout: what each problem means
 
-`check_layout` answers the problems by kind; `{}` means none. Every row is an object with
+`layout` answers the problems by kind; `{}` means none. Every row is an object with
 the `key` it is accepted by and the elements involved (name, bounds and z).
 
 - **overlap**: classified `collision` (a real clash, listed first), `nesting` (built in,

@@ -26,7 +26,7 @@ pub(crate) struct People {
     /// Height of the main cook, cm, to size the countertop (default 165).
     stature: Option<f64>,
     /// City whose building code applies for this call only, e.g.
-    /// `sao-paulo`; `set_home(city=…)` keeps it with the project.
+    /// `sao-paulo`; `edit_home(city=…)` keeps it with the project.
     city: Option<String>,
 }
 
@@ -58,7 +58,7 @@ impl People {
 
 /// Makes these people the project's, so every later review and dry run
 /// scores for them. One undoable step, and none when nothing changes. The
-/// tools do this through `set_home(people=…)`; the tests, through the
+/// tools do this through `edit_home(people=…)`; the tests, through the
 /// all-in-one `ergonomics` below.
 #[cfg(test)]
 pub(crate) fn keep_people(doc: &mut newera_core::Document, people: &People) {
@@ -91,7 +91,7 @@ pub(crate) struct CheckReadParams {
 /// Findings looked at, from any review.
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct AcceptParams {
-    /// `[[key, reason]]`, key as the review names it (`check_layout`,
+    /// `[[key, reason]]`, key as the review names it (`layout`,
     /// ergonomics, electrical, plumbing): it keeps showing there with the
     /// reason and stops counting. An empty reason takes it back.
     #[serde(default)]
@@ -173,7 +173,7 @@ fn round2(v: f64) -> f64 {
 impl NewEraMcp {
     #[tool(
         name = "ergonomics",
-        description = "Ergonomics and habitability review for the people living there: room to walk beside beds and in front of kitchen equipment, beds, seats, bathrooms and wardrobes per person, the kitchen (work triangle, counter heights and lengths, work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. It advises and never blocks. Answers {score, score_basis, scope, scores:{architecture,electrical,plumbing}, layout, coverage, capacity, findings:[{sev, place, msg, key, weight, discipline, in_scope, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. weight is what the score gains if that finding goes; fix is a checked change as `move` or `update` arguments, to apply and review again; tier A–E is how much the source obliges where the project is. People and city given here weigh this call only; `set_home` keeps them for every review. `accept` marks a finding right as drawn. How the score and the tiers work: `rules` topic=ergonomics."
+        description = "Ergonomics and habitability review for the people living there: room to walk beside beds and in front of kitchen equipment, beds, seats, bathrooms and wardrobes per person, the kitchen (work triangle, counter heights and lengths, work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. It advises and never blocks. Answers {score, score_basis, scope, scores:{architecture,electrical,plumbing}, layout, coverage, capacity, findings:[{sev, place, msg, key, weight, discipline, in_scope, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. weight is what the score gains if that finding goes; fix is a checked change as `move` or `update` arguments, to apply and review again; tier A–E is how much the source obliges where the project is. People and city given here weigh this call only; `edit_home` keeps them for every review. `accept` marks a finding right as drawn. How the score and the tiers work: `rules` topic=ergonomics."
     )]
     pub(crate) fn read_ergonomics(&self, Parameters(people): Parameters<People>) -> String {
         self.review(&ErgonomicsParams {
@@ -182,7 +182,7 @@ impl NewEraMcp {
         })
     }
     #[tool(
-        name = "check_layout",
+        name = "layout",
         description = "Layout problems on a storey — pieces colliding or clashing, blocked doors and windows: overlap, blocked, in_wall, blocks_door, blocks_window, no_door, backwards, turned, unrated_light, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose and above_ceiling, as {kind: [rows]}; {} means none. Every row is an object with the `key` it is accepted by and the elements involved (name, bounds, z). Overlaps are classified collision (a real clash, first), nesting, served or cross_level, with extent [x,y,z] cm, counted in overlap_kinds. accepted {key, kind, why, extent} lists findings `accept` marked right as drawn; orphaned [[key, reason]] acceptances whose finding is gone. What each problem means and how to fix it: `rules` topic=layout. level: a storey id or `all` (default the one shown); areas {name|id: m²} compares room areas with a reference drawing."
     )]
     pub(crate) fn read_check_layout(
@@ -196,7 +196,7 @@ impl NewEraMcp {
         }))
     }
     #[tool(
-        description = "Mark findings of check_layout, ergonomics, electrical or plumbing as looked at, by the key the review gives: accept=[[key, reason]] — they stay in their review with the reason and stop counting (score, pendencies, dry runs); an empty reason takes one back. prune=true drops every acceptance whose finding is gone (the reviews list them as orphaned). One undoable step. Reply ok, with accepted and removed counts; read the review again to see it."
+        description = "Mark findings of layout, ergonomics, electrical or plumbing as looked at, by the key the review gives: accept=[[key, reason]] — they stay in their review with the reason and stop counting (score, pendencies, dry runs); an empty reason takes one back. prune=true drops every acceptance whose finding is gone (the reviews list them as orphaned). One undoable step. Reply ok, with accepted and removed counts; read the review again to see it."
     )]
     pub(crate) fn accept(
         &self,
@@ -204,7 +204,7 @@ impl NewEraMcp {
     ) -> Result<String, ErrorData> {
         if p.accept.is_empty() && !p.prune {
             return Err(invalid(
-                "nothing to do: accept=[[key, reason]] (keys come from check_layout, ergonomics, electrical or plumbing) or prune=true",
+                "nothing to do: accept=[[key, reason]] (keys come from layout, ergonomics, electrical or plumbing) or prune=true",
             ));
         }
         let mut doc = self.document.write();
@@ -246,7 +246,7 @@ impl NewEraMcp {
     }
     /// Ergonomics review that also keeps the people given and applies
     /// acceptances, as the tool once did; the tools split that between
-    /// `ergonomics`, `set_home` and `accept`, and the tests keep the shorthand.
+    /// `ergonomics`, `edit_home` and `accept`, and the tests keep the shorthand.
     #[cfg(test)]
     pub(crate) fn ergonomics(&self, Parameters(p): Parameters<ErgonomicsParams>) -> String {
         if p.people.given() {
@@ -333,7 +333,7 @@ impl NewEraMcp {
         }
         out.to_string()
     }
-    /// Layout check that also applies acceptances; the tools split that between `check_layout` and `accept`.
+    /// Layout check that also applies acceptances; the tools split that between `layout` and `accept`.
     pub(crate) fn check_layout(
         &self,
         Parameters(p): Parameters<CheckParams>,
@@ -619,7 +619,7 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .find(|call| call["review"] == "check_layout" && call["tool"] == "accept")
+            .find(|call| call["review"] == "layout" && call["tool"] == "accept")
             .unwrap();
         assert_eq!(
             call["orphaned"],
@@ -1402,7 +1402,7 @@ mod tests {
         assert_eq!(again["score"], after["score"], "{again}");
     }
 
-    /// The tools: reviews read, `accept` writes, `set_home` keeps the people.
+    /// The tools: reviews read, `accept` writes, `edit_home` keeps the people.
     #[test]
     fn reviews_read_and_accept_writes() {
         let s = server();

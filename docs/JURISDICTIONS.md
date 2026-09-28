@@ -30,7 +30,7 @@ tier from those against a `Place`.
   country, silence is not disagreement; naming a different city is.
 - `Place::HOME_COUNTRY` — a project that says nothing is judged at home, not
   nowhere. The compass starts with no city, so this is the common case.
-- `Compass.country` / `Compass.region`, set by `set_home(country=…, region=…)`.
+- `Compass.country` / `Compass.region`, set by `edit_home(country=…, region=…)`.
   A city the registry holds implies both. A city named for one call (the
   review's `city`) replaces only the city: the country and the state the
   project declares still stand.

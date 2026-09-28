@@ -6,11 +6,11 @@
       "readOnlyHint": false,
       "title": "Accept findings"
     },
-    "description": "Mark findings of check_layout, ergonomics, electrical or plumbing as looked at, by the key the review gives: accept=[[key, reason]] — they stay in their review with the reason and stop counting (score, pendencies, dry runs); an empty reason takes one back. prune=true drops every acceptance whose finding is gone (the reviews list them as orphaned). One undoable step. Reply ok, with accepted and removed counts; read the review again to see it.",
+    "description": "Mark findings of layout, ergonomics, electrical or plumbing as looked at, by the key the review gives: accept=[[key, reason]] — they stay in their review with the reason and stop counting (score, pendencies, dry runs); an empty reason takes one back. prune=true drops every acceptance whose finding is gone (the reviews list them as orphaned). One undoable step. Reply ok, with accepted and removed counts; read the review again to see it.",
     "inputSchema": {
       "properties": {
         "accept": {
-          "description": "`[[key, reason]]`, key as the review names it (`check_layout`, ergonomics, electrical, plumbing): it keeps showing there with the reason and stops counting. An empty reason takes it back",
+          "description": "`[[key, reason]]`, key as the review names it (`layout`, ergonomics, electrical, plumbing): it keeps showing there with the reason and stops counting. An empty reason takes it back",
           "items": {
             "items": {
               "type": "string"
@@ -258,6 +258,66 @@
     },
     "title": "Copy, align and group"
   },
+  "background": {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Find walls in a scan"
+    },
+    "description": "Walls detected in the scanned plan under the drawing (`edit_background` action=set puts it there): thick dark or gray bands across or down the image become walls, colored areas (lawn, plants, furniture) are ignored, and pieces split by doors or windows up to max_gap join; region limits the search. Returns rows [[x1,y1],[x2,y2],t] in plan cm without drawing; `edit_background` action=trace creates them. Check with `render_plan` bg=0.5.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "h": {
+          "description": "Wall height cm when creating (default 250)",
+          "type": "number"
+        },
+        "max_gap": {
+          "description": "Doors and windows up to this wide don't split a wall, cm (default 130)",
+          "type": "number"
+        },
+        "min_len": {
+          "description": "Shortest wall kept, cm (default 60)",
+          "type": "number"
+        },
+        "region": {
+          "description": "Only this part of the plan `[x0, y0, x1, y1]` cm",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+        },
+        "t_max": {
+          "description": "Thickest wall kept, cm (default 45)",
+          "type": "number"
+        },
+        "t_min": {
+          "description": "Thinnest wall kept, cm (default 5)",
+          "type": "number"
+        },
+        "threshold": {
+          "description": "Luminance 0..255 below which a gray pixel is ink (default 128; raise it for light gray walls)",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "background",
+    "outputSchema": {
+      "properties": {
+        "rows": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "rows"
+      ],
+      "type": "object"
+    },
+    "title": "Find walls in a scan"
+  },
   "cabinet_run": {
     "annotations": {
       "destructiveHint": true,
@@ -425,181 +485,6 @@
       "type": "object"
     },
     "title": "Search the furniture catalog"
-  },
-  "check_layout": {
-    "annotations": {
-      "openWorldHint": false,
-      "readOnlyHint": true,
-      "title": "Check the layout"
-    },
-    "description": "Layout problems on a storey — pieces colliding or clashing, blocked doors and windows: overlap, blocked, in_wall, blocks_door, blocks_window, no_door, backwards, turned, unrated_light, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose and above_ceiling, as {kind: [rows]}; {} means none. Every row is an object with the `key` it is accepted by and the elements involved (name, bounds, z). Overlaps are classified collision (a real clash, first), nesting, served or cross_level, with extent [x,y,z] cm, counted in overlap_kinds. accepted {key, kind, why, extent} lists findings `accept` marked right as drawn; orphaned [[key, reason]] acceptances whose finding is gone. What each problem means and how to fix it: `rules` topic=layout. level: a storey id or `all` (default the one shown); areas {name|id: m²} compares room areas with a reference drawing.",
-    "inputSchema": {
-      "additionalProperties": false,
-      "properties": {
-        "areas": {
-          "additionalProperties": {
-            "type": "number"
-          },
-          "description": "Expected room areas in m² by room name or id, e.g. {\"Sala\": 10.91}; adds rows [room, expected, actual, diff %]",
-          "type": "object"
-        },
-        "level": {
-          "description": "Storey to check: an id like `lv3`, or `all` for every storey that is not a reference layer. Default: the storey being shown",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "check_layout",
-    "outputSchema": {
-      "properties": {
-        "above_ceiling": {
-          "type": "array"
-        },
-        "accepted": {
-          "type": "array"
-        },
-        "areas": {
-          "type": "array"
-        },
-        "backwards": {
-          "type": "array"
-        },
-        "blocked": {
-          "type": "array"
-        },
-        "blocks_door": {
-          "type": "array"
-        },
-        "blocks_window": {
-          "type": "array"
-        },
-        "in_wall": {
-          "type": "array"
-        },
-        "loose": {
-          "type": "array"
-        },
-        "loose_opening": {
-          "type": "array"
-        },
-        "no_door": {
-          "type": "array"
-        },
-        "orphaned": {
-          "type": "array"
-        },
-        "outgrew_niche": {
-          "type": "array"
-        },
-        "outside_rooms": {
-          "type": "array"
-        },
-        "overlap": {
-          "type": "array"
-        },
-        "overlap_kinds": {
-          "type": "object"
-        },
-        "turned": {
-          "type": "array"
-        },
-        "unclear_front": {
-          "type": "array"
-        },
-        "unrated_light": {
-          "type": "array"
-        },
-        "warnings": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "type": "object"
-    },
-    "title": "Check the layout"
-  },
-  "checkpoint": {
-    "annotations": {
-      "destructiveHint": true,
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Remember or go back"
-    },
-    "description": "Name where the plan is now, and come back to it. {label} (action checkpoint, the default) remembers this point; action=revert {label} undoes back down to it, keeping every id — which duplicating a version cannot do, since a copy renumbers. A checkpoint lives with the project and survives saving; the checkpoints tool lists them.",
-    "inputSchema": {
-      "properties": {
-        "action": {
-          "description": "Default `checkpoint`, remembering here; `revert` goes back",
-          "enum": [
-            "checkpoint",
-            "revert"
-          ],
-          "type": "string"
-        },
-        "label": {
-          "description": "The checkpoint's name; required by both actions",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "checkpoint",
-    "outputSchema": {
-      "properties": {
-        "ids": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "ok": {
-          "type": "boolean"
-        },
-        "rev": {
-          "type": "integer"
-        },
-        "text": {
-          "type": "string"
-        },
-        "v": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "ok",
-        "text"
-      ],
-      "type": "object"
-    },
-    "title": "Remember or go back"
-  },
-  "checkpoints": {
-    "annotations": {
-      "openWorldHint": false,
-      "readOnlyHint": true,
-      "title": "List checkpoints"
-    },
-    "description": "What checkpoint remembered: rows [label, changes ago]. A checkpoint lives with the project and survives saving.",
-    "inputSchema": {
-      "additionalProperties": false,
-      "type": "object"
-    },
-    "name": "checkpoints",
-    "outputSchema": {
-      "properties": {
-        "checkpoints": {
-          "type": "array"
-        }
-      },
-      "required": [
-        "checkpoints"
-      ],
-      "type": "object"
-    },
-    "title": "List checkpoints"
   },
   "create": {
     "annotations": {
@@ -1125,7 +1010,7 @@
       "readOnlyHint": true,
       "title": "Cut list"
     },
-    "description": "Cut list of joinery builds, and of groups drawn by hand: each part of a drawn group up to 50 mm thick is a board at the size it was drawn (board is its finish and thickness, no edge banding), the groups are named in drawn and the parts that are not boards in skipped [[id,name]]. Rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. export_cut_list writes it as .csv, or .dxf/.svg (boards laid out on sheets). sources names the panel standards behind the boards: MDF is a dry-process fibreboard (NBR 15316), MDP a particleboard of 551 to 750 kg/m³ that holds screws better (NBR 14810).",
+    "description": "Cut list of joinery builds, and of groups drawn by hand: each part of a drawn group up to 50 mm thick is a board at the size it was drawn (board is its finish and thickness, no edge banding), the groups are named in drawn and the parts that are not boards in skipped [[id,name]]. Rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. export what=cut_list writes it as .csv, or .dxf/.svg (boards laid out on sheets). sources names the panel standards behind the boards: MDF is a dry-process fibreboard (NBR 15316), MDP a particleboard of 551 to 750 kg/m³ that holds screws better (NBR 14810).",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -1248,7 +1133,7 @@
       "readOnlyHint": true,
       "title": "Show what the plan displays"
     },
-    "description": "Electrical and plumbing projects and plan layers over the plan. active (default): {active, hidden, layers {key:{pieces, hidden}}} — the discipline new symbols go to, what is hidden, and the layers (lighting, appliances, joinery); get_home gives each piece its plan_layer. quantities: {electrical:[[kind,count,names?]], plumbing:[...], lines_cm:{...}} — grouped by catalog kind (every low outlet together), with the names of the points as the detail. Change what is shown with edit_disciplines.",
+    "description": "Electrical and plumbing projects and plan layers over the plan. active (default): {active, hidden, layers {key:{pieces, hidden}}} — the discipline new symbols go to, what is hidden, and the layers (lighting, appliances, joinery); home gives each piece its plan_layer. quantities: {electrical:[[kind,count,names?]], plumbing:[...], lines_cm:{...}} — grouped by catalog kind (every low outlet together), with the names of the points as the detail. Change what is shown with edit_disciplines.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -1407,6 +1292,169 @@
       "type": "object"
     },
     "title": "Change dimensions and tags"
+  },
+  "edit_background": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Set or trace a scanned plan"
+    },
+    "description": "Put a scanned plan under the drawing at real scale, or turn it into walls. set {path, then cm_per_px (+cm_per_px_y), calibrate {a,b px, cm} or calibrations [{a,b,cm}…] to fit X/Y scales; angle (clockwise °); offset, opacity, visible; clear=true removes it}. trace creates, in one undo step, the walls `background` detects (same arguments, plus h). Check with `render_plan` bg=0.5.",
+    "inputSchema": {
+      "$defs": {
+        "Calibration": {
+          "properties": {
+            "a": {
+              "$ref": "#/$defs/Point2",
+              "description": "First image pixel"
+            },
+            "b": {
+              "$ref": "#/$defs/Point2",
+              "description": "Second image pixel"
+            },
+            "cm": {
+              "description": "Real distance between them, cm",
+              "type": "number"
+            }
+          },
+          "required": [
+            "a",
+            "b",
+            "cm"
+          ],
+          "type": "object"
+        },
+        "Point2": {
+          "description": "[x, y] cm",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "properties": {
+        "action": {
+          "description": "What to do with the scanned plan",
+          "enum": [
+            "set",
+            "trace"
+          ],
+          "type": "string"
+        },
+        "angle": {
+          "description": "For `set`: clockwise turn of the image, degrees",
+          "type": "number"
+        },
+        "calibrate": {
+          "$ref": "#/$defs/Calibration",
+          "description": "For `set`: two pixels with a known real distance, `{a, b, cm}`"
+        },
+        "calibrations": {
+          "description": "For `set`: several known distances, fitting X and Y scales apart",
+          "items": {
+            "$ref": "#/$defs/Calibration"
+          },
+          "type": "array"
+        },
+        "clear": {
+          "description": "For `set`: remove the background",
+          "type": "boolean"
+        },
+        "cm_per_px": {
+          "description": "For `set`: the scale, cm per image pixel",
+          "type": "number"
+        },
+        "cm_per_px_y": {
+          "description": "For `set`: the vertical scale, when it differs",
+          "type": "number"
+        },
+        "h": {
+          "description": "For `trace`: wall height cm (default 250)",
+          "type": "number"
+        },
+        "max_gap": {
+          "description": "For `trace`: doors and windows up to this wide don't split a wall, cm (default 130)",
+          "type": "number"
+        },
+        "min_len": {
+          "description": "For `trace`: shortest wall kept, cm (default 60)",
+          "type": "number"
+        },
+        "offset": {
+          "$ref": "#/$defs/Point2",
+          "description": "For `set`: plan position cm of the image's top-left corner"
+        },
+        "opacity": {
+          "description": "For `set`: how opaque the image is drawn, 0..1",
+          "type": "number"
+        },
+        "path": {
+          "description": "For `set`: image file (png/jpg/webp/bmp); required when there is no background yet",
+          "type": "string"
+        },
+        "region": {
+          "description": "For `trace`: only this part of the plan `[x0, y0, x1, y1]` cm",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+        },
+        "t_max": {
+          "description": "For `trace`: thickest wall kept, cm (default 45)",
+          "type": "number"
+        },
+        "t_min": {
+          "description": "For `trace`: thinnest wall kept, cm (default 5)",
+          "type": "number"
+        },
+        "threshold": {
+          "description": "For `trace`: luminance 0..255 below which a gray pixel is ink (default 128)",
+          "type": "integer"
+        },
+        "visible": {
+          "description": "For `set`: show or hide the image without removing it",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    },
+    "name": "edit_background",
+    "outputSchema": {
+      "properties": {
+        "ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "rev": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "v": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "text"
+      ],
+      "type": "object"
+    },
+    "title": "Set or trace a scanned plan"
   },
   "edit_cameras": {
     "annotations": {
@@ -1797,6 +1845,243 @@
     },
     "title": "Change the electrical project"
   },
+  "edit_history": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Undo, redo, checkpoints"
+    },
+    "description": "Undo, redo, or name where the plan is now and come back to it. undo and redo step through changes, whoever made them, and the reply names what changed. checkpoint {label} remembers this point; revert {label} undoes back down to it, keeping every id — which duplicating a version cannot do, since a copy renumbers. A checkpoint lives with the project and survives saving; `history` lists them.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "What to do",
+          "enum": [
+            "undo",
+            "redo",
+            "checkpoint",
+            "revert"
+          ],
+          "type": "string"
+        },
+        "label": {
+          "description": "For `checkpoint` and `revert`: the checkpoint's name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    },
+    "name": "edit_history",
+    "outputSchema": {
+      "properties": {
+        "added": {
+          "type": [
+            "array",
+            "integer"
+          ]
+        },
+        "annotations": {
+          "type": "object"
+        },
+        "changed": {
+          "type": [
+            "array",
+            "integer"
+          ]
+        },
+        "gone": {
+          "type": [
+            "array",
+            "integer"
+          ]
+        },
+        "ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "properties": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rev": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "v": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "text"
+      ],
+      "type": "object"
+    },
+    "title": "Undo, redo, checkpoints"
+  },
+  "edit_home": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Project settings"
+    },
+    "description": "Rename the project, set or remove project properties (properties {key: value|null}, or a storey's with level), set the compass (north), set the city whose building code applies (city=sao-paulo), and say who lives there (people {occupants, children, elderly, wheelchair, stature cm, scope}). City and people belong to the project: `ergonomics`, `layout` and every dry run then weigh the same rules for the same people, so a change can be tested against the score it moves.",
+    "inputSchema": {
+      "$defs": {
+        "People": {
+          "additionalProperties": false,
+          "description": "Who lives there, as far as this call says; the rest is the project's",
+          "properties": {
+            "children": {
+              "description": "Of them, children (sleep in single beds or cribs)",
+              "type": "integer"
+            },
+            "city": {
+              "description": "City whose building code applies for this call only, e.g. `sao-paulo`; `edit_home(city=…)` keeps it with the project",
+              "type": "string"
+            },
+            "elderly": {
+              "description": "Of them, elderly people",
+              "type": "integer"
+            },
+            "occupants": {
+              "description": "People living in the home (default 2)",
+              "type": "integer"
+            },
+            "scope": {
+              "$ref": "#/$defs/ReviewScope",
+              "description": "Disciplines included in the score. Architecture always counts; excluded findings remain visible"
+            },
+            "stature": {
+              "description": "Height of the main cook, cm, to size the countertop (default 165)",
+              "type": "number"
+            },
+            "wheelchair": {
+              "description": "Someone uses a wheelchair: NBR 9050 turning space, doors and reach",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "Point2": {
+          "description": "[x, y] cm",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "ReviewScope": {
+          "description": "Disciplines included in the habitability score. Architecture is always included; other findings remain visible even when outside the score",
+          "properties": {
+            "electrical": {
+              "default": true,
+              "description": "Count electrical findings in the score (default true)",
+              "type": "boolean"
+            },
+            "plumbing": {
+              "default": true,
+              "description": "Count plumbing findings in the score (default true)",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "city": {
+          "description": "City whose building code applies, e.g. `sao-paulo`; `\"\"` clears it. Kept with the project, so `ergonomics`, `layout` and every dry run weigh the same municipal rules",
+          "type": "string"
+        },
+        "compass_at": {
+          "$ref": "#/$defs/Point2",
+          "description": "Where the compass sits on the plan, `[x,y]` cm"
+        },
+        "compass_d": {
+          "description": "Compass diameter cm",
+          "type": "number"
+        },
+        "compass_visible": {
+          "description": "Show or hide the compass",
+          "type": "boolean"
+        },
+        "country": {
+          "description": "Country whose standards apply, ISO 3166-1 alpha-2: `br`, `us`, `de`; `\"\"` clears it. It decides which sources oblige and which only inform — a Brazilian standard is a reference in Florida, and the IRC is a reference here. A city we hold implies its country, so this is for saying where a project is when no code was picked",
+          "type": "string"
+        },
+        "level": {
+          "description": "Storey whose properties `properties` changes, e.g. `lv2`",
+          "type": "string"
+        },
+        "name": {
+          "description": "The project's name",
+          "type": "string"
+        },
+        "north": {
+          "description": "Clockwise degrees from plan up to north",
+          "type": "number"
+        },
+        "people": {
+          "$ref": "#/$defs/People",
+          "description": "Who lives there — occupants, children, elderly, wheelchair, stature cm, scope — kept with the project: ergonomics and every dry run then score for them. What is left out stays as it was"
+        },
+        "properties": {
+          "additionalProperties": true,
+          "description": "Project properties to set, `{key: \"value\"}`, or remove, `{key: null}` — what an import leaves behind (window sizes, panel dividers, ids of the program it came from). With `level`, that storey's instead",
+          "type": "object"
+        },
+        "region": {
+          "description": "State or province whose code applies: `sp`, `fl`; `\"\"` clears it. In the United States it is the state that adopts a building code, so it matters as much as the country there",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "edit_home",
+    "outputSchema": {
+      "properties": {
+        "ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "rev": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "v": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "text"
+      ],
+      "type": "object"
+    },
+    "title": "Project settings"
+  },
   "edit_levels": {
     "annotations": {
       "destructiveHint": true,
@@ -1869,6 +2154,66 @@
       "type": "object"
     },
     "title": "Change storeys"
+  },
+  "edit_lighting": {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Fill a room with light"
+    },
+    "description": "Fill a room with a grid of one fixture (downlight, led-panel, light-ceiling, pendant) until the work plane reaches the room's ABNT NBR ISO/CIE 8995-1 reference, or lux; the grid is checked by the same photometry as `lighting`. Reply placed ids, and the room's rating before and after.",
+    "inputSchema": {
+      "properties": {
+        "fixture": {
+          "description": "The fixture to place in a grid: `downlight`, `led-panel`, `light-ceiling`, `pendant`",
+          "type": "string"
+        },
+        "lux": {
+          "description": "Lux wanted instead of the room's reference",
+          "type": "number"
+        },
+        "plane": {
+          "description": "Work plane height cm (default 75)",
+          "type": "number"
+        },
+        "room": {
+          "description": "Room id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room",
+        "fixture"
+      ],
+      "type": "object"
+    },
+    "name": "edit_lighting",
+    "outputSchema": {
+      "properties": {
+        "after": {
+          "type": "array"
+        },
+        "before": {
+          "type": "array"
+        },
+        "note": {
+          "type": "string"
+        },
+        "placed": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "placed",
+        "before"
+      ],
+      "type": "object"
+    },
+    "title": "Fill a room with light"
   },
   "edit_plumbing": {
     "annotations": {
@@ -2170,6 +2515,75 @@
     },
     "title": "Change or render the video"
   },
+  "edit_walls": {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Split or merge walls"
+    },
+    "description": "Split a wall in two, or join walls into one. split {id, t?} cuts a wall into two joined walls at t (0..1, default 0.5). merge {ids} joins walls running along one line — the wall a partition interrupted, a stretch imported as many segments, the same wall drawn twice: the longest keeps its id and its build (thickness, height, type, finishes) and spans them all, the others are deleted, doors and windows stay where they are, and a gap between them is closed. The reply names the ids that result.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "What to do with the walls",
+          "enum": [
+            "split",
+            "merge"
+          ],
+          "type": "string"
+        },
+        "id": {
+          "description": "For `split`: the wall to split",
+          "type": "string"
+        },
+        "ids": {
+          "description": "For `merge`: the walls to join, in order along the line they make",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "t": {
+          "description": "For `split`: where along the wall, 0..1 (default 0.5)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    },
+    "name": "edit_walls",
+    "outputSchema": {
+      "properties": {
+        "ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "rev": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "v": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "text"
+      ],
+      "type": "object"
+    },
+    "title": "Split or merge walls"
+  },
   "electrical": {
     "annotations": {
       "openWorldHint": false,
@@ -2348,7 +2762,7 @@
       "readOnlyHint": true,
       "title": "Review ergonomics"
     },
-    "description": "Ergonomics and habitability review for the people living there: room to walk beside beds and in front of kitchen equipment, beds, seats, bathrooms and wardrobes per person, the kitchen (work triangle, counter heights and lengths, work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. It advises and never blocks. Answers {score, score_basis, scope, scores:{architecture,electrical,plumbing}, layout, coverage, capacity, findings:[{sev, place, msg, key, weight, discipline, in_scope, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. weight is what the score gains if that finding goes; fix is a checked change as `move` or `update` arguments, to apply and review again; tier A–E is how much the source obliges where the project is. People and city given here weigh this call only; `set_home` keeps them for every review. `accept` marks a finding right as drawn. How the score and the tiers work: `rules` topic=ergonomics.",
+    "description": "Ergonomics and habitability review for the people living there: room to walk beside beds and in front of kitchen equipment, beds, seats, bathrooms and wardrobes per person, the kitchen (work triangle, counter heights and lengths, work zones, sockets, gas ventilation, extraction), doors, ceiling heights, windows, minimum furniture, wheelchair turning. It advises and never blocks. Answers {score, score_basis, scope, scores:{architecture,electrical,plumbing}, layout, coverage, capacity, findings:[{sev, place, msg, key, weight, discipline, in_scope, src?, fix?, accepted?}], sources:{src:[title, tier, url]}}. weight is what the score gains if that finding goes; fix is a checked change as `move` or `update` arguments, to apply and review again; tier A–E is how much the source obliges where the project is. People and city given here weigh this call only; `edit_home` keeps them for every review. `accept` marks a finding right as drawn. How the score and the tiers work: `rules` topic=ergonomics.",
     "inputSchema": {
       "$defs": {
         "ReviewScope": {
@@ -2375,7 +2789,7 @@
           "type": "integer"
         },
         "city": {
-          "description": "City whose building code applies for this call only, e.g. `sao-paulo`; `set_home(city=…)` keeps it with the project",
+          "description": "City whose building code applies for this call only, e.g. `sao-paulo`; `edit_home(city=…)` keeps it with the project",
           "type": "string"
         },
         "elderly": {
@@ -2443,26 +2857,45 @@
     },
     "title": "Review ergonomics"
   },
-  "export_cut_list": {
+  "export": {
     "annotations": {
       "destructiveHint": true,
       "openWorldHint": false,
       "readOnlyHint": false,
-      "title": "Write the cut list"
+      "title": "Export to a file"
     },
-    "description": "Write the cut list of joinery builds (and of groups drawn by hand) to a file: path .csv (spreadsheet), .dxf (boards laid out on sheets, for CNC) or .svg (sheets to view). ids: builds or drawn groups (default every one on this storey). The cut_list tool reads it.",
+    "description": "Export to a file, by its extension. what=plan (default): the plan as .pdf (A3; scale=50/100 or fit), .svg (true scale) or .png, or the 3D model as .glb or .obj. what=cut_list: the joinery's cut list (and that of groups drawn by hand) as .csv (spreadsheet), .dxf (boards laid out on sheets, for CNC) or .svg (sheets to view); `cut_list` reads it.",
     "inputSchema": {
-      "additionalProperties": false,
       "properties": {
+        "h": {
+          "description": "For `plan`, `.png` only: height px (default 1200)",
+          "type": "integer"
+        },
         "ids": {
-          "description": "Build or drawn group ids (default: every build and drawn group on this storey)",
+          "description": "For `cut_list`: builds or drawn groups (default every one on this storey)",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "path": {
-          "description": "`.csv` (spreadsheet), `.dxf` (sheets for CNC) or `.svg` (sheets to view)",
+          "description": "The file to write; its extension picks the format",
+          "type": "string"
+        },
+        "scale": {
+          "description": "For `plan`, `.pdf`: scale denominator (50 → 1:50); omitted fits the sheet",
+          "type": "number"
+        },
+        "w": {
+          "description": "For `plan`, `.png` only: width px (default 1600)",
+          "type": "integer"
+        },
+        "what": {
+          "description": "Default `plan`: the drawing or the 3D model. `cut_list`: the boards of the joinery",
+          "enum": [
+            "plan",
+            "cut_list"
+          ],
           "type": "string"
         }
       },
@@ -2471,7 +2904,7 @@
       ],
       "type": "object"
     },
-    "name": "export_cut_list",
+    "name": "export",
     "outputSchema": {
       "properties": {
         "drawn": {
@@ -2486,63 +2919,6 @@
           },
           "type": "array"
         },
-        "rows": {
-          "type": "array"
-        },
-        "sheets": {
-          "type": "array"
-        },
-        "skipped": {
-          "type": "array"
-        },
-        "sources": {
-          "type": "object"
-        }
-      },
-      "required": [
-        "rows",
-        "hardware",
-        "sources"
-      ],
-      "type": "object"
-    },
-    "title": "Write the cut list"
-  },
-  "export_plan": {
-    "annotations": {
-      "destructiveHint": true,
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Export the plan"
-    },
-    "description": "Export to a file by extension: plan .pdf (A3; scale=50/100 or fit), .svg (true scale) or .png; 3D model .glb or .obj.",
-    "inputSchema": {
-      "properties": {
-        "h": {
-          "description": "`.png` only: height px (default 1200)",
-          "type": "integer"
-        },
-        "path": {
-          "description": "Output file: `.pdf`, `.svg`, `.png`, `.glb` or `.obj`",
-          "type": "string"
-        },
-        "scale": {
-          "description": "PDF scale denominator (50 → 1:50); omitted fits the sheet",
-          "type": "number"
-        },
-        "w": {
-          "description": "`.png` only: width px (default 1600)",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "path"
-      ],
-      "type": "object"
-    },
-    "name": "export_plan",
-    "outputSchema": {
-      "properties": {
         "ids": {
           "items": {
             "type": "string"
@@ -2555,6 +2931,18 @@
         "rev": {
           "type": "integer"
         },
+        "rows": {
+          "type": "array"
+        },
+        "sheets": {
+          "type": "array"
+        },
+        "skipped": {
+          "type": "array"
+        },
+        "sources": {
+          "type": "object"
+        },
         "text": {
           "type": "string"
         },
@@ -2562,13 +2950,9 @@
           "type": "integer"
         }
       },
-      "required": [
-        "ok",
-        "text"
-      ],
       "type": "object"
     },
-    "title": "Export the plan"
+    "title": "Export to a file"
   },
   "feedback": {
     "annotations": {
@@ -2642,65 +3026,64 @@
     },
     "title": "Report to the developers"
   },
-  "fill_lighting": {
+  "file": {
     "annotations": {
-      "destructiveHint": false,
+      "destructiveHint": true,
       "openWorldHint": false,
       "readOnlyHint": false,
-      "title": "Fill a room with light"
+      "title": "New, open or save"
     },
-    "description": "Fill a room with a grid of one fixture (downlight, led-panel, light-ceiling, pendant) until the work plane reaches the room's ABNT NBR ISO/CIE 8995-1 reference, or lux; the grid is checked by the same photometry as the lighting tool. Reply placed ids, and the room's rating before and after.",
+    "description": "Start, open or save the project. new: an empty project in place of this one. open {path}: a project (.newera), or a Sweet Home 3D file (.sh3d) imported, in place of this one. save {path?}: writes the project (.newera); path is optional once it was saved.",
     "inputSchema": {
       "properties": {
-        "fixture": {
-          "description": "The fixture to place in a grid: `downlight`, `led-panel`, `light-ceiling`, `pendant`",
+        "action": {
+          "description": "What to do with the project",
+          "enum": [
+            "new",
+            "open",
+            "save"
+          ],
           "type": "string"
         },
-        "lux": {
-          "description": "Lux wanted instead of the room's reference",
-          "type": "number"
-        },
-        "plane": {
-          "description": "Work plane height cm (default 75)",
-          "type": "number"
-        },
-        "room": {
-          "description": "Room id",
+        "path": {
+          "description": "For `open` and `save`: the file, `.newera` (or `.sh3d` to import)",
           "type": "string"
         }
       },
       "required": [
-        "room",
-        "fixture"
+        "action"
       ],
       "type": "object"
     },
-    "name": "fill_lighting",
+    "name": "file",
     "outputSchema": {
       "properties": {
-        "after": {
-          "type": "array"
-        },
-        "before": {
-          "type": "array"
-        },
-        "note": {
-          "type": "string"
-        },
-        "placed": {
+        "ids": {
           "items": {
             "type": "string"
           },
           "type": "array"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "rev": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "v": {
+          "type": "integer"
         }
       },
       "required": [
-        "placed",
-        "before"
+        "ok",
+        "text"
       ],
       "type": "object"
     },
-    "title": "Fill a room with light"
+    "title": "New, open or save"
   },
   "fit_roof": {
     "annotations": {
@@ -2766,7 +3149,32 @@
     },
     "title": "Fit walls to the roof"
   },
-  "get_home": {
+  "history": {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List checkpoints"
+    },
+    "description": "The checkpoints `edit_history` remembered: rows [label, changes ago]. A checkpoint lives with the project and survives saving.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "history",
+    "outputSchema": {
+      "properties": {
+        "checkpoints": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "checkpoints"
+      ],
+      "type": "object"
+    },
+    "title": "List checkpoints"
+  },
+  "home": {
     "annotations": {
       "openWorldHint": false,
       "readOnlyHint": true,
@@ -2833,7 +3241,7 @@
       },
       "type": "object"
     },
-    "name": "get_home",
+    "name": "home",
     "outputSchema": {
       "properties": {
         "background": {
@@ -3009,6 +3417,101 @@
     },
     "title": "Build joinery"
   },
+  "layout": {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Check the layout"
+    },
+    "description": "Layout problems on a storey — pieces colliding or clashing, blocked doors and windows: overlap, blocked, in_wall, blocks_door, blocks_window, no_door, backwards, turned, unrated_light, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose and above_ceiling, as {kind: [rows]}; {} means none. Every row is an object with the `key` it is accepted by and the elements involved (name, bounds, z). Overlaps are classified collision (a real clash, first), nesting, served or cross_level, with extent [x,y,z] cm, counted in overlap_kinds. accepted {key, kind, why, extent} lists findings `accept` marked right as drawn; orphaned [[key, reason]] acceptances whose finding is gone. What each problem means and how to fix it: `rules` topic=layout. level: a storey id or `all` (default the one shown); areas {name|id: m²} compares room areas with a reference drawing.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "areas": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Expected room areas in m² by room name or id, e.g. {\"Sala\": 10.91}; adds rows [room, expected, actual, diff %]",
+          "type": "object"
+        },
+        "level": {
+          "description": "Storey to check: an id like `lv3`, or `all` for every storey that is not a reference layer. Default: the storey being shown",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "layout",
+    "outputSchema": {
+      "properties": {
+        "above_ceiling": {
+          "type": "array"
+        },
+        "accepted": {
+          "type": "array"
+        },
+        "areas": {
+          "type": "array"
+        },
+        "backwards": {
+          "type": "array"
+        },
+        "blocked": {
+          "type": "array"
+        },
+        "blocks_door": {
+          "type": "array"
+        },
+        "blocks_window": {
+          "type": "array"
+        },
+        "in_wall": {
+          "type": "array"
+        },
+        "loose": {
+          "type": "array"
+        },
+        "loose_opening": {
+          "type": "array"
+        },
+        "no_door": {
+          "type": "array"
+        },
+        "orphaned": {
+          "type": "array"
+        },
+        "outgrew_niche": {
+          "type": "array"
+        },
+        "outside_rooms": {
+          "type": "array"
+        },
+        "overlap": {
+          "type": "array"
+        },
+        "overlap_kinds": {
+          "type": "object"
+        },
+        "turned": {
+          "type": "array"
+        },
+        "unclear_front": {
+          "type": "array"
+        },
+        "unrated_light": {
+          "type": "array"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "title": "Check the layout"
+  },
   "levels": {
     "annotations": {
       "openWorldHint": false,
@@ -3040,7 +3543,7 @@
       "readOnlyHint": true,
       "title": "Rate the lighting"
     },
-    "description": "Lighting review: lux (illuminance) per room by photometry. Every fixture's flux (lm, or W × lamp efficacy), color temperature and distribution (bulb, spot beam, LED panel/strip) lights the work plane by the inverse-square cosine law, walls casting shadows, plus interreflection (split flux). Reply rooms [[id,name,m²,avg lx,min lx,uniformity,reference lx,fixtures,W/m²,verdict]] against ABNT NBR ISO/CIE 8995-1 residential references. fill_lighting places the fixtures a room needs. Set a piece's light with place/update light {lm|w,lamp,k,beam,area}.",
+    "description": "Lighting review: lux (illuminance) per room by photometry. Every fixture's flux (lm, or W × lamp efficacy), color temperature and distribution (bulb, spot beam, LED panel/strip) lights the work plane by the inverse-square cosine law, walls casting shadows, plus interreflection (split flux). Reply rooms [[id,name,m²,avg lx,min lx,uniformity,reference lx,fixtures,W/m²,verdict]] against ABNT NBR ISO/CIE 8995-1 residential references. edit_lighting places the fixtures a room needs. Set a piece's light with place/update light {lm|w,lamp,k,beam,area}.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -3236,59 +3739,6 @@
     },
     "title": "Measure the plan"
   },
-  "merge_walls": {
-    "annotations": {
-      "destructiveHint": true,
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Merge walls"
-    },
-    "description": "Join walls that run along the same line into a single wall: the wall a partition interrupted, a stretch imported as many segments, the same wall drawn twice. The longest one keeps its id and its build (thickness, height, type, finishes) and spans them all; the others are deleted, doors and windows stay where they are, and a gap between them is closed. Straight walls on one storey whose centerlines run inside one another; the reply names the id that remains.",
-    "inputSchema": {
-      "properties": {
-        "ids": {
-          "description": "The walls to join, in order along the line they make",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "ids"
-      ],
-      "type": "object"
-    },
-    "name": "merge_walls",
-    "outputSchema": {
-      "properties": {
-        "ids": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "ok": {
-          "type": "boolean"
-        },
-        "rev": {
-          "type": "integer"
-        },
-        "text": {
-          "type": "string"
-        },
-        "v": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "ok",
-        "text"
-      ],
-      "type": "object"
-    },
-    "title": "Merge walls"
-  },
   "move": {
     "annotations": {
       "destructiveHint": true,
@@ -3447,98 +3897,6 @@
       "type": "object"
     },
     "title": "Move elements"
-  },
-  "new_home": {
-    "annotations": {
-      "destructiveHint": true,
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "New project"
-    },
-    "description": "Start a new empty project.",
-    "inputSchema": {
-      "properties": {},
-      "type": "object"
-    },
-    "name": "new_home",
-    "outputSchema": {
-      "properties": {
-        "ids": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "ok": {
-          "type": "boolean"
-        },
-        "rev": {
-          "type": "integer"
-        },
-        "text": {
-          "type": "string"
-        },
-        "v": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "ok",
-        "text"
-      ],
-      "type": "object"
-    },
-    "title": "New project"
-  },
-  "open_home": {
-    "annotations": {
-      "destructiveHint": true,
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Open a project"
-    },
-    "description": "Open a project (.newera) or import a Sweet Home 3D file (.sh3d), replacing the current one.",
-    "inputSchema": {
-      "properties": {
-        "path": {
-          "description": "Project (`.newera`) or Sweet Home 3D file (`.sh3d`)",
-          "type": "string"
-        }
-      },
-      "required": [
-        "path"
-      ],
-      "type": "object"
-    },
-    "name": "open_home",
-    "outputSchema": {
-      "properties": {
-        "ids": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "ok": {
-          "type": "boolean"
-        },
-        "rev": {
-          "type": "integer"
-        },
-        "text": {
-          "type": "string"
-        },
-        "v": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "ok",
-        "text"
-      ],
-      "type": "object"
-    },
-    "title": "Open a project"
   },
   "place": {
     "annotations": {
@@ -3965,75 +4323,6 @@
     },
     "title": "Check the plumbing project"
   },
-  "redo": {
-    "annotations": {
-      "destructiveHint": true,
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Redo"
-    },
-    "description": "Redo the last undone change.",
-    "inputSchema": {
-      "properties": {},
-      "type": "object"
-    },
-    "name": "redo",
-    "outputSchema": {
-      "properties": {
-        "added": {
-          "type": [
-            "array",
-            "integer"
-          ]
-        },
-        "annotations": {
-          "type": "object"
-        },
-        "changed": {
-          "type": [
-            "array",
-            "integer"
-          ]
-        },
-        "gone": {
-          "type": [
-            "array",
-            "integer"
-          ]
-        },
-        "ids": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "ok": {
-          "type": "boolean"
-        },
-        "properties": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "rev": {
-          "type": "integer"
-        },
-        "text": {
-          "type": "string"
-        },
-        "v": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "ok",
-        "text"
-      ],
-      "type": "object"
-    },
-    "title": "Redo"
-  },
   "render_3d": {
     "annotations": {
       "openWorldHint": false,
@@ -4248,7 +4537,7 @@
       "readOnlyHint": true,
       "title": "Read the rules behind a review"
     },
-    "description": "The rules behind a review, as Markdown: what `electrical` and `plumbing` check against NBR 5410, 16264, 5626 and 8160 (outlets per room, loads, wire sections, DR, the panel, Wi-Fi, drains, diameters, traps, pipe runs), what each `check_layout` problem means and how to fix it, and how `ergonomics` scores (weights, source tiers, scope, city). For designing to a standard, or explaining a finding.",
+    "description": "The rules behind a review, as Markdown: what `electrical` and `plumbing` check against NBR 5410, 16264, 5626 and 8160 (outlets per room, loads, wire sections, DR, the panel, Wi-Fi, drains, diameters, traps, pipe runs), what each `layout` problem means and how to fix it, and how `ergonomics` scores (weights, source tiers, scope, city). For designing to a standard, or explaining a finding.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -4344,53 +4633,6 @@
     },
     "title": "Run a plugin"
   },
-  "save_home": {
-    "annotations": {
-      "destructiveHint": true,
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Save the project"
-    },
-    "description": "Save the project (.newera). path optional after the first save.",
-    "inputSchema": {
-      "properties": {
-        "path": {
-          "description": "Project file (`.newera`). Optional when the project was saved once",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "save_home",
-    "outputSchema": {
-      "properties": {
-        "ids": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "ok": {
-          "type": "boolean"
-        },
-        "rev": {
-          "type": "integer"
-        },
-        "text": {
-          "type": "string"
-        },
-        "v": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "ok",
-        "text"
-      ],
-      "type": "object"
-    },
-    "title": "Save the project"
-  },
   "sessions": {
     "annotations": {
       "openWorldHint": false,
@@ -4419,275 +4661,6 @@
       "type": "object"
     },
     "title": "List who is editing"
-  },
-  "set_background": {
-    "annotations": {
-      "destructiveHint": true,
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Set a scanned plan"
-    },
-    "description": "Set a scanned plan as background at real scale: path, then cm_per_px (+cm_per_px_y), calibrate {a,b px, cm} or calibrations [{a,b,cm}…] (fits X/Y scales), angle (clockwise °); offset/opacity/visible; clear=true removes.",
-    "inputSchema": {
-      "$defs": {
-        "Calibration": {
-          "properties": {
-            "a": {
-              "$ref": "#/$defs/Point2",
-              "description": "First image pixel"
-            },
-            "b": {
-              "$ref": "#/$defs/Point2",
-              "description": "Second image pixel"
-            },
-            "cm": {
-              "description": "Real distance between them, cm",
-              "type": "number"
-            }
-          },
-          "required": [
-            "a",
-            "b",
-            "cm"
-          ],
-          "type": "object"
-        },
-        "Point2": {
-          "description": "[x, y] cm",
-          "items": {
-            "type": "number"
-          },
-          "maxItems": 2,
-          "minItems": 2,
-          "type": "array"
-        }
-      },
-      "properties": {
-        "angle": {
-          "description": "Clockwise turn of the image, degrees",
-          "type": "number"
-        },
-        "calibrate": {
-          "$ref": "#/$defs/Calibration",
-          "description": "Or scale by marking two pixels with a known real distance"
-        },
-        "calibrations": {
-          "description": "Several known distances (e.g. one across, one down): fits separate horizontal and vertical scales when they differ, uniform otherwise",
-          "items": {
-            "$ref": "#/$defs/Calibration"
-          },
-          "type": "array"
-        },
-        "clear": {
-          "description": "Remove the background",
-          "type": "boolean"
-        },
-        "cm_per_px": {
-          "description": "Scale directly, cm per image pixel",
-          "type": "number"
-        },
-        "cm_per_px_y": {
-          "description": "Vertical scale cm/px when it differs from the horizontal one",
-          "type": "number"
-        },
-        "offset": {
-          "$ref": "#/$defs/Point2",
-          "description": "Plan position cm of the image's top-left corner"
-        },
-        "opacity": {
-          "description": "How opaque the image is drawn, 0..1",
-          "type": "number"
-        },
-        "path": {
-          "description": "Image file (png/jpg/webp/bmp). Required when there is no background yet",
-          "type": "string"
-        },
-        "visible": {
-          "description": "Show or hide the image without removing it",
-          "type": "boolean"
-        }
-      },
-      "type": "object"
-    },
-    "name": "set_background",
-    "outputSchema": {
-      "properties": {
-        "ids": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "ok": {
-          "type": "boolean"
-        },
-        "rev": {
-          "type": "integer"
-        },
-        "text": {
-          "type": "string"
-        },
-        "v": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "ok",
-        "text"
-      ],
-      "type": "object"
-    },
-    "title": "Set a scanned plan"
-  },
-  "set_home": {
-    "annotations": {
-      "destructiveHint": true,
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Project settings"
-    },
-    "description": "Rename the project, set or remove project properties (properties {key: value|null}, or a storey's with level), set the compass (north), set the city whose building code applies (city=sao-paulo), and say who lives there (people {occupants, children, elderly, wheelchair, stature cm, scope}). City and people belong to the project: ergonomics, check_layout and every dry run then weigh the same rules for the same people, so a change can be tested against the score it moves.",
-    "inputSchema": {
-      "$defs": {
-        "People": {
-          "additionalProperties": false,
-          "description": "Who lives there, as far as this call says; the rest is the project's",
-          "properties": {
-            "children": {
-              "description": "Of them, children (sleep in single beds or cribs)",
-              "type": "integer"
-            },
-            "city": {
-              "description": "City whose building code applies for this call only, e.g. `sao-paulo`; `set_home(city=…)` keeps it with the project",
-              "type": "string"
-            },
-            "elderly": {
-              "description": "Of them, elderly people",
-              "type": "integer"
-            },
-            "occupants": {
-              "description": "People living in the home (default 2)",
-              "type": "integer"
-            },
-            "scope": {
-              "$ref": "#/$defs/ReviewScope",
-              "description": "Disciplines included in the score. Architecture always counts; excluded findings remain visible"
-            },
-            "stature": {
-              "description": "Height of the main cook, cm, to size the countertop (default 165)",
-              "type": "number"
-            },
-            "wheelchair": {
-              "description": "Someone uses a wheelchair: NBR 9050 turning space, doors and reach",
-              "type": "boolean"
-            }
-          },
-          "type": "object"
-        },
-        "Point2": {
-          "description": "[x, y] cm",
-          "items": {
-            "type": "number"
-          },
-          "maxItems": 2,
-          "minItems": 2,
-          "type": "array"
-        },
-        "ReviewScope": {
-          "description": "Disciplines included in the habitability score. Architecture is always included; other findings remain visible even when outside the score",
-          "properties": {
-            "electrical": {
-              "default": true,
-              "description": "Count electrical findings in the score (default true)",
-              "type": "boolean"
-            },
-            "plumbing": {
-              "default": true,
-              "description": "Count plumbing findings in the score (default true)",
-              "type": "boolean"
-            }
-          },
-          "type": "object"
-        }
-      },
-      "properties": {
-        "city": {
-          "description": "City whose building code applies, e.g. `sao-paulo`; `\"\"` clears it. Kept with the project, so `ergonomics`, `check_layout` and every dry run weigh the same municipal rules",
-          "type": "string"
-        },
-        "compass_at": {
-          "$ref": "#/$defs/Point2",
-          "description": "Where the compass sits on the plan, `[x,y]` cm"
-        },
-        "compass_d": {
-          "description": "Compass diameter cm",
-          "type": "number"
-        },
-        "compass_visible": {
-          "description": "Show or hide the compass",
-          "type": "boolean"
-        },
-        "country": {
-          "description": "Country whose standards apply, ISO 3166-1 alpha-2: `br`, `us`, `de`; `\"\"` clears it. It decides which sources oblige and which only inform — a Brazilian standard is a reference in Florida, and the IRC is a reference here. A city we hold implies its country, so this is for saying where a project is when no code was picked",
-          "type": "string"
-        },
-        "level": {
-          "description": "Storey whose properties `properties` changes, e.g. `lv2`",
-          "type": "string"
-        },
-        "name": {
-          "description": "The project's name",
-          "type": "string"
-        },
-        "north": {
-          "description": "Clockwise degrees from plan up to north",
-          "type": "number"
-        },
-        "people": {
-          "$ref": "#/$defs/People",
-          "description": "Who lives there — occupants, children, elderly, wheelchair, stature cm, scope — kept with the project: ergonomics and every dry run then score for them. What is left out stays as it was"
-        },
-        "properties": {
-          "additionalProperties": true,
-          "description": "Project properties to set, `{key: \"value\"}`, or remove, `{key: null}` — what an import leaves behind (window sizes, panel dividers, ids of the program it came from). With `level`, that storey's instead",
-          "type": "object"
-        },
-        "region": {
-          "description": "State or province whose code applies: `sp`, `fl`; `\"\"` clears it. In the United States it is the state that adopts a building code, so it matters as much as the country there",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "set_home",
-    "outputSchema": {
-      "properties": {
-        "ids": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "ok": {
-          "type": "boolean"
-        },
-        "rev": {
-          "type": "integer"
-        },
-        "text": {
-          "type": "string"
-        },
-        "v": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "ok",
-        "text"
-      ],
-      "type": "object"
-    },
-    "title": "Project settings"
   },
   "show_plan": {
     "_meta": {
@@ -4736,266 +4709,6 @@
     },
     "title": "Show the plan"
   },
-  "split_wall": {
-    "annotations": {
-      "destructiveHint": true,
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Split a wall"
-    },
-    "description": "Split a wall into two joined walls at t (0..1).",
-    "inputSchema": {
-      "properties": {
-        "id": {
-          "description": "The wall to split",
-          "type": "string"
-        },
-        "t": {
-          "description": "Split position along the wall, 0..1 (default 0.5)",
-          "type": "number"
-        }
-      },
-      "required": [
-        "id"
-      ],
-      "type": "object"
-    },
-    "name": "split_wall",
-    "outputSchema": {
-      "properties": {
-        "ids": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "ok": {
-          "type": "boolean"
-        },
-        "rev": {
-          "type": "integer"
-        },
-        "text": {
-          "type": "string"
-        },
-        "v": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "ok",
-        "text"
-      ],
-      "type": "object"
-    },
-    "title": "Split a wall"
-  },
-  "trace_background": {
-    "annotations": {
-      "openWorldHint": false,
-      "readOnlyHint": true,
-      "title": "Find walls in a scan"
-    },
-    "description": "Trace walls from the background image (set_background first): thick dark or gray bands across or down the image become walls (colored areas — lawn, plants, furniture — are ignored; collinear pieces split by doors/windows up to max_gap join; region limits the search). Returns rows [[x1,y1],[x2,y2],t] in plan cm; trace_walls adds them as walls. Check with render_plan bg=0.5.",
-    "inputSchema": {
-      "additionalProperties": false,
-      "properties": {
-        "h": {
-          "description": "Wall height cm when creating (default 250)",
-          "type": "number"
-        },
-        "max_gap": {
-          "description": "Doors and windows up to this wide don't split a wall, cm (default 130)",
-          "type": "number"
-        },
-        "min_len": {
-          "description": "Shortest wall kept, cm (default 60)",
-          "type": "number"
-        },
-        "region": {
-          "description": "Only this part of the plan `[x0, y0, x1, y1]` cm",
-          "items": {
-            "type": "number"
-          },
-          "maxItems": 4,
-          "minItems": 4,
-          "type": "array"
-        },
-        "t_max": {
-          "description": "Thickest wall kept, cm (default 45)",
-          "type": "number"
-        },
-        "t_min": {
-          "description": "Thinnest wall kept, cm (default 5)",
-          "type": "number"
-        },
-        "threshold": {
-          "description": "Luminance 0..255 below which a gray pixel is ink (default 128; raise it for light gray walls)",
-          "type": "integer"
-        }
-      },
-      "type": "object"
-    },
-    "name": "trace_background",
-    "outputSchema": {
-      "properties": {
-        "rows": {
-          "type": "array"
-        }
-      },
-      "required": [
-        "rows"
-      ],
-      "type": "object"
-    },
-    "title": "Find walls in a scan"
-  },
-  "trace_walls": {
-    "annotations": {
-      "destructiveHint": false,
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Trace walls from a scan"
-    },
-    "description": "Trace walls from the background image, as trace_background does, and create them in one undo step (h: wall height cm, default 250). Check with render_plan bg=0.5.",
-    "inputSchema": {
-      "additionalProperties": false,
-      "properties": {
-        "h": {
-          "description": "Wall height cm when creating (default 250)",
-          "type": "number"
-        },
-        "max_gap": {
-          "description": "Doors and windows up to this wide don't split a wall, cm (default 130)",
-          "type": "number"
-        },
-        "min_len": {
-          "description": "Shortest wall kept, cm (default 60)",
-          "type": "number"
-        },
-        "region": {
-          "description": "Only this part of the plan `[x0, y0, x1, y1]` cm",
-          "items": {
-            "type": "number"
-          },
-          "maxItems": 4,
-          "minItems": 4,
-          "type": "array"
-        },
-        "t_max": {
-          "description": "Thickest wall kept, cm (default 45)",
-          "type": "number"
-        },
-        "t_min": {
-          "description": "Thinnest wall kept, cm (default 5)",
-          "type": "number"
-        },
-        "threshold": {
-          "description": "Luminance 0..255 below which a gray pixel is ink (default 128; raise it for light gray walls)",
-          "type": "integer"
-        }
-      },
-      "type": "object"
-    },
-    "name": "trace_walls",
-    "outputSchema": {
-      "properties": {
-        "ids": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "ok": {
-          "type": "boolean"
-        },
-        "rev": {
-          "type": "integer"
-        },
-        "text": {
-          "type": "string"
-        },
-        "v": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "ok",
-        "text"
-      ],
-      "type": "object"
-    },
-    "title": "Trace walls from a scan"
-  },
-  "undo": {
-    "annotations": {
-      "destructiveHint": true,
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "title": "Undo"
-    },
-    "description": "Undo the last change, whoever made it.",
-    "inputSchema": {
-      "properties": {},
-      "type": "object"
-    },
-    "name": "undo",
-    "outputSchema": {
-      "properties": {
-        "added": {
-          "type": [
-            "array",
-            "integer"
-          ]
-        },
-        "annotations": {
-          "type": "object"
-        },
-        "changed": {
-          "type": [
-            "array",
-            "integer"
-          ]
-        },
-        "gone": {
-          "type": [
-            "array",
-            "integer"
-          ]
-        },
-        "ids": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "ok": {
-          "type": "boolean"
-        },
-        "properties": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "rev": {
-          "type": "integer"
-        },
-        "text": {
-          "type": "string"
-        },
-        "v": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "ok",
-        "text"
-      ],
-      "type": "object"
-    },
-    "title": "Undo"
-  },
   "update": {
     "annotations": {
       "destructiveHint": true,
@@ -5003,7 +4716,7 @@
       "readOnlyHint": false,
       "title": "Change elements"
     },
-    "description": "Change fields of elements by id; each field applies only to the kinds that have it (furniture mat/opacity/pitch, wall h_end, room auto/ceiling_flat, polyline divider). A part of a group takes name, brand, model_name and url on its own; its size and place belong to the group. anchor on a resize holds one face still instead of growing around the center; stretch=[part ids] on a group resize grows only those parts and moves the rest along (uprights keep 5.8 cm while the opening grows). dry=true answers what it would do without writing: changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the kinds `check_layout` gives, and issues_changed (extent_was); dry=\"summary\" leaves out the parts a group rebuilds. Otherwise the reply names what changed. rename {pattern, to, what} renames in bulk by a regex (Rust syntax, `(?i)` for any case, `$1` in to) in one step; with dry it lists them first.",
+    "description": "Change fields of elements by id; each field applies only to the kinds that have it (furniture mat/opacity/pitch, wall h_end, room auto/ceiling_flat, polyline divider). A part of a group takes name, brand, model_name and url on its own; its size and place belong to the group. anchor on a resize holds one face still instead of growing around the center; stretch=[part ids] on a group resize grows only those parts and moves the rest along (uprights keep 5.8 cm while the opening grows). dry=true answers what it would do without writing: changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the kinds `layout` gives, and issues_changed (extent_was); dry=\"summary\" leaves out the parts a group rebuilds. Otherwise the reply names what changed. rename {pattern, to, what} renames in bulk by a regex (Rust syntax, `(?i)` for any case, `$1` in to) in one step; with dry it lists them first.",
     "inputSchema": {
       "$defs": {
         "Dry": {

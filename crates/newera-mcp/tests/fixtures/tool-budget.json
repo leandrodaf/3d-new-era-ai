@@ -1,10 +1,10 @@
 {
-  "total": 112976,
+  "total": 110196,
   "tools": {
     "accept": {
-      "total": 1372,
-      "description": 447,
-      "input": 464,
+      "total": 1360,
+      "description": 441,
+      "input": 458,
       "output": 262
     },
     "annotations": {
@@ -18,6 +18,12 @@
       "description": 822,
       "input": 1679,
       "output": 203
+    },
+    "background": {
+      "total": 1478,
+      "description": 437,
+      "input": 776,
+      "output": 76
     },
     "cabinet_run": {
       "total": 2608,
@@ -37,24 +43,6 @@
       "input": 479,
       "output": 163
     },
-    "check_layout": {
-      "total": 2129,
-      "description": 871,
-      "input": 424,
-      "output": 651
-    },
-    "checkpoint": {
-      "total": 1000,
-      "description": 331,
-      "input": 255,
-      "output": 203
-    },
-    "checkpoints": {
-      "total": 429,
-      "description": 111,
-      "input": 46,
-      "output": 90
-    },
     "create": {
       "total": 9369,
       "description": 505,
@@ -62,8 +50,8 @@
       "output": 203
     },
     "cut_list": {
-      "total": 1314,
-      "description": 663,
+      "total": 1319,
+      "description": 668,
       "input": 205,
       "output": 283
     },
@@ -74,8 +62,8 @@
       "output": 294
     },
     "disciplines": {
-      "total": 1120,
-      "description": 497,
+      "total": 1116,
+      "description": 493,
       "input": 152,
       "output": 267
     },
@@ -84,6 +72,12 @@
       "description": 948,
       "input": 959,
       "output": 551
+    },
+    "edit_background": {
+      "total": 3164,
+      "description": 383,
+      "input": 2346,
+      "output": 203
     },
     "edit_cameras": {
       "total": 1657,
@@ -103,11 +97,29 @@
       "input": 2721,
       "output": 785
     },
+    "edit_history": {
+      "total": 1266,
+      "description": 394,
+      "input": 248,
+      "output": 403
+    },
+    "edit_home": {
+      "total": 4207,
+      "description": 471,
+      "input": 3329,
+      "output": 203
+    },
     "edit_levels": {
       "total": 1645,
       "description": 491,
       "input": 749,
       "output": 203
+    },
+    "edit_lighting": {
+      "total": 1095,
+      "description": 284,
+      "input": 399,
+      "output": 191
     },
     "edit_plumbing": {
       "total": 2419,
@@ -127,6 +139,12 @@
       "input": 1187,
       "output": 258
     },
+    "edit_walls": {
+      "total": 1354,
+      "description": 497,
+      "input": 441,
+      "output": 203
+    },
     "electrical": {
       "total": 1989,
       "description": 930,
@@ -140,22 +158,16 @@
       "output": 300
     },
     "ergonomics": {
-      "total": 2818,
-      "description": 1002,
-      "input": 1288,
+      "total": 2820,
+      "description": 1003,
+      "input": 1289,
       "output": 345
     },
-    "export_cut_list": {
-      "total": 1098,
-      "description": 262,
-      "input": 339,
-      "output": 283
-    },
-    "export_plan": {
-      "total": 926,
-      "description": 117,
-      "input": 402,
-      "output": 203
+    "export": {
+      "total": 1662,
+      "description": 345,
+      "input": 728,
+      "output": 388
     },
     "feedback": {
       "total": 2505,
@@ -163,11 +175,11 @@
       "input": 1276,
       "output": 110
     },
-    "fill_lighting": {
-      "total": 1102,
-      "description": 291,
-      "input": 399,
-      "output": 191
+    "file": {
+      "total": 919,
+      "description": 254,
+      "input": 261,
+      "output": 203
     },
     "fit_roof": {
       "total": 1176,
@@ -175,8 +187,14 @@
       "input": 357,
       "output": 231
     },
-    "get_home": {
-      "total": 2466,
+    "history": {
+      "total": 440,
+      "description": 126,
+      "input": 46,
+      "output": 90
+    },
+    "home": {
+      "total": 2462,
       "description": 594,
       "input": 1218,
       "output": 481
@@ -186,6 +204,12 @@
       "description": 1176,
       "input": 1411,
       "output": 295
+    },
+    "layout": {
+      "total": 2123,
+      "description": 871,
+      "input": 424,
+      "output": 651
     },
     "levels": {
       "total": 465,
@@ -211,29 +235,11 @@
       "input": 1790,
       "output": 302
     },
-    "merge_walls": {
-      "total": 1029,
-      "description": 461,
-      "input": 169,
-      "output": 203
-    },
     "move": {
       "total": 2219,
       "description": 223,
       "input": 1008,
       "output": 793
-    },
-    "new_home": {
-      "total": 455,
-      "description": 26,
-      "input": 33,
-      "output": 203
-    },
-    "open_home": {
-      "total": 639,
-      "description": 91,
-      "input": 145,
-      "output": 203
     },
     "place": {
       "total": 7501,
@@ -252,12 +258,6 @@
       "description": 702,
       "input": 46,
       "output": 274
-    },
-    "redo": {
-      "total": 639,
-      "description": 28,
-      "input": 33,
-      "output": 403
     },
     "render_3d": {
       "total": 2114,
@@ -278,8 +278,8 @@
       "output": 85
     },
     "rules": {
-      "total": 877,
-      "description": 396,
+      "total": 871,
+      "description": 390,
       "input": 200,
       "output": 77
     },
@@ -289,29 +289,11 @@
       "input": 210,
       "output": 288
     },
-    "save_home": {
-      "total": 610,
-      "description": 63,
-      "input": 140,
-      "output": 203
-    },
     "sessions": {
       "total": 402,
       "description": 77,
       "input": 33,
       "output": 107
-    },
-    "set_background": {
-      "total": 2108,
-      "description": 222,
-      "input": 1470,
-      "output": 203
-    },
-    "set_home": {
-      "total": 4213,
-      "description": 473,
-      "input": 3334,
-      "output": 203
     },
     "show_plan": {
       "total": 770,
@@ -319,33 +301,9 @@
       "input": 33,
       "output": 181
     },
-    "split_wall": {
-      "total": 642,
-      "description": 47,
-      "input": 195,
-      "output": 203
-    },
-    "trace_background": {
-      "total": 1426,
-      "description": 379,
-      "input": 776,
-      "output": 76
-    },
-    "trace_walls": {
-      "total": 1362,
-      "description": 162,
-      "input": 776,
-      "output": 203
-    },
-    "undo": {
-      "total": 649,
-      "description": 38,
-      "input": 33,
-      "output": 403
-    },
     "update": {
-      "total": 9768,
-      "description": 1007,
+      "total": 9762,
+      "description": 1001,
       "input": 7703,
       "output": 857
     },

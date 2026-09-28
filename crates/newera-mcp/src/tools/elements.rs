@@ -11,7 +11,9 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use super::NewEraMcp;
-use super::reply::{self, Dry, applied, background_scale, core, invalid, ok, on_variant};
+use super::reply::{
+    self, Dry, Raw, applied, background_scale, core, forward, invalid, ok, on_variant, take_action,
+};
 use crate::edit::{self, CreateParams, UpdateSpec};
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -31,6 +33,20 @@ pub(crate) struct UpdateParams {
 pub(crate) struct IdsParams {
     /// The walls to join, in order along the line they make.
     ids: Vec<String>,
+}
+/// What `edit_walls` takes; each action goes on to its own parameters.
+#[derive(JsonSchema)]
+#[allow(dead_code)] // a schema, never built
+pub(crate) struct WallsSchema {
+    /// What to do with the walls.
+    #[schemars(extend("enum" = ["split", "merge"]))]
+    action: String,
+    /// For `split`: the wall to split.
+    id: Option<String>,
+    /// For `split`: where along the wall, 0..1 (default 0.5).
+    t: Option<f64>,
+    /// For `merge`: the walls to join, in order along the line they make.
+    ids: Option<Vec<String>>,
 }
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct DeleteParams {
@@ -144,7 +160,7 @@ impl NewEraMcp {
         Ok(ok(&doc, &ids))
     }
     #[tool(
-        description = "Change fields of elements by id; each field applies only to the kinds that have it (furniture mat/opacity/pitch, wall h_end, room auto/ceiling_flat, polyline divider). A part of a group takes name, brand, model_name and url on its own; its size and place belong to the group. anchor on a resize holds one face still instead of growing around the center; stretch=[part ids] on a group resize grows only those parts and moves the rest along (uprights keep 5.8 cm while the opening grows). dry=true answers what it would do without writing: changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the kinds `check_layout` gives, and issues_changed (extent_was); dry=\"summary\" leaves out the parts a group rebuilds. Otherwise the reply names what changed. rename {pattern, to, what} renames in bulk by a regex (Rust syntax, `(?i)` for any case, `$1` in to) in one step; with dry it lists them first."
+        description = "Change fields of elements by id; each field applies only to the kinds that have it (furniture mat/opacity/pitch, wall h_end, room auto/ceiling_flat, polyline divider). A part of a group takes name, brand, model_name and url on its own; its size and place belong to the group. anchor on a resize holds one face still instead of growing around the center; stretch=[part ids] on a group resize grows only those parts and moves the rest along (uprights keep 5.8 cm while the opening grows). dry=true answers what it would do without writing: changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the kinds `layout` gives, and issues_changed (extent_was); dry=\"summary\" leaves out the parts a group rebuilds. Otherwise the reply names what changed. rename {pattern, to, what} renames in bulk by a regex (Rust syntax, `(?i)` for any case, `$1` in to) in one step; with dry it lists them first."
     )]
     pub(crate) fn update(
         &self,
@@ -286,7 +302,19 @@ impl NewEraMcp {
         ops::translate(&mut doc, &ids, dx, dy, joined).map_err(core)?;
         Ok(applied(&doc, &before))
     }
-    #[tool(description = "Split a wall into two joined walls at t (0..1).")]
+    #[tool(
+        description = "Split a wall in two, or join walls into one. split {id, t?} cuts a wall into two joined walls at t (0..1, default 0.5). merge {ids} joins walls running along one line — the wall a partition interrupted, a stretch imported as many segments, the same wall drawn twice: the longest keeps its id and its build (thickness, height, type, finishes) and spans them all, the others are deleted, doors and windows stay where they are, and a gap between them is closed. The reply names the ids that result."
+    )]
+    pub(crate) fn edit_walls(
+        &self,
+        Parameters(Raw(mut args, _)): Parameters<Raw<WallsSchema>>,
+    ) -> Result<String, ErrorData> {
+        match take_action(&mut args, "action", &["split", "merge"], None)?.as_str() {
+            "split" => self.split_wall(Parameters(forward(args)?)),
+            _ => self.merge_walls(Parameters(forward(args)?)),
+        }
+    }
+    /// Splits a wall into two joined walls at `t`.
     pub(crate) fn split_wall(
         &self,
         Parameters(p): Parameters<SplitParams>,
@@ -296,9 +324,7 @@ impl NewEraMcp {
         let second = ops::split_wall(&mut doc, id, p.t.unwrap_or(0.5)).map_err(core)?;
         Ok(ok(&doc, &[second.to_string()]))
     }
-    #[tool(
-        description = "Join walls that run along the same line into a single wall: the wall a partition interrupted, a stretch imported as many segments, the same wall drawn twice. The longest one keeps its id and its build (thickness, height, type, finishes) and spans them all; the others are deleted, doors and windows stay where they are, and a gap between them is closed. Straight walls on one storey whose centerlines run inside one another; the reply names the id that remains."
-    )]
+    /// Joins walls along one line into the longest of them.
     pub(crate) fn merge_walls(
         &self,
         Parameters(p): Parameters<IdsParams>,

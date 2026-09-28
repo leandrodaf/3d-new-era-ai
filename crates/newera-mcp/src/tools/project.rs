@@ -10,7 +10,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use super::NewEraMcp;
-use super::reply::{core, invalid, ok, write_action};
+use super::reply::{Raw, core, forward, invalid, ok, take_action, write_action};
 use crate::compact;
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -26,7 +26,7 @@ pub(crate) struct SetHomeParams {
     /// Show or hide the compass.
     compass_visible: Option<bool>,
     /// City whose building code applies, e.g. `sao-paulo`; `""` clears it.
-    /// Kept with the project, so `ergonomics`, `check_layout` and every dry
+    /// Kept with the project, so `ergonomics`, `layout` and every dry
     /// run weigh the same municipal rules.
     city: Option<String>,
     /// Country whose standards apply, ISO 3166-1 alpha-2: `br`, `us`, `de`;
@@ -96,6 +96,26 @@ pub(crate) struct OpenParams {
     /// Project (`.newera`) or Sweet Home 3D file (`.sh3d`).
     path: String,
 }
+/// What `file` takes; each action goes on to its own parameters.
+#[derive(JsonSchema)]
+#[allow(dead_code)] // a schema, never built
+pub(crate) struct FileSchema {
+    /// What to do with the project.
+    #[schemars(extend("enum" = ["new", "open", "save"]))]
+    action: String,
+    /// For `open` and `save`: the file, `.newera` (or `.sh3d` to import).
+    path: Option<String>,
+}
+/// What `edit_history` takes.
+#[derive(JsonSchema)]
+#[allow(dead_code)] // a schema, never built
+pub(crate) struct HistorySchema {
+    /// What to do.
+    #[schemars(extend("enum" = ["undo", "redo", "checkpoint", "revert"]))]
+    action: String,
+    /// For `checkpoint` and `revert`: the checkpoint's name.
+    label: Option<String>,
+}
 fn with_extension(path: PathBuf) -> PathBuf {
     if path.extension().is_some() {
         path
@@ -106,7 +126,8 @@ fn with_extension(path: PathBuf) -> PathBuf {
 #[tool_router(router = project_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Rename the project, set or remove project properties (properties {key: value|null}, or a storey's with level), set the compass (north), set the city whose building code applies (city=sao-paulo), and say who lives there (people {occupants, children, elderly, wheelchair, stature cm, scope}). City and people belong to the project: ergonomics, check_layout and every dry run then weigh the same rules for the same people, so a change can be tested against the score it moves."
+        name = "edit_home",
+        description = "Rename the project, set or remove project properties (properties {key: value|null}, or a storey's with level), set the compass (north), set the city whose building code applies (city=sao-paulo), and say who lives there (people {occupants, children, elderly, wheelchair, stature cm, scope}). City and people belong to the project: `ergonomics`, `layout` and every dry run then weigh the same rules for the same people, so a change can be tested against the score it moves."
     )]
     pub(crate) fn set_home(
         &self,
@@ -205,7 +226,7 @@ impl NewEraMcp {
         doc.execute(Command::Batch { commands }).map_err(core)?;
         Ok(ok(&doc, &[]))
     }
-    #[tool(description = "Save the project (.newera). path optional after the first save.")]
+    /// Saves the project where it was, or at `path`.
     pub(crate) fn save_home(
         &self,
         Parameters(p): Parameters<PathParams>,
@@ -221,9 +242,7 @@ impl NewEraMcp {
         doc.mark_saved(&path);
         Ok(format!("ok {}", path.display()))
     }
-    #[tool(
-        description = "Open a project (.newera) or import a Sweet Home 3D file (.sh3d), replacing the current one."
-    )]
+    /// Opens a project, or imports a Sweet Home 3D file, in place of this one.
     pub(crate) fn open_home(
         &self,
         Parameters(p): Parameters<OpenParams>,
@@ -241,7 +260,20 @@ impl NewEraMcp {
         }
         Ok(reply)
     }
-    #[tool(description = "Start a new empty project.")]
+    #[tool(
+        description = "Start, open or save the project. new: an empty project in place of this one. open {path}: a project (.newera), or a Sweet Home 3D file (.sh3d) imported, in place of this one. save {path?}: writes the project (.newera); path is optional once it was saved."
+    )]
+    pub(crate) fn file(
+        &self,
+        Parameters(Raw(mut args, _)): Parameters<Raw<FileSchema>>,
+    ) -> Result<String, ErrorData> {
+        match take_action(&mut args, "action", &["new", "open", "save"], None)?.as_str() {
+            "new" => Ok(self.new_home()),
+            "open" => self.open_home(Parameters(forward(args)?)),
+            _ => self.save_home(Parameters(forward(args)?)),
+        }
+    }
+    /// Starts a new, empty project.
     pub(crate) fn new_home(&self) -> String {
         let mut doc = self.document.write();
         doc.load(Home::default());
@@ -378,8 +410,8 @@ impl NewEraMcp {
         }
     }
     #[tool(
-        name = "checkpoints",
-        description = "What checkpoint remembered: rows [label, changes ago]. A checkpoint lives with the project and survives saving."
+        name = "history",
+        description = "The checkpoints `edit_history` remembered: rows [label, changes ago]. A checkpoint lives with the project and survives saving."
     )]
     pub(crate) fn list_checkpoints(
         &self,
@@ -391,9 +423,29 @@ impl NewEraMcp {
         }))
     }
     #[tool(
-        name = "checkpoint",
-        description = "Name where the plan is now, and come back to it. {label} (action checkpoint, the default) remembers this point; action=revert {label} undoes back down to it, keeping every id — which duplicating a version cannot do, since a copy renumbers. A checkpoint lives with the project and survives saving; the checkpoints tool lists them."
+        description = "Undo, redo, or name where the plan is now and come back to it. undo and redo step through changes, whoever made them, and the reply names what changed. checkpoint {label} remembers this point; revert {label} undoes back down to it, keeping every id — which duplicating a version cannot do, since a copy renumbers. A checkpoint lives with the project and survives saving; `history` lists them."
     )]
+    pub(crate) fn edit_history(
+        &self,
+        Parameters(Raw(mut args, _)): Parameters<Raw<HistorySchema>>,
+    ) -> Result<String, ErrorData> {
+        let action = take_action(
+            &mut args,
+            "action",
+            &["undo", "redo", "checkpoint", "revert"],
+            None,
+        )?;
+        match action.as_str() {
+            "undo" => self.undo(),
+            "redo" => self.redo(),
+            _ => {
+                let mut p: CheckpointParams = forward(args)?;
+                p.action = Some(action);
+                self.set_checkpoint(Parameters(p))
+            }
+        }
+    }
+    /// Remembers a checkpoint, or goes back to one.
     pub(crate) fn set_checkpoint(
         &self,
         Parameters(p): Parameters<CheckpointParams>,
@@ -401,7 +453,7 @@ impl NewEraMcp {
         let action = write_action(
             Some(p.action.as_deref().unwrap_or("checkpoint")),
             &["checkpoint", "set", "revert"],
-            "checkpoints",
+            "history",
         )?
         .to_owned();
         self.checkpoint(Parameters(CheckpointParams {
@@ -460,7 +512,7 @@ impl NewEraMcp {
             other => Err(invalid(format!("unknown action `{other}`"))),
         }
     }
-    #[tool(description = "Undo the last change, whoever made it.")]
+    /// Undoes the last change, whoever made it.
     pub(crate) fn undo(&self) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
         let before = doc.home().clone();
@@ -469,7 +521,7 @@ impl NewEraMcp {
         // numbers with it is otherwise found only in a render.
         Ok(super::reply::applied(&doc, &before))
     }
-    #[tool(description = "Redo the last undone change.")]
+    /// Redoes the last undone change.
     pub(crate) fn redo(&self) -> Result<String, ErrorData> {
         let mut doc = self.document.write();
         let before = doc.home().clone();

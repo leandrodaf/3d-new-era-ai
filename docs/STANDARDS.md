@@ -66,7 +66,7 @@ a letter come out right is how the taxonomy rots.
 
 The place a report was weighed at travels with it, as `Report.place`: whoever
 shows a citation has to know where it was judged, or the letter means nothing.
-`set_home(country=…, region=…, city=…)` is what sets it, and a city the registry
+`edit_home(country=…, region=…, city=…)` is what sets it, and a city the registry
 holds implies its state and country.
 
 Besides the tier, every entry carries a `Confidence`. `ConfirmBeforeUse` marks

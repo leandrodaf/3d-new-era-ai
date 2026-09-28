@@ -56,7 +56,7 @@ async fn an_ai_reaches_the_tab_and_the_tab_answers() {
         .send(tokio_tungstenite::tungstenite::Message::text(
             json!({
                 "type": "hello",
-                "tools": [{"name": "get_home", "description": "reads the plan", "inputSchema": {"type": "object"}}]
+                "tools": [{"name": "home", "description": "reads the plan", "inputSchema": {"type": "object"}}]
             })
             .to_string(),
         ))
@@ -91,7 +91,7 @@ async fn an_ai_reaches_the_tab_and_the_tab_answers() {
         json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
     )
     .await;
-    assert_eq!(list["result"]["tools"][0]["name"], "get_home");
+    assert_eq!(list["result"]["tools"][0]["name"], "home");
 
     // 5. A call goes down to the window, and its answer comes back up.
     let calling = tokio::spawn({
@@ -101,7 +101,7 @@ async fn an_ai_reaches_the_tab_and_the_tab_answers() {
                 &mcp,
                 json!({
                     "jsonrpc": "2.0", "id": 3, "method": "tools/call",
-                    "params": {"name": "get_home", "arguments": {"level": 0}}
+                    "params": {"name": "home", "arguments": {"level": 0}}
                 }),
             )
             .await
@@ -111,7 +111,7 @@ async fn an_ai_reaches_the_tab_and_the_tab_answers() {
     let work = socket.next().await.expect("a message").expect("text");
     let work: Value = serde_json::from_str(work.to_text().unwrap()).unwrap();
     assert_eq!(work["type"], "call");
-    assert_eq!(work["name"], "get_home");
+    assert_eq!(work["name"], "home");
     assert_eq!(work["args"]["level"], 0);
     socket
         .send(tokio_tungstenite::tungstenite::Message::text(
@@ -137,7 +137,7 @@ async fn an_ai_reaches_the_tab_and_the_tab_answers() {
         &mcp,
         json!({
             "jsonrpc": "2.0", "id": 4, "method": "tools/call",
-            "params": {"name": "get_home", "arguments": {}}
+            "params": {"name": "home", "arguments": {}}
         }),
     )
     .await;

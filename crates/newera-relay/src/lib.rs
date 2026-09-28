@@ -856,7 +856,7 @@ mod tests {
         let (id, _tab, token) = rooms.open("test", None).expect("a room");
         let call = json!({
             "jsonrpc": "2.0", "id": 7, "method": "tools/call",
-            "params": {"name": "get_home", "arguments": {}}
+            "params": {"name": "home", "arguments": {}}
         });
         let answer = answer(&rooms, &id, &token, &call).await.expect("an answer");
         assert_eq!(answer["result"]["isError"], true);

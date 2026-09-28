@@ -45,7 +45,7 @@ pub(crate) struct RulesParams {
 #[tool_router(router = rules_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "The rules behind a review, as Markdown: what `electrical` and `plumbing` check against NBR 5410, 16264, 5626 and 8160 (outlets per room, loads, wire sections, DR, the panel, Wi-Fi, drains, diameters, traps, pipe runs), what each `check_layout` problem means and how to fix it, and how `ergonomics` scores (weights, source tiers, scope, city). For designing to a standard, or explaining a finding."
+        description = "The rules behind a review, as Markdown: what `electrical` and `plumbing` check against NBR 5410, 16264, 5626 and 8160 (outlets per room, loads, wire sections, DR, the panel, Wi-Fi, drains, diameters, traps, pipe runs), what each `layout` problem means and how to fix it, and how `ergonomics` scores (weights, source tiers, scope, city). For designing to a standard, or explaining a finding."
     )]
     #[allow(clippy::unused_self)] // tool methods need the receiver
     pub(crate) fn rules(

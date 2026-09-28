@@ -784,7 +784,7 @@ impl UpdateSpec {
 /// Why an id does not resolve, in the terms of whoever asked.
 ///
 /// The commonest miss is a part of a group: those ids come out of diffs and
-/// of `check_layout`, so trying one is fair, and "not found" would send the
+/// of `layout`, so trying one is fair, and "not found" would send the
 /// caller looking for a typo instead of at the parent it belongs to.
 pub(crate) fn missing(home: &newera_core::Home, id: ElementId) -> String {
     if let ElementId::Furniture(piece) = id
