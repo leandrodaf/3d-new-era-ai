@@ -81,7 +81,7 @@ pub(crate) struct EditBackgroundSchema {
 #[tool_router(router = background_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Put a scanned plan under the drawing at real scale, or turn it into walls. set {path, then cm_per_px (+cm_per_px_y), calibrate {a,b px, cm} or calibrations [{a,b,cm}…] to fit X/Y scales; angle (clockwise °); offset, opacity, visible; clear=true removes it}. trace creates, in one undo step, the walls `background` detects (same arguments, plus h). Check with `render_plan` bg=0.5."
+        description = "Put a scanned plan under the drawing at real scale, or turn it into walls. set {path, then cm_per_px (+cm_per_px_y), calibrate {a,b px, cm} or calibrations [{a,b,cm}…] to fit X/Y scales; angle (clockwise °); offset, opacity, visible; clear=true removes it}. trace {threshold?, min_len?, t_min?, t_max?, max_gap?, region?, h?} creates, in one undo step, the walls `background` detects with the same options, on the image set puts there. Check with `render_plan` bg=0.5."
     )]
     pub(crate) fn edit_background(
         &self,

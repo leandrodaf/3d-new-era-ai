@@ -781,6 +781,16 @@ async fn hand_to_tab(rooms: &Rooms, room: &str, name: &str, args: Value) -> Resu
                     .to_owned(),
             );
         };
+        // A tab keeps the editor it loaded: one older than the service that
+        // listed a tool does not have it, and says so better than `unknown`.
+        if let Some(offered) = entry.tools.as_array()
+            && !offered.is_empty()
+            && !offered.iter().any(|tool| tool["name"] == name)
+        {
+            return Err(format!(
+                "the editor open in the browser has no tool `{name}`: it is older than this service — reload the tab and call again"
+            ));
+        }
         entry.next_call += 1;
         let id = entry.next_call;
         entry.waiting.insert(id, tx);
@@ -862,6 +872,29 @@ mod tests {
         assert_eq!(answer["result"]["isError"], true);
         let text = answer["result"]["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("not connected"), "{text}");
+    }
+
+    /// A tab running an editor older than the service that listed a tool
+    /// says to reload it, instead of an unknown tool.
+    #[tokio::test]
+    async fn an_older_tab_asks_to_be_reloaded() {
+        let rooms = Rooms::default();
+        let (id, _tab, token) = rooms.open("test", None).expect("a room");
+        let (outbox, _inbox) = mpsc::unbounded_channel();
+        {
+            let mut held = rooms.0.lock().expect("rooms");
+            let entry = held.rooms.get_mut(&id).expect("the room");
+            entry.outbox = Some(outbox);
+            entry.tools = json!([{"name": "home"}]);
+        }
+        let call = json!({
+            "jsonrpc": "2.0", "id": 8, "method": "tools/call",
+            "params": {"name": "file", "arguments": {"action": "save"}}
+        });
+        let answer = answer(&rooms, &id, &token, &call).await.expect("an answer");
+        assert_eq!(answer["result"]["isError"], true);
+        let text = answer["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("reload the tab"), "{text}");
     }
 
     /// The handshake answers like a server, and says what it is.

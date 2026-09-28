@@ -68,7 +68,7 @@ All kinds share one id counter, and composite pieces (roofs, joinery, cabinet ru
 parts, so ids have gaps: use the ids a reply returns, never guess the next one. \
 Reads omit defaults (wall t=15 h=250). Writes reply `ok rev=N [ids=...]`; don't re-read \
 unless needed. Every change is one undoable step. \
-Tools, by what they are for — a read is a noun, the tool that changes it is edit_<noun>: \
+Tools, by what they are for — most reads are nouns, and a read that can be changed has an edit_<noun> beside it; file, export and the element verbs (create, update, place…) are named for what they do: \
 project: home, file, edit_home, history, edit_history, variants, edit_variants, levels, edit_levels, sessions; \
 drawing: create, update, delete, move, edit_walls, place, arrange, catalog, materials, measure, fit_roof, \
 background, edit_background; \

@@ -135,6 +135,10 @@ fn hosted_tools() -> Vec<Value> {
                     "type": "string",
                     "description": "For `new`: the project's name",
                 });
+                tool["inputSchema"]["properties"]["path"] = json!({
+                    "type": "string",
+                    "description": "For `open` and `save`: a project's name — open takes one projects lists, save renames the active one",
+                });
             }
         }
     }
