@@ -15,8 +15,9 @@ the `key` it is accepted by and the elements involved (name, bounds and z).
 - **blocks_door** `{key, door, by}`: includes a 60 cm approach on either face, even for
   sliding doors and passages.
 - **blocks_window**: nearby tall or elevated solids masking the window, with extent
-  [width,height] cm; compact countertop objects are exempt, so this does not certify sash
-  operation or ventilation.
+  [width,height] cm; compact countertop objects, plants, lights, glass and guards (bar
+  railings, glass balustrades, balcony glazing) are exempt, so this does not certify sash
+  operation, ventilation or protection against falls.
 - **no_door**: a bedroom or bathroom (by name) with no door — only open passages, listed,
   or no way in at all — said once the storey has doors somewhere; a living room, kitchen or
   balcony left open is not.

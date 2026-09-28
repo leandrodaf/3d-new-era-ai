@@ -879,10 +879,13 @@ fn passage_hits(door: &Furniture, piece: &Furniture, footprint: &Polygon<f64>) -
 /// Sash operation and appliance ventilation require separate use checks.
 fn window_obstruction(window: &Furniture, piece: &Furniture) -> Option<[f64; 2]> {
     // Their bounding boxes are mostly air or transparent glass. Treating
-    // them as opaque cupboards would reject ordinary window-side decor.
+    // them as opaque cupboards would reject ordinary window-side decor —
+    // and a guard of bars or glass in front of a window, which is what
+    // guards are for.
     if piece.light.is_some()
         || matches!(piece.catalog.as_str(), "plant" | "shower-glass")
         || piece.opacity.is_some_and(|opacity| opacity < 0.5)
+        || crate::guard::guard_of(piece).is_some()
     {
         return None;
     }
@@ -1671,6 +1674,24 @@ mod tests {
             glass.opacity = None;
             glass.catalog = "plant".into();
             assert!(window_obstruction(&window, &glass).is_none());
+            // Bars or glass under a handrail, rising past the sill (a landing
+            // guard in front of a stair window).
+            let mut guard = hood.clone();
+            guard.elevation = 40.0;
+            guard.height = 110.0;
+            guard.width = 180.0;
+            guard.depth = 5.0;
+            assert!(window_obstruction(&window, &guard).is_some(), "a solid box");
+            for catalog in ["railing", "glass-railing", "balcony-glazing"] {
+                guard.catalog = catalog.into();
+                assert!(window_obstruction(&window, &guard).is_none(), "{catalog}");
+            }
+            guard.catalog = "box".into();
+            guard.name = "Guarda-corpo de barras do patamar".into();
+            assert!(
+                window_obstruction(&window, &guard).is_none(),
+                "named a guard"
+            );
             let mut fridge = hood.clone();
             fridge.elevation = 0.0;
             fridge.height = 180.0;
