@@ -1485,7 +1485,13 @@ mod tests {
         use crate::vocabulary::Language;
         let mut home = Home::default();
         home.furniture = vec![
-            piece(40, "sink-counter", "Pia", (100.0, 30.0), (120.0, 60.0, 90.0)),
+            piece(
+                40,
+                "sink-counter",
+                "Pia",
+                (100.0, 30.0),
+                (120.0, 60.0, 90.0),
+            ),
             piece(41, "washer", "Máquina", (300.0, 30.0), (60.0, 60.0, 85.0)),
         ];
         let said: Vec<(String, String)> = check(&home)
@@ -1501,7 +1507,10 @@ mod tests {
         assert_eq!(said.len(), 2, "{said:?}");
         assert!(said[0].0.contains(": a pia de cozinha não tem"), "{said:?}");
         assert!(said[0].1.contains(": the kitchen sink has"), "{said:?}");
-        assert!(said[1].0.contains(": a máquina de lavar não tem"), "{said:?}");
+        assert!(
+            said[1].0.contains(": a máquina de lavar não tem"),
+            "{said:?}"
+        );
     }
 
     #[test]
