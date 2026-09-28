@@ -796,6 +796,10 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
             .iter()
             .map(|r| (home.resolve_level(r.level), polygon(&r.points)))
             .collect();
+        // Outside, per group: a facade panel of 42 slats is one piece
+        // outside, said once, and a shelf of a cabinet sticking out is that
+        // shelf.
+        let mut outside: Vec<(usize, FurnitureId, bool)> = Vec::new();
         for (i, piece) in pieces.iter().enumerate() {
             if piece.is_opening() {
                 continue;
@@ -806,8 +810,21 @@ pub fn check_layout_in(home: &Home, scope: Storeys) -> Vec<Issue> {
                 .any(|(level, r)| *level == levels[i] && geo::Contains::contains(r, &center));
             // A storey with no rooms drawn yet has nothing to be outside of.
             let has_rooms = rooms.iter().any(|(level, _)| *level == levels[i]);
-            if has_rooms && !covered {
-                issues.push(Issue::OutsideRooms(piece.id));
+            outside.push((groups[i], piece.id, has_rooms && !covered));
+        }
+        let mut said: Vec<usize> = Vec::new();
+        for &(group, id, out) in &outside {
+            if !out {
+                continue;
+            }
+            let parts = outside.iter().filter(|(g, ..)| *g == group);
+            if parts.clone().count() > 1 && parts.clone().all(|(.., out)| *out) {
+                if !said.contains(&group) {
+                    said.push(group);
+                    issues.push(Issue::OutsideRooms(home.furniture[group].id));
+                }
+            } else {
+                issues.push(Issue::OutsideRooms(id));
             }
         }
     }
@@ -1689,6 +1706,19 @@ mod tests {
             .push(piece(22, (40.0, 180.0), (40.0, 40.0, 80.0))); // in the swing
         home.furniture
             .push(piece(23, (900.0, 900.0), (40.0, 40.0, 40.0))); // outside
+        // A panel of slats outside is one piece outside; a shelf of a
+        // cabinet sticking out of the room is that shelf.
+        let mut panel = piece(24, (900.0, 600.0), (100.0, 5.0, 200.0));
+        panel.children = [(25, 860.0), (26, 900.0), (27, 940.0)]
+            .map(|(id, x)| piece(id, (x, 600.0), (4.0, 5.0, 200.0)))
+            .to_vec();
+        home.furniture.push(panel);
+        let mut cabinet = piece(30, (100.0, 380.0), (100.0, 40.0, 200.0));
+        cabinet.children = vec![
+            piece(31, (100.0, 380.0), (100.0, 40.0, 200.0)),
+            piece(32, (100.0, 420.0), (100.0, 30.0, 2.0)),
+        ];
+        home.furniture.push(cabinet);
 
         let issues = check_layout(&home);
         assert!(
@@ -1697,6 +1727,18 @@ mod tests {
         );
         assert!(
             issues.contains(&Issue::OutsideRooms(FurnitureId(23))),
+            "{issues:?}"
+        );
+        let outside: Vec<FurnitureId> = issues
+            .iter()
+            .filter_map(|i| match i {
+                Issue::OutsideRooms(f) => Some(*f),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            outside,
+            [FurnitureId(23), FurnitureId(24), FurnitureId(32)],
             "{issues:?}"
         );
         let swing_side = door_swing(&home.furniture[1]).unwrap();

@@ -75,6 +75,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `layout` says a group outside every room once. Each of its parts was a row, so a facade panel
+  of 42 slats was 43 `outside_rooms` rows next to the four parapets; a group partly outside still
+  names the parts that are.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
