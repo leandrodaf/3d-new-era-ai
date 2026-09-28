@@ -23,6 +23,23 @@ pub(crate) fn material(raw: &str) -> EditResult<Option<Material>> {
     raw.parse().map(Some)
 }
 
+/// Sets a piece's finish. A finish that is only a color — `#c8b89a`, no
+/// pattern and no image — is the piece's color: a piece draws its finish
+/// from a pattern or an image, and a bare color there would change nothing
+/// on screen. A `color` given in the same call wins.
+fn finish(piece: &mut newera_core::Furniture, raw: &str, color_given: bool) -> EditResult<()> {
+    match material(raw)? {
+        Some(m) if m.pattern.is_none() && m.image.is_none() => {
+            if !color_given {
+                piece.color = m.color.or(piece.color);
+            }
+            piece.texture = None;
+        }
+        other => piece.texture = other,
+    }
+    Ok(())
+}
+
 /// Resolves a wall type id; `none` clears it.
 fn wall_type(raw: &str) -> EditResult<Option<&'static newera_core::WallType>> {
     if raw == "none" {
@@ -315,7 +332,7 @@ fn solid(doc: &mut Document, spec: &SolidSpec) -> EditResult<newera_core::Furnit
         _ => return Err("a solid needs either `pts` or `profile`".into()),
     }
     if let Some(raw) = &spec.mat {
-        piece.texture = material(raw)?;
+        finish(&mut piece, raw, spec.color.is_some())?;
     }
     piece.opacity = spec.opacity.filter(|o| *o < 1.0).map(|o| o.clamp(0.0, 1.0));
     Ok(piece)
@@ -1031,7 +1048,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 f.name = spec.name.unwrap_or(f.name);
                 f.color = spec.color.or(f.color);
                 if let Some(raw) = &spec.mat {
-                    f.texture = material(raw)?;
+                    finish(&mut f, raw, spec.color.is_some())?;
                 }
                 if let Some(o) = spec.opacity {
                     f.opacity = (o < 1.0).then_some(o.clamp(0.0, 1.0));
@@ -2451,7 +2468,7 @@ pub(crate) fn place_noting(
         piece.name = spec.name.unwrap_or(piece.name);
         piece.color = spec.color.or(piece.color);
         if let Some(raw) = &spec.mat {
-            piece.texture = material(raw)?;
+            finish(&mut piece, raw, spec.color.is_some())?;
         }
         if let Some(o) = spec.opacity {
             piece.opacity = (o < 1.0).then_some(o.clamp(0.0, 1.0));
@@ -2689,6 +2706,64 @@ fn back_against_nearest_wall(
 #[cfg(test)]
 mod place_tests {
     use super::*;
+
+    #[test]
+    fn a_finish_that_is_only_a_color_paints_the_piece() {
+        let mut doc = Document::default();
+        let ids = place(
+            &mut doc,
+            vec![
+                PlaceSpec {
+                    cat: "wardrobe".into(),
+                    at: Some(Point2::new(100.0, 100.0)),
+                    mat: Some("#c8b89a".into()),
+                    ..PlaceSpec::default()
+                },
+                PlaceSpec {
+                    cat: "wardrobe".into(),
+                    at: Some(Point2::new(300.0, 100.0)),
+                    mat: Some("wood #c8b89a".into()),
+                    ..PlaceSpec::default()
+                },
+                PlaceSpec {
+                    cat: "wardrobe".into(),
+                    at: Some(Point2::new(500.0, 100.0)),
+                    color: Some([1, 2, 3]),
+                    mat: Some("#c8b89a".into()),
+                    ..PlaceSpec::default()
+                },
+            ],
+        )
+        .unwrap();
+        let piece = |doc: &Document, id: &str| {
+            doc.home()
+                .furniture
+                .iter()
+                .find(|f| f.id.to_string() == id)
+                .unwrap()
+                .clone()
+        };
+        let plain = piece(&doc, &ids[0]);
+        assert_eq!(plain.color, Some([0xc8, 0xb8, 0x9a]));
+        assert_eq!(plain.texture, None);
+        // A pattern is a finish; its color tints it.
+        let wood = piece(&doc, &ids[1]);
+        assert!(wood.texture.is_some_and(|t| t.pattern.is_some()));
+        assert_eq!(piece(&doc, &ids[2]).color, Some([1, 2, 3]), "color wins");
+        // Changed later, the same.
+        update(
+            &mut doc,
+            vec![UpdateSpec {
+                id: ids[1].clone(),
+                mat: Some("#445566".into()),
+                ..UpdateSpec::default()
+            }],
+        )
+        .unwrap();
+        let repainted = piece(&doc, &ids[1]);
+        assert_eq!(repainted.color, Some([0x44, 0x55, 0x66]));
+        assert_eq!(repainted.texture, None, "the wood is gone");
+    }
 
     #[test]
     fn a_batch_says_every_item_it_refuses_and_places_none() {
