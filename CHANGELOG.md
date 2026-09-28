@@ -75,11 +75,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- `ergonomics` judges a bathroom as a bathroom. A bowl set into a vanity — a "cuba" — was read as
-  a kitchen sink wherever it stood, so a bathroom with a countertop and a bowl, or a double vanity,
-  was reviewed as a kitchen (the five work zones, 366 cm of counter) and still said to have no
-  basin. A bowl in a bathroom is now a basin; a bathroom or a laundry is never reviewed as a
-  kitchen; and the cabinet under a vanity asks the basin's 40 cm in front, not a kitchen's 85.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
