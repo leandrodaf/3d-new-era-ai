@@ -494,6 +494,12 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
                 ),
                 ("warnings", strings("What is not drawn as the file says")),
                 ("piece", object("With id: {id, size cm, scale per axis}")),
+                (
+                    "clashes",
+                    list("check: [part, part, triangle pairs, at [x,y,z], depth] cm"),
+                ),
+                ("degenerate", list("check: [part, faces with no area]")),
+                ("checked", text("check: what was and was not looked at")),
             ],
             &[
                 "file",
@@ -1179,6 +1185,10 @@ mod tests {
             ("catalog", json!({})),
             ("measure", json!({"from": "w1", "to": "w2"})),
             ("model", json!({"file": dir.join("box.obj")})),
+            (
+                "model",
+                json!({"file": dir.join("box.obj"), "check": "clashes"}),
+            ),
             ("sessions", json!({})),
             ("cameras", json!({})),
             ("edit_cameras", json!({"action": "store", "name": "A"})),
