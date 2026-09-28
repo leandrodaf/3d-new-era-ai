@@ -80,7 +80,7 @@ pub(crate) fn report(file: &str, loaded: &newera_catalog::ImportedModel) -> Valu
 #[tool_router(router = model_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken for its numbers and its natural size, triangles, its materials with their images, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, alpha masks, extensions). For a piece that looks wrong after place model=…, instead of reading the file. Reply {file, format, unit, raw (file units), size cm, tris, materials [[name, color, image, tris]], images, uv, warnings}; with id also piece {size, scale per axis}. update's material overrides change a material by its name here."
+        description = "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken for its numbers and its natural size, triangles, its materials with their images, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, alpha masks, extensions). For a piece that looks wrong after place model=…, instead of reading the file. Reply {file, format, unit, raw (file units), size cm, tris, materials [[name, color, image, tris]], images, uv, warnings}; with id also piece {size, scale per axis}. place model=… imports one."
     )]
     pub(crate) fn model(
         &self,
