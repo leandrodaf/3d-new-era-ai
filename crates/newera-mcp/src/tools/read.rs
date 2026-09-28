@@ -556,5 +556,18 @@ mod tests {
             rows[1].get("mat").is_none(),
             "none given, none said: {read}"
         );
+        // A dry run of a new finish says it changes.
+        let id = rows[1]["id"].as_str().unwrap();
+        let dry: serde_json::Value = serde_json::from_str(
+            &s.update(Parameters(
+                serde_json::from_str(&format!(
+                    r#"{{"items":[{{"id":"{id}","mat":"wood"}}],"dry":true}}"#
+                ))
+                .unwrap(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(dry["changed"][0]["to"]["mat"], "wood", "{dry}");
     }
 }

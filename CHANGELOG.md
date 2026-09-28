@@ -77,7 +77,7 @@ All notable changes to this project are documented here. The format follows
 
 - `home` says a piece's finish, as `mat`, in the words `place` and `update` take it. It said a
   wall's and a floor's, never a piece's, so a finish set on a cabinet front could not be read back
-  to check it had taken.
+  to check it had taken — and a dry run of a new finish answered that nothing changed.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
