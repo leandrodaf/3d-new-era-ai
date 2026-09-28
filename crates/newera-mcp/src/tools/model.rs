@@ -419,8 +419,8 @@ mod tests {
         std::fs::write(dir.join("win-v3.obj"), obj(0.8, "tecido")).unwrap();
         std::fs::write(dir.join("win-v4.obj"), obj(0.7, "linho")).unwrap();
         std::fs::write(dir.join("broken.obj"), "not a model").unwrap();
-        let v3 = dir.join("win-v3.obj").display().to_string();
-        let v4 = dir.join("win-v4.obj").display().to_string();
+        let v3 = path(&dir.join("win-v3.obj"));
+        let v4 = path(&dir.join("win-v4.obj"));
         let s = server();
         let place = |json: String| {
             s.place(Parameters(serde_json::from_str(&json).unwrap()))
@@ -454,7 +454,7 @@ mod tests {
         let edit = |json: String| s.edit_model(Parameters(serde_json::from_str(&json).unwrap()));
 
         // A file that does not load changes nothing.
-        let broken = dir.join("broken.obj").display().to_string();
+        let broken = path(&dir.join("broken.obj"));
         let refused = edit(format!(
             r#"{{"action":"replace","ids":["f1"],"file":"{broken}"}}"#
         ))
