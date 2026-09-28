@@ -392,7 +392,17 @@ pub fn fixtures(home: &Home) -> Vec<(Fixture, Furniture)> {
             Fixture::Basin
         };
     }
-    out
+    // Read again, two drawings of one bowl ("Pia" and "Cuba") are one fixture.
+    let mut kept: Vec<(Fixture, Furniture)> = Vec::new();
+    for (fixture, piece) in out {
+        let twin = kept
+            .iter()
+            .any(|(k, f)| *k == fixture && f.position.distance(piece.position) <= 40.0);
+        if !twin {
+            kept.push((fixture, piece));
+        }
+    }
+    kept
 }
 
 /// A bowl called by what it is, not by what it is for: a "cuba", or the
@@ -1588,6 +1598,30 @@ mod tests {
             (60.0, 45.0, 85.0),
         )];
         assert_eq!(fixtures(&home)[0].0, Fixture::Basin);
+        // Two drawings of one bowl, called "Pia" and "Cuba": one kitchen sink.
+        let mut home = Home::default();
+        home.rooms.push(crate::Room::new(
+            crate::RoomId(10),
+            "Cozinha",
+            vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(300.0, 0.0),
+                Point2::new(300.0, 300.0),
+                Point2::new(0.0, 300.0),
+            ],
+        ));
+        home.furniture = vec![
+            piece(40, "sink-bowl", "Pia", (150.0, 30.0), (50.0, 40.0, 18.0)),
+            piece(41, "sink-bowl", "Cuba", (152.0, 30.0), (50.0, 40.0, 18.0)),
+        ];
+        let found = fixtures(&home);
+        assert_eq!(
+            found.len(),
+            1,
+            "{:?}",
+            found.iter().map(|(x, f)| (x, f.id)).collect::<Vec<_>>()
+        );
+        assert_eq!(found[0].0, Fixture::KitchenSink);
         // A bathroom inside a kitchen's outline is the room the bowl is in.
         let mut home = Home::default();
         for (id, name, size) in [(10, "Cozinha", 600.0), (11, "Lavabo", 200.0)] {
