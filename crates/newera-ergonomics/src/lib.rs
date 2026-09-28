@@ -2879,33 +2879,6 @@ mod tests {
     }
 
     #[test]
-    fn a_pantry_tower_is_the_kitchens_storage() {
-        let mut home = Home::default();
-        square(&mut home, "Cozinha", 500.0, 300.0);
-        let mut tower = piece(24, "group", (460.0, 37.5), (70.0, 60.0, 235.0), 0.0);
-        tower.name = "Armário 70 × 60 × 235 cm".into();
-        tower.properties.insert(
-            "joinery:params".into(),
-            r#"{"kind":"cabinet","w":70,"h":235,"d":60}"#.into(),
-        );
-        home.furniture = vec![
-            piece(20, "fridge", (50.0, 43.5), (70.0, 72.0, 180.0), 0.0),
-            piece(21, "sink-counter", (160.0, 37.5), (120.0, 60.0, 90.0), 0.0),
-            piece(22, "base-cabinet", (270.0, 37.5), (100.0, 60.0, 90.0), 0.0),
-            piece(23, "stove", (360.0, 37.5), (60.0, 60.0, 90.0), 0.0),
-        ];
-        let lacks_storage = |home: &Home| {
-            review(home, &Profile::default())
-                .findings
-                .iter()
-                .any(|f| f.message.contains("zonas de trabalho falta armazenagem"))
-        };
-        assert!(lacks_storage(&home), "no storage at all");
-        home.furniture.push(tower);
-        assert!(!lacks_storage(&home), "the pantry tower is storage");
-    }
-
-    #[test]
     fn a_vanity_with_two_bowls_is_a_bathroom_not_a_kitchen() {
         let mut home = Home::default();
         square(&mut home, "Banho master", 250.0, 130.0);
@@ -4344,6 +4317,33 @@ mod tests {
             says(&report, Severity::Dica, "240 cm de bancada livre"),
             "{report:#?}"
         );
+    }
+
+    #[test]
+    fn a_pantry_tower_is_the_kitchens_storage() {
+        let mut home = Home::default();
+        square(&mut home, "Cozinha", 500.0, 300.0);
+        let mut tower = piece(24, "group", (460.0, 37.5), (70.0, 60.0, 235.0), 0.0);
+        tower.name = "Armário 70 × 60 × 235 cm".into();
+        tower.properties.insert(
+            "joinery:params".into(),
+            r#"{"kind":"cabinet","w":70,"h":235,"d":60}"#.into(),
+        );
+        home.furniture = vec![
+            piece(20, "fridge", (50.0, 43.5), (70.0, 72.0, 180.0), 0.0),
+            piece(21, "sink-counter", (160.0, 37.5), (120.0, 60.0, 90.0), 0.0),
+            piece(22, "base-cabinet", (270.0, 37.5), (100.0, 60.0, 90.0), 0.0),
+            piece(23, "stove", (360.0, 37.5), (60.0, 60.0, 90.0), 0.0),
+        ];
+        let lacks_storage = |home: &Home| {
+            review(home, &Profile::default())
+                .findings
+                .iter()
+                .any(|f| f.message.contains("zonas de trabalho falta armazenagem"))
+        };
+        assert!(lacks_storage(&home), "no storage at all");
+        home.furniture.push(tower);
+        assert!(!lacks_storage(&home), "the pantry tower is storage");
     }
 
     #[test]
