@@ -75,10 +75,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- `edit_lighting` keeps every fixture it places whole inside the room. It kept only the centers
-  inside, so in an L-shaped room a column of the grid could fall a few centimeters from the inner
-  corner's edge and the fixtures there crossed into the next room (`layout` then called them
-  `outside_rooms`). A fixture now stands at least half its diagonal off every edge.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
