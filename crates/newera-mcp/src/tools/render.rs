@@ -561,7 +561,11 @@ mod tests {
                 .replace("f 1 2 3 4", "f 5 6 7 8"),
         )
         .unwrap();
-        let file = dir.join("banco.obj").display().to_string();
+        let file = dir
+            .join("banco.obj")
+            .display()
+            .to_string()
+            .replace('\\', "/");
         let s = server();
         s.create(Parameters(
             serde_json::from_str(
