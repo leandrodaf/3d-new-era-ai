@@ -168,6 +168,21 @@ impl Document {
         self.current_mut().home.new_level_id()
     }
 
+    /// The active plan, alone, showing storey `level` at this document's
+    /// revision: what a read of another storey works on, leaving the storey
+    /// the person is looking at alone.
+    #[must_use]
+    pub fn showing(&self, level: Option<LevelId>) -> Self {
+        let mut home = self.home().clone();
+        home.selected_level = level;
+        let mut copy = Self::new(home);
+        copy.revision = self.revision;
+        copy.saved_revision = self.saved_revision;
+        copy.path.clone_from(&self.path);
+        copy.asset_dir.clone_from(&self.asset_dir);
+        copy
+    }
+
     /// Selects the storey shown in the plan and used for new elements. It is
     /// view state: saved with the project but not part of the undo history.
     pub fn select_level(&mut self, level: Option<LevelId>) {

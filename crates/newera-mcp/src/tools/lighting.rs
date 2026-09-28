@@ -149,6 +149,9 @@ impl NewEraMcp {
                 .collect();
             codes.sort_unstable();
             codes.dedup();
+            // The totals are the storey's, like its rooms.
+            let shown = home.current_level();
+            let lights: Vec<_> = lights.iter().filter(|e| e.level == shown).collect();
             let lumens: f64 = lights.iter().map(|e| e.flux).sum();
             let watts: f64 = lights.iter().map(|e| e.watts).sum();
             return Ok(serde_json::json!({

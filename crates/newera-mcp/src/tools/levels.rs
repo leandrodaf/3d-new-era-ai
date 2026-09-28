@@ -263,6 +263,7 @@ mod tests {
                 .unwrap(),
         );
         assert_eq!(lighting["rooms"][0][1], "Cozinha", "{lighting}");
+        assert_eq!(lighting["fixtures"], 1, "the storey's own: {lighting}");
         let plumbing = json(
             s.read_plumbing(Parameters(serde_json::from_str(&level).unwrap()))
                 .unwrap(),
@@ -281,6 +282,25 @@ mod tests {
                 .is_some_and(|p| !p.is_empty()),
             "{electrical}"
         );
+        // Upstairs, a lamp of its own, counted only there.
+        s.place(Parameters(
+            serde_json::from_str(r#"{"items":[{"cat":"floor-lamp","at":[100,100]}]}"#).unwrap(),
+        ))
+        .unwrap();
+        let ground_again = json(
+            s.read_lighting(Parameters(serde_json::from_str(&level).unwrap()))
+                .unwrap(),
+        );
+        assert_eq!(ground_again["fixtures"], 1, "{ground_again}");
+        let rev = s.document.read().revision();
+        let wifi = json(
+            s.read_electrical(Parameters(
+                serde_json::from_str(&format!(r#"{{"level":"{ground}","action":"wifi"}}"#))
+                    .unwrap(),
+            ))
+            .unwrap(),
+        );
+        assert_eq!(wifi["rev"], rev, "the project's revision: {wifi}");
         // The upper storey, shown, has none of it.
         let upstairs = json(
             s.read_lighting(Parameters(serde_json::from_str("{}").unwrap()))

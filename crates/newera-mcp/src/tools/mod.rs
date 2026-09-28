@@ -153,10 +153,8 @@ impl NewEraMcp {
                 "no storey {raw} (`levels` lists them)"
             )));
         }
-        let mut home = doc.home().clone();
-        home.selected_level = Some(id);
         let mut scratch = self.clone();
-        scratch.document = SharedDocument::new(newera_core::Document::new(home));
+        scratch.document = SharedDocument::new(doc.showing(Some(id)));
         Ok(Some(scratch))
     }
 
