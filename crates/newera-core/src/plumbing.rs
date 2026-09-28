@@ -180,11 +180,9 @@ impl Fixture {
         }
     }
 
-    fn of(piece: &Furniture) -> Option<Self> {
-        if piece.discipline.is_some() {
-            return None;
-        }
-        let by_catalog = match piece.catalog.as_str() {
+    /// What a catalog item is made as, whatever it is called.
+    fn by_catalog(catalog: &str) -> Option<Self> {
+        match catalog {
             "toilet" => Some(Self::Toilet),
             "basin-cabinet" => Some(Self::Basin),
             "sink-counter" => Some(Self::KitchenSink),
@@ -194,7 +192,14 @@ impl Fixture {
             "laundry-sink" => Some(Self::LaundrySink),
             "dishwasher" => Some(Self::Dishwasher),
             _ => None,
-        };
+        }
+    }
+
+    fn of(piece: &Furniture) -> Option<Self> {
+        if piece.discipline.is_some() {
+            return None;
+        }
+        let by_catalog = Self::by_catalog(&piece.catalog);
         if by_catalog.is_some() {
             return by_catalog;
         }
@@ -377,22 +382,27 @@ pub fn fixtures(home: &Home) -> Vec<(Fixture, Furniture)> {
             continue;
         };
         let says = room.mentions();
-        if says.any(&[M::Bathroom, M::Lavatory]) {
-            *fixture = Fixture::Basin;
+        *fixture = if says.any(&[M::Bathroom, M::Lavatory]) {
+            Fixture::Basin
         } else if says.any(&[M::Kitchen, M::Pantry, M::Gourmet]) {
-            *fixture = Fixture::KitchenSink;
+            Fixture::KitchenSink
         } else if says.has(M::Laundry) {
-            *fixture = Fixture::LaundrySink;
-        }
+            Fixture::LaundrySink
+        } else {
+            Fixture::Basin
+        };
     }
     out
 }
 
 /// A bowl called by what it is, not by what it is for: a "cuba", or the
-/// catalog's inset bowl unless it is named a basin.
+/// catalog's inset bowl unless it is named a basin. A catalog fixture —
+/// a basin cabinet called "Cuba" — is what it was made as.
 fn is_bowl(piece: &Furniture) -> bool {
     let name = crate::annotations::fold(&piece.name);
-    !name.starts_with("lavatorio") && (piece.catalog == "sink-bowl" || name.starts_with("cuba"))
+    !name.starts_with("lavatorio")
+        && (piece.catalog == "sink-bowl"
+            || (Fixture::by_catalog(&piece.catalog).is_none() && name.starts_with("cuba")))
 }
 
 /// How far from a fixture's centre its points may stand: half its size and
@@ -1553,6 +1563,31 @@ mod tests {
         assert_eq!(named("Pia do banheiro", "Banheiro"), Fixture::Basin);
         assert_eq!(named("Pia", "Lavanderia"), Fixture::LaundrySink);
         assert_eq!(named("Lavatório de apoio", "Cozinha"), Fixture::Basin);
+        assert_eq!(
+            named("Pia", "Sala"),
+            Fixture::Basin,
+            "a bowl elsewhere is a basin"
+        );
+        // Made as a basin, it is one wherever it is and whatever it is called.
+        let mut home = Home::default();
+        home.rooms.push(crate::Room::new(
+            crate::RoomId(10),
+            "Cozinha",
+            vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(300.0, 0.0),
+                Point2::new(300.0, 300.0),
+                Point2::new(0.0, 300.0),
+            ],
+        ));
+        home.furniture = vec![piece(
+            40,
+            "basin-cabinet",
+            "Cuba",
+            (150.0, 30.0),
+            (60.0, 45.0, 85.0),
+        )];
+        assert_eq!(fixtures(&home)[0].0, Fixture::Basin);
         // A bathroom inside a kitchen's outline is the room the bowl is in.
         let mut home = Home::default();
         for (id, name, size) in [(10, "Cozinha", 600.0), (11, "Lavabo", 200.0)] {
