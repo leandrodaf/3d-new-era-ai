@@ -722,9 +722,14 @@ impl Furniture {
     }
 
     /// Stairs open a hole in the floor of the storey they climb to.
-    /// Catalog ids starting with `stairs` are stairs.
+    /// Catalog ids starting with `stairs` are stairs, and so is a flight
+    /// built by hand — a group or a solid — given the role `stair`.
     pub fn is_stairs(&self) -> bool {
         self.catalog.starts_with("stairs")
+            || self
+                .properties
+                .get(Self::ROLE_KEY)
+                .is_some_and(|r| r == "stair")
     }
 
     /// Something people sit on, which belongs pushed under its table.

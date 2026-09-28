@@ -5041,7 +5041,7 @@
               "type": "string"
             },
             "role": {
-              "description": "Role independent of the name: `trim`, `backsplash`, `counter`; empty restores the automatic one",
+              "description": "Role independent of the name: `trim`, `backsplash`, `counter`, `stair`; empty: automatic",
               "type": "string"
             },
             "roll": {
