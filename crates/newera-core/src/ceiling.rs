@@ -314,11 +314,13 @@ pub fn room_ceiling(home: &Home, room: &Room) -> Vec<CeilingTriangle> {
     }
     // The stair climbing to the storey above goes up through this ceiling:
     // its void, the one it opens in that storey's floor, is open here too.
+    // The storey physically above: the lowest designed one over this floor —
+    // not a tracing or another layout drawn at the same elevation.
+    let floor = home.elevation_of(level);
     let above = home
         .sorted_levels()
-        .iter()
-        .skip_while(|l| Some(l.id) != level)
-        .nth(1)
+        .into_iter()
+        .find(|l| !l.is_reference() && l.elevation > floor + 1.0)
         .map(|l| l.id);
     if let Some(above) = above {
         for void in crate::stair_holes(home, Some(above)) {
@@ -383,6 +385,21 @@ mod tests {
             height: 262.0,
             ..Furniture::default()
         });
+        assert!(
+            (area(&home) - (400.0 * 400.0 - 90.0 * 300.0)).abs() < 1e-3,
+            "{}",
+            area(&home)
+        );
+        // A tracing of the ground floor, next in the list, is not the storey above.
+        home.levels.push(Level {
+            id: LevelId(3),
+            elevation: 0.0,
+            height: 250.0,
+            elevation_index: 1,
+            ..Level::default()
+        });
+        home.levels[2].set_reference(true);
+        home.levels[1].elevation_index = 2;
         assert!(
             (area(&home) - (400.0 * 400.0 - 90.0 * 300.0)).abs() < 1e-3,
             "{}",
