@@ -5,7 +5,7 @@
 //! becomes a blind corner; the other wall is planned again in the same undo
 //! step so the corner works from whichever side was drawn first.
 
-use crate::{Build, EndKind, PARAMS_KEY, RunGap, RunOver, RunParams, RunRow};
+use crate::{Build, CutoutKind, EndKind, PARAMS_KEY, RunGap, RunOver, RunParams, RunRow};
 use newera_core::{
     Command, Document, Furniture, FurnitureId, Home, Point2, RunBlock, RunObstacle, WallId,
 };
@@ -788,7 +788,7 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
 
     let angle = wall_angle + if side < 0.0 { 180.0 } else { 0.0 };
     let normal = (-u.1 * side, u.0 * side);
-    let pending = modules
+    let mut pending: Vec<Pending> = modules
         .into_iter()
         .map(|m| {
             let mut build = m.build;
@@ -821,6 +821,7 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
             }
         })
         .collect();
+    cut_tops(&mut pending, &mut notes);
     let request = Request {
         params,
         given: request.given.clone(),
@@ -834,6 +835,63 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
         neighbors,
         carry,
     })
+}
+
+/// Cuts the wooden top of each cabinet a bowl or a cooktop in the run's
+/// countertop goes down through, as `embed` does for one set in later.
+fn cut_tops(pending: &mut [Pending], notes: &mut Vec<String>) {
+    let frame = |m: &Pending, [width, depth, height]: [f64; 3]| Furniture {
+        position: m.position,
+        angle: m.angle,
+        elevation: m.elevation,
+        width,
+        depth,
+        height,
+        ..Furniture::default()
+    };
+    // What hangs under each hole: the bowl (18 cm) or the cooktop's body (6).
+    let mut bodies: Vec<(Furniture, (f64, f64), f64)> = Vec::new();
+    for m in pending.iter() {
+        let Build::Countertop(top) = &m.build else {
+            continue;
+        };
+        let slab = frame(m, [top.length, top.depth, top.height]);
+        let counter = m.elevation + top.height;
+        for c in &top.cutouts {
+            let (w, d, deep, name) = match c.kind {
+                CutoutKind::Sink => (c.w.unwrap_or(50.0), c.d.unwrap_or(40.0), 18.0, "A cuba"),
+                CutoutKind::Cooktop => (c.w.unwrap_or(56.0), c.d.unwrap_or(48.0), 6.0, "O cooktop"),
+                CutoutKind::Grommet => continue,
+            };
+            let y0 = (top.depth - d) / 2.0;
+            let body = Furniture {
+                name: name.to_owned(),
+                position: slab.to_plan((c.x - top.length / 2.0, y0 + d / 2.0 - top.depth / 2.0)),
+                angle: m.angle,
+                elevation: counter - deep,
+                ..Furniture::default()
+            };
+            bodies.push((body, (w, d), counter));
+        }
+    }
+    for m in pending.iter_mut() {
+        let Build::Cabinet(p) = &m.build else {
+            continue;
+        };
+        let Ok(output) = crate::generate(&m.build) else {
+            continue;
+        };
+        let cabinet = frame(m, output.size);
+        let mut p = p.clone();
+        for (body, hole, counter) in &bodies {
+            match crate::embed::top_cut(&cabinet, &p, body, *hole, *counter) {
+                Some(Ok(cut)) => p.top_cutout = Some(cut),
+                Some(Err(why)) => notes.push(why),
+                None => {}
+            }
+        }
+        m.build = Build::Cabinet(p);
+    }
 }
 
 /// Turns a plan into commands, taking furniture ids from `doc`.

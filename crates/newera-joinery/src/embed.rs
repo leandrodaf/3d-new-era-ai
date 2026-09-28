@@ -480,7 +480,7 @@ fn cut_below(
     home: &newera_core::Home,
     countertop: &Furniture,
     body: &Furniture,
-    (w, d): (f64, f64),
+    hole: (f64, f64),
     counter: f64,
     notes: &mut Vec<String>,
 ) -> Vec<(Furniture, CabinetParams)> {
@@ -498,54 +498,75 @@ fn cut_below(
         else {
             continue;
         };
-        // Under the stone, and reaching up to where the body hangs.
-        let top = cabinet.elevation + cabinet.height;
-        if top > counter + 0.5 || top <= body.elevation + 0.1 {
-            continue;
-        }
-        let (lx, ly) = cabinet.to_local(body.position);
-        if lx.abs() > cabinet.width / 2.0 || ly.abs() > cabinet.depth / 2.0 {
-            continue;
-        }
-        let turn = (body.angle - cabinet.angle).rem_euclid(180.0);
-        let (cw, cd) = if turn < 0.5 || turn > 179.5 {
-            (w, d)
-        } else if (turn - 90.0).abs() < 0.5 {
-            (d, w)
-        } else {
-            continue;
-        };
-        let x = lx + cabinet.width / 2.0 - cw / 2.0;
-        let y = ly + cabinet.depth / 2.0 - cd / 2.0;
-        let cut = [x, y, cw, cd].map(|v| (v * 10.0).round() / 10.0);
-        if let Some(old) = p.top_cutout {
-            let apart = old[0] + old[2] <= cut[0]
-                || cut[0] + cut[2] <= old[0]
-                || old[1] + old[3] <= cut[1]
-                || cut[1] + cut[3] <= old[1];
-            if old.iter().zip(cut).all(|(a, b)| (a - b).abs() < 0.05) {
-                continue;
+        match top_cut(cabinet, &p, body, hole, counter) {
+            Some(Ok(cut)) => {
+                p.top_cutout = Some(cut);
+                out.push((cabinet.clone(), p));
             }
-            if apart {
-                notes.push(format!(
-                    "O tampo de {} já tem um recorte em outro lugar e só leva um: recorte-o para {} com joinery id={} p.top_cutout.",
-                    cabinet.id,
-                    body.name,
-                    cabinet.id
-                ));
-                continue;
-            }
-        }
-        p.top_cutout = Some(cut);
-        match generate(&Build::Cabinet(p.clone())) {
-            Ok(_) => out.push((cabinet.clone(), p)),
-            Err(why) => notes.push(format!(
-                "{} atravessa o tampo de {} e o recorte não cabe nele: {why}",
-                body.name, cabinet.id
-            )),
+            Some(Err(why)) => notes.push(why),
+            None => {}
         }
     }
     out
+}
+
+/// The `top_cutout` a cabinet standing as `cabinet` needs for `body` — set
+/// into a stone at `counter` cm through a hole `(w, d)` — to pass through its
+/// wooden top: `None` when the body does not reach it (or it is already cut
+/// so), an error saying why when it cannot be cut.
+pub(crate) fn top_cut(
+    cabinet: &Furniture,
+    p: &CabinetParams,
+    body: &Furniture,
+    (w, d): (f64, f64),
+    counter: f64,
+) -> Option<Result<[f64; 4], String>> {
+    // Under the stone, and reaching up to where the body hangs.
+    let top = cabinet.elevation + cabinet.height;
+    if top > counter + 0.5 || top <= body.elevation + 0.1 {
+        return None;
+    }
+    let (lx, ly) = cabinet.to_local(body.position);
+    if lx.abs() > cabinet.width / 2.0 || ly.abs() > cabinet.depth / 2.0 {
+        return None;
+    }
+    let turn = (body.angle - cabinet.angle).rem_euclid(180.0);
+    let (cw, cd) = if !(0.5..=179.5).contains(&turn) {
+        (w, d)
+    } else if (turn - 90.0).abs() < 0.5 {
+        (d, w)
+    } else {
+        return None;
+    };
+    let x = lx + cabinet.width / 2.0 - cw / 2.0;
+    let y = ly + cabinet.depth / 2.0 - cd / 2.0;
+    let cut = [x, y, cw, cd].map(|v| (v * 10.0).round() / 10.0);
+    if let Some(old) = p.top_cutout {
+        if old.iter().zip(cut).all(|(a, b)| (a - b).abs() < 0.05) {
+            return None;
+        }
+        let apart = old[0] + old[2] <= cut[0]
+            || cut[0] + cut[2] <= old[0]
+            || old[1] + old[3] <= cut[1]
+            || cut[1] + cut[3] <= old[1];
+        if apart {
+            return Some(Err(format!(
+                "O tampo de {} já tem um recorte em outro lugar e só leva um: recorte-o para {} com joinery id={} p.top_cutout.",
+                cabinet.id, body.name, cabinet.id
+            )));
+        }
+    }
+    let cut_one = CabinetParams {
+        top_cutout: Some(cut),
+        ..p.clone()
+    };
+    Some(match generate(&Build::Cabinet(cut_one)) {
+        Ok(_) => Ok(cut),
+        Err(why) => Err(format!(
+            "{} atravessa o tampo de {} e o recorte não cabe nele: {why}",
+            body.name, cabinet.id
+        )),
+    })
 }
 
 #[cfg(test)]
