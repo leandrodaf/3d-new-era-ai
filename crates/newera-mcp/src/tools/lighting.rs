@@ -189,7 +189,9 @@ impl NewEraMcp {
         }
         let layout = |count: usize| -> (Vec<newera_core::Furniture>, newera_core::RoomLighting) {
             // The whole grid, even a few more than asked: symmetric layouts.
-            let placed: Vec<newera_core::Furniture> = grid_positions(&room.points, count)
+            // Each fixture whole inside the room: its box never crosses a wall.
+            let clear = template.width.hypot(template.depth) / 2.0;
+            let placed: Vec<newera_core::Furniture> = grid_positions(&room.points, count, clear)
                 .into_iter()
                 .map(|at| {
                     let mut piece = template.clone();

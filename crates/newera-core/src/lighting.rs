@@ -573,12 +573,7 @@ pub fn room_lighting(
                 lo.y + (hi.y - lo.y) * (j as f64 + 0.5) / ny as f64,
             );
             // Like task areas in lighting standards, leave out a band along the walls.
-            let edge = room
-                .points
-                .iter()
-                .zip(room.points.iter().cycle().skip(1))
-                .map(|(a, b)| p.distance_to_segment(*a, *b))
-                .fold(f64::MAX, f64::min);
+            let edge = edge_distance(&room.points, p);
             if inside(&room.points, p) && (edge >= BORDER || area < 40_000.0) {
                 values.push(illuminance(
                     home,
@@ -651,13 +646,15 @@ pub fn fixtures_needed(target: f64, area_m2: f64, fixture_lm: f64) -> usize {
 }
 
 /// `count` evenly spaced points covering a room (a grid matching its
-/// proportions, spacing s with s/2 to the edges), kept inside the outline.
+/// proportions, spacing s with s/2 to the edges), kept inside the outline
+/// and at least `clear` cm off every edge of it — half a fixture's diagonal
+/// keeps the whole fixture in the room, even at the inner corner of an L.
 #[allow(
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss
 )]
-pub fn grid_positions(points: &[Point2], count: usize) -> Vec<Point2> {
+pub fn grid_positions(points: &[Point2], count: usize, clear: f64) -> Vec<Point2> {
     if points.len() < 3 || count == 0 {
         return Vec::new();
     }
@@ -688,7 +685,7 @@ pub fn grid_positions(points: &[Point2], count: usize) -> Vec<Point2> {
                     )
                 })
             })
-            .filter(|p| inside(points, *p))
+            .filter(|p| inside(points, *p) && edge_distance(points, *p) >= clear)
             .collect();
         if grid.len() >= count {
             return grid;
@@ -696,6 +693,15 @@ pub fn grid_positions(points: &[Point2], count: usize) -> Vec<Point2> {
         want += count - grid.len();
     }
     vec![crate::polygon_centroid(points).unwrap_or(lo)]
+}
+
+/// Distance from `p` to the nearest edge of the outline, cm.
+fn edge_distance(points: &[Point2], p: Point2) -> f64 {
+    points
+        .iter()
+        .zip(points.iter().cycle().skip(1))
+        .map(|(a, b)| p.distance_to_segment(*a, *b))
+        .fold(f64::MAX, f64::min)
 }
 
 #[cfg(test)]
@@ -791,6 +797,33 @@ mod tests {
     }
 
     #[test]
+    fn a_fill_keeps_every_fixture_inside_an_l_shaped_room() {
+        // An L whose inner edge (x = 228) runs 3 cm from a column of the grid.
+        let l = [
+            (0.0, 0.0),
+            (600.0, 0.0),
+            (600.0, 50.0),
+            (228.0, 50.0),
+            (228.0, 400.0),
+            (0.0, 400.0),
+        ]
+        .map(|(x, y)| Point2::new(x, y));
+        let hugging = |spots: &[Point2]| spots.iter().any(|p| edge_distance(&l, *p) < 10.0);
+        assert!(
+            hugging(&grid_positions(&l, 4, 0.0)),
+            "the case this is about"
+        );
+        for count in 1..=12 {
+            let spots = grid_positions(&l, count, 30.0);
+            assert!(!spots.is_empty());
+            for p in &spots {
+                assert!(inside(&l, *p), "{count}: {p:?} outside");
+                assert!(edge_distance(&l, *p) >= 30.0, "{count}: {p:?} on the edge");
+            }
+        }
+    }
+
+    #[test]
     fn walls_cast_shadows_and_rooms_are_rated() {
         let mut home = Home::default();
         home.wall_height = 260.0;
@@ -829,7 +862,7 @@ mod tests {
         // The lumen method asks for more panels to reach 300 lx over 16 m².
         let n = fixtures_needed(300.0, report.area_m2, 3600.0);
         assert_eq!(n, 3);
-        let spots = grid_positions(&room.points, 4);
+        let spots = grid_positions(&room.points, 4, 0.0);
         assert_eq!(spots.len(), 4);
         assert!(
             spots
