@@ -80,8 +80,8 @@ web/demo.newera [Versão 1] / casal
   Alerta elec:mount:f149 ref=nbr5410 w=1 | Spot embutido LED 7 W f149 está a 300 cm do chão, solto no ar: vai fixado no teto, a 250 cm.
   Alerta plumb:cold:f60 ref=nbr5626 w=1 | Sem ponto de água fria a até 160 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f60 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 160 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f65 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f65 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f65 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f65 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Alerta plumb:cold:f84 ref=nbr5626 w=1 | Sem ponto de água fria a até 100 cm: o lavatório não tem de onde receber água.
   Alerta plumb:sewer:f84 ref=nbr8160 w=1 | Sem ponto de esgoto ou ralo sifonado a até 100 cm: o lavatório não tem para onde escoar (ramal de 40 mm).
   Alerta plumb:cold:f85 ref=nbr5626 w=1 | Sem ponto de água fria a até 94 cm: o vaso sanitário não tem de onde receber água.
@@ -234,8 +234,8 @@ web/demo.newera [Versão 1] / cadeirante
   Alerta elec:mount:f149 ref=nbr5410 w=1 | Spot embutido LED 7 W f149 está a 300 cm do chão, solto no ar: vai fixado no teto, a 250 cm.
   Alerta plumb:cold:f60 ref=nbr5626 w=1 | Sem ponto de água fria a até 160 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f60 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 160 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f65 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f65 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f65 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f65 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Alerta plumb:cold:f84 ref=nbr5626 w=1 | Sem ponto de água fria a até 100 cm: o lavatório não tem de onde receber água.
   Alerta plumb:sewer:f84 ref=nbr8160 w=1 | Sem ponto de esgoto ou ralo sifonado a até 100 cm: o lavatório não tem para onde escoar (ramal de 40 mm).
   Alerta plumb:cold:f85 ref=nbr5626 w=1 | Sem ponto de água fria a até 94 cm: o vaso sanitário não tem de onde receber água.
@@ -385,8 +385,8 @@ web/demo.newera [Versão 1] / família
   Alerta elec:mount:f149 ref=nbr5410 w=1 | Spot embutido LED 7 W f149 está a 300 cm do chão, solto no ar: vai fixado no teto, a 250 cm.
   Alerta plumb:cold:f60 ref=nbr5626 w=1 | Sem ponto de água fria a até 160 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f60 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 160 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f65 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f65 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f65 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f65 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Alerta plumb:cold:f84 ref=nbr5626 w=1 | Sem ponto de água fria a até 100 cm: o lavatório não tem de onde receber água.
   Alerta plumb:sewer:f84 ref=nbr8160 w=1 | Sem ponto de esgoto ou ralo sifonado a até 100 cm: o lavatório não tem para onde escoar (ramal de 40 mm).
   Alerta plumb:cold:f85 ref=nbr5626 w=1 | Sem ponto de água fria a até 94 cm: o vaso sanitário não tem de onde receber água.
@@ -466,8 +466,8 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / casal
   Alerta elec:panel ref=nbr5410 w=1 | Há cargas e nenhum quadro de distribuição.
   Alerta plumb:cold:f60 ref=nbr5626 w=1 | Sem ponto de água fria a até 160 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f60 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 160 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f65 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f65 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f65 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f65 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Alerta plumb:cold:f84 ref=nbr5626 w=1 | Sem ponto de água fria a até 110 cm: o lavatório não tem de onde receber água.
   Alerta plumb:sewer:f84 ref=nbr8160 w=1 | Sem ponto de esgoto ou ralo sifonado a até 110 cm: o lavatório não tem para onde escoar (ramal de 40 mm).
   Alerta plumb:cold:f85 ref=nbr5626 w=1 | Sem ponto de água fria a até 94 cm: o vaso sanitário não tem de onde receber água.
@@ -551,8 +551,8 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / cadeirante
   Alerta elec:panel ref=nbr5410 w=1 | Há cargas e nenhum quadro de distribuição.
   Alerta plumb:cold:f60 ref=nbr5626 w=1 | Sem ponto de água fria a até 160 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f60 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 160 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f65 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f65 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f65 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f65 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Alerta plumb:cold:f84 ref=nbr5626 w=1 | Sem ponto de água fria a até 110 cm: o lavatório não tem de onde receber água.
   Alerta plumb:sewer:f84 ref=nbr8160 w=1 | Sem ponto de esgoto ou ralo sifonado a até 110 cm: o lavatório não tem para onde escoar (ramal de 40 mm).
   Alerta plumb:cold:f85 ref=nbr5626 w=1 | Sem ponto de água fria a até 94 cm: o vaso sanitário não tem de onde receber água.
@@ -631,8 +631,8 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / família
   Alerta elec:panel ref=nbr5410 w=1 | Há cargas e nenhum quadro de distribuição.
   Alerta plumb:cold:f60 ref=nbr5626 w=1 | Sem ponto de água fria a até 160 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f60 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 160 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f65 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f65 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f65 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f65 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Alerta plumb:cold:f84 ref=nbr5626 w=1 | Sem ponto de água fria a até 110 cm: o lavatório não tem de onde receber água.
   Alerta plumb:sewer:f84 ref=nbr8160 w=1 | Sem ponto de esgoto ou ralo sifonado a até 110 cm: o lavatório não tem para onde escoar (ramal de 40 mm).
   Alerta plumb:cold:f85 ref=nbr5626 w=1 | Sem ponto de água fria a até 94 cm: o vaso sanitário não tem de onde receber água.
@@ -1844,8 +1844,8 @@ Cozinha #0 / casal
   Alerta elec:outlets:r105 ref=nbr5410 w=1 | 0 de 3 tomadas de uso geral: a norma pede um a cada 3,5 m de perímetro (7,1 m).
   Alerta plumb:cold:f108 ref=nbr5626 w=1 | Sem ponto de água fria a até 120 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f108 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 120 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
   Dica room_area:r105 ref=coe-municipal w=0 | 2,97 m² para cozinha: códigos de obras costumam pedir ao menos 4,00 m² (confira o do seu município).
@@ -1889,8 +1889,8 @@ Cozinha #0 / cadeirante
   Alerta elec:outlets:r105 ref=nbr5410 w=1 | 0 de 3 tomadas de uso geral: a norma pede um a cada 3,5 m de perímetro (7,1 m).
   Alerta plumb:cold:f108 ref=nbr5626 w=1 | Sem ponto de água fria a até 120 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f108 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 120 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
   Dica room_area:r105 ref=coe-municipal w=0 | 2,97 m² para cozinha: códigos de obras costumam pedir ao menos 4,00 m² (confira o do seu município).
@@ -1933,8 +1933,8 @@ Cozinha #0 / família
   Alerta elec:outlets:r105 ref=nbr5410 w=1 | 0 de 3 tomadas de uso geral: a norma pede um a cada 3,5 m de perímetro (7,1 m).
   Alerta plumb:cold:f108 ref=nbr5626 w=1 | Sem ponto de água fria a até 120 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f108 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 120 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 7 moradores: todos sentam juntos com mais 7 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 480 cm no total.
   Dica room_area:r105 ref=coe-municipal w=0 | 2,97 m² para cozinha: códigos de obras costumam pedir ao menos 4,00 m² (confira o do seu município).
@@ -1971,8 +1971,8 @@ Cozinha #1 / casal
   Alerta elec:light:r105 ref=nbr5410 w=1 | Sem ponto de luz: a norma pede ao menos um ponto de iluminação no teto de cada cômodo, comandado por interruptor.
   Alerta elec:outlets:r105 ref=nbr5410 w=1 | 0 de 4 tomadas de uso geral: a norma pede um a cada 3,5 m de perímetro (12,3 m).
   Alerta elec:mount:f115 ref=nbr5410 w=1 | switch f115 está sobre o vidro da janela window (f107): a caixa fica a pelo menos 10 cm do vão, fora do batente e do alizar; mova-o para o lado ou abaixo do peitoril.
-  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Dica living_seats:casa ref=- w=1 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=1 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
   Dica window_area:r105 ref=coe-municipal w=1 | Janelas somam 1,14 m² para 9,47 m² de piso; o Código Sanitário de SP pede 1/8 do piso: 1,18 m², com metade abrindo para ventilar.
@@ -2007,8 +2007,8 @@ Cozinha #1 / cadeirante
   Alerta elec:light:r105 ref=nbr5410 w=1 | Sem ponto de luz: a norma pede ao menos um ponto de iluminação no teto de cada cômodo, comandado por interruptor.
   Alerta elec:outlets:r105 ref=nbr5410 w=1 | 0 de 4 tomadas de uso geral: a norma pede um a cada 3,5 m de perímetro (12,3 m).
   Alerta elec:mount:f115 ref=nbr5410 w=1 | switch f115 está sobre o vidro da janela window (f107): a caixa fica a pelo menos 10 cm do vão, fora do batente e do alizar; mova-o para o lado ou abaixo do peitoril.
-  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
   Dica window_area:r105 ref=coe-municipal w=0 | Janelas somam 1,14 m² para 9,47 m² de piso; o Código Sanitário de SP pede 1/8 do piso: 1,18 m², com metade abrindo para ventilar.
@@ -2042,8 +2042,8 @@ Cozinha #1 / família
   Alerta elec:light:r105 ref=nbr5410 w=1 | Sem ponto de luz: a norma pede ao menos um ponto de iluminação no teto de cada cômodo, comandado por interruptor.
   Alerta elec:outlets:r105 ref=nbr5410 w=1 | 0 de 4 tomadas de uso geral: a norma pede um a cada 3,5 m de perímetro (12,3 m).
   Alerta elec:mount:f115 ref=nbr5410 w=1 | switch f115 está sobre o vidro da janela window (f107): a caixa fica a pelo menos 10 cm do vão, fora do batente e do alizar; mova-o para o lado ou abaixo do peitoril.
-  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 7 moradores: todos sentam juntos com mais 7 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 480 cm no total.
   Dica window_area:r105 ref=coe-municipal w=0 | Janelas somam 1,14 m² para 9,47 m² de piso; o Código Sanitário de SP pede 1/8 do piso: 1,18 m², com metade abrindo para ventilar.
@@ -2085,8 +2085,8 @@ Cozinha #2 / casal
   Alerta elec:outlets:r105 ref=nbr5410 w=1 | 0 de 4 tomadas de uso geral: a norma pede um a cada 3,5 m de perímetro (11,1 m).
   Alerta plumb:cold:f108 ref=nbr5626 w=1 | Sem ponto de água fria a até 120 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f108 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 120 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f111 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f111 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f111 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f111 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
   Dica missing_fixtures:r105 ref=nbr15575g w=0 | Falta fogão ou cooktop, geladeira para testar o uso de cozinha.
@@ -2131,8 +2131,8 @@ Cozinha #2 / cadeirante
   Alerta elec:outlets:r105 ref=nbr5410 w=1 | 0 de 4 tomadas de uso geral: a norma pede um a cada 3,5 m de perímetro (11,1 m).
   Alerta plumb:cold:f108 ref=nbr5626 w=1 | Sem ponto de água fria a até 120 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f108 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 120 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f111 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f111 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f111 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f111 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
   Dica missing_fixtures:r105 ref=nbr15575g w=0 | Falta fogão ou cooktop, geladeira para testar o uso de cozinha.
@@ -2176,8 +2176,8 @@ Cozinha #2 / família
   Alerta elec:outlets:r105 ref=nbr5410 w=1 | 0 de 4 tomadas de uso geral: a norma pede um a cada 3,5 m de perímetro (11,1 m).
   Alerta plumb:cold:f108 ref=nbr5626 w=1 | Sem ponto de água fria a até 120 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f108 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 120 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f111 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f111 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f111 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f111 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 7 moradores: todos sentam juntos com mais 7 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 480 cm no total.
   Dica missing_fixtures:r105 ref=nbr15575g w=0 | Falta fogão ou cooktop, geladeira para testar o uso de cozinha.
@@ -2223,8 +2223,8 @@ Cozinha #3 / casal
   Alerta elec:outlets:r105 ref=nbr5410 w=1 | 0 de 3 tomadas de uso geral: a norma pede um a cada 3,5 m de perímetro (9,0 m).
   Alerta plumb:cold:f109 ref=nbr5626 w=1 | Sem ponto de água fria a até 120 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f109 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 120 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f111 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f111 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f111 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f111 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
   Dica missing_fixtures:r105 ref=nbr15575g w=0 | Falta geladeira para testar o uso de cozinha.
@@ -2269,8 +2269,8 @@ Cozinha #3 / cadeirante
   Alerta elec:outlets:r105 ref=nbr5410 w=1 | 0 de 3 tomadas de uso geral: a norma pede um a cada 3,5 m de perímetro (9,0 m).
   Alerta plumb:cold:f109 ref=nbr5626 w=1 | Sem ponto de água fria a até 120 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f109 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 120 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f111 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f111 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f111 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f111 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
   Dica missing_fixtures:r105 ref=nbr15575g w=0 | Falta geladeira para testar o uso de cozinha.
@@ -2313,8 +2313,8 @@ Cozinha #3 / família
   Alerta elec:outlets:r105 ref=nbr5410 w=1 | 0 de 3 tomadas de uso geral: a norma pede um a cada 3,5 m de perímetro (9,0 m).
   Alerta plumb:cold:f109 ref=nbr5626 w=1 | Sem ponto de água fria a até 120 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f109 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 120 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f111 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f111 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f111 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f111 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 7 moradores: todos sentam juntos com mais 7 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 480 cm no total.
   Dica missing_fixtures:r105 ref=nbr15575g w=0 | Falta geladeira para testar o uso de cozinha.
@@ -2483,8 +2483,8 @@ Cozinha #5 / casal
   Alerta elec:outlets:r105 ref=nbr5410 w=1 | 0 de 4 tomadas de uso geral: a norma pede um a cada 3,5 m de perímetro (13,0 m).
   Alerta plumb:cold:f108 ref=nbr5626 w=1 | Sem ponto de água fria a até 120 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f108 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 120 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
   Dica missing_fixtures:r105 ref=nbr15575g w=0 | Falta fogão ou cooktop para testar o uso de cozinha.
@@ -2520,8 +2520,8 @@ Cozinha #5 / cadeirante
   Alerta elec:outlets:r105 ref=nbr5410 w=1 | 0 de 4 tomadas de uso geral: a norma pede um a cada 3,5 m de perímetro (13,0 m).
   Alerta plumb:cold:f108 ref=nbr5626 w=1 | Sem ponto de água fria a até 120 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f108 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 120 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 2 moradores: todos sentam juntos com mais 2 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 160 cm no total.
   Dica missing_fixtures:r105 ref=nbr15575g w=0 | Falta fogão ou cooktop para testar o uso de cozinha.
@@ -2557,8 +2557,8 @@ Cozinha #5 / família
   Alerta elec:outlets:r105 ref=nbr5410 w=1 | 0 de 4 tomadas de uso geral: a norma pede um a cada 3,5 m de perímetro (13,0 m).
   Alerta plumb:cold:f108 ref=nbr5626 w=1 | Sem ponto de água fria a até 120 cm: a pia de cozinha não tem de onde receber água.
   Alerta plumb:sewer:f108 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 120 cm: a pia de cozinha não tem para onde escoar (ramal de 50 mm).
-  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f110 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f110 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Dica living_seats:casa ref=- w=0 | 0 lugares na sala para 7 moradores: todos sentam juntos com mais 7 lugar(es) (poltrona ou sofá maior).
   Dica wardrobe_capacity:casa ref=- w=0 | 0 cm de guarda-roupa nos dormitórios e closets; a norma de desempenho (anexo F) prevê 1,60 m no dormitório de casal e 1,20 m no de solteiro, uns 80 cm por adulto e metade por criança: 480 cm no total.
   Dica missing_fixtures:r105 ref=nbr15575g w=0 | Falta fogão ou cooktop para testar o uso de cozinha.
@@ -4646,8 +4646,8 @@ Apartamento #3 / casal
   Alerta elec:light:r142 ref=nbr5410 w=1 | Sem ponto de luz: a norma pede ao menos um ponto de iluminação no teto de cada cômodo, comandado por interruptor.
   Alerta elec:outlets:r142 ref=nbr5410 w=1 | 0 de 3 tomadas de uso geral: a norma pede um a cada 5 m de perímetro (13,0 m).
   Alerta elec:mount:f152 ref=nbr5410 w=1 | switch f152 está no vão da porta door (f143): a caixa fica a pelo menos 10 cm do vão, fora do batente e do alizar; mova-o para o lado ou abaixo do peitoril.
-  Alerta plumb:cold:f112 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f112 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f112 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f112 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Alerta plumb:cold:f136 ref=nbr5626 w=1 | Sem ponto de água fria a até 93 cm: o vaso sanitário não tem de onde receber água.
   Alerta plumb:sewer:f136 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 93 cm: o vaso sanitário não tem para onde escoar (ramal de 100 mm).
   Alerta plumb:cold:f137 ref=nbr5626 w=1 | Sem ponto de água fria a até 105 cm: o chuveiro não tem de onde receber água.
@@ -4722,8 +4722,8 @@ Apartamento #3 / cadeirante
   Alerta elec:light:r142 ref=nbr5410 w=1 | Sem ponto de luz: a norma pede ao menos um ponto de iluminação no teto de cada cômodo, comandado por interruptor.
   Alerta elec:outlets:r142 ref=nbr5410 w=1 | 0 de 3 tomadas de uso geral: a norma pede um a cada 5 m de perímetro (13,0 m).
   Alerta elec:mount:f152 ref=nbr5410 w=1 | switch f152 está no vão da porta door (f143): a caixa fica a pelo menos 10 cm do vão, fora do batente e do alizar; mova-o para o lado ou abaixo do peitoril.
-  Alerta plumb:cold:f112 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f112 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f112 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f112 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Alerta plumb:cold:f136 ref=nbr5626 w=1 | Sem ponto de água fria a até 93 cm: o vaso sanitário não tem de onde receber água.
   Alerta plumb:sewer:f136 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 93 cm: o vaso sanitário não tem para onde escoar (ramal de 100 mm).
   Alerta plumb:cold:f137 ref=nbr5626 w=1 | Sem ponto de água fria a até 105 cm: o chuveiro não tem de onde receber água.
@@ -4795,8 +4795,8 @@ Apartamento #3 / família
   Alerta elec:light:r142 ref=nbr5410 w=1 | Sem ponto de luz: a norma pede ao menos um ponto de iluminação no teto de cada cômodo, comandado por interruptor.
   Alerta elec:outlets:r142 ref=nbr5410 w=1 | 0 de 3 tomadas de uso geral: a norma pede um a cada 5 m de perímetro (13,0 m).
   Alerta elec:mount:f152 ref=nbr5410 w=1 | switch f152 está no vão da porta door (f143): a caixa fica a pelo menos 10 cm do vão, fora do batente e do alizar; mova-o para o lado ou abaixo do peitoril.
-  Alerta plumb:cold:f112 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: o lava-louças não tem de onde receber água.
-  Alerta plumb:sewer:f112 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: o lava-louças não tem para onde escoar (ramal de 50 mm).
+  Alerta plumb:cold:f112 ref=nbr5626 w=1 | Sem ponto de água fria a até 90 cm: a lava-louças não tem de onde receber água.
+  Alerta plumb:sewer:f112 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 90 cm: a lava-louças não tem para onde escoar (ramal de 50 mm).
   Alerta plumb:cold:f136 ref=nbr5626 w=1 | Sem ponto de água fria a até 93 cm: o vaso sanitário não tem de onde receber água.
   Alerta plumb:sewer:f136 ref=nbr8160 w=1 | Sem ponto de esgoto próprio a até 93 cm: o vaso sanitário não tem para onde escoar (ramal de 100 mm).
   Alerta plumb:cold:f137 ref=nbr5626 w=1 | Sem ponto de água fria a até 105 cm: o chuveiro não tem de onde receber água.

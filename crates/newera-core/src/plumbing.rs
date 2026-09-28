@@ -152,7 +152,7 @@ impl Fixture {
             Self::Bathtub => "a banheira",
             Self::Washer => "a máquina de lavar",
             Self::LaundrySink => "o tanque",
-            Self::Dishwasher => "o lava-louças",
+            Self::Dishwasher => "a lava-louças",
             Self::Bidet => "o bidê",
         })
     }
@@ -1510,6 +1510,12 @@ mod tests {
         assert!(
             said[1].0.contains(": a máquina de lavar não tem"),
             "{said:?}"
+        );
+        assert_eq!(
+            Fixture::Dishwasher
+                .the()
+                .in_language(crate::vocabulary::Language::Portuguese),
+            "a lava-louças"
         );
     }
 

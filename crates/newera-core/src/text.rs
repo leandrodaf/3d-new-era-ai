@@ -1010,7 +1010,7 @@ pub static ENGLISH: &[(&str, &str)] = &[
     ("a banheira", "the bathtub"),
     ("a máquina de lavar", "the washing machine"),
     ("o tanque", "the laundry sink"),
-    ("o lava-louças", "the dishwasher"),
+    ("a lava-louças", "the dishwasher"),
     ("o bidê", "the bidet"),
     ("gradil", "railing"),
     ("guarda-corpo de vidro", "glass guard"),
