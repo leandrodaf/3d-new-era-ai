@@ -75,9 +75,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- An empty total is 0, not -0.0: `electrical(action=circuits)`'s `total_va` with no circuits yet, and
-  `lighting`'s `lm`, `W` and W/m² for a storey or a room with no light — the sum of nothing in
-  floating point is negative zero, and it went out as such.
 - The hosted service listed tools it then refused — the video, the scanned plan — and a browser tab
   listed feedback and the plugins, which need a desktop. Each place now lists only what it runs, says
   so in one place for all three (`newera_mcp::surface`), and gives server instructions that name every
