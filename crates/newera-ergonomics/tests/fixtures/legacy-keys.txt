@@ -431,6 +431,7 @@ web/demo.newera [Versão 1] / família
   nkba:r14:triangulo-geladeira-fogao-lado
   panero-zelnik:f69:topo-aereo-prateleira-cima
 docs/projects/upper-west-side-reviewed.newera [Versão 1] / casal
+  -:f157:poltrona-para-essa-tela
   -:r14:possivel-canto-ocioso-junto
   coe-municipal:r14:codigo-obras-informado-circulo
   coe-municipal:r14:ralo-piso-codigo-sanitario
@@ -488,6 +489,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / casal
   nbr8160:suite):ponto-esgoto-ralo-sifonado
   nkba:r14:triangulo-geladeira-fogao-lado
 docs/projects/upper-west-side-reviewed.newera [Versão 1] / cadeirante
+  -:f157:poltrona-para-essa-tela
   -:r14:possivel-canto-ocioso-junto
   coe-municipal:r14:codigo-obras-informado-circulo
   coe-municipal:r14:ralo-piso-codigo-sanitario
@@ -567,6 +569,7 @@ docs/projects/upper-west-side-reviewed.newera [Versão 1] / cadeirante
   nkba:r14:triangulo-geladeira-fogao-lado
 docs/projects/upper-west-side-reviewed.newera [Versão 1] / família
   -:casa:moradores-lugares-para-dormir
+  -:f157:poltrona-para-essa-tela
   -:r14:possivel-canto-ocioso-junto
   blum-zonas:f60:bancada-para-quem-altura
   coe-municipal:r14:codigo-obras-informado-circulo
@@ -2721,7 +2724,6 @@ Sala #3 / casal
   -:casa:nenhum-dormitorio-identificado-nomeie
   -:f106:livre-cerca-abaixo-passa
   -:f108:ocupa-mesmo-lugar-dining
-  -:f111:sofa-para-essa-tela
   nbr15575g:f109:livres-frente-sentar-levantar
   nbr15575g:f113:livres-direita-puxar-cadeira
   nbr16264:r105:pontos-norma-cabeamento-residencial
@@ -2735,7 +2737,6 @@ Sala #3 / cadeirante
   -:casa:nenhum-dormitorio-identificado-nomeie
   -:f106:livre-cerca-abaixo-passa
   -:f108:ocupa-mesmo-lugar-dining
-  -:f111:sofa-para-essa-tela
   nbr15575g:f109:livres-frente-sentar-levantar
   nbr15575g:f113:livres-direita-puxar-cadeira
   nbr16264:r105:pontos-norma-cabeamento-residencial
@@ -2751,7 +2752,6 @@ Sala #3 / família
   -:casa:nenhum-dormitorio-identificado-nomeie
   -:f106:livre-cerca-abaixo-passa
   -:f108:ocupa-mesmo-lugar-dining
-  -:f111:sofa-para-essa-tela
   nbr15575g:f109:livres-frente-sentar-levantar
   nbr15575g:f113:livres-direita-puxar-cadeira
   nbr16264:r105:pontos-norma-cabeamento-residencial
@@ -2764,7 +2764,6 @@ Sala #4 / casal
   -:casa:nenhum-banheiro-vaso-sanitario
   -:casa:nenhum-dormitorio-identificado-nomeie
   -:f110:ocupa-mesmo-lugar-dining
-  -:f111:sofa-para-essa-tela
   nbr15575g:f108:livres-frente-sentar-levantar
   nbr15575g:f109:livres-frente-sentar-levantar
   nbr15575g:f112:livres-direita-puxar-cadeira
@@ -2781,7 +2780,6 @@ Sala #4 / cadeirante
   -:casa:nenhum-banheiro-vaso-sanitario
   -:casa:nenhum-dormitorio-identificado-nomeie
   -:f110:ocupa-mesmo-lugar-dining
-  -:f111:sofa-para-essa-tela
   nbr15575g:f108:livres-frente-sentar-levantar
   nbr15575g:f109:livres-frente-sentar-levantar
   nbr15575g:f112:livres-direita-puxar-cadeira
@@ -2800,7 +2798,6 @@ Sala #4 / família
   -:casa:nenhum-banheiro-vaso-sanitario
   -:casa:nenhum-dormitorio-identificado-nomeie
   -:f110:ocupa-mesmo-lugar-dining
-  -:f111:sofa-para-essa-tela
   nbr15575g:f108:livres-frente-sentar-levantar
   nbr15575g:f109:livres-frente-sentar-levantar
   nbr15575g:f112:livres-direita-puxar-cadeira
@@ -2818,7 +2815,7 @@ Sala #5 / casal
   -:casa:nenhum-dormitorio-identificado-nomeie
   -:f107:ocupa-mesmo-lugar-stand
   -:f109:ocupa-mesmo-lugar-dining
-  -:f111:sofa-para-essa-tela
+  -:f111:armchair-para-essa-tela
   coe-municipal:r105:janelas-somam-para-piso
   nbr15575g:f112:livres-direita-puxar-cadeira
   nbr16264:r105:pontos-norma-cabeamento-residencial
@@ -2832,7 +2829,7 @@ Sala #5 / cadeirante
   -:casa:nenhum-dormitorio-identificado-nomeie
   -:f107:ocupa-mesmo-lugar-stand
   -:f109:ocupa-mesmo-lugar-dining
-  -:f111:sofa-para-essa-tela
+  -:f111:armchair-para-essa-tela
   coe-municipal:r105:janelas-somam-para-piso
   nbr15575g:f112:livres-direita-puxar-cadeira
   nbr16264:r105:pontos-norma-cabeamento-residencial
@@ -2848,7 +2845,7 @@ Sala #5 / família
   -:casa:nenhum-dormitorio-identificado-nomeie
   -:f107:ocupa-mesmo-lugar-stand
   -:f109:ocupa-mesmo-lugar-dining
-  -:f111:sofa-para-essa-tela
+  -:f111:armchair-para-essa-tela
   coe-municipal:r105:janelas-somam-para-piso
   nbr15575g:f112:livres-direita-puxar-cadeira
   nbr16264:r105:pontos-norma-cabeamento-residencial
