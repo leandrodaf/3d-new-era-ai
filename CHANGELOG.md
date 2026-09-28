@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A piece with a heavy imported model can have a lighter file for afar: `edit_model`
+  `action=lod` (`file`, `beyond` cm from the camera, default 400) draws it in the 3D view, the
+  previews and photos when the camera is farther than that, in the same box, its materials and
+  parts answering by the same names; `detail=always` holds the detailed file for a close review,
+  and exports and top views always use it. `model` says where the triangles go — `cost {tris,
+  heaviest [[part, tris, %]], copies, in_project}` — and warns when a model over 50,000
+  triangles has no lighter file. The Ares chair's weave was 69 % of its 89,718 triangles, and
+  nothing said so.
+
 - A texture's alpha can cut holes: a glTF material with `alphaMode: MASK` (and its
   `alphaCutoff`), or an MTL whose `map_d` is its color image, has holes wherever the image's
   alpha is under the cutoff — in the 3D view, the previews and top views, and photos, where

@@ -341,6 +341,10 @@ pub(crate) fn sun_light(home: &Home, hour: f64) -> (Vec3, f32) {
     }
 }
 
+/// Revision, selection, cutaway, and which pieces with a lighter far file
+/// were drawn with it.
+type BuiltFor = (u64, Vec<ElementId>, Option<Cutaway>, Vec<bool>);
+
 pub(crate) struct SceneView {
     camera: OrbitCamera,
     /// When set, the view looks through this visitor instead of orbiting.
@@ -350,9 +354,8 @@ pub(crate) struct SceneView {
     /// Walls up, cut away or down; a visitor always sees them up.
     pub(crate) walls: Walls,
     gpu: Option<Gpu>,
-    /// `(document revision, selection, walls brought down)` the GPU mesh was
-    /// built from.
-    built_for: Option<(u64, Vec<ElementId>, Option<Cutaway>)>,
+    /// What the GPU mesh was built from.
+    built_for: Option<BuiltFor>,
     framed_once: bool,
     /// Imported models by resolved path; `None` when a file failed to load.
     models: std::cell::RefCell<
@@ -465,14 +468,38 @@ impl SceneView {
             Walls::Cutaway => Some(Cutaway::facing(home, self.camera.toward())),
             Walls::Down => Some(Cutaway::all(home)),
         };
+        // Pieces with a lighter file for afar switch as the camera crosses
+        // their distance, which rebuilds the scene like an edit would.
+        let eye = self
+            .visitor
+            .as_ref()
+            .map_or_else(|| self.camera.eye(), Visitor::eye);
+        let distance =
+            |piece: &newera_core::Furniture| newera_render::camera_distance(home, piece, eye);
+        let far: Vec<bool> = home
+            .furniture
+            .iter()
+            .flat_map(newera_core::Furniture::flatten)
+            .filter_map(|piece| {
+                let lod = piece.model_far.as_ref()?;
+                Some(lod.file_at(Some(distance(piece))).is_some())
+            })
+            .collect();
         let key = (
             revision,
             selection.iter().copied().collect::<Vec<_>>(),
             cutaway,
+            far,
         );
         if self.built_for.as_ref() != Some(&key) {
             let models = |piece: &newera_core::Furniture| {
-                let path = newera_core::resolve_asset(project, piece.model.as_deref()?);
+                piece.model.as_ref()?;
+                let file = piece
+                    .model_far
+                    .as_ref()
+                    .and_then(|far| far.file_at(Some(distance(piece))))
+                    .or(piece.model.as_deref())?;
+                let path = newera_core::resolve_asset(project, file);
                 let mut cache = self.models.borrow_mut();
                 let mut mesh = cache
                     .entry(path.clone())

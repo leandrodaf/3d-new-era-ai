@@ -289,7 +289,24 @@ impl ModelCache {
         piece: &newera_core::Furniture,
         assets: Option<&Path>,
     ) -> Option<newera_catalog::Mesh> {
-        let path = newera_core::resolve_asset(assets, piece.model.as_deref()?);
+        self.piece_model_seen(piece, assets, None)
+    }
+
+    /// [`Self::piece_model`] for a camera `distance` cm away: the piece's
+    /// lighter file ([`newera_core::FarModel`]) when it is that far.
+    pub fn piece_model_seen(
+        &self,
+        piece: &newera_core::Furniture,
+        assets: Option<&Path>,
+        distance: Option<f64>,
+    ) -> Option<newera_catalog::Mesh> {
+        piece.model.as_ref()?;
+        let file = piece
+            .model_far
+            .as_ref()
+            .and_then(|far| far.file_at(distance))
+            .or(piece.model.as_deref())?;
+        let path = newera_core::resolve_asset(assets, file);
         let version = self.asset_version(&path);
         let mut cache = self.models.borrow_mut();
         let cached = cache.entry(path.clone()).or_insert_with(|| CachedModel {
@@ -308,6 +325,23 @@ impl ModelCache {
         mesh.edit_parts(&piece.model_parts, true);
         Some(mesh)
     }
+}
+
+/// How far a piece's center is from a camera at `eye` (meters, world
+/// axes), cm: what picks a lighter file for pieces far away.
+#[must_use]
+pub fn camera_distance(
+    home: &newera_core::Home,
+    piece: &newera_core::Furniture,
+    eye: glam::Vec3,
+) -> f64 {
+    let floor = home.elevation_of(piece.level);
+    let center = glam::DVec3::new(
+        piece.position.x,
+        floor + piece.elevation + piece.height / 2.0,
+        piece.position.y,
+    );
+    (center - eye.as_dvec3() * 100.0).length()
 }
 
 /// Exports the home's 3D model (`.glb` or `.obj`), with models and textures
@@ -417,7 +451,9 @@ pub fn photo_home(
 ) -> image::RgbaImage {
     use glam::Vec3;
     let cache = ModelCache::default();
-    let models = |piece: &newera_core::Furniture| cache.piece_model(piece, assets);
+    let models = |piece: &newera_core::Furniture| {
+        cache.piece_model_seen(piece, assets, Some(camera_distance(home, piece, view.eye)))
+    };
     // From above the walls, a dollhouse: the path tracer sees both sides of
     // every face, so room ceilings would hide the inside that the 3D view
     // (which culls back faces) shows.
@@ -591,7 +627,9 @@ pub fn render_home_cut(
     assets: Option<&Path>,
 ) -> image::RgbaImage {
     let cache = ModelCache::default();
-    let models = |piece: &newera_core::Furniture| cache.piece_model(piece, assets);
+    let models = |piece: &newera_core::Furniture| {
+        cache.piece_model_seen(piece, assets, Some(camera_distance(home, piece, view.eye)))
+    };
     let mut mesh = Mesh::from_home_cut(home, &Selection::new(), &models, cutaway);
     // A section seen from above shows the walls it cuts as solid.
     if let (Some(near), Some(_)) = (view.near, view.ortho) {

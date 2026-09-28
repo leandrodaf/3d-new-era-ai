@@ -187,6 +187,28 @@ pub struct ModelPart {
     pub scale: Option<[f64; 3]>,
 }
 
+/// A lighter file drawn for a piece seen from afar — a weave as an alpha
+/// sheet, fewer segments — in the same box, its materials and parts
+/// answering by the same names.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct FarModel {
+    pub file: String,
+    /// Farther than this from the camera, cm, the lighter file is drawn.
+    pub beyond: f64,
+    /// The detailed file always, however far (a close review).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub off: bool,
+}
+
+impl FarModel {
+    /// The file to draw for a camera `distance` cm away, or `None` for the
+    /// piece's own.
+    #[must_use]
+    pub fn file_at(&self, distance: Option<f64>) -> Option<&str> {
+        (!self.off && distance.is_some_and(|d| d > self.beyond)).then_some(self.file.as_str())
+    }
+}
+
 /// Descriptive data that doesn't affect geometry.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct PieceInfo {
@@ -365,6 +387,9 @@ pub struct Furniture {
     /// Parts of its imported model hidden, moved or resized.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub model_parts: Vec<ModelPart>,
+    /// A lighter file for its imported model, drawn from afar.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_far: Option<FarModel>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub light: Option<Light>,
     /// Pieces of a group, positioned in plan coordinates like top-level ones.
@@ -421,6 +446,7 @@ impl Default for Furniture {
             shape: None,
             materials: Vec::new(),
             model_parts: Vec::new(),
+            model_far: None,
             light: None,
             children: Vec::new(),
             drop_on_top: 1.0,

@@ -52,12 +52,13 @@ fn unit_of(
 #[serde(deny_unknown_fields)]
 pub(crate) struct EditModelParams {
     /// `replace` puts another file in the pieces, keeping each one's id and all the rest;
-    /// `material` changes one of their materials, `part` one of their parts, by name.
-    #[schemars(extend("enum" = ["replace", "material", "part"]))]
+    /// `material` changes one of their materials, `part` one of their parts, by name;
+    /// `lod` gives them a lighter file drawn from afar.
+    #[schemars(extend("enum" = ["replace", "material", "part", "lod"]))]
     action: String,
     /// Pieces whose model changes, e.g. `["f12"]`.
     ids: Vec<String>,
-    /// replace: the new .obj/.gltf/.glb file.
+    /// replace/lod: the new .obj/.gltf/.glb file (lod: the lighter one).
     file: Option<String>,
     /// replace: also every other piece using the same file as `ids` (default: only `ids`).
     #[serde(default)]
@@ -88,6 +89,11 @@ pub(crate) struct EditModelParams {
     offset: Option<[f64; 3]>,
     /// part: resize it about its center, `[x, y, z]` factors.
     scale: Option<[f64; 3]>,
+    /// lod: farther than this from the camera, cm, the lighter file is drawn (default 400).
+    beyond: Option<f64>,
+    /// lod: `always` draws the detailed file however far (a close review); `auto` switches again.
+    #[schemars(extend("enum" = ["auto", "always"]))]
+    detail: Option<String>,
 }
 
 /// A short, stable name for the bytes of a file: which version was loaded.
@@ -202,6 +208,27 @@ fn check(out: &mut Value, mesh: &newera_catalog::Mesh, tol: f32) {
     ));
 }
 
+/// Triangles in a model before it is worth a lighter file for afar.
+const HEAVY: usize = 50_000;
+
+/// Where a model's triangles go: the parts that weigh most, with their
+/// share, heaviest first.
+fn cost(mesh: &newera_catalog::Mesh) -> Value {
+    let total = mesh.indices.len() / 3;
+    let mut parts: Vec<(&str, usize)> = mesh
+        .parts
+        .iter()
+        .map(|p| (p.name.as_str(), p.count))
+        .collect();
+    parts.sort_by_key(|p| std::cmp::Reverse(p.1));
+    #[allow(clippy::cast_precision_loss)]
+    let share = |n: usize| ((n as f64 / total.max(1) as f64) * 1000.0).round() / 10.0;
+    json!({
+        "tris": total,
+        "heaviest": parts.iter().take(5).map(|(name, n)| json!([name, n, share(*n)])).collect::<Vec<_>>(),
+    })
+}
+
 /// What `model` answers for a loaded file.
 pub(crate) fn report(file: &str, loaded: &newera_catalog::ImportedModel) -> Value {
     let mesh = &loaded.mesh;
@@ -245,6 +272,7 @@ pub(crate) fn report(file: &str, loaded: &newera_catalog::ImportedModel) -> Valu
         "images": images.len(),
         "uv": mesh.uvs.iter().any(|uv| *uv != [0.0, 0.0]),
         "parts": parts(mesh, &[], None),
+        "cost": cost(mesh),
         "warnings": r.warnings,
     })
 }
@@ -252,7 +280,7 @@ pub(crate) fn report(file: &str, loaded: &newera_catalog::ImportedModel) -> Valu
 #[tool_router(router = model_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken for its numbers (guessed from the size unless unit= or the piece says) and its natural size, triangles, its materials with their images, its named parts (OBJ objects and groups, glTF nodes: arms, seat, frame) with their bounds and materials, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, extensions). For a piece that looks wrong after place model=…, instead of reading the file. part=<words> keeps the parts named so; check=clashes finds parts passing through one another (a cushion through a rail), not those that touch. Reply {file, format, unit, raw (file units), size cm, tris, materials [[name, color, image, tris]], images, uv, parts [[name, tris, min, max, materials]] in cm of the piece (x across, y to the front, z up), warnings}; with id also piece {size, scale per axis}; check adds clashes [[part, part, triangle pairs, at, depth cm]], degenerate [[part, faces]] and checked (what was and was not looked at). place model=… imports one."
+        description = "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken (guessed from its size unless unit= or the piece says), natural size, triangles and where they go, materials with their images, named parts (OBJ objects and groups, glTF nodes: arms, seat, frame) with bounds and materials, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, extensions). For a piece that looks wrong after place model=…, instead of reading the file. part=<words> keeps the parts named so; check=clashes finds parts passing through one another (a cushion through a rail), not those that touch. Reply {file, format, unit, raw, size cm, tris, materials [[name, color, image, tris]], parts [[name, tris, min, max, materials]] in cm of the piece (x across, y to the front, z up), cost {tris, heaviest [[part, tris, %]], copies, in_project}, warnings}; with id also piece {size, scale, far}; check adds clashes [[part, part, pairs, at, depth cm]], degenerate and checked (what was looked at). place model=… imports one."
     )]
     pub(crate) fn model(
         &self,
@@ -284,6 +312,25 @@ impl NewEraMcp {
         let loaded = newera_catalog::load_model_in(&path, unit)
             .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
         let mut out = report(&file, &loaded);
+        let tris = loaded.mesh.indices.len() / 3;
+        let copies = doc
+            .home()
+            .furniture
+            .iter()
+            .flat_map(newera_core::Furniture::flatten)
+            .filter(|f| f.model.as_deref() == Some(file.as_str()))
+            .count();
+        out["cost"]["copies"] = json!(copies);
+        out["cost"]["in_project"] = json!(copies * tris);
+        if tris > HEAVY && piece.as_ref().is_none_or(|p| p.model_far.is_none()) {
+            let top = out["cost"]["heaviest"][0].clone();
+            out["warnings"].as_array_mut().expect("list").push(json!(format!(
+                "heavy: {tris} triangles{}; a lighter file for afar (edit_model action=lod) keeps a room of them quick",
+                top.as_array()
+                    .map(|t| format!(", {}% of them in {}", t[2], t[0].as_str().unwrap_or_default()))
+                    .unwrap_or_default()
+            )));
+        }
         // A piece's model as it is drawn: turned, fitted to its box, its
         // parts moved and resized; hidden ones listed, but not checked.
         let (listed, drawn, hidden) = match &piece {
@@ -323,6 +370,9 @@ impl NewEraMcp {
                 .collect();
             out["piece"] =
                 json!({ "id": piece.id.to_string(), "size": size.map(cm), "scale": scale });
+            if let Some(far) = &piece.model_far {
+                out["piece"]["far"] = json!({ "file": far.file, "beyond": far.beyond, "detail": if far.off { "always" } else { "auto" } });
+            }
             let (lo, hi) = scale
                 .iter()
                 .fold((f64::MAX, f64::MIN), |(lo, hi), s| (lo.min(*s), hi.max(*s)));
@@ -342,7 +392,7 @@ impl NewEraMcp {
 #[tool_router(router = edit_model_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Change the model of placed pieces. replace swaps the file of ids (every=true: of every piece using the same file) in one undo step, keeping each piece's id, position, angle, storey, size (size=natural takes the file's), finish, material overrides, names and links; the new file is read first and nothing changes if it fails. rev refuses the change when the plan moved on since that revision. Reply ok with the ids, then a line per piece: old file → new, the version loaded (bytes, hash), overrides that no longer match a material, and what the new file leaves out. part hides, moves (offset cm: x across, y to the front, z up) or resizes one of their parts by the name model lists — the back cushion alone, the arms unchanged. material changes one of their materials by the name model lists — color, mat (an image over it), repeat, its texture scale (2 halves the image, the piece unchanged), clear. model inspects a file; place imports a new piece."
+        description = "Change the model of placed pieces. replace swaps the file of ids (every=true: of every piece using the same file) in one undo step, keeping each piece's id, position, angle, storey, size (size=natural takes the file's), finish, material overrides, names and links; the new file is read first and nothing changes if it fails. rev refuses the change when the plan moved on since that revision. Reply ok with the ids, then a line per piece: old file → new, the version loaded (bytes, hash), overrides that no longer match a material, and what the new file leaves out. lod gives them a lighter file (file) drawn beyond a distance from the camera (beyond cm, default 400) — same box, materials and parts by name — and detail=always holds the detailed one for a close review. part hides, moves (offset cm: x across, y to the front, z up) or resizes one of their parts by the name model lists — the back cushion alone, the arms unchanged. material changes one of their materials by the name model lists — color, mat (an image over it), repeat, its texture scale (2 halves the image, the piece unchanged), clear. model inspects a file; place imports a new piece."
     )]
     pub(crate) fn edit_model(
         &self,
@@ -352,8 +402,9 @@ impl NewEraMcp {
             "replace" => self.replace_model(&p),
             "material" => self.model_material(p),
             "part" => self.model_part(&p),
+            "lod" => self.model_lod(&p),
             other => Err(invalid(format!(
-                "action `{other}`: replace, material or part"
+                "action `{other}`: replace, material, part or lod"
             ))),
         }
     }
@@ -399,6 +450,86 @@ fn at_revision(doc: &newera_core::Document, rev: Option<u64>) -> Result<(), Erro
 }
 
 impl NewEraMcp {
+    fn model_lod(&self, p: &EditModelParams) -> Result<String, ErrorData> {
+        let mut doc = self.document.write();
+        at_revision(&doc, p.rev)?;
+        let pieces = model_pieces(&doc, &p.ids)?;
+        let off = match p.detail.as_deref() {
+            None => None,
+            Some("auto") => Some(false),
+            Some("always") => Some(true),
+            Some(other) => return Err(invalid(format!("detail `{other}`: auto or always"))),
+        };
+        if p.beyond.is_some_and(|b| !(b.is_finite() && b >= 0.0)) {
+            return Err(invalid("beyond: a distance in cm, 0 or more"));
+        }
+        if !p.clear && p.file.is_none() && off.is_none() && p.beyond.is_none() {
+            return Err(invalid(
+                "lod: give file (the lighter one), beyond, detail or clear",
+            ));
+        }
+        // The lighter file is read first, and must be one.
+        let far_tris = match &p.file {
+            Some(file) => {
+                let path = doc.resolve_asset(file);
+                let loaded = newera_catalog::load_model(&path).map_err(|e| {
+                    invalid(format!("{}: {e} — nothing was changed", path.display()))
+                })?;
+                Some(loaded.mesh.indices.len() / 3)
+            }
+            None => None,
+        };
+        let mut commands = Vec::with_capacity(pieces.len());
+        let mut lines = Vec::with_capacity(pieces.len());
+        for mut piece in pieces {
+            if p.clear {
+                piece.model_far = None;
+                lines.push(format!("{}: one file at every distance", piece.id));
+            } else {
+                let mut far = match (piece.model_far.take(), &p.file) {
+                    (_, Some(file)) => newera_core::FarModel {
+                        file: file.clone(),
+                        beyond: 400.0,
+                        off: false,
+                    },
+                    (Some(far), None) => far,
+                    (None, None) => {
+                        return Err(invalid(format!(
+                            "{} has no lighter file yet: file=<the lighter .obj/.glb>",
+                            piece.id
+                        )));
+                    }
+                };
+                if let Some(beyond) = p.beyond {
+                    far.beyond = beyond;
+                }
+                if let Some(off) = off {
+                    far.off = off;
+                }
+                let mut line = format!(
+                    "{}: {} beyond {} cm{}",
+                    piece.id,
+                    far.file,
+                    cm(far.beyond),
+                    if far.off {
+                        ", but the detailed file always for now"
+                    } else {
+                        ""
+                    }
+                );
+                if let Some(n) = far_tris {
+                    let _ = write!(line, " ({n} triangles)");
+                }
+                lines.push(line);
+                piece.model_far = Some(far);
+            }
+            commands.push(newera_core::Command::update(piece));
+        }
+        doc.execute(newera_core::Command::Batch { commands })
+            .map_err(core)?;
+        Ok(format!("{}\n{}", ok(&doc, &p.ids), lines.join("\n")))
+    }
+
     fn model_part(&self, p: &EditModelParams) -> Result<String, ErrorData> {
         let name = p
             .part
@@ -1235,6 +1366,102 @@ mod tests {
                 .model_parts
                 .is_empty()
         );
+        drop(doc);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_heavy_model_says_where_its_triangles_go_and_takes_a_lighter_file_for_afar() {
+        let dir = std::env::temp_dir().join(format!("newera-model-lod-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // A frame of 12 triangles and a weave of 60,000.
+        let mut obj = boxes(&[("moldura", [0.0, 0.0, 0.0], [47.0, 81.0, 5.0])]);
+        obj.push_str("o palhinha\n");
+        let n = 100;
+        for i in 0..=n {
+            for j in 0..=n / 2 {
+                let _ = writeln!(obj, "v {} {} 2", f64::from(i) * 0.4, f64::from(j) * 0.8);
+            }
+        }
+        let row = n / 2 + 1;
+        let mut faces = 0;
+        'grid: for i in 0..n {
+            for j in 0..n / 2 {
+                let a = 8 + i * row + j + 1;
+                let _ = writeln!(obj, "f {} {} {}", a, a + row, a + row + 1);
+                let _ = writeln!(obj, "f {} {} {}", a, a + row + 1, a + 1);
+                faces += 2;
+                if faces >= 60_000 {
+                    break 'grid;
+                }
+            }
+        }
+        // Six layers of the same grid make it heavy.
+        let grid = obj.lines().filter(|l| l.starts_with("f ")).skip(12).fold(
+            String::new(),
+            |mut out, l| {
+                let _ = writeln!(out, "{l}");
+                out
+            },
+        );
+        for _ in 0..5 {
+            obj.push_str(&grid);
+        }
+        std::fs::write(dir.join("ares.obj"), obj).unwrap();
+        std::fs::write(
+            dir.join("ares-leve.obj"),
+            boxes(&[("moldura", [0.0, 0.0, 0.0], [47.0, 81.0, 5.0])]),
+        )
+        .unwrap();
+        let file = dir.join("ares.obj").display().to_string();
+        let light = dir.join("ares-leve.obj").display().to_string();
+        let s = server();
+        s.place(Parameters(
+            serde_json::from_str(&format!(r#"{{"items":[{{"model":"{file}","at":[0,0],"unit":"cm"}},{{"model":"{file}","at":[100,0],"unit":"cm"}}]}}"#)).unwrap(),
+        ))
+        .unwrap();
+        let seen = call(&s, r#"{"id":"f1"}"#).unwrap();
+        let cost = &seen["cost"];
+        let tris = cost["tris"].as_u64().unwrap();
+        assert!(tris > 50_000, "{cost}");
+        assert_eq!(cost["heaviest"][0][0], "palhinha", "{cost}");
+        assert!(cost["heaviest"][0][2].as_f64().unwrap() > 99.0, "{cost}");
+        assert_eq!(
+            (cost["copies"].as_u64(), cost["in_project"].as_u64()),
+            (Some(2), Some(2 * tris))
+        );
+        assert!(seen["warnings"].to_string().contains("heavy"), "{seen}");
+
+        let edit = |json: String| s.edit_model(Parameters(serde_json::from_str(&json).unwrap()));
+        assert!(
+            edit(r#"{"action":"lod","ids":["f1"],"beyond":300}"#.to_owned())
+                .unwrap_err()
+                .message
+                .contains("no lighter file yet")
+        );
+        let reply = edit(format!(
+            r#"{{"action":"lod","ids":["f1","f2"],"file":"{light}","beyond":350}}"#
+        ))
+        .unwrap();
+        assert!(reply.contains("beyond 350 cm (12 triangles)"), "{reply}");
+        edit(r#"{"action":"lod","ids":["f1"],"detail":"always"}"#.to_owned()).unwrap();
+        let held = call(&s, r#"{"id":"f1"}"#).unwrap();
+        assert_eq!(
+            held["piece"]["far"],
+            json!({"file": light, "beyond": 350.0, "detail": "always"})
+        );
+        assert!(!held["warnings"].to_string().contains("heavy"), "{held}");
+        edit(r#"{"action":"lod","ids":["f1"],"clear":true}"#.to_owned()).unwrap();
+        let doc = s.document.read();
+        let far = |id: &str| {
+            doc.home()
+                .find_piece(id.parse().unwrap())
+                .unwrap()
+                .model_far
+                .clone()
+        };
+        assert!(far("f1").is_none());
+        assert_eq!(far("f2").map(|f| f.beyond), Some(350.0));
         drop(doc);
         std::fs::remove_dir_all(dir).unwrap();
     }
