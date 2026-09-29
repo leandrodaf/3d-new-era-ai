@@ -2432,6 +2432,9 @@ pub(crate) fn place_noting(doc: &mut Document, items: Vec<PlaceSpec>) -> EditRes
                 spec.stretch = Some(true);
             }
         }
+        if spec.model.is_none() && (spec.unit.is_some() || spec.stretch.is_some()) {
+            return Err("unit and stretch are for model=<file>".into());
+        }
         if spec.cat == "beam" && (spec.a.is_some() || spec.b.is_some()) {
             let (Some(a), Some(b)) = (spec.a, spec.b) else {
                 return Err("a beam needs `a` and `b` as [x,y,z]".into());
@@ -2470,8 +2473,12 @@ pub(crate) fn place_noting(doc: &mut Document, items: Vec<PlaceSpec>) -> EditRes
                 .and_then(|id| home.find_piece(id))
                 .map(|f| f.id.to_string())
         });
-        if spec.model.is_none() && (spec.unit.is_some() || spec.stretch.is_some()) {
-            return Err("unit and stretch are for model=<file>".into());
+        if let Some(raw) = &source_id
+            && (spec.unit.is_some() || spec.stretch.is_some())
+        {
+            return Err(format!(
+                "unit and stretch are for a model file: this repeats {raw}, at its unit and size"
+            ));
         }
         let copied = match &source_id {
             Some(raw) => {
