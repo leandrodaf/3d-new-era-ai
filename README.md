@@ -275,8 +275,9 @@ run it without asking, and asks before each change.
 | `feedback` | A note to the developers about what a tool could do better (desktop only) |
 
 The hosted connector adds `projects`, to list and switch between the projects in your
-account, and leaves out `feedback` and the plugin tools, which only make sense on your
-own machine.
+account, and leaves out `feedback`, the plugin tools and `library` / `edit_library` (the
+library is a folder on your machine), which only make sense on your own machine; the
+browser tab leaves out the library tools too.
 
 ## Command line
 
