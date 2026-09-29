@@ -214,7 +214,9 @@ impl NewEraMcp {
                     piece.catalog
                 )));
             }
-            targets.push(piece.clone());
+            if !targets.iter().any(|t| t.id == piece.id) {
+                targets.push(piece.clone());
+            }
         }
         if targets.is_empty() {
             return Err(invalid("ids: the pieces whose model changes"));
@@ -502,6 +504,19 @@ mod tests {
         // Only f1: the other copy of v3 stays, and one undo brings v3 back.
         assert_eq!(piece("f2").model.as_deref(), Some(v3.as_str()));
         assert_eq!(s.document.read().home().furniture.len(), 2);
+        s.document.write().undo().unwrap();
+        assert_eq!(piece("f1"), before);
+
+        // A repeated id is one piece: one change, one line.
+        let reply = edit(format!(
+            r#"{{"action":"replace","ids":["f1","f1"],"file":"{v4}"}}"#
+        ))
+        .unwrap();
+        assert_eq!(
+            reply.matches(&format!("f1: {v3} → {v4}")).count(),
+            1,
+            "{reply}"
+        );
         s.document.write().undo().unwrap();
         assert_eq!(piece("f1"), before);
 
