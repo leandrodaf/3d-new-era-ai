@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-09-29
+
 ### Added
 
 - A plugin as heavy as a modeler declares `limits` in its `plugin.json` — `heavy`, `threads`,
@@ -1012,7 +1014,8 @@ MCP server, with everything below.
 - `scripts/mcp.sh` / `make mcp` to call MCP tools from the shell.
 - CI for formatting, clippy, tests on Linux/macOS/Windows, MCP smoke test, MSRV and cargo-deny; release builds.
 
-[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.10.0...v2.0.0
 [1.10.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.9.2...v1.10.0
 [1.9.2]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.9.1...v1.9.2
