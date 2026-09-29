@@ -16,6 +16,7 @@
 //! | [`render`] | `render_plan`, `show_plan`, `render_3d`, `render_photo`, `export` |
 //! | [`cameras`] | `cameras`, `edit_cameras`, `video`, `edit_video` |
 //! | [`measure`] | `measure` |
+//! | [`model`] | `model` |
 //! | [`check`] | `layout`, `ergonomics`, `accept` |
 //! | [`annotations`] | `annotations`, `edit_annotations`, `disciplines`, `edit_disciplines` |
 //! | [`background`] | `background`, `edit_background` |
@@ -51,6 +52,7 @@ mod joinery;
 mod levels;
 mod lighting;
 mod measure;
+mod model;
 #[cfg(not(target_arch = "wasm32"))]
 mod native_job;
 mod plumbing;
@@ -94,6 +96,7 @@ impl NewEraMcp {
         let parts = [
             Self::levels_router(),
             Self::measure_router(),
+            Self::model_router(),
             Self::check_router(),
             Self::background_router(),
             Self::roof_router(),

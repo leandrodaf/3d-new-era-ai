@@ -2343,17 +2343,26 @@ pub(crate) fn with_defaults(
 
 /// Places catalog pieces in one undoable step; returns their ids.
 pub(crate) fn place(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Vec<String>> {
-    place_noting(doc, items).map(|(ids, _)| ids)
+    place_noting(doc, items).map(|placed| placed.ids)
+}
+
+/// What [`place_noting`] did besides placing.
+#[derive(Debug, Default)]
+pub(crate) struct Placed {
+    pub ids: Vec<String>,
+    /// Pieces turned to put their back on a wall: `f3:back to w2`.
+    pub turned: Vec<String>,
+    /// Imported models that are not drawn as their file is:
+    /// `f12 chair.glb: 2 warnings (normal map of material tecido is not drawn; …)`.
+    pub imported: Vec<String>,
 }
 
 /// [`place`], also naming the pieces it turned on its own: a piece whose
 /// back belongs on a wall, put `at` a point beside one with no `angle` or
 /// `facing`, goes back to that wall — `f3:back to w2`.
-pub(crate) fn place_noting(
-    doc: &mut Document,
-    items: Vec<PlaceSpec>,
-) -> EditResult<(Vec<String>, Vec<String>)> {
+pub(crate) fn place_noting(doc: &mut Document, items: Vec<PlaceSpec>) -> EditResult<Placed> {
     let mut turned = Vec::new();
+    let mut imported = Vec::new();
     if items.is_empty() {
         return Err("nothing to place".into());
     }
@@ -2432,8 +2441,18 @@ pub(crate) fn place_noting(
             let name = path
                 .file_stem()
                 .map_or_else(|| "Modelo".to_owned(), |n| n.to_string_lossy().into_owned());
+            let id = doc.new_furniture_id();
+            let warnings = &loaded.report.warnings;
+            if !warnings.is_empty() {
+                imported.push(format!(
+                    "{id} {model}: {} warning{} ({})",
+                    warnings.len(),
+                    if warnings.len() == 1 { "" } else { "s" },
+                    warnings.join("; ")
+                ));
+            }
             newera_core::Furniture {
-                id: doc.new_furniture_id(),
+                id,
                 catalog: "imported".to_owned(),
                 name,
                 position: spec.at.unwrap_or_default(),
@@ -2647,7 +2666,11 @@ pub(crate) fn place_noting(
         }
     }
     doc.execute(Command::Batch { commands }).map_err(core)?;
-    Ok((ids, turned))
+    Ok(Placed {
+        ids,
+        turned,
+        imported,
+    })
 }
 
 /// How far behind a piece's back a wall may be and still be the wall it

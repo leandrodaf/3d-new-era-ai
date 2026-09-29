@@ -52,6 +52,7 @@ const HINTS: &[(&str, &str, Effect, bool)] = &[
         false,
     ),
     ("measure", "Measure the plan", Effect::Read, false),
+    ("model", "Inspect an imported model", Effect::Read, false),
     ("sessions", "List who is editing", Effect::Read, false),
     ("cameras", "List points of view", Effect::Read, false),
     ("video", "Read the video path", Effect::Read, false),

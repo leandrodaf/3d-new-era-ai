@@ -3753,6 +3753,83 @@
     },
     "title": "Measure the plan"
   },
+  "model": {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Inspect an imported model"
+    },
+    "description": "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken for its numbers and its natural size, triangles, its materials with their images, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, alpha masks, extensions). For a piece that looks wrong after place model=…, instead of reading the file. Reply {file, format, unit, raw (file units), size cm, tris, materials [[name, color, image, tris]], images, uv, warnings}; with id also piece {size, scale per axis}. place model=… imports one.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "description": "Instead of `id`: an .obj/.gltf/.glb file, before placing it",
+          "type": "string"
+        },
+        "id": {
+          "description": "A piece that uses an imported model, e.g. `f12`",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "model",
+    "outputSchema": {
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string"
+        },
+        "images": {
+          "type": "integer"
+        },
+        "materials": {
+          "type": "array"
+        },
+        "meshes": {
+          "type": "integer"
+        },
+        "piece": {
+          "type": "object"
+        },
+        "raw": {
+          "type": "array"
+        },
+        "size": {
+          "type": "array"
+        },
+        "tris": {
+          "type": "integer"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "uv": {
+          "type": "boolean"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "file",
+        "format",
+        "unit",
+        "size",
+        "tris",
+        "materials",
+        "warnings"
+      ],
+      "type": "object"
+    },
+    "title": "Inspect an imported model"
+  },
   "move": {
     "annotations": {
       "destructiveHint": true,

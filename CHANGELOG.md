@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `model` reads what an imported OBJ/glTF/GLB became: the unit taken for its numbers (and the
+  numbers themselves), its natural size, triangles, each material with its color, image and
+  triangle count, and warnings for what is not drawn as the file says — a material library or
+  texture not found, normal, roughness and opacity maps, an alpha mask, emission, an extension,
+  animations. Given a placed piece (`id`), it also says the scale per axis and warns when the
+  piece is stretched unevenly. `place model=…` adds a line per model with such warnings, and
+  importing from the window says them in the status bar: "it loaded" read as "it looks right",
+  and finding out why a chair came in gray meant reading the importer.
+
 - Win armchair and Ares cane chair in the living and dining catalogs, with
   product dimensions, orientation, model metadata and bundled textured models. Models
   and their textures travel with saved projects; placement uses the existing catalog
