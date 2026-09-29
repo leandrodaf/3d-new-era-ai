@@ -120,12 +120,20 @@ pub(crate) fn parts(
 /// Answers `check=clashes`: the parts whose surfaces cross, where and how
 /// deep, the faces with no area, and what was and was not looked at.
 fn check(out: &mut Value, mesh: &newera_catalog::Mesh, scale: [f64; 3], tol: f32) {
+    // Stretched to the piece first: an uneven scale changes how deep a crossing is.
+    let mut placed = mesh.clone();
+    #[allow(clippy::cast_possible_truncation)]
+    let [w, d, h] = scale.map(|s| s as f32);
+    for v in &mut placed.positions {
+        *v = [v[0] * w, v[1] * h, v[2] * d];
+    }
+    let mesh = &placed;
     let name = |k: usize| mesh.parts.get(k).map_or("(no part)", |p| p.name.as_str());
     let at = |v: [f32; 3]| {
         [
-            cm(f64::from(v[0]) * scale[0]),
-            cm(f64::from(v[2]) * scale[1]),
-            cm(f64::from(v[1]) * scale[2]),
+            cm(f64::from(v[0])),
+            cm(f64::from(v[2])),
+            cm(f64::from(v[1])),
         ]
     };
     let clashes: Vec<Value> = newera_catalog::clashes(mesh, tol)
@@ -793,6 +801,32 @@ mod tests {
         )
         .unwrap();
         assert_eq!(loose["clashes"], json!([]), "{loose}");
+        // Placed at twice its size, the crossing is twice as deep, in the piece's cm.
+        s.place(Parameters(
+            serde_json::from_str(&format!(
+                r#"{{"items":[{{"model":"{file}","at":[100,100]}}]}}"#
+            ))
+            .unwrap(),
+        ))
+        .unwrap();
+        {
+            let mut doc = s.document.write();
+            let mut piece = doc
+                .home()
+                .find_piece("f1".parse().unwrap())
+                .unwrap()
+                .clone();
+            piece.width *= 2.0;
+            piece.depth *= 2.0;
+            piece.height *= 2.0;
+            doc.execute(newera_core::Command::update(piece)).unwrap();
+        }
+        let placed = call(&s, r#"{"id":"f1","check":"clashes"}"#).unwrap();
+        let depth = |v: &Value| v["clashes"][0][4].as_f64().unwrap();
+        assert!(
+            (depth(&placed) - 2.0 * depth(&seen)).abs() < 0.1,
+            "{placed}"
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
