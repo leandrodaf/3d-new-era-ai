@@ -379,7 +379,12 @@ fn model_pieces(
                 piece.catalog
             )));
         }
-        out.push(piece.clone());
+        if !out
+            .iter()
+            .any(|t: &newera_core::Furniture| t.id == piece.id)
+        {
+            out.push(piece.clone());
+        }
     }
     if out.is_empty() {
         return Err(invalid("ids: the pieces whose model changes"));
@@ -546,6 +551,15 @@ impl NewEraMcp {
                 }
                 if let Some(r) = p.repeat {
                     m.repeat = ((r - 1.0).abs() > 1e-9).then_some(r);
+                }
+                // An override left with nothing to change is none at all.
+                if m.key.is_none()
+                    && m.color.is_none()
+                    && m.texture.is_none()
+                    && m.shininess.is_none()
+                    && m.repeat.is_none()
+                {
+                    piece.materials.remove(k);
                 }
             }
             commands.push(newera_core::Command::update(piece));
@@ -873,6 +887,19 @@ mod tests {
         s.document.write().undo().unwrap();
         assert_eq!(piece("f1"), before);
 
+        // A repeated id is one piece: one change, one line.
+        let reply = edit(format!(
+            r#"{{"action":"replace","ids":["f1","f1"],"file":"{v4}"}}"#
+        ))
+        .unwrap();
+        assert_eq!(
+            reply.matches(&format!("f1: {v3} → {v4}")).count(),
+            1,
+            "{reply}"
+        );
+        s.document.write().undo().unwrap();
+        assert_eq!(piece("f1"), before);
+
         // every=true: every piece on the same file, at the new file's size.
         edit(format!(
             r#"{{"action":"replace","ids":["f1"],"file":"{v4}","every":true,"size":"natural"}}"#
@@ -1036,6 +1063,32 @@ mod tests {
         )
         .unwrap();
         assert_eq!(loose["clashes"], json!([]), "{loose}");
+        // Placed at twice its size, the crossing is twice as deep, in the piece's cm.
+        s.place(Parameters(
+            serde_json::from_str(&format!(
+                r#"{{"items":[{{"model":"{file}","at":[100,100]}}]}}"#
+            ))
+            .unwrap(),
+        ))
+        .unwrap();
+        {
+            let mut doc = s.document.write();
+            let mut piece = doc
+                .home()
+                .find_piece("f1".parse().unwrap())
+                .unwrap()
+                .clone();
+            piece.width *= 2.0;
+            piece.depth *= 2.0;
+            piece.height *= 2.0;
+            doc.execute(newera_core::Command::update(piece)).unwrap();
+        }
+        let placed = call(&s, r#"{"id":"f1","check":"clashes"}"#).unwrap();
+        let depth = |v: &Value| v["clashes"][0][4].as_f64().unwrap();
+        assert!(
+            (depth(&placed) - 2.0 * depth(&seen)).abs() < 0.1,
+            "{placed}"
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -1100,6 +1153,19 @@ mod tests {
             ))
             .unwrap_err();
         assert!(catalog.message.contains("for model="), "{catalog:?}");
+        let beam = s
+            .place(Parameters(
+                serde_json::from_str(
+                    r#"{"items":[{"cat":"beam","a":[0,0,250],"b":[300,0,250],"stretch":true}]}"#,
+                )
+                .unwrap(),
+            ))
+            .unwrap_err();
+        assert!(beam.message.contains("for model="), "{beam:?}");
+        // With the file gone, the same path repeats a piece: its unit stays that piece's.
+        std::fs::remove_file(dir.join("puxador.obj")).unwrap();
+        let repeated = place(r#","unit":"m""#).unwrap_err();
+        assert!(repeated.message.contains("this repeats f1"), "{repeated:?}");
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -1169,6 +1235,12 @@ mod tests {
         assert!(pattern.message.contains("an image"), "{pattern:?}");
         edit(r#"{"action":"material","ids":["f1"],"material":"tecido","clear":true}"#).unwrap();
         assert!(overrides().is_empty());
+        // Back to repeat 1 with nothing else set, no override stays behind.
+        edit(r#"{"action":"material","ids":["f1"],"material":"tecido","repeat":2}"#).unwrap();
+        edit(r#"{"action":"material","ids":["f1"],"material":"tecido","repeat":1}"#).unwrap();
+        assert!(overrides().is_empty(), "{:?}", overrides());
+        edit(r#"{"action":"material","ids":["f1"],"material":"tecido","repeat":1}"#).unwrap();
+        assert!(overrides().is_empty(), "{:?}", overrides());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
