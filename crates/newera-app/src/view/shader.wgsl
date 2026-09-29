@@ -14,7 +14,7 @@ var image_sampler: sampler;
 // Must match `IMAGE_BASE` in mesh.rs.
 const IMAGE_BASE: u32 = 100u;
 // Must match `MASK_FLAG` in mesh.rs: an image whose alpha cuts holes, the
-// cutoff in bits 24-30 (127ths).
+// cutoff in bits 23-30 (255ths).
 const MASK_FLAG: u32 = 0x80000000u;
 
 struct VertexIn {
@@ -232,11 +232,11 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     // Sample unconditionally: derivatives must be taken in uniform control flow.
     let d = fwidth(in.uv);
     pixel = max(d.x, d.y);
-    let kind = in.kind & 0x00ffffffu;
+    let kind = in.kind & 0x007fffffu;
     let layer = select(0u, kind - IMAGE_BASE, kind >= IMAGE_BASE);
     let sampled = textureSample(images, image_sampler, vec2<f32>(in.uv.x, -in.uv.y), layer);
     let texel = sampled.rgb;
-    if ((in.kind & MASK_FLAG) != 0u && sampled.a < f32((in.kind >> 24u) & 0x7fu) / 127.0) {
+    if ((in.kind & MASK_FLAG) != 0u && sampled.a < f32((in.kind >> 23u) & 0xffu) / 255.0) {
         discard;
     }
     var albedo = in.color.rgb;

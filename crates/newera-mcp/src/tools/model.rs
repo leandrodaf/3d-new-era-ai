@@ -280,46 +280,51 @@ pub(crate) fn report(file: &str, loaded: &newera_catalog::ImportedModel) -> Valu
 #[tool_router(router = model_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken (guessed from its size unless unit= or the piece says), natural size, triangles and where they go, materials with their images, named parts (OBJ objects and groups, glTF nodes: arms, seat, frame) with bounds and materials, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, extensions). For a piece that looks wrong after place model=…, instead of reading the file. part=<words> keeps the parts named so; check=clashes finds parts passing through one another (a cushion through a rail), not those that touch. Reply {file, format, unit, raw, size cm, tris, materials [[name, color, image, tris]], parts [[name, tris, min, max, materials]] in cm of the piece (x across, y to the front, z up), cost {tris, heaviest [[part, tris, %]], copies, in_project}, warnings}; with id also piece {size, scale, far}; check adds clashes [[part, part, pairs, at, depth cm]], degenerate and checked (what was looked at). place model=… imports one."
+        description = "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken (guessed from its size unless unit= or the piece says), natural size, triangles and where they go, materials with their images, named parts (OBJ objects and groups, glTF nodes: arms, seat, frame) with bounds and materials, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, extensions). For a piece that looks wrong after place model=…, instead of reading the file. part=<words> keeps the parts named so; check=clashes finds parts passing through one another (a cushion through a rail), not those that touch. Reply {file, format, unit, raw, size cm, tris, materials [[name, color, image, tris]], parts [[name, tris, min, max, materials, \"hidden\" when hidden]] in cm of the piece (x across, y to the front, z up), cost {tris, heaviest [[part, tris, %]], copies, in_project}, warnings}; with id also piece {size, scale, far}; check adds clashes [[part, part, pairs, at, depth cm]], degenerate and checked (what was looked at). place model=… imports one."
     )]
     pub(crate) fn model(
         &self,
         Parameters(p): Parameters<ModelParams>,
     ) -> Result<String, ErrorData> {
-        let doc = self.document.read();
-        let (file, piece) = match (&p.id, &p.file) {
-            (Some(raw), None) => {
-                let id = raw
-                    .parse::<newera_core::FurnitureId>()
-                    .map_err(|e| invalid(format!("id: {e}")))?;
-                let piece = doc
-                    .home()
-                    .find_piece(id)
-                    .ok_or_else(|| invalid(format!("{raw} not found")))?;
-                let model = piece.model.clone().ok_or_else(|| {
-                    invalid(format!(
-                        "{raw} is built from the catalog (`{}`), not an imported model",
-                        piece.catalog
-                    ))
-                })?;
-                (model, Some(piece.clone()))
-            }
-            (None, Some(file)) => (file.clone(), None),
-            _ => return Err(invalid("give `id` (a placed piece) or `file`, one of them")),
+        // The lock only to copy out what is read: a heavy file or a clash
+        // check must not keep the editor from saving or drawing.
+        let (file, piece, path, copies) = {
+            let doc = self.document.read();
+            let (file, piece) = match (&p.id, &p.file) {
+                (Some(raw), None) => {
+                    let id = raw
+                        .parse::<newera_core::FurnitureId>()
+                        .map_err(|e| invalid(format!("id: {e}")))?;
+                    let piece = doc
+                        .home()
+                        .find_piece(id)
+                        .ok_or_else(|| invalid(format!("{raw} not found")))?;
+                    let model = piece.model.clone().ok_or_else(|| {
+                        invalid(format!(
+                            "{raw} is built from the catalog (`{}`), not an imported model",
+                            piece.catalog
+                        ))
+                    })?;
+                    (model, Some(piece.clone()))
+                }
+                (None, Some(file)) => (file.clone(), None),
+                _ => return Err(invalid("give `id` (a placed piece) or `file`, one of them")),
+            };
+            let path = doc.resolve_asset(&file);
+            let copies = doc
+                .home()
+                .furniture
+                .iter()
+                .flat_map(newera_core::Furniture::flatten)
+                .filter(|f| f.model.as_deref() == Some(file.as_str()))
+                .count();
+            (file, piece, path, copies)
         };
-        let path = doc.resolve_asset(&file);
         let unit = unit_of(p.unit.as_deref(), piece.as_ref())?;
         let loaded = newera_catalog::load_model_in(&path, unit)
             .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
         let mut out = report(&file, &loaded);
         let tris = loaded.mesh.indices.len() / 3;
-        let copies = doc
-            .home()
-            .furniture
-            .iter()
-            .flat_map(newera_core::Furniture::flatten)
-            .filter(|f| f.model.as_deref() == Some(file.as_str()))
-            .count();
         out["cost"]["copies"] = json!(copies);
         out["cost"]["in_project"] = json!(copies * tris);
         if tris > HEAVY && piece.as_ref().is_none_or(|p| p.model_far.is_none()) {
@@ -430,12 +435,70 @@ fn model_pieces(
                 piece.catalog
             )));
         }
-        out.push(piece.clone());
+        if !out
+            .iter()
+            .any(|t: &newera_core::Furniture| t.id == piece.id)
+        {
+            out.push(piece.clone());
+        }
     }
     if out.is_empty() {
         return Err(invalid("ids: the pieces whose model changes"));
     }
     Ok(out)
+}
+
+/// Models read ahead, with no lock held, by path and unit.
+struct Preloaded(
+    Vec<(
+        std::path::PathBuf,
+        Option<newera_catalog::Unit>,
+        Result<newera_catalog::ImportedModel, String>,
+    )>,
+);
+
+impl Preloaded {
+    /// The model read for `path` in `unit`; `None` when the piece's file
+    /// changed since, and it is read again.
+    fn get(
+        &self,
+        path: &std::path::Path,
+        unit: Option<newera_catalog::Unit>,
+    ) -> Option<Result<&newera_catalog::ImportedModel, &str>> {
+        self.0
+            .iter()
+            .find(|(p, u, _)| p == path && *u == unit)
+            .map(|(_, _, loaded)| loaded.as_ref().map_err(String::as_str))
+    }
+}
+
+impl NewEraMcp {
+    /// The models of the pieces `ids`, each read once in the unit `unit_of`
+    /// gives, with the plan unlocked: a heavy file must not stop the editor.
+    fn preload(
+        &self,
+        ids: &[String],
+        unit_of: impl Fn(&newera_core::Furniture) -> Result<Option<newera_catalog::Unit>, ErrorData>,
+    ) -> Result<Preloaded, ErrorData> {
+        let wanted = {
+            let doc = self.document.read();
+            model_pieces(&doc, ids)?
+                .iter()
+                .map(|piece| {
+                    let file = piece.model.as_deref().unwrap_or_default();
+                    Ok((doc.resolve_asset(file), unit_of(piece)?))
+                })
+                .collect::<Result<Vec<_>, ErrorData>>()?
+        };
+        let mut out = Preloaded(Vec::new());
+        for (path, unit) in wanted {
+            if out.get(&path, unit).is_none() {
+                let loaded = newera_catalog::load_model_in(&path, unit).map_err(|e| e.to_string());
+                out.0.push((path, unit, loaded));
+            }
+        }
+        Ok(out)
+    }
 }
 
 /// Refuses a change prepared on another revision of the plan.
@@ -451,9 +514,6 @@ fn at_revision(doc: &newera_core::Document, rev: Option<u64>) -> Result<(), Erro
 
 impl NewEraMcp {
     fn model_lod(&self, p: &EditModelParams) -> Result<String, ErrorData> {
-        let mut doc = self.document.write();
-        at_revision(&doc, p.rev)?;
-        let pieces = model_pieces(&doc, &p.ids)?;
         let off = match p.detail.as_deref() {
             None => None,
             Some("auto") => Some(false),
@@ -468,10 +528,10 @@ impl NewEraMcp {
                 "lod: give file (the lighter one), beyond, detail or clear",
             ));
         }
-        // The lighter file is read first, and must be one.
+        // The lighter file is read first, with no lock held, and must be one.
         let far_tris = match &p.file {
             Some(file) => {
-                let path = doc.resolve_asset(file);
+                let path = self.document.read().resolve_asset(file);
                 let loaded = newera_catalog::load_model(&path).map_err(|e| {
                     invalid(format!("{}: {e} — nothing was changed", path.display()))
                 })?;
@@ -479,6 +539,9 @@ impl NewEraMcp {
             }
             None => None,
         };
+        let mut doc = self.document.write();
+        at_revision(&doc, p.rev)?;
+        let pieces = model_pieces(&doc, &p.ids)?;
         let mut commands = Vec::with_capacity(pieces.len());
         let mut lines = Vec::with_capacity(pieces.len());
         for mut piece in pieces {
@@ -543,6 +606,7 @@ impl NewEraMcp {
         {
             return Err(invalid("scale: three numbers above 0"));
         }
+        let preloaded = self.preload(&p.ids, |piece| unit_of(None, Some(piece)))?;
         let mut doc = self.document.write();
         at_revision(&doc, p.rev)?;
         let pieces = model_pieces(&doc, &p.ids)?;
@@ -551,8 +615,14 @@ impl NewEraMcp {
             let file = piece.model.clone().unwrap_or_default();
             let path = doc.resolve_asset(&file);
             let unit = unit_of(None, Some(&piece))?;
-            let loaded = newera_catalog::load_model_in(&path, unit)
-                .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+            let fresh;
+            let loaded = if let Some(loaded) = preloaded.get(&path, unit) {
+                loaded.map_err(|e| invalid(format!("{}: {e}", path.display())))?
+            } else {
+                fresh = newera_catalog::load_model_in(&path, unit)
+                    .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+                &fresh
+            };
             if !loaded.mesh.parts.iter().any(|q| q.name == name) {
                 let names: Vec<&str> = loaded.mesh.parts.iter().map(|q| q.name.as_str()).collect();
                 return Err(invalid(format!(
@@ -629,6 +699,7 @@ impl NewEraMcp {
                 Some(m)
             }
         };
+        let preloaded = self.preload(&p.ids, |_| Ok(None))?;
         let mut doc = self.document.write();
         at_revision(&doc, p.rev)?;
         let pieces = model_pieces(&doc, &p.ids)?;
@@ -636,8 +707,14 @@ impl NewEraMcp {
         for mut piece in pieces {
             let file = piece.model.clone().unwrap_or_default();
             let path = doc.resolve_asset(&file);
-            let loaded = newera_catalog::load_model(&path)
-                .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+            let fresh;
+            let loaded = if let Some(loaded) = preloaded.get(&path, None) {
+                loaded.map_err(|e| invalid(format!("{}: {e}", path.display())))?
+            } else {
+                fresh = newera_catalog::load_model(&path)
+                    .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+                &fresh
+            };
             if !loaded.mesh.materials.iter().any(|m| m.name == name) {
                 let names: Vec<&str> = loaded
                     .mesh
@@ -678,6 +755,15 @@ impl NewEraMcp {
                 if let Some(r) = p.repeat {
                     m.repeat = ((r - 1.0).abs() > 1e-9).then_some(r);
                 }
+                // An override left with nothing to change is none at all.
+                if m.key.is_none()
+                    && m.color.is_none()
+                    && m.texture.is_none()
+                    && m.shininess.is_none()
+                    && m.repeat.is_none()
+                {
+                    piece.materials.remove(k);
+                }
             }
             commands.push(newera_core::Command::update(piece));
         }
@@ -697,12 +783,13 @@ impl NewEraMcp {
             Some("natural") => true,
             Some(other) => return Err(invalid(format!("size `{other}`: keep or natural"))),
         };
-        let mut doc = self.document.write();
-        at_revision(&doc, p.rev)?;
-        let path = doc.resolve_asset(&file);
+        // The new file is read with no lock held; the plan is locked after.
+        let path = self.document.read().resolve_asset(&file);
         let unit = unit_of(p.unit.as_deref(), None)?;
         let loaded = newera_catalog::load_model_in(&path, unit)
             .map_err(|e| invalid(format!("{}: {e} — nothing was replaced", path.display())))?;
+        let mut doc = self.document.write();
+        at_revision(&doc, p.rev)?;
         let mut targets = model_pieces(&doc, &p.ids)?;
         let home = doc.home();
         if p.every {
@@ -1004,6 +1091,19 @@ mod tests {
         s.document.write().undo().unwrap();
         assert_eq!(piece("f1"), before);
 
+        // A repeated id is one piece: one change, one line.
+        let reply = edit(format!(
+            r#"{{"action":"replace","ids":["f1","f1"],"file":"{v4}"}}"#
+        ))
+        .unwrap();
+        assert_eq!(
+            reply.matches(&format!("f1: {v3} → {v4}")).count(),
+            1,
+            "{reply}"
+        );
+        s.document.write().undo().unwrap();
+        assert_eq!(piece("f1"), before);
+
         // every=true: every piece on the same file, at the new file's size.
         edit(format!(
             r#"{{"action":"replace","ids":["f1"],"file":"{v4}","every":true,"size":"natural"}}"#
@@ -1167,6 +1267,32 @@ mod tests {
         )
         .unwrap();
         assert_eq!(loose["clashes"], json!([]), "{loose}");
+        // Placed at twice its size, the crossing is twice as deep, in the piece's cm.
+        s.place(Parameters(
+            serde_json::from_str(&format!(
+                r#"{{"items":[{{"model":"{file}","at":[100,100]}}]}}"#
+            ))
+            .unwrap(),
+        ))
+        .unwrap();
+        {
+            let mut doc = s.document.write();
+            let mut piece = doc
+                .home()
+                .find_piece("f1".parse().unwrap())
+                .unwrap()
+                .clone();
+            piece.width *= 2.0;
+            piece.depth *= 2.0;
+            piece.height *= 2.0;
+            doc.execute(newera_core::Command::update(piece)).unwrap();
+        }
+        let placed = call(&s, r#"{"id":"f1","check":"clashes"}"#).unwrap();
+        let depth = |v: &Value| v["clashes"][0][4].as_f64().unwrap();
+        assert!(
+            (depth(&placed) - 2.0 * depth(&seen)).abs() < 0.1,
+            "{placed}"
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -1231,6 +1357,19 @@ mod tests {
             ))
             .unwrap_err();
         assert!(catalog.message.contains("for model="), "{catalog:?}");
+        let beam = s
+            .place(Parameters(
+                serde_json::from_str(
+                    r#"{"items":[{"cat":"beam","a":[0,0,250],"b":[300,0,250],"stretch":true}]}"#,
+                )
+                .unwrap(),
+            ))
+            .unwrap_err();
+        assert!(beam.message.contains("for model="), "{beam:?}");
+        // With the file gone, the same path repeats a piece: its unit stays that piece's.
+        std::fs::remove_file(dir.join("puxador.obj")).unwrap();
+        let repeated = place(r#","unit":"m""#).unwrap_err();
+        assert!(repeated.message.contains("this repeats f1"), "{repeated:?}");
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -1300,6 +1439,12 @@ mod tests {
         assert!(pattern.message.contains("an image"), "{pattern:?}");
         edit(r#"{"action":"material","ids":["f1"],"material":"tecido","clear":true}"#).unwrap();
         assert!(overrides().is_empty());
+        // Back to repeat 1 with nothing else set, no override stays behind.
+        edit(r#"{"action":"material","ids":["f1"],"material":"tecido","repeat":2}"#).unwrap();
+        edit(r#"{"action":"material","ids":["f1"],"material":"tecido","repeat":1}"#).unwrap();
+        assert!(overrides().is_empty(), "{:?}", overrides());
+        edit(r#"{"action":"material","ids":["f1"],"material":"tecido","repeat":1}"#).unwrap();
+        assert!(overrides().is_empty(), "{:?}", overrides());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
