@@ -1338,12 +1338,12 @@ impl Mesh {
                         kind = masked(kind, cutoff);
                     }
                     uv = match planar {
-                        Some(size) => planar_uv(position, normal, *size),
+                        Some(size) => tiled(planar_uv(position, normal, *size), *repeat),
                         // The shader flips v, matching OBJ's bottom-up convention.
                         None => local
                             .uvs
                             .get(k)
-                            .map_or([0.0, 0.0], |uv| uv.map(|c| c * repeat)),
+                            .map_or([0.0, 0.0], |uv| tiled(*uv, *repeat)),
                     };
                 }
             }
@@ -1510,6 +1510,14 @@ fn up_facing(points: &[Point2]) -> Vec<Point2> {
     }
 }
 
+/// A file's UV repeated `repeat` times, kept finite: a huge repeat or UV
+/// would reach infinity, and the texture lookup would turn it into NaN.
+fn tiled(uv: [f32; 2], repeat: f32) -> [f32; 2] {
+    uv.map(|c| {
+        let v = c * repeat;
+        if v.is_finite() { v } else { 0.0 }
+    })
+}
 #[cfg(test)]
 mod tests {
     use newera_core::{Room, align_to_wall};
@@ -2261,6 +2269,21 @@ mod material_tests {
         assert!((span - 4.0).abs() < 1e-3, "{us:?}");
         assert!(mesh.vertices.iter().all(|v| v.kind == IMAGE_BASE));
         assert_eq!(mesh.images, ["marble.png"]);
+        // Repeated twice, the same image is drawn at half the size: eight tiles.
+        piece.materials[0].repeat = Some(2.0);
+        let mesh = Mesh::piece_alone(&piece, &model);
+        let us: Vec<f32> = mesh.vertices.iter().map(|v| v.uv[0]).collect();
+        let span = us.iter().copied().fold(f32::MIN, f32::max)
+            - us.iter().copied().fold(f32::MAX, f32::min);
+        assert!((span - 8.0).abs() < 1e-3, "{us:?}");
+    }
+
+    #[test]
+    fn a_repeated_uv_stays_finite() {
+        let near = |a: [f32; 2], b: [f32; 2]| a.iter().zip(b).all(|(a, b)| (a - b).abs() < 1e-6);
+        assert!(near(tiled([0.25, -0.5], 2.0), [0.5, -1.0]));
+        assert!(near(tiled([1e30, 0.0], f32::INFINITY), [0.0, 0.0]));
+        assert!(near(tiled([3e38, -3e38], 10.0), [0.0, 0.0]));
     }
 
     #[test]
