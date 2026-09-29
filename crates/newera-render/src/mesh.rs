@@ -1314,7 +1314,7 @@ impl Mesh {
                         None => local
                             .uvs
                             .get(k)
-                            .map_or([0.0, 0.0], |uv| uv.map(|c| c * repeat)),
+                            .map_or([0.0, 0.0], |uv| tiled(*uv, *repeat)),
                     };
                 }
             }
@@ -1462,6 +1462,14 @@ fn up_facing(points: &[Point2]) -> Vec<Point2> {
     }
 }
 
+/// A file's UV repeated `repeat` times, kept finite: a huge repeat or UV
+/// would reach infinity, and the texture lookup would turn it into NaN.
+fn tiled(uv: [f32; 2], repeat: f32) -> [f32; 2] {
+    uv.map(|c| {
+        let v = c * repeat;
+        if v.is_finite() { v } else { 0.0 }
+    })
+}
 #[cfg(test)]
 mod tests {
     use newera_core::{Room, align_to_wall};
@@ -2211,6 +2219,14 @@ mod material_tests {
         assert!((span - 4.0).abs() < 1e-3, "{us:?}");
         assert!(mesh.vertices.iter().all(|v| v.kind == IMAGE_BASE));
         assert_eq!(mesh.images, ["marble.png"]);
+    }
+
+    #[test]
+    fn a_repeated_uv_stays_finite() {
+        let near = |a: [f32; 2], b: [f32; 2]| a.iter().zip(b).all(|(a, b)| (a - b).abs() < 1e-6);
+        assert!(near(tiled([0.25, -0.5], 2.0), [0.5, -1.0]));
+        assert!(near(tiled([1e30, 0.0], f32::INFINITY), [0.0, 0.0]));
+        assert!(near(tiled([3e38, -3e38], 10.0), [0.0, 0.0]));
     }
 
     #[test]
