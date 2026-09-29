@@ -928,6 +928,15 @@ mod tests {
             ))
             .unwrap_err();
         assert!(catalog.message.contains("for model="), "{catalog:?}");
+        let beam = s
+            .place(Parameters(
+                serde_json::from_str(
+                    r#"{"items":[{"cat":"beam","a":[0,0,250],"b":[300,0,250],"stretch":true}]}"#,
+                )
+                .unwrap(),
+            ))
+            .unwrap_err();
+        assert!(beam.message.contains("for model="), "{beam:?}");
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

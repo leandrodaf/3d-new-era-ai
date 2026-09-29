@@ -2414,6 +2414,9 @@ pub(crate) fn place_noting(doc: &mut Document, items: Vec<PlaceSpec>) -> EditRes
     let count = items.len();
     let mut refused: Vec<String> = Vec::new();
     let mut one = |spec: PlaceSpec| -> EditResult<()> {
+        if spec.model.is_none() && (spec.unit.is_some() || spec.stretch.is_some()) {
+            return Err("unit and stretch are for model=<file>".into());
+        }
         if spec.cat == "beam" && (spec.a.is_some() || spec.b.is_some()) {
             let (Some(a), Some(b)) = (spec.a, spec.b) else {
                 return Err("a beam needs `a` and `b` as [x,y,z]".into());
@@ -2452,9 +2455,6 @@ pub(crate) fn place_noting(doc: &mut Document, items: Vec<PlaceSpec>) -> EditRes
                 .and_then(|id| home.find_piece(id))
                 .map(|f| f.id.to_string())
         });
-        if spec.model.is_none() && (spec.unit.is_some() || spec.stretch.is_some()) {
-            return Err("unit and stretch are for model=<file>".into());
-        }
         let copied = match &source_id {
             Some(raw) => {
                 let id: newera_core::FurnitureId = raw.parse().map_err(|e| format!("copy: {e}"))?;
