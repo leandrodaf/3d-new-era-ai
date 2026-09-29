@@ -2222,18 +2222,23 @@
       "readOnlyHint": false,
       "title": "Replace a model file"
     },
-    "description": "Change the model of placed pieces. replace swaps the file of ids (every=true: of every piece using the same file) in one undo step, keeping each piece's id, position, angle, storey, size (size=natural takes the file's), finish, material overrides, names and links; the new file is read first and nothing changes if it fails. rev refuses the change when the plan moved on since that revision. Reply ok with the ids, then a line per piece: old file → new, the version loaded (bytes, hash), overrides that no longer match a material, and what the new file leaves out. part hides, moves (offset cm: x across, y to the front, z up) or resizes one of their parts by the name model lists — the back cushion alone, the arms unchanged. material changes one of their materials by the name model lists — color, mat (an image over it), repeat, its texture scale (2 halves the image, the piece unchanged), clear. model inspects a file; place imports a new piece.",
+    "description": "Change the model of placed pieces. replace swaps the file of ids (every=true: of every piece using the same file) in one undo step, keeping each piece's id, position, angle, storey, size (size=natural takes the file's), finish, material overrides, names and links; the new file is read first and nothing changes if it fails. rev refuses the change when the plan moved on since that revision. Reply ok with the ids, then a line per piece: old file → new, the version loaded (bytes, hash), overrides that no longer match a material, and what the new file leaves out. lod gives them a lighter file (file) drawn beyond a distance from the camera (beyond cm, default 400) — same box, materials and parts by name — and detail=always holds the detailed one for a close review. part hides, moves (offset cm: x across, y to the front, z up) or resizes one of their parts by the name model lists — the back cushion alone, the arms unchanged. material changes one of their materials by the name model lists — color, mat (an image over it), repeat, its texture scale (2 halves the image, the piece unchanged), clear. model inspects a file; place imports a new piece.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
         "action": {
-          "description": "`replace` puts another file in the pieces, keeping each one's id and all the rest; `material` changes one of their materials, `part` one of their parts, by name",
+          "description": "`replace` puts another file in the pieces, keeping each one's id and all the rest; `material` changes one of their materials, `part` one of their parts, by name; `lod` gives them a lighter file drawn from afar",
           "enum": [
             "replace",
             "material",
-            "part"
+            "part",
+            "lod"
           ],
           "type": "string"
+        },
+        "beyond": {
+          "description": "lod: farther than this from the camera, cm, the lighter file is drawn (default 400)",
+          "type": "number"
         },
         "clear": {
           "description": "material/part: back to the file's own",
@@ -2248,12 +2253,20 @@
           "minItems": 3,
           "type": "array"
         },
+        "detail": {
+          "description": "lod: `always` draws the detailed file however far (a close review); `auto` switches again",
+          "enum": [
+            "auto",
+            "always"
+          ],
+          "type": "string"
+        },
         "every": {
           "description": "replace: also every other piece using the same file as `ids` (default: only `ids`)",
           "type": "boolean"
         },
         "file": {
-          "description": "replace: the new .obj/.gltf/.glb file",
+          "description": "replace/lod: the new .obj/.gltf/.glb file (lod: the lighter one)",
           "type": "string"
         },
         "hide": {
@@ -3898,7 +3911,7 @@
       "readOnlyHint": true,
       "title": "Inspect an imported model"
     },
-    "description": "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken for its numbers (guessed from the size unless unit= or the piece says) and its natural size, triangles, its materials with their images, its named parts (OBJ objects and groups, glTF nodes: arms, seat, frame) with their bounds and materials, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, extensions). For a piece that looks wrong after place model=…, instead of reading the file. part=<words> keeps the parts named so; check=clashes finds parts passing through one another (a cushion through a rail), not those that touch. Reply {file, format, unit, raw (file units), size cm, tris, materials [[name, color, image, tris]], images, uv, parts [[name, tris, min, max, materials, \"hidden\" when hidden]] in cm of the piece (x across, y to the front, z up), warnings}; with id also piece {size, scale per axis}; check adds clashes [[part, part, triangle pairs, at, depth cm]], degenerate [[part, faces]] and checked (what was and was not looked at). place model=… imports one.",
+    "description": "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken (guessed from its size unless unit= or the piece says), natural size, triangles and where they go, materials with their images, named parts (OBJ objects and groups, glTF nodes: arms, seat, frame) with bounds and materials, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, extensions). For a piece that looks wrong after place model=…, instead of reading the file. part=<words> keeps the parts named so; check=clashes finds parts passing through one another (a cushion through a rail), not those that touch. Reply {file, format, unit, raw, size cm, tris, materials [[name, color, image, tris]], parts [[name, tris, min, max, materials, \"hidden\" when hidden]] in cm of the piece (x across, y to the front, z up), cost {tris, heaviest [[part, tris, %]], copies, in_project}, warnings}; with id also piece {size, scale, far}; check adds clashes [[part, part, pairs, at, depth cm]], degenerate and checked (what was looked at). place model=… imports one.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -3940,6 +3953,9 @@
         },
         "clashes": {
           "type": "array"
+        },
+        "cost": {
+          "type": "object"
         },
         "degenerate": {
           "type": "array"

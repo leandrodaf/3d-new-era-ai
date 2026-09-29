@@ -497,3 +497,52 @@ fn a_masked_weave_is_seen_from_both_sides_and_exported_as_a_mask() {
         back.mesh.materials
     );
 }
+
+#[test]
+fn a_piece_far_from_the_camera_is_drawn_with_its_lighter_file() {
+    let assets = Assets::new();
+    // The detailed file: two triangles; the lighter one: a single one.
+    assets.mount("test.obj", OBJ);
+    assets.mount("test.mtl", RED);
+    assets.mount("light.obj", b"v -1 0 -1\nv 1 0 -1\nv 1 0 1\nf 1 3 2\n");
+    let mut piece = Assets::piece();
+    piece.model_far = Some(newera_core::FarModel {
+        file: "light.obj".into(),
+        beyond: 300.0,
+        off: false,
+    });
+    let cache = ModelCache::default();
+    let tris = |distance: Option<f64>, piece: &Furniture| {
+        cache
+            .piece_model_seen(piece, Some(&assets.0), distance)
+            .unwrap()
+            .indices
+            .len()
+            / 3
+    };
+    assert_eq!(tris(Some(100.0), &piece), 2);
+    assert_eq!(tris(Some(500.0), &piece), 1);
+    // Fitted to the same box either way.
+    let far = cache
+        .piece_model_seen(&piece, Some(&assets.0), Some(500.0))
+        .unwrap();
+    let (min, max) = far.bounds().unwrap();
+    assert!((max[0] - min[0] - 80.0).abs() < 1e-3, "{min:?} {max:?}");
+    // Held detailed for a review; and without a camera (exports, top views).
+    let mut review = piece.clone();
+    review.model_far.as_mut().unwrap().off = true;
+    assert_eq!(tris(Some(500.0), &review), 2);
+    assert_eq!(tris(None, &piece), 2);
+    // A lighter file that is gone leaves the piece drawn in full.
+    let mut lost = piece.clone();
+    lost.model_far.as_mut().unwrap().file = "missing.obj".into();
+    assert_eq!(tris(Some(500.0), &lost), 2);
+    // And it travels with the project like the model does.
+    let mut home = newera_core::Home::default();
+    home.furniture.push(piece.clone());
+    assert!(home.asset_paths().contains(&"light.obj".to_owned()));
+    // Distance from a camera, cm: 4 m in front of a piece standing at the origin.
+    let home = newera_core::Home::default();
+    let d = crate::camera_distance(&home, &piece, glam::Vec3::new(0.0, 0.1, 4.0));
+    assert!((d - 400.0).abs() < 1e-3, "{d}");
+}

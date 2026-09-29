@@ -341,6 +341,10 @@ pub(crate) fn sun_light(home: &Home, hour: f64) -> (Vec3, f32) {
     }
 }
 
+/// Revision, selection, cutaway, and which pieces with a lighter far file
+/// were drawn with it.
+type BuiltFor = (u64, Vec<ElementId>, Option<Cutaway>, Vec<bool>);
+
 pub(crate) struct SceneView {
     camera: OrbitCamera,
     /// When set, the view looks through this visitor instead of orbiting.
@@ -350,14 +354,11 @@ pub(crate) struct SceneView {
     /// Walls up, cut away or down; a visitor always sees them up.
     pub(crate) walls: Walls,
     gpu: Option<Gpu>,
-    /// `(document revision, selection, walls brought down)` the GPU mesh was
-    /// built from.
-    built_for: Option<(u64, Vec<ElementId>, Option<Cutaway>)>,
+    /// What the GPU mesh was built from.
+    built_for: Option<BuiltFor>,
     framed_once: bool,
-    /// Imported models by resolved path; `None` when a file failed to load.
-    models: std::cell::RefCell<
-        std::collections::HashMap<std::path::PathBuf, Option<newera_catalog::Mesh>>,
-    >,
+    /// Imported models, reloaded when a file or its companions change.
+    models: newera_render::ModelCache,
 }
 
 impl std::fmt::Debug for SceneView {
@@ -379,7 +380,7 @@ impl SceneView {
             walls: Walls::Up,
             built_for: None,
             framed_once: false,
-            models: std::cell::RefCell::default(),
+            models: newera_render::ModelCache::default(),
         }
     }
 
@@ -465,29 +466,35 @@ impl SceneView {
             Walls::Cutaway => Some(Cutaway::facing(home, self.camera.toward())),
             Walls::Down => Some(Cutaway::all(home)),
         };
+        // Pieces with a lighter file for afar switch as the camera crosses
+        // their distance, which rebuilds the scene like an edit would.
+        let eye = self
+            .visitor
+            .as_ref()
+            .map_or_else(|| self.camera.eye(), Visitor::eye);
+        let distance =
+            |piece: &newera_core::Furniture| newera_render::camera_distance(home, piece, eye);
+        let far: Vec<bool> = home
+            .furniture
+            .iter()
+            .flat_map(newera_core::Furniture::flatten)
+            .filter_map(|piece| {
+                let lod = piece.model_far.as_ref()?;
+                Some(lod.file_at(Some(distance(piece))).is_some())
+            })
+            .collect();
         let key = (
             revision,
             selection.iter().copied().collect::<Vec<_>>(),
             cutaway,
+            far,
         );
         if self.built_for.as_ref() != Some(&key) {
+            // The same cache as photos: a file replaced under the same path
+            // (edit_model replace or lod) is read again, not kept.
             let models = |piece: &newera_core::Furniture| {
-                let path = newera_core::resolve_asset(project, piece.model.as_deref()?);
-                let mut cache = self.models.borrow_mut();
-                let mut mesh = cache
-                    .entry(path.clone())
-                    .or_insert_with(|| match newera_catalog::load_model(&path) {
-                        Ok(model) => Some(model.mesh),
-                        Err(err) => {
-                            tracing::warn!("cannot load model {}: {err}", path.display());
-                            None
-                        }
-                    })
-                    .clone()?;
-                mesh.rotate(piece.model_transform.rotation);
-                mesh.fit_to(piece.width, piece.depth, piece.height);
-                mesh.edit_parts(&piece.model_parts, true);
-                Some(mesh)
+                self.models
+                    .piece_model_seen(piece, project, Some(distance(piece)))
             };
             let mesh = Mesh::from_home_cut(home, selection, &models, key.2.as_ref());
             gpu.upload_images(rs, &mesh.images, project);

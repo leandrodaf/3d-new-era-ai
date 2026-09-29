@@ -497,7 +497,14 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
                     list("[name, triangles, min [x,y,z], max, materials] cm of the piece"),
                 ),
                 ("warnings", strings("What is not drawn as the file says")),
-                ("piece", object("With id: {id, size cm, scale per axis}")),
+                (
+                    "piece",
+                    object("With id: {id, size cm, scale per axis, far?}"),
+                ),
+                (
+                    "cost",
+                    object("{tris, heaviest [[part, tris, %]], copies, in_project}"),
+                ),
                 (
                     "clashes",
                     list("check: [part, part, triangle pairs, at [x,y,z], depth] cm"),

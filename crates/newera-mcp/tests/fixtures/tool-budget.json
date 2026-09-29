@@ -1,5 +1,5 @@
 {
-  "total": 117337,
+  "total": 117914,
   "tools": {
     "accept": {
       "total": 1360,
@@ -122,9 +122,9 @@
       "output": 191
     },
     "edit_model": {
-      "total": 3476,
-      "description": 955,
-      "input": 2105,
+      "total": 4052,
+      "description": 1164,
+      "input": 2472,
       "output": 203
     },
     "edit_plumbing": {
@@ -242,10 +242,10 @@
       "output": 302
     },
     "model": {
-      "total": 2671,
-      "description": 1138,
+      "total": 2672,
+      "description": 1114,
       "input": 754,
-      "output": 583
+      "output": 608
     },
     "move": {
       "total": 2219,

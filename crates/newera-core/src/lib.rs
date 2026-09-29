@@ -66,9 +66,9 @@ pub use elements::{
 };
 pub use error::{CoreError, CoreResult};
 pub use furniture::{
-    Furniture, Light, LightSource, ModelMaterial, ModelPart, ModelTransform, Opening, OpeningKind,
-    PieceInfo, PieceLocks, Sash, SolidShape, WallCut, WallCutOut, align_to_wall, cut_outline,
-    wall_cuts,
+    FarModel, Furniture, Light, LightSource, ModelMaterial, ModelPart, ModelTransform, Opening,
+    OpeningKind, PieceInfo, PieceLocks, Sash, SolidShape, WallCut, WallCutOut, align_to_wall,
+    cut_outline, wall_cuts,
 };
 pub use geometry::{Point2, polygon_area, polygon_centroid, signed_area, to_polygon, triangulate};
 pub use home::Home;

@@ -47,6 +47,8 @@
     ["texture scale of an imported material too big", "edit_model"],
     ["move back only the back cushion of the imported armchair", "edit_model"],
     ["hide a part of an imported model", "edit_model"],
+    ["lighter version of a heavy model far from the camera level of detail", "edit_model"],
+    ["how many triangles does the imported chair have", "model"],
     ["lux illuminance per room", "lighting"],
     ["add light fixtures to reach lux", "edit_lighting"],
     ["electrical circuits breakers", "electrical"],
