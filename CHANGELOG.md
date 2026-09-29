@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `model` `check=clashes` finds the parts of an imported model that pass through one another —
+  a cushion through a rail — with the triangle pairs, a point where they cross and how deep, in
+  cm of the piece; surfaces that only touch (a cushion resting on the frame) are not a clash,
+  and `tol` sets how far one has to pass the other. It also counts faces with no area, and says
+  what it did not look at (a part wholly inside another, clearances, flipped normals, open
+  meshes). The check had to be a script in Blender.
+
 - An imported model keeps its named parts — OBJ objects and groups, glTF nodes — and `model`
   lists them: `[name, triangles, min, max, materials]`, in cm of the piece (x across, y to the
   front, z up), with `part=<words>` to keep only some (`braco`). A repeated name gets `#2`. The

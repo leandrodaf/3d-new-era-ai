@@ -21,6 +21,11 @@ pub(crate) struct ModelParams {
     file: Option<String>,
     /// Only the parts whose name has these words (`braco`), all of them.
     part: Option<String>,
+    /// `clashes`: which parts pass through one another, and faces with no area.
+    #[schemars(extend("enum" = ["clashes"]))]
+    check: Option<String>,
+    /// check: how far a surface must pass the other to count, cm (default 0.05); touching is not a clash.
+    tol: Option<f64>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -112,6 +117,53 @@ pub(crate) fn parts(
         .collect()
 }
 
+/// Answers `check=clashes`: the parts whose surfaces cross, where and how
+/// deep, the faces with no area, and what was and was not looked at.
+fn check(out: &mut Value, mesh: &newera_catalog::Mesh, scale: [f64; 3], tol: f32) {
+    // Stretched to the piece first: an uneven scale changes how deep a crossing is.
+    let mut placed = mesh.clone();
+    #[allow(clippy::cast_possible_truncation)]
+    let [w, d, h] = scale.map(|s| s as f32);
+    for v in &mut placed.positions {
+        *v = [v[0] * w, v[1] * h, v[2] * d];
+    }
+    let mesh = &placed;
+    let name = |k: usize| mesh.parts.get(k).map_or("(no part)", |p| p.name.as_str());
+    let at = |v: [f32; 3]| {
+        [
+            cm(f64::from(v[0])),
+            cm(f64::from(v[2])),
+            cm(f64::from(v[1])),
+        ]
+    };
+    let clashes: Vec<Value> = newera_catalog::clashes(mesh, tol)
+        .iter()
+        .map(|c| {
+            json!([
+                name(c.a),
+                name(c.b),
+                c.pairs,
+                at(c.at),
+                cm(f64::from(c.depth))
+            ])
+        })
+        .collect();
+    let degenerate: Vec<Value> = newera_catalog::degenerate(mesh)
+        .into_iter()
+        .map(|(k, n)| json!([name(k), n]))
+        .collect();
+    out["clashes"] = json!(clashes);
+    out["degenerate"] = json!(degenerate);
+    out["checked"] = json!(format!(
+        "surfaces of different parts crossing by more than {tol} cm (touching is not a clash), and faces with no area; not checked: a part wholly inside another, clearances, flipped normals, open meshes{}",
+        if mesh.parts.len() < 2 {
+            " — this file has one part, so there is nothing to cross"
+        } else {
+            ""
+        }
+    ));
+}
+
 /// What `model` answers for a loaded file.
 pub(crate) fn report(file: &str, loaded: &newera_catalog::ImportedModel) -> Value {
     let mesh = &loaded.mesh;
@@ -161,7 +213,7 @@ pub(crate) fn report(file: &str, loaded: &newera_catalog::ImportedModel) -> Valu
 #[tool_router(router = model_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken for its numbers and its natural size, triangles, its materials with their images, its named parts (OBJ objects and groups, glTF nodes: arms, seat, frame) with their bounds and materials, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, alpha masks, extensions). For a piece that looks wrong after place model=…, instead of reading the file. part=<words> keeps the parts named so. Reply {file, format, unit, raw (file units), size cm, tris, materials [[name, color, image, tris]], images, uv, parts [[name, tris, min, max, materials]] in cm of the piece (x across, y to the front, z up), warnings}; with id also piece {size, scale per axis}. place model=… imports one."
+        description = "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken for its numbers and its natural size, triangles, its materials with their images, its named parts (OBJ objects and groups, glTF nodes: arms, seat, frame) with their bounds and materials, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, alpha masks, extensions). For a piece that looks wrong after place model=…, instead of reading the file. part=<words> keeps the parts named so; check=clashes finds parts passing through one another (a cushion through a rail), not those that touch. Reply {file, format, unit, raw (file units), size cm, tris, materials [[name, color, image, tris]], images, uv, parts [[name, tris, min, max, materials]] in cm of the piece (x across, y to the front, z up), warnings}; with id also piece {size, scale per axis}; check adds clashes [[part, part, triangle pairs, at, depth cm]], degenerate [[part, faces]] and checked (what was and was not looked at). place model=… imports one."
     )]
     pub(crate) fn model(
         &self,
@@ -202,6 +254,15 @@ impl NewEraMcp {
                 .unwrap_or([1.0; 3])
         });
         out["parts"] = json!(parts(&loaded.mesh, scale, p.part.as_deref()));
+        match p.check.as_deref() {
+            None => {}
+            Some("clashes") => {
+                #[allow(clippy::cast_possible_truncation)]
+                let tol = p.tol.unwrap_or(0.05).max(0.0) as f32;
+                check(&mut out, &loaded.mesh, scale, tol);
+            }
+            Some(other) => return Err(invalid(format!("check `{other}`: clashes"))),
+        }
         if let Some(piece) = piece {
             let size = [piece.width, piece.depth, piece.height];
             let scale: Vec<f64> = size
@@ -659,6 +720,113 @@ mod tests {
             .map(|p| p[0].as_str().unwrap())
             .collect();
         assert_eq!(names, ["almofada_assento", "almofada_encosto"], "{back}");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// OBJ text for axis-aligned boxes, one object each, in cm.
+    fn boxes(parts: &[(&str, [f64; 3], [f64; 3])]) -> String {
+        let mut out = String::new();
+        let mut n = 0;
+        for (name, lo, hi) in parts {
+            let _ = writeln!(out, "o {name}");
+            for k in 0..8 {
+                let pick = |axis: usize| {
+                    if k >> axis & 1 == 0 {
+                        lo[axis]
+                    } else {
+                        hi[axis]
+                    }
+                };
+                let _ = writeln!(out, "v {} {} {}", pick(0), pick(1), pick(2));
+            }
+            for face in [
+                [0, 2, 3, 1],
+                [4, 5, 7, 6],
+                [0, 1, 5, 4],
+                [2, 6, 7, 3],
+                [0, 4, 6, 2],
+                [1, 3, 7, 5],
+            ] {
+                let _ = writeln!(
+                    out,
+                    "f {} {} {} {}",
+                    face[0] + n + 1,
+                    face[1] + n + 1,
+                    face[2] + n + 1,
+                    face[3] + n + 1
+                );
+            }
+            n += 8;
+        }
+        out
+    }
+
+    #[test]
+    fn a_cushion_through_a_rail_is_a_clash_and_one_resting_on_it_is_not() {
+        let dir = std::env::temp_dir().join(format!("newera-model-clash-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // Heights up (y), in cm: a 60 × 4 rail, a cushion 3 cm into it, one on top of it.
+        std::fs::write(
+            dir.join("poltrona.obj"),
+            boxes(&[
+                ("travessa", [0.0, 40.0, 0.0], [60.0, 44.0, 5.0]),
+                ("almofada", [5.0, 41.0, 6.0], [55.0, 50.0, 30.0]),
+                ("almofada_apoiada", [5.0, 44.0, -30.0], [55.0, 50.0, 2.0]),
+                ("encosto", [0.0, 0.0, 31.0], [60.0, 90.0, 35.0]),
+            ])
+            .replace("v 5 41 6", "v 5 41 3")
+            .replace("v 55 41 6", "v 55 41 3")
+            .replace("v 5 50 6", "v 5 50 3")
+            .replace("v 55 50 6", "v 55 50 3"),
+        )
+        .unwrap();
+        let file = path(&dir.join("poltrona.obj"));
+        let s = server();
+        let seen = call(&s, &format!(r#"{{"file":"{file}","check":"clashes"}}"#)).unwrap();
+        let clashes = seen["clashes"].as_array().unwrap();
+        assert_eq!(clashes.len(), 1, "{seen}");
+        assert_eq!(
+            (clashes[0][0].as_str(), clashes[0][1].as_str()),
+            (Some("travessa"), Some("almofada"))
+        );
+        assert!(
+            seen["checked"].as_str().unwrap().contains("not checked"),
+            "{seen}"
+        );
+        assert_eq!(seen["degenerate"], json!([]));
+        // Touching only: a looser tolerance than the 3 cm finds nothing.
+        let loose = call(
+            &s,
+            &format!(r#"{{"file":"{file}","check":"clashes","tol":4}}"#),
+        )
+        .unwrap();
+        assert_eq!(loose["clashes"], json!([]), "{loose}");
+        // Placed at twice its size, the crossing is twice as deep, in the piece's cm.
+        s.place(Parameters(
+            serde_json::from_str(&format!(
+                r#"{{"items":[{{"model":"{file}","at":[100,100]}}]}}"#
+            ))
+            .unwrap(),
+        ))
+        .unwrap();
+        {
+            let mut doc = s.document.write();
+            let mut piece = doc
+                .home()
+                .find_piece("f1".parse().unwrap())
+                .unwrap()
+                .clone();
+            piece.width *= 2.0;
+            piece.depth *= 2.0;
+            piece.height *= 2.0;
+            doc.execute(newera_core::Command::update(piece)).unwrap();
+        }
+        let placed = call(&s, r#"{"id":"f1","check":"clashes"}"#).unwrap();
+        let depth = |v: &Value| v["clashes"][0][4].as_f64().unwrap();
+        assert!(
+            (depth(&placed) - 2.0 * depth(&seen)).abs() < 0.1,
+            "{placed}"
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -5,6 +5,7 @@
 //! their materials and textures in the application.
 
 mod bundled;
+mod check;
 mod finish;
 mod fixtures;
 mod import;
@@ -12,6 +13,7 @@ mod mesh;
 mod models;
 mod symbols;
 
+pub use check::{Clash, clashes, degenerate};
 pub use fixtures::DIFFUSER;
 pub use import::{ImportError, ImportReport, ImportedModel, load_model};
 pub use mesh::{Axis, GLASS, Mesh, MeshMaterial, MeshPart, Rgb, is_glass, rgb, shade};
