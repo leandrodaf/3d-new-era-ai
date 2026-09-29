@@ -426,24 +426,7 @@ impl NewEraMcp {
                 .and_then(|b| newera_core::images::decode(&b).map_err(|e| e.to_string()))
                 .map_err(|e| invalid(format!("{file}: {e}")))?
                 .to_rgba8();
-            #[allow(
-                clippy::cast_possible_truncation,
-                clippy::cast_sign_loss,
-                clippy::cast_precision_loss
-            )]
-            let width = ((reference.width() as f32 * h as f32 / reference.height().max(1) as f32)
-                .round() as u32)
-                .clamp(1, 1600);
-            let left = image::imageops::resize(
-                &reference,
-                width,
-                h,
-                image::imageops::FilterType::Triangle,
-            );
-            let mut both = image::RgbaImage::from_pixel(width + w, h, image::Rgba([255; 4]));
-            image::imageops::overlay(&mut both, &left, 0, 0);
-            image::imageops::overlay(&mut both, &image, i64::from(width), 0);
-            image = both;
+            image = side_by_side(&reference, &image);
         }
         let mut png = Vec::new();
         image::DynamicImage::ImageRgba8(image)
@@ -570,8 +553,38 @@ impl NewEraMcp {
     }
 }
 
+/// The product photo at the render's height, at most 1600 px wide and in
+/// its own proportions (a very wide one is shorter, centered), then the render.
+fn side_by_side(photo: &image::RgbaImage, render: &image::RgbaImage) -> image::RgbaImage {
+    let (w, h) = render.dimensions();
+    let (pw, ph) = (photo.width().max(1), photo.height().max(1));
+    let scale = (f64::from(h) / f64::from(ph)).min(1600.0 / f64::from(pw));
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let size = |v: u32| ((f64::from(v) * scale).round() as u32).max(1);
+    let (width, height) = (size(pw), size(ph).min(h));
+    let left = image::imageops::resize(photo, width, height, image::imageops::FilterType::Triangle);
+    let mut both = image::RgbaImage::from_pixel(width + w, h, image::Rgba([255; 4]));
+    image::imageops::overlay(&mut both, &left, 0, i64::from((h - height) / 2));
+    image::imageops::overlay(&mut both, render, i64::from(width), 0);
+    both
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_very_wide_photo_keeps_its_proportions_beside_the_render() {
+        let photo = image::RgbaImage::from_pixel(4000, 100, image::Rgba([200, 30, 30, 255]));
+        let render = image::RgbaImage::from_pixel(96, 72, image::Rgba([0, 0, 0, 255]));
+        let both = side_by_side(&photo, &render);
+        // 1600 wide at most, so 40 tall, centered in the render's 72.
+        assert_eq!(both.dimensions(), (1600 + 96, 72));
+        assert_eq!(both.get_pixel(800, 2).0, [255; 4]);
+        assert_eq!(both.get_pixel(800, 36).0, [200, 30, 30, 255]);
+        // An ordinary one is as tall as the render.
+        let photo = image::RgbaImage::from_pixel(200, 100, image::Rgba([200, 30, 30, 255]));
+        assert_eq!(side_by_side(&photo, &render).dimensions(), (144 + 96, 72));
+    }
+
     use super::*;
     use crate::edit::CreateParams;
     use crate::tools::server;
