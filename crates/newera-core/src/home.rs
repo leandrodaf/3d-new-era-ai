@@ -456,6 +456,9 @@ impl Home {
             if let Some(far) = &mut f.model_far {
                 visit(&mut far.file);
             }
+            for reference in &mut f.references {
+                visit(&mut reference.file);
+            }
             material(visit, &mut f.texture);
             for m in &mut f.materials {
                 material(visit, &mut m.texture);
@@ -508,6 +511,7 @@ impl Home {
                     .cloned(),
             );
             out.extend(f.model_far.iter().map(|far| far.file.clone()));
+            out.extend(f.references.iter().map(|r| r.file.clone()));
             material(out, f.texture.as_ref());
             for m in &f.materials {
                 material(out, m.texture.as_ref());
