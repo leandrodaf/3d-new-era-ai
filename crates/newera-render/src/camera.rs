@@ -65,6 +65,59 @@ impl View {
         proj * view
     }
 
+    /// A product shot of a piece: perspective, looking at the box `local`
+    /// (`(min, max)` cm in the piece's model frame — x across, y up, z to
+    /// its front) from `side` of the piece itself — its front, back, left,
+    /// right, above, or a three-quarter view for `None` — at `zoom` times
+    /// the distance that just fits it. The same call frames the same view
+    /// every time, however the piece stands in the plan.
+    #[must_use]
+    pub fn product(
+        home: &Home,
+        piece: &newera_core::Furniture,
+        local: ([f32; 3], [f32; 3]),
+        side: Option<Side>,
+        zoom: f32,
+    ) -> Self {
+        let fov_y = 35f32.to_radians();
+        let (min, max) = local;
+        let center: [f32; 3] = std::array::from_fn(|k| f32::midpoint(min[k], max[k]));
+        let size: [f32; 3] = std::array::from_fn(|k| max[k] - min[k]);
+        let plan = piece.to_plan((f64::from(center[0]), f64::from(center[2])));
+        let floor = home.elevation_of(piece.level) + piece.elevation;
+        #[allow(clippy::cast_possible_truncation)]
+        let target = Vec3::new(
+            plan.x as f32,
+            (floor + f64::from(center[1])) as f32,
+            plan.y as f32,
+        ) / 100.0;
+        // The piece's own axes on the plan: its front and its right.
+        let axis = |local: (f64, f64)| {
+            let (o, p) = (piece.to_plan((0.0, 0.0)), piece.to_plan(local));
+            #[allow(clippy::cast_possible_truncation)]
+            Vec3::new((p.x - o.x) as f32, 0.0, (p.y - o.y) as f32).normalize_or_zero()
+        };
+        let (front, right) = (axis((0.0, 1.0)), axis((1.0, 0.0)));
+        let direction = match side {
+            Some(Side::Front) => front + Vec3::Y * 0.12,
+            Some(Side::Back) => -front + Vec3::Y * 0.12,
+            Some(Side::Left) => -right + Vec3::Y * 0.12,
+            Some(Side::Right) => right + Vec3::Y * 0.12,
+            Some(Side::Top) => Vec3::Y + front * 0.02,
+            None => front + right * 0.7 + Vec3::Y * 0.55,
+        }
+        .normalize_or_zero();
+        let radius = (size[0] * size[0] + size[1] * size[1] + size[2] * size[2]).sqrt() / 200.0;
+        let distance = (radius.max(0.02) / (fov_y / 2.0).sin() * zoom.clamp(0.2, 10.0)).max(0.05);
+        Self {
+            eye: target + direction * distance,
+            target,
+            fov_y,
+            ortho: None,
+            near: None,
+        }
+    }
+
     /// A head-on orthographic view of the whole building from `side`, for an
     /// image of `aspect`. With `cut` (plan cm along the view direction, or
     /// height for `Top`) everything in front of that plane is cut away.
@@ -231,5 +284,51 @@ mod tests {
             let far = View::aerial_zoom(&home, yaw, 30.0, 2.0);
             assert!(far.eye.distance(far.target) > view.eye.distance(view.target) * 1.9);
         }
+    }
+}
+
+#[cfg(test)]
+mod product_tests {
+    use super::*;
+
+    #[test]
+    fn a_product_shot_looks_at_the_piece_from_its_own_front() {
+        let home = Home::default();
+        // A piece at (300, 200) turned so its front looks to −x.
+        let piece = newera_core::Furniture {
+            position: newera_core::Point2::new(300.0, 200.0),
+            angle: 90.0,
+            width: 60.0,
+            depth: 70.0,
+            height: 80.0,
+            ..newera_core::Furniture::default()
+        };
+        let whole = ([-30.0, 0.0, -35.0], [30.0, 80.0, 35.0]);
+        let front = View::product(&home, &piece, whole, Some(Side::Front), 1.0);
+        assert!(
+            (front.target - Vec3::new(3.0, 0.4, 2.0)).length() < 1e-4,
+            "{:?}",
+            front.target
+        );
+        assert!(front.eye.x < front.target.x - 0.5, "{front:?}");
+        assert!((front.eye.z - front.target.z).abs() < 1e-3, "{front:?}");
+        let back = View::product(&home, &piece, whole, Some(Side::Back), 1.0);
+        assert!(back.eye.x > back.target.x + 0.5, "{back:?}");
+        // A part: framed on its own box, closer.
+        let arm = View::product(
+            &home,
+            &piece,
+            ([20.0, 40.0, -35.0], [30.0, 60.0, 35.0]),
+            Some(Side::Front),
+            1.0,
+        );
+        assert!((arm.eye - arm.target).length() < (front.eye - front.target).length());
+        // Moved, the same shot moves with it.
+        let moved = newera_core::Furniture {
+            position: newera_core::Point2::new(800.0, 200.0),
+            ..piece
+        };
+        let again = View::product(&home, &moved, whole, Some(Side::Front), 1.0);
+        assert!(((again.eye - again.target) - (front.eye - front.target)).length() < 1e-4);
     }
 }

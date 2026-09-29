@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `render_3d` `piece=<id>` draws that piece alone — no walls, rooms or other pieces — seen from
+  its own front, back, left, right or top (`aerial` is three-quarter), with `zoom`; the same call
+  frames the same view wherever the piece stands. `part=<name>` frames one part of its model,
+  such as the tip of an arm. Checking a chair against its photos meant a stored camera by
+  coordinates, with the armchair next to it in the edge of the picture.
+
 - A piece with a heavy imported model can have a lighter file for afar: `edit_model`
   `action=lod` (`file`, `beyond` cm from the camera, default 400) draws it in the 3D view, the
   previews and photos when the camera is farther than that, in the same box, its materials and
