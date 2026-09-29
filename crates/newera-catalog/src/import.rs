@@ -739,23 +739,28 @@ fn percent_decode(uri: &str) -> String {
 fn gltf_material(m: &gltf::Material<'_>, images: &[Option<std::path::PathBuf>]) -> MeshMaterial {
     let pbr = m.pbr_metallic_roughness();
     let [r, g, b, a] = pbr.base_color_factor();
+    let a = a.clamp(0.0, 1.0);
+    let cutoff = m.alpha_cutoff().unwrap_or(0.5).clamp(0.0, 1.0);
     MeshMaterial {
         name: m.name().map_or_else(
             || format!("material{}", m.index().unwrap_or_default()),
             str::to_owned,
         ),
         color: [r, g, b],
-        alpha: if m.alpha_mode() == gltf::material::AlphaMode::Blend {
-            a.clamp(0.0, 1.0)
-        } else {
-            1.0
+        alpha: match m.alpha_mode() {
+            gltf::material::AlphaMode::Blend => a.clamp(0.0, 1.0),
+            // Under the cutoff whatever the image says: not there at all.
+            gltf::material::AlphaMode::Mask if a < cutoff => 0.0,
+            _ => 1.0,
         },
         texture: pbr
             .base_color_texture()
             .and_then(|t| images.get(t.texture().source().index())?.clone()),
         shininess: 0.0,
-        cutoff: (m.alpha_mode() == gltf::material::AlphaMode::Mask)
-            .then(|| m.alpha_cutoff().unwrap_or(0.5).clamp(0.0, 1.0)),
+        // The image's alpha times the factor's against the cutoff: the image's
+        // alone against the cutoff over the factor.
+        cutoff: (m.alpha_mode() == gltf::material::AlphaMode::Mask && a >= cutoff)
+            .then(|| (cutoff / a.max(1e-6)).min(1.0)),
         double_sided: m.double_sided(),
     }
 }
@@ -846,6 +851,11 @@ mod memory_tests {
 
     /// [`textured_glb`] with more JSON in its material and at its root.
     pub(crate) fn glb_with(image: &[u8], material: &str, root: &str) -> Vec<u8> {
+        glb_with_pbr(image, material, "", root)
+    }
+
+    /// [`glb_with`], with more of `pbrMetallicRoughness` after its texture.
+    pub(crate) fn glb_with_pbr(image: &[u8], material: &str, pbr: &str, root: &str) -> Vec<u8> {
         let mut bin = Vec::new();
         for v in [[0.0f32, 0.0, 0.0], [100.0, 0.0, 0.0], [0.0, 100.0, 0.0]] {
             bin.extend(v.iter().flat_map(|c| c.to_le_bytes()));
@@ -861,7 +871,7 @@ mod memory_tests {
         let json = format!(
             r#"{{"asset":{{"version":"2.0"}},{root}"scene":0,"scenes":[{{"nodes":[0]}}],"nodes":[{{"mesh":0,"name":"assento"}}],
             "meshes":[{{"primitives":[{{"attributes":{{"POSITION":0,"TEXCOORD_0":1}},"material":0}}]}}],
-            "materials":[{{"name":"tecido",{material}"pbrMetallicRoughness":{{"baseColorTexture":{{"index":0}}}}}}],
+            "materials":[{{"name":"tecido",{material}"pbrMetallicRoughness":{{"baseColorTexture":{{"index":0}}{pbr}}}}}],
             "textures":[{{"source":0}}],"images":[{{"bufferView":2,"mimeType":"image/png"}}],
             "buffers":[{{"byteLength":{len}}}],
             "bufferViews":[{{"buffer":0,"byteLength":36}},{{"buffer":0,"byteOffset":36,"byteLength":24}},{{"buffer":0,"byteOffset":{image_at},"byteLength":{image_len}}}],
@@ -1171,6 +1181,37 @@ mod memory_tests {
         let glb = load_model(&dir.join("cane.glb")).unwrap();
         let m = &glb.mesh.materials[0];
         assert_eq!((m.cutoff, m.double_sided), (Some(0.3), true));
+        newera_core::vfs::unmount(dir);
+    }
+
+    #[test]
+    fn a_mask_counts_the_color_factor_alpha_against_its_cutoff() {
+        let dir = Path::new("/virtual/catalog-mask-factor-test");
+        let with_factor = |a: f32| {
+            glb_with_pbr(
+                b"png",
+                r#""alphaMode":"MASK","alphaCutoff":0.3,"#,
+                &format!(r#","baseColorFactor":[1,1,1,{a}]"#),
+                "",
+            )
+        };
+        newera_core::vfs::mount(
+            dir,
+            [
+                ("half.glb".to_owned(), with_factor(0.6)),
+                ("faint.glb".to_owned(), with_factor(0.2)),
+            ],
+        );
+        // Image alpha × 0.6 under 0.3: the image's own alpha under 0.5.
+        let half = &load_model(&dir.join("half.glb")).unwrap().mesh.materials[0];
+        assert!(
+            half.cutoff.is_some_and(|c| (c - 0.5).abs() < 1e-6),
+            "{half:?}"
+        );
+        assert!((half.alpha - 1.0).abs() < 1e-6, "{half:?}");
+        // 0.2 is under 0.3 whatever the image: not drawn.
+        let faint = &load_model(&dir.join("faint.glb")).unwrap().mesh.materials[0];
+        assert_eq!((faint.cutoff, faint.alpha), (None, 0.0), "{faint:?}");
         newera_core::vfs::unmount(dir);
     }
 
