@@ -396,3 +396,28 @@ fn a_textured_piece_exported_as_glb_comes_back_with_its_image() {
         .to_rgba8();
     assert_eq!(image.get_pixel(0, 0).0, [220, 20, 20, 255]);
 }
+
+#[test]
+fn a_hidden_part_is_not_drawn_and_the_rest_keeps_its_place() {
+    let assets = Assets::new();
+    assets.mount(
+        "test.obj",
+        b"o assento\nv -1 0 -1\nv 1 0 -1\nv 1 0 1\nf 1 3 2\no encosto\nv -1 0 1\nv 1 0 1\nv 1 2 1\nf 4 5 6\n",
+    );
+    let mut piece = Assets::piece();
+    let cache = ModelCache::default();
+    let whole = cache.piece_model(&piece, Some(&assets.0)).unwrap();
+    piece.model_parts.push(newera_core::ModelPart {
+        name: "encosto".into(),
+        hidden: true,
+        ..Default::default()
+    });
+    let seat = cache.piece_model(&piece, Some(&assets.0)).unwrap();
+    assert_eq!((whole.indices.len(), seat.indices.len()), (6, 3));
+    assert_eq!(seat.parts.len(), 1);
+    assert_eq!(
+        &seat.positions[..3],
+        &whole.positions[..3],
+        "fitted before hiding"
+    );
+}

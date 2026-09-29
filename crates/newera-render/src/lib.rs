@@ -305,6 +305,7 @@ impl ModelCache {
         let mut mesh = cached.mesh.clone()?;
         mesh.rotate(piece.model_transform.rotation);
         mesh.fit_to(piece.width, piece.depth, piece.height);
+        mesh.edit_parts(&piece.model_parts, true);
         Some(mesh)
     }
 }

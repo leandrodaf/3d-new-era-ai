@@ -369,6 +369,79 @@ impl Mesh {
         })
     }
 
+    /// Applies a piece's changes to named parts, on a mesh already fitted
+    /// to the piece: moved and resized parts, then hidden ones taken out
+    /// when `drop_hidden` (a read keeps them, to list them).
+    pub fn edit_parts(&mut self, edits: &[newera_core::ModelPart], drop_hidden: bool) {
+        if edits.is_empty() || self.parts.is_empty() {
+            return;
+        }
+        for edit in edits {
+            let Some(part) = self.parts.iter().find(|p| p.name == edit.name).cloned() else {
+                continue;
+            };
+            let Some((min, max)) = self.part_bounds(&part) else {
+                continue;
+            };
+            let center: V3 = std::array::from_fn(|k| f32::midpoint(min[k], max[k]));
+            // Piece axes [x, y front, z up] to mesh axes [x, y up, z front].
+            let [sx, sy, sz] = edit.scale.unwrap_or([1.0; 3]).map(f);
+            let scale = [sx, sz, sy];
+            let [dx, dy, dz] = edit.offset.map(f);
+            let offset = [dx, dz, dy];
+            let mut vertices: Vec<usize> = self.indices
+                [part.start * 3..(part.start + part.count) * 3]
+                .iter()
+                .map(|&i| i as usize)
+                .collect();
+            vertices.sort_unstable();
+            vertices.dedup();
+            for v in vertices {
+                if let Some(p) = self.positions.get_mut(v) {
+                    *p = std::array::from_fn(|k| {
+                        (p[k] - center[k]) * scale[k] + center[k] + offset[k]
+                    });
+                }
+                if let Some(n) = self.normals.get_mut(v) {
+                    *n = normalize(std::array::from_fn(|k| n[k] / scale[k]));
+                }
+            }
+        }
+        if !drop_hidden {
+            return;
+        }
+        let hidden: Vec<&str> = edits
+            .iter()
+            .filter(|e| e.hidden)
+            .map(|e| e.name.as_str())
+            .collect();
+        if hidden.is_empty() {
+            return;
+        }
+        let mut indices = Vec::with_capacity(self.indices.len());
+        let mut parts = Vec::with_capacity(self.parts.len());
+        let mut next = 0;
+        // Triangles outside every part stay; hidden parts' go.
+        let mut kept_upto = 0;
+        for part in &self.parts {
+            indices.extend_from_slice(&self.indices[kept_upto * 3..part.start * 3]);
+            next += part.start - kept_upto;
+            kept_upto = part.start + part.count;
+            if hidden.contains(&part.name.as_str()) {
+                continue;
+            }
+            indices.extend_from_slice(&self.indices[part.start * 3..kept_upto * 3]);
+            parts.push(MeshPart {
+                start: next,
+                ..part.clone()
+            });
+            next += part.count;
+        }
+        indices.extend_from_slice(&self.indices[kept_upto * 3..]);
+        self.indices = indices;
+        self.parts = parts;
+    }
+
     /// Axis-aligned bounds `(min, max)` in cm.
     pub fn bounds(&self) -> Option<(V3, V3)> {
         self.positions.iter().fold(None, |acc, p| {
@@ -464,6 +537,58 @@ pub(crate) mod tests {
         let (min, max) = m.bounds().unwrap();
         assert!(min[1].abs() < 1e-6);
         assert!((max[0] - 44.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn a_part_moves_or_hides_and_the_others_stay() {
+        let mut m = Mesh::default();
+        for (name, x) in [("braco", 0.0), ("encosto", 10.0), ("assento", 20.0)] {
+            let start = m.begin_part();
+            m.cuboid([x, 0.0, 0.0], [x + 5.0, 5.0, 5.0], [0.5; 3]);
+            m.end_part(name, start);
+        }
+        let arm = m.part_bounds(&m.parts[0]).unwrap();
+        let mut moved = m.clone();
+        moved.edit_parts(
+            &[newera_core::ModelPart {
+                name: "encosto".into(),
+                // Back by 2 cm (y is toward the front), up by 1, twice as tall.
+                offset: [0.0, -2.0, 1.0],
+                scale: Some([1.0, 1.0, 2.0]),
+                ..Default::default()
+            }],
+            true,
+        );
+        let (lo, hi) = moved.part_bounds(&moved.parts[1]).unwrap();
+        assert!(
+            (lo[2] + 2.0).abs() < 1e-4 && (hi[2] - 3.0).abs() < 1e-4,
+            "{lo:?} {hi:?}"
+        );
+        assert!(
+            (lo[1] + 1.5).abs() < 1e-4 && (hi[1] - 8.5).abs() < 1e-4,
+            "{lo:?} {hi:?}"
+        );
+        assert_eq!(moved.part_bounds(&moved.parts[0]).unwrap(), arm);
+        let mut hidden = m.clone();
+        hidden.edit_parts(
+            &[newera_core::ModelPart {
+                name: "encosto".into(),
+                hidden: true,
+                ..Default::default()
+            }],
+            true,
+        );
+        assert_eq!(hidden.indices.len(), m.indices.len() * 2 / 3);
+        let names: Vec<(&str, usize)> = hidden
+            .parts
+            .iter()
+            .map(|p| (p.name.as_str(), p.start))
+            .collect();
+        assert_eq!(names, [("braco", 0), ("assento", 12)]);
+        assert_eq!(
+            hidden.part_bounds(&hidden.parts[1]),
+            m.part_bounds(&m.parts[2])
+        );
     }
 
     #[test]
