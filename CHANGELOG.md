@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `place model=…` takes `unit` (`m`, `cm`, `mm`, `in`) for the file's numbers, and the piece
+  keeps it for `model` and `edit_model`. The unit was only guessed from the size — under 20 units
+  meters, over 2000 millimeters — so a 5 cm knob drawn in centimeters came in 5 m wide, and an
+  800 mm chair 8 m tall. When the guess makes a piece smaller than 10 cm or larger than 4 m, the
+  reply says so. A glTF whose numbers are not meters, as the standard says they are, is warned
+  about too.
+- A model placed with one or two of `w`/`d`/`h` scales evenly, keeping its proportions; sizes that
+  would stretch it unevenly are refused unless `stretch=true`, and then the reply gives the
+  scale on each axis. Asking a chair for its height stretched it.
+
 - `model` `check=clashes` finds the parts of an imported model that pass through one another —
   a cushion through a rail — with the triangle pairs, a point where they cross and how deep, in
   cm of the piece; surfaces that only touch (a cushion resting on the frame) are not a clash,

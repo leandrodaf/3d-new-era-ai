@@ -15,7 +15,7 @@ mod symbols;
 
 pub use check::{Clash, clashes, degenerate};
 pub use fixtures::DIFFUSER;
-pub use import::{ImportError, ImportReport, ImportedModel, load_model};
+pub use import::{ImportError, ImportReport, ImportedModel, Unit, load_model, load_model_in};
 pub use mesh::{Axis, GLASS, Mesh, MeshMaterial, MeshPart, Rgb, is_glass, rgb, shade};
 use newera_core::{Furniture, Opening, OpeningKind};
 /// Build-time source fingerprint for persistent generated-image caches.

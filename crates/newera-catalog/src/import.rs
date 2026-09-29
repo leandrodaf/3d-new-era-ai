@@ -43,17 +43,84 @@ pub struct ImportReport {
     pub meshes: usize,
     /// Width, depth, height in the file's own units.
     pub raw_size: [f64; 3],
-    /// The unit taken for those numbers: `m`, `cm` or `mm`.
+    /// The unit taken for those numbers: `m`, `cm`, `mm` or `in`.
     pub unit: &'static str,
+    /// Whether that unit was guessed from the size rather than given.
+    pub guessed: bool,
     /// What was left out or could not be found, one sentence each.
     pub warnings: Vec<String>,
 }
 
 const DEFAULT_COLOR: Rgb = [0.78, 0.76, 0.72];
 
-/// Loads a model file and guesses its unit from its size: under 20 units it is
-/// taken as meters, over 2000 as millimeters, otherwise centimeters.
+/// The unit a model file's numbers are in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unit {
+    M,
+    Cm,
+    Mm,
+    In,
+}
+
+impl Unit {
+    pub const NAMES: [&str; 4] = ["m", "cm", "mm", "in"];
+
+    /// `m`, `cm`, `mm` or `in`.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        match text.trim().to_ascii_lowercase().as_str() {
+            "m" => Some(Self::M),
+            "cm" => Some(Self::Cm),
+            "mm" => Some(Self::Mm),
+            "in" | "inch" => Some(Self::In),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::M => "m",
+            Self::Cm => "cm",
+            Self::Mm => "mm",
+            Self::In => "in",
+        }
+    }
+
+    #[must_use]
+    pub fn to_cm(self) -> f64 {
+        match self {
+            Self::M => 100.0,
+            Self::Cm => 1.0,
+            Self::Mm => 0.1,
+            Self::In => 2.54,
+        }
+    }
+
+    /// The guess for a file that does not say: under 20 units across it is
+    /// taken as meters, over 2000 as millimeters, otherwise centimeters.
+    #[must_use]
+    pub fn guess(largest: f64) -> Self {
+        if largest < 20.0 {
+            Self::M
+        } else if largest > 2000.0 {
+            Self::Mm
+        } else {
+            Self::Cm
+        }
+    }
+}
+
+/// Loads a model file, guessing its unit from its size ([`Unit::guess`]).
 pub fn load_model(path: &Path) -> Result<ImportedModel, ImportError> {
+    load_model_in(path, None)
+}
+
+/// Loads a model file whose numbers are in `unit`, or guessed when `None`.
+/// A 5 cm part in a file drawn in centimeters is under 20 units across, and
+/// the guess would make it 5 m: saying the unit is how such a file comes in
+/// at its size.
+pub fn load_model_in(path: &Path, unit: Option<Unit>) -> Result<ImportedModel, ImportError> {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
@@ -75,16 +142,24 @@ pub fn load_model(path: &Path) -> Result<ImportedModel, ImportError> {
         f64::from(max[1] - min[1]),
     ];
     let largest = raw.iter().copied().fold(0.0, f64::max);
-    let (to_cm, unit) = if largest < 20.0 {
-        (100.0, "m")
-    } else if largest > 2000.0 {
-        (0.1, "mm")
-    } else {
-        (1.0, "cm")
-    };
+    report.guessed = unit.is_none();
+    let unit = unit.unwrap_or_else(|| Unit::guess(largest));
     report.raw_size = raw;
-    report.unit = unit;
-    let size = raw.map(|v| (v * to_cm).max(1.0));
+    report.unit = unit.name();
+    // glTF says its numbers are meters; a file that reads otherwise was
+    // exported wrong, and which way is a guess worth saying.
+    if matches!(ext.as_str(), "gltf" | "glb") && unit != Unit::M {
+        report.warnings.push(format!(
+            "glTF numbers are meters, but this file is {largest:.1} units across: read as {}{}",
+            unit.name(),
+            if report.guessed {
+                " (pass the unit if that is wrong)"
+            } else {
+                " as asked"
+            }
+        ));
+    }
+    let size = raw.map(|v| (v * unit.to_cm()).max(1.0));
     mesh.fit_to(size[0], size[1], size[2]);
     Ok(ImportedModel { mesh, size, report })
 }
@@ -944,10 +1019,15 @@ mod memory_tests {
                 "{said}: {pbr:?}"
             );
         }
-        // A clean file says nothing.
+        // A clean file says nothing but the unit it had to guess: its 100
+        // units are not meters, as glTF's should be.
         newera_core::vfs::mount(dir, [("clean.glb".to_owned(), textured_glb(b"png"))]);
         let clean = load_model(&dir.join("clean.glb")).unwrap().report;
-        assert!(clean.warnings.is_empty(), "{clean:?}");
+        assert_eq!(clean.warnings.len(), 1, "{clean:?}");
+        assert!(
+            clean.warnings[0].starts_with("glTF numbers are meters"),
+            "{clean:?}"
+        );
         assert_eq!((clean.format.as_str(), clean.unit), ("glb", "cm"));
         newera_core::vfs::unmount(dir);
     }
@@ -991,6 +1071,38 @@ mod memory_tests {
         assert_eq!(
             (glb.parts[0].name.as_str(), glb.parts[0].count),
             ("assento", 1)
+        );
+        newera_core::vfs::unmount(dir);
+    }
+
+    #[test]
+    fn a_unit_said_is_taken_over_the_guess() {
+        let dir = Path::new("/virtual/catalog-unit-test");
+        newera_core::vfs::mount(
+            dir,
+            [
+                (
+                    "knob.obj".to_owned(),
+                    b"v 0 0 0\nv 5 0 0\nv 5 3 0\nv 0 0 4\nf 1 2 3\nf 1 3 4\n".to_vec(),
+                ),
+                ("chair.glb".to_owned(), textured_glb(b"png")),
+            ],
+        );
+        let guessed = load_model(&dir.join("knob.obj")).unwrap();
+        assert_eq!((guessed.report.unit, guessed.report.guessed), ("m", true));
+        assert!((guessed.size[0] - 500.0).abs() < 1e-3);
+        let said = load_model_in(&dir.join("knob.obj"), Some(Unit::Cm)).unwrap();
+        assert_eq!((said.report.unit, said.report.guessed), ("cm", false));
+        assert!((said.size[0] - 5.0).abs() < 1e-3);
+        let inches = load_model_in(&dir.join("knob.obj"), Some(Unit::In)).unwrap();
+        assert!((inches.size[0] - 12.7).abs() < 1e-3);
+        // A glTF 100 units across is not meters, as the standard says it is.
+        let glb = load_model(&dir.join("chair.glb")).unwrap().report;
+        assert!(
+            glb.warnings
+                .iter()
+                .any(|w| w.contains("glTF numbers are meters")),
+            "{glb:?}"
         );
         newera_core::vfs::unmount(dir);
     }

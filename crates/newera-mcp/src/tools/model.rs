@@ -26,6 +26,26 @@ pub(crate) struct ModelParams {
     check: Option<String>,
     /// check: how far a surface must pass the other to count, cm (default 0.05); touching is not a clash.
     tol: Option<f64>,
+    /// Unit of the file's numbers, `m`, `cm`, `mm` or `in` (default: the piece's, or guessed).
+    unit: Option<String>,
+}
+
+/// A unit named by a caller, or the one a piece was placed with.
+fn unit_of(
+    asked: Option<&str>,
+    piece: Option<&newera_core::Furniture>,
+) -> Result<Option<newera_catalog::Unit>, ErrorData> {
+    if let Some(raw) = asked {
+        return newera_catalog::Unit::parse(raw).map(Some).ok_or_else(|| {
+            invalid(format!(
+                "unit `{raw}`: {}",
+                newera_catalog::Unit::NAMES.join(", ")
+            ))
+        });
+    }
+    Ok(piece
+        .and_then(|p| p.properties.get(crate::edit::MODEL_UNIT_KEY))
+        .and_then(|u| newera_catalog::Unit::parse(u)))
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -46,6 +66,8 @@ pub(crate) struct EditModelParams {
     size: Option<String>,
     /// Revision the change was prepared on; refused if the plan has moved on since.
     rev: Option<u64>,
+    /// replace: unit of the new file's numbers, `m`, `cm`, `mm` or `in` (default: guessed).
+    unit: Option<String>,
 }
 
 /// A short, stable name for the bytes of a file: which version was loaded.
@@ -198,6 +220,7 @@ pub(crate) fn report(file: &str, loaded: &newera_catalog::ImportedModel) -> Valu
         "file": file,
         "format": r.format,
         "unit": r.unit,
+        "guessed": r.guessed,
         "raw": r.raw_size.map(|v| (v * 1000.0).round() / 1000.0),
         "size": loaded.size.map(cm),
         "tris": mesh.indices.len() / 3,
@@ -213,7 +236,7 @@ pub(crate) fn report(file: &str, loaded: &newera_catalog::ImportedModel) -> Valu
 #[tool_router(router = model_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken for its numbers and its natural size, triangles, its materials with their images, its named parts (OBJ objects and groups, glTF nodes: arms, seat, frame) with their bounds and materials, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, alpha masks, extensions). For a piece that looks wrong after place model=…, instead of reading the file. part=<words> keeps the parts named so; check=clashes finds parts passing through one another (a cushion through a rail), not those that touch. Reply {file, format, unit, raw (file units), size cm, tris, materials [[name, color, image, tris]], images, uv, parts [[name, tris, min, max, materials]] in cm of the piece (x across, y to the front, z up), warnings}; with id also piece {size, scale per axis}; check adds clashes [[part, part, triangle pairs, at, depth cm]], degenerate [[part, faces]] and checked (what was and was not looked at). place model=… imports one."
+        description = "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken for its numbers (guessed from the size unless unit= or the piece says) and its natural size, triangles, its materials with their images, its named parts (OBJ objects and groups, glTF nodes: arms, seat, frame) with their bounds and materials, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, alpha masks, extensions). For a piece that looks wrong after place model=…, instead of reading the file. part=<words> keeps the parts named so; check=clashes finds parts passing through one another (a cushion through a rail), not those that touch. Reply {file, format, unit, raw (file units), size cm, tris, materials [[name, color, image, tris]], images, uv, parts [[name, tris, min, max, materials]] in cm of the piece (x across, y to the front, z up), warnings}; with id also piece {size, scale per axis}; check adds clashes [[part, part, triangle pairs, at, depth cm]], degenerate [[part, faces]] and checked (what was and was not looked at). place model=… imports one."
     )]
     pub(crate) fn model(
         &self,
@@ -241,7 +264,8 @@ impl NewEraMcp {
             _ => return Err(invalid("give `id` (a placed piece) or `file`, one of them")),
         };
         let path = doc.resolve_asset(&file);
-        let loaded = newera_catalog::load_model(&path)
+        let unit = unit_of(p.unit.as_deref(), piece.as_ref())?;
+        let loaded = newera_catalog::load_model_in(&path, unit)
             .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
         let mut out = report(&file, &loaded);
         let scale = piece.as_ref().map_or([1.0; 3], |piece| {
@@ -315,7 +339,8 @@ impl NewEraMcp {
             )));
         }
         let path = doc.resolve_asset(&p.file);
-        let loaded = newera_catalog::load_model(&path)
+        let unit = unit_of(p.unit.as_deref(), None)?;
+        let loaded = newera_catalog::load_model_in(&path, unit)
             .map_err(|e| invalid(format!("{}: {e} — nothing was replaced", path.display())))?;
         let home = doc.home();
         let mut targets: Vec<newera_core::Furniture> = Vec::new();
@@ -377,6 +402,17 @@ impl NewEraMcp {
                 && let Some(new) = stem(&p.file)
             {
                 piece.name = new;
+            }
+            // The unit belongs to the file: a new file keeps none it was not given.
+            match unit {
+                Some(u) => {
+                    piece
+                        .properties
+                        .insert(crate::edit::MODEL_UNIT_KEY.into(), u.name().into());
+                }
+                None => {
+                    piece.properties.remove(crate::edit::MODEL_UNIT_KEY);
+                }
             }
             if natural {
                 piece.width = loaded.size[0];
@@ -487,7 +523,7 @@ mod tests {
         let reply = s
             .place(Parameters(
                 serde_json::from_str(&format!(
-                    r#"{{"items":[{{"model":"{file}","at":[100,100],"h":100}}]}}"#
+                    r#"{{"items":[{{"model":"{file}","at":[100,100],"h":100,"stretch":true}}]}}"#
                 ))
                 .unwrap(),
             ))
@@ -499,7 +535,8 @@ mod tests {
             .unwrap()
             .to_owned();
         assert!(
-            reply.contains(&format!("\nimported {id} {file}: 2 warnings")),
+            reply.contains(&format!("\nimported {id} {file}: 3 warnings"))
+                && reply.contains("stretched ×[1.0, 1.0, 1.25]"),
             "{reply}"
         );
         let piece = call(&s, &format!(r#"{{"id":"{id}"}}"#)).unwrap();
@@ -827,6 +864,83 @@ mod tests {
             (depth(&placed) - 2.0 * depth(&seen)).abs() < 0.1,
             "{placed}"
         );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_small_part_drawn_in_centimeters_comes_in_at_its_size_when_the_unit_is_said() {
+        let dir = std::env::temp_dir().join(format!("newera-model-unit-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // A knob 5 × 4 × 3 cm, its numbers in centimeters.
+        std::fs::write(
+            dir.join("puxador.obj"),
+            boxes(&[("puxador", [0.0, 0.0, 0.0], [5.0, 3.0, 4.0])]),
+        )
+        .unwrap();
+        let file = path(&dir.join("puxador.obj"));
+        let s = server();
+        let place = |item: &str| {
+            s.place(Parameters(
+                serde_json::from_str(&format!(
+                    r#"{{"items":[{{"model":"{file}","at":[0,0]{item}}}]}}"#
+                ))
+                .unwrap(),
+            ))
+        };
+        let size = |id: &str| {
+            let doc = s.document.read();
+            let p = doc.home().find_piece(id.parse().unwrap()).unwrap();
+            // Whole centimeters: every size here is one.
+            #[allow(clippy::cast_possible_truncation)]
+            [p.width, p.depth, p.height].map(|v| v.round() as i64)
+        };
+        // Guessed, it is 5 m across, and the reply says so.
+        let guessed = place("").unwrap();
+        assert_eq!(size("f1"), [500, 400, 300]);
+        assert!(
+            guessed.contains("unit guessed as m, so it is 500 cm across"),
+            "{guessed}"
+        );
+        // Said, it is 5 cm, and `model` reads the piece in the same unit.
+        let said = place(r#","unit":"cm""#).unwrap();
+        assert_eq!(size("f2"), [5, 4, 3]);
+        assert!(!said.contains("imported"), "{said}");
+        let seen = call(&s, r#"{"id":"f2"}"#).unwrap();
+        assert_eq!(
+            (seen["unit"].as_str(), seen["guessed"].as_bool()),
+            (Some("cm"), Some(false))
+        );
+        assert_eq!(seen["piece"]["scale"], json!([1.0, 1.0, 1.0]), "{seen}");
+        // One size scales it evenly; two that disagree are refused; stretch lets them.
+        place(r#","unit":"cm","h":6"#).unwrap();
+        assert_eq!(size("f3"), [10, 8, 6]);
+        let refused = place(r#","unit":"cm","w":10,"h":3"#).unwrap_err();
+        assert!(refused.message.contains("stretch=true"), "{refused:?}");
+        let stretched = place(r#","unit":"cm","w":10,"h":3,"stretch":true"#).unwrap();
+        assert!(
+            stretched.contains("stretched ×[2.0, 1.0, 1.0]"),
+            "{stretched}"
+        );
+        let catalog = s
+            .place(Parameters(
+                serde_json::from_str(r#"{"items":[{"cat":"sofa-3","at":[0,0],"unit":"cm"}]}"#)
+                    .unwrap(),
+            ))
+            .unwrap_err();
+        assert!(catalog.message.contains("for model="), "{catalog:?}");
+        let beam = s
+            .place(Parameters(
+                serde_json::from_str(
+                    r#"{"items":[{"cat":"beam","a":[0,0,250],"b":[300,0,250],"stretch":true}]}"#,
+                )
+                .unwrap(),
+            ))
+            .unwrap_err();
+        assert!(beam.message.contains("for model="), "{beam:?}");
+        // With the file gone, the same path repeats a piece: its unit stays that piece's.
+        std::fs::remove_file(dir.join("puxador.obj")).unwrap();
+        let repeated = place(r#","unit":"m""#).unwrap_err();
+        assert!(repeated.message.contains("this repeats f1"), "{repeated:?}");
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
