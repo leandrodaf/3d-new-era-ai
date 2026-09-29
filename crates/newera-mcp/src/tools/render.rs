@@ -135,11 +135,44 @@ pub(crate) struct Render3dParams {
 struct Deadline {
     inner: Option<Arc<dyn newera_core::progress::Watcher>>,
     until: std::time::Instant,
+    /// What stopped the render first: [`RUNNING`], [`LATE`] or [`STOPPED`].
+    stop: std::sync::atomic::AtomicU8,
 }
 
+const RUNNING: u8 = 0;
+/// `max_s` ran out.
+const LATE: u8 = 1;
+/// Cancelled from outside (cancel=true, the client gone).
+const STOPPED: u8 = 2;
+
 impl Deadline {
-    fn passed(&self) -> bool {
-        std::time::Instant::now() >= self.until
+    fn new(
+        inner: Option<Arc<dyn newera_core::progress::Watcher>>,
+        until: std::time::Instant,
+    ) -> Self {
+        Self {
+            inner,
+            until,
+            stop: std::sync::atomic::AtomicU8::new(RUNNING),
+        }
+    }
+
+    /// Why the render stopped, decided once, at the first check that saw it.
+    fn stopped(&self) -> u8 {
+        use std::sync::atomic::Ordering;
+        let now = if self.inner.as_ref().is_some_and(|w| w.cancelled()) {
+            STOPPED
+        } else if std::time::Instant::now() >= self.until {
+            LATE
+        } else {
+            RUNNING
+        };
+        if now != RUNNING {
+            let _ = self
+                .stop
+                .compare_exchange(RUNNING, now, Ordering::SeqCst, Ordering::SeqCst);
+        }
+        self.stop.load(Ordering::SeqCst)
     }
 }
 
@@ -150,7 +183,7 @@ impl newera_core::progress::Watcher for Deadline {
         }
     }
     fn cancelled(&self) -> bool {
-        self.passed() || self.inner.as_ref().is_some_and(|w| w.cancelled())
+        self.stopped() != RUNNING
     }
 }
 
@@ -583,18 +616,20 @@ impl NewEraMcp {
         let image = match until {
             None => render(),
             Some((seconds, until)) => {
-                let deadline = Arc::new(Deadline {
-                    inner: newera_core::progress::listener(),
-                    until,
-                });
+                let deadline = Arc::new(Deadline::new(newera_core::progress::listener(), until));
                 let watcher: Arc<dyn newera_core::progress::Watcher> = deadline.clone();
                 let image = newera_core::progress::watched(&watcher, render);
-                if deadline.passed() {
-                    return Err(invalid(format!(
-                        "stopped after max_s={seconds} s; nothing in the project changed (estimate=true says what it takes; draft, fewer pixels or threads cost less)"
-                    )));
+                // Only what the render itself saw: one that finished in time
+                // is not refused by a late look at the clock.
+                match deadline.stop.load(std::sync::atomic::Ordering::SeqCst) {
+                    LATE => {
+                        return Err(invalid(format!(
+                            "stopped after max_s={seconds} s; nothing in the project changed (estimate=true says what it takes; draft, fewer pixels or threads cost less)"
+                        )));
+                    }
+                    STOPPED => return Err(invalid(newera_core::progress::CANCELLED)),
+                    _ => image,
                 }
-                image
             }
         };
         let mut png = Vec::new();
@@ -681,6 +716,29 @@ fn side_by_side(photo: &image::RgbaImage, render: &image::RgbaImage) -> image::R
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_render_stopped_from_outside_is_cancelled_not_late() {
+        use super::{Deadline, LATE, RUNNING, STOPPED};
+        use std::sync::Arc;
+        struct Cancelled;
+        impl newera_core::progress::Watcher for Cancelled {
+            fn step(&self, _: &str, _: u64, _: u64) {}
+            fn cancelled(&self) -> bool {
+                true
+            }
+        }
+        let later = std::time::Instant::now() + std::time::Duration::from_secs(3600);
+        let outside = Deadline::new(Some(Arc::new(Cancelled)), later);
+        assert_eq!(outside.stopped(), STOPPED);
+        let late = Deadline::new(None, std::time::Instant::now());
+        assert_eq!(late.stopped(), LATE);
+        // Decided at the first look that saw it, not later.
+        let running = Deadline::new(None, later);
+        assert_eq!(
+            running.stop.load(std::sync::atomic::Ordering::SeqCst),
+            RUNNING
+        );
+    }
     #[test]
     fn a_very_wide_photo_keeps_its_proportions_beside_the_render() {
         let photo = image::RgbaImage::from_pixel(4000, 100, image::Rgba([200, 30, 30, 255]));
