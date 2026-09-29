@@ -658,6 +658,7 @@ mod tests {
             color: None,
             texture: material("override"),
             shininess: None,
+            repeat: None,
         });
         piece.children.push(Furniture {
             model: Some("child".into()),

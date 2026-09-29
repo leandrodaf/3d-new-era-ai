@@ -166,6 +166,10 @@ pub struct ModelMaterial {
     pub texture: Option<Material>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shininess: Option<f64>,
+    /// How many times the material's image repeats, against the file's own
+    /// mapping: 2 draws the weave at half its size, the piece unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat: Option<f64>,
 }
 
 /// Descriptive data that doesn't affect geometry.

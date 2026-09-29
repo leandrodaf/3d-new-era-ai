@@ -2222,16 +2222,30 @@
       "readOnlyHint": false,
       "title": "Replace a model file"
     },
-    "description": "Change the model file of placed pieces. replace swaps the file of ids (every=true: of every piece using the same file) in one undo step, keeping each piece's id, position, angle, storey, size (size=natural takes the file's), finish, material overrides, names and links; the new file is read first and nothing changes if it fails. rev refuses the change when the plan moved on since that revision. Reply ok with the ids, then a line per piece: old file → new, the version loaded (bytes, hash), overrides that no longer match a material, and what the new file does not draw. model inspects a file; place imports a new piece.",
+    "description": "Change the model of placed pieces. replace swaps the file of ids (every=true: of every piece using the same file) in one undo step, keeping each piece's id, position, angle, storey, size (size=natural takes the file's), finish, material overrides, names and links; the new file is read first and nothing changes if it fails. rev refuses the change when the plan moved on since that revision. Reply ok with the ids, then a line per piece: old file → new, the version loaded (bytes, hash), overrides that no longer match a material, and what the new file leaves out. material changes one of their materials by the name model lists — color, mat (an image over it), repeat, its texture scale (2 halves the image, the piece unchanged), clear. model inspects a file; place imports a new piece.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
         "action": {
-          "description": "`replace`: put another file in the pieces, keeping each one's id and all the rest",
+          "description": "`replace` puts another file in the pieces, keeping each one's id and all the rest; `material` changes one of their materials, by name",
           "enum": [
-            "replace"
+            "replace",
+            "material"
           ],
           "type": "string"
+        },
+        "clear": {
+          "description": "material: back to the file's own look",
+          "type": "boolean"
+        },
+        "color": {
+          "description": "material: its color `[r,g,b]`",
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
         },
         "every": {
           "description": "replace: also every other piece using the same file as `ids` (default: only `ids`)",
@@ -2247,6 +2261,18 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "mat": {
+          "description": "material: an image over it, `img:trama.png`, or `none` for the file's own",
+          "type": "string"
+        },
+        "material": {
+          "description": "material: which one, by the name `model` lists (`tecido`)",
+          "type": "string"
+        },
+        "repeat": {
+          "description": "material: times its image repeats against the file's mapping (2 draws it at half size)",
+          "type": "number"
         },
         "rev": {
           "description": "Revision the change was prepared on; refused if the plan has moved on since",
@@ -2267,8 +2293,7 @@
       },
       "required": [
         "action",
-        "ids",
-        "file"
+        "ids"
       ],
       "type": "object"
     },
