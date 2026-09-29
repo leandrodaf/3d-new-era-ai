@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `edit_model` `action=replace` puts a new version of a model file in placed pieces in one undo
+  step, keeping each piece's id, position, angle, storey, size (`size=natural` takes the file's),
+  finish, material overrides, names and links; `every=true` does it for every piece on the same
+  file. The new file is read first and nothing changes when it fails; `rev` refuses the change
+  when the plan moved on since the revision it was prepared on. The reply names the version
+  loaded (bytes and a hash), the overrides that no longer match a material the file uses, a kept
+  size that stretches the new file unevenly and what the file does not draw. A new version was
+  `place` then `delete`: two pieces in one spot between the calls, a new id, and whatever the
+  person had set on the old one lost.
+
 - `model` reads what an imported OBJ/glTF/GLB became: the unit taken for its numbers (and the
   numbers themselves), its natural size, triangles, each material with its color, image and
   triangle count, and warnings for what is not drawn as the file says — a material library or

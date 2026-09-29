@@ -1,5 +1,5 @@
 {
-  "total": 112401,
+  "total": 114264,
   "tools": {
     "accept": {
       "total": 1360,
@@ -120,6 +120,12 @@
       "description": 284,
       "input": 399,
       "output": 191
+    },
+    "edit_model": {
+      "total": 1862,
+      "description": 624,
+      "input": 822,
+      "output": 203
     },
     "edit_plumbing": {
       "total": 2419,

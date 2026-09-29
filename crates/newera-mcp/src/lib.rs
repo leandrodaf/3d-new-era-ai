@@ -258,6 +258,11 @@ fn run(
         "model" => Ok(said(
             server.model(Parameters(params(args)?)).map_err(reason)?,
         )),
+        "edit_model" => Ok(said(
+            server
+                .edit_model(Parameters(params(args)?))
+                .map_err(reason)?,
+        )),
         "plumbing" => Ok(said(
             server
                 .read_plumbing(Parameters(params(args)?))

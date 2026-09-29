@@ -7,9 +7,10 @@ use rmcp::{ErrorData, tool, tool_router};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::fmt::Write as _;
 
 use super::NewEraMcp;
-use super::reply::invalid;
+use super::reply::{core, invalid, ok};
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -18,6 +19,39 @@ pub(crate) struct ModelParams {
     id: Option<String>,
     /// Instead of `id`: an .obj/.gltf/.glb file, before placing it.
     file: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct EditModelParams {
+    /// `replace`: put another file in the pieces, keeping each one's id and all the rest.
+    #[schemars(extend("enum" = ["replace"]))]
+    action: String,
+    /// Pieces whose model changes, e.g. `["f12"]`.
+    ids: Vec<String>,
+    /// replace: the new .obj/.gltf/.glb file.
+    file: String,
+    /// replace: also every other piece using the same file as `ids` (default: only `ids`).
+    #[serde(default)]
+    every: bool,
+    /// replace: `keep` each piece's w/d/h (default) or take the new file's `natural` size.
+    #[schemars(extend("enum" = ["keep", "natural"]))]
+    size: Option<String>,
+    /// Revision the change was prepared on; refused if the plan has moved on since.
+    rev: Option<u64>,
+}
+
+/// A short, stable name for the bytes of a file: which version was loaded.
+fn fingerprint(path: &std::path::Path) -> Option<String> {
+    use std::hash::{Hash, Hasher};
+    let bytes = newera_core::vfs::read(path).ok()?;
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut hash);
+    Some(format!(
+        "{}B #{:08x}",
+        bytes.len(),
+        hash.finish() & 0xffff_ffff
+    ))
 }
 
 /// `#rrggbb` of a material color in `0..=1`.
@@ -136,6 +170,147 @@ impl NewEraMcp {
     }
 }
 
+#[tool_router(router = edit_model_router, vis = "pub(crate)")]
+impl NewEraMcp {
+    #[tool(
+        description = "Change the model file of placed pieces. replace swaps the file of ids (every=true: of every piece using the same file) in one undo step, keeping each piece's id, position, angle, storey, size (size=natural takes the file's), finish, material overrides, names and links; the new file is read first and nothing changes if it fails. rev refuses the change when the plan moved on since that revision. Reply ok with the ids, then a line per piece: old file → new, the version loaded (bytes, hash), overrides that no longer match a material, and what the new file does not draw. model inspects a file; place imports a new piece."
+    )]
+    pub(crate) fn edit_model(
+        &self,
+        Parameters(p): Parameters<EditModelParams>,
+    ) -> Result<String, ErrorData> {
+        if p.action != "replace" {
+            return Err(invalid(format!("action `{}`: replace", p.action)));
+        }
+        let natural = match p.size.as_deref() {
+            None | Some("keep") => false,
+            Some("natural") => true,
+            Some(other) => return Err(invalid(format!("size `{other}`: keep or natural"))),
+        };
+        let mut doc = self.document.write();
+        if let Some(rev) = p.rev
+            && rev != doc.revision()
+        {
+            return Err(invalid(format!(
+                "the plan is at rev {} now, not {rev}: read it again (home ids=…) and decide on what is there",
+                doc.revision()
+            )));
+        }
+        let path = doc.resolve_asset(&p.file);
+        let loaded = newera_catalog::load_model(&path)
+            .map_err(|e| invalid(format!("{}: {e} — nothing was replaced", path.display())))?;
+        let home = doc.home();
+        let mut targets: Vec<newera_core::Furniture> = Vec::new();
+        for raw in &p.ids {
+            let id = raw
+                .parse::<newera_core::FurnitureId>()
+                .map_err(|e| invalid(format!("ids: {e}")))?;
+            let piece = home
+                .find_piece(id)
+                .ok_or_else(|| invalid(format!("{raw} not found")))?;
+            if piece.model.is_none() {
+                return Err(invalid(format!(
+                    "{raw} is built from the catalog (`{}`), not an imported model",
+                    piece.catalog
+                )));
+            }
+            if !targets.iter().any(|t| t.id == piece.id) {
+                targets.push(piece.clone());
+            }
+        }
+        if targets.is_empty() {
+            return Err(invalid("ids: the pieces whose model changes"));
+        }
+        if p.every {
+            let files: Vec<Option<String>> = targets.iter().map(|t| t.model.clone()).collect();
+            for piece in home
+                .furniture
+                .iter()
+                .flat_map(newera_core::Furniture::flatten)
+            {
+                if files.contains(&piece.model) && !targets.iter().any(|t| t.id == piece.id) {
+                    targets.push(piece.clone());
+                }
+            }
+        }
+        // The materials some face uses: a library can define more.
+        let used: std::collections::BTreeSet<u16> =
+            loaded.mesh.vertex_materials.iter().copied().collect();
+        let names: Vec<&str> = loaded
+            .mesh
+            .materials
+            .iter()
+            .enumerate()
+            .filter(|(k, _)| u16::try_from(*k).is_ok_and(|k| used.contains(&k)))
+            .map(|(_, m)| m.name.as_str())
+            .collect();
+        let stem = |file: &str| {
+            std::path::Path::new(file)
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+        };
+        let version = fingerprint(&path).unwrap_or_default();
+        let mut commands = Vec::with_capacity(targets.len());
+        let mut lines = Vec::with_capacity(targets.len());
+        for mut piece in targets {
+            let old = piece.model.replace(p.file.clone()).unwrap_or_default();
+            // A name that was only the old file's is the new file's now.
+            if stem(&old).as_deref() == Some(piece.name.as_str())
+                && let Some(new) = stem(&p.file)
+            {
+                piece.name = new;
+            }
+            if natural {
+                piece.width = loaded.size[0];
+                piece.depth = loaded.size[1];
+                piece.height = loaded.size[2];
+            }
+            let mut line = format!("{}: {old} → {} ({version})", piece.id, p.file);
+            let orphans: Vec<&str> = piece
+                .materials
+                .iter()
+                .map(|m| m.name.as_str())
+                .filter(|n| !names.contains(n))
+                .collect();
+            if !orphans.is_empty() {
+                let _ = write!(
+                    line,
+                    "; overrides matching no material now: {}",
+                    orphans.join(", ")
+                );
+            }
+            let scale = [piece.width, piece.depth, piece.height]
+                .iter()
+                .zip(loaded.size)
+                .map(|(s, n)| s / n)
+                .collect::<Vec<_>>();
+            let (lo, hi) = scale
+                .iter()
+                .fold((f64::MAX, f64::MIN), |(lo, hi), s| (lo.min(*s), hi.max(*s)));
+            if hi > lo * 1.02 {
+                let _ = write!(
+                    line,
+                    "; the kept size {:?} stretches the file's {:?} unevenly",
+                    [piece.width, piece.depth, piece.height].map(cm),
+                    loaded.size.map(cm)
+                );
+            }
+            if !loaded.report.warnings.is_empty() {
+                let _ = write!(line, "; not drawn: {}", loaded.report.warnings.join("; "));
+            }
+            lines.push(line);
+            commands.push(newera_core::Command::update(piece));
+        }
+        doc.execute(newera_core::Command::Batch { commands })
+            .map_err(core)?;
+        let ids: Vec<String> = lines
+            .iter()
+            .filter_map(|l| l.split(':').next().map(str::to_owned))
+            .collect();
+        Ok(format!("{}\n{}", ok(&doc, &ids), lines.join("\n")))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -226,6 +401,135 @@ mod tests {
             catalog.message.contains("built from the catalog"),
             "{catalog:?}"
         );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_new_version_of_a_file_takes_the_place_of_the_old_one_under_the_same_id() {
+        let dir = std::env::temp_dir().join(format!("newera-edit-model-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let obj = |w: f64, material: &str| {
+            format!(
+                "mtllib m.mtl\nusemtl {material}\nv 0 0 0\nv {w} 0 0\nv {w} 0.8 0\nv 0 0 0.6\nf 1 2 3\nf 1 3 4\n"
+            )
+        };
+        std::fs::write(
+            dir.join("m.mtl"),
+            "newmtl tecido\nKd 1 0 0\nnewmtl linho\nKd 0 1 0\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("win-v3.obj"), obj(0.8, "tecido")).unwrap();
+        std::fs::write(dir.join("win-v4.obj"), obj(0.7, "linho")).unwrap();
+        std::fs::write(dir.join("broken.obj"), "not a model").unwrap();
+        let v3 = path(&dir.join("win-v3.obj"));
+        let v4 = path(&dir.join("win-v4.obj"));
+        let s = server();
+        let place = |json: String| {
+            s.place(Parameters(serde_json::from_str(&json).unwrap()))
+                .unwrap()
+        };
+        place(format!(
+            r#"{{"items":[{{"model":"{v3}","at":[100,100],"facing":"+x"}},{{"model":"{v3}","at":[300,100]}}]}}"#
+        ));
+        let piece = |id: &str| {
+            let doc = s.document.read();
+            doc.home().find_piece(id.parse().unwrap()).unwrap().clone()
+        };
+        // A material override and some metadata, set between versions.
+        {
+            let mut changed = piece("f1");
+            changed.info.brand = Some("Example Furniture".into());
+            changed.materials.push(newera_core::ModelMaterial {
+                name: "tecido".into(),
+                key: None,
+                color: Some([0, 0, 255]),
+                texture: None,
+                shininess: None,
+            });
+            s.document
+                .write()
+                .execute(newera_core::Command::update(changed))
+                .unwrap();
+        }
+        let before = piece("f1");
+        let rev = s.document.read().revision();
+        let edit = |json: String| s.edit_model(Parameters(serde_json::from_str(&json).unwrap()));
+
+        // A file that does not load changes nothing.
+        let broken = path(&dir.join("broken.obj"));
+        let refused = edit(format!(
+            r#"{{"action":"replace","ids":["f1"],"file":"{broken}"}}"#
+        ))
+        .unwrap_err();
+        assert!(
+            refused.message.contains("nothing was replaced"),
+            "{refused:?}"
+        );
+        // Nor does one prepared on an older plan.
+        let stale = edit(format!(
+            r#"{{"action":"replace","ids":["f1"],"file":"{v4}","rev":{}}}"#,
+            rev - 1
+        ))
+        .unwrap_err();
+        assert!(stale.message.contains("read it again"), "{stale:?}");
+        assert_eq!(piece("f1"), before);
+
+        let reply = edit(format!(
+            r#"{{"action":"replace","ids":["f1"],"file":"{v4}","rev":{rev}}}"#
+        ))
+        .unwrap();
+        let after = piece("f1");
+        assert_eq!(after.model.as_deref(), Some(v4.as_str()));
+        assert_eq!(after.name, "win-v4", "the name was the old file's");
+        assert_eq!(
+            (
+                after.position,
+                after.angle,
+                after.width,
+                after.info.brand.as_deref()
+            ),
+            (
+                before.position,
+                before.angle,
+                before.width,
+                Some("Example Furniture")
+            )
+        );
+        assert!(reply.contains(&format!("f1: {v3} → {v4} (")), "{reply}");
+        assert!(
+            reply.contains("overrides matching no material now: tecido"),
+            "{reply}"
+        );
+        assert!(reply.contains("stretches the file's"), "{reply}");
+        // Only f1: the other copy of v3 stays, and one undo brings v3 back.
+        assert_eq!(piece("f2").model.as_deref(), Some(v3.as_str()));
+        assert_eq!(s.document.read().home().furniture.len(), 2);
+        s.document.write().undo().unwrap();
+        assert_eq!(piece("f1"), before);
+
+        // A repeated id is one piece: one change, one line.
+        let reply = edit(format!(
+            r#"{{"action":"replace","ids":["f1","f1"],"file":"{v4}"}}"#
+        ))
+        .unwrap();
+        assert_eq!(
+            reply.matches(&format!("f1: {v3} → {v4}")).count(),
+            1,
+            "{reply}"
+        );
+        s.document.write().undo().unwrap();
+        assert_eq!(piece("f1"), before);
+
+        // every=true: every piece on the same file, at the new file's size.
+        edit(format!(
+            r#"{{"action":"replace","ids":["f1"],"file":"{v4}","every":true,"size":"natural"}}"#
+        ))
+        .unwrap();
+        for id in ["f1", "f2"] {
+            let p = piece(id);
+            assert_eq!(p.model.as_deref(), Some(v4.as_str()));
+            assert!((p.width - 70.0).abs() < 1e-3, "{}", p.width);
+        }
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -48,7 +48,7 @@ SESSION=$(grep -i '^mcp-session-id:' "$LOG.headers" | awk '{print $2}' | tr -d '
 rpc '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
 
 reply=$(rpc '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
-for tool in home create update delete move edit_walls edit_home edit_background render_plan export file edit_history history catalog place layout variants levels materials cameras video plugins sessions arrange background joinery cabinet_run embed fit_roof cut_list ergonomics disciplines annotations render_3d render_photo rules model; do
+for tool in home create update delete move edit_walls edit_home edit_background render_plan export file edit_history history catalog place layout variants levels materials cameras video plugins sessions arrange background joinery cabinet_run embed fit_roof cut_list ergonomics disciplines annotations render_3d render_photo rules model edit_model; do
   check "tool $tool listed" "$reply" "\"name\":\"$tool\""
 done
 
