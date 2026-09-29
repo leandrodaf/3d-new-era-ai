@@ -258,6 +258,14 @@ fn run(
         "model" => Ok(said(
             server.model(Parameters(params(args)?)).map_err(reason)?,
         )),
+        "library" => Ok(said(
+            server.library(Parameters(params(args)?)).map_err(reason)?,
+        )),
+        "edit_library" => Ok(said(
+            server
+                .edit_library(Parameters(params(args)?))
+                .map_err(reason)?,
+        )),
         "edit_model" => Ok(said(
             server
                 .edit_model(Parameters(params(args)?))

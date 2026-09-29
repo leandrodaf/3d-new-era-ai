@@ -28,8 +28,10 @@ pub enum Transport {
 /// Tools that need the person's own machine: they read or write files on its
 /// disk (a scanned plan, a video), run its programs (plugins), or keep notes
 /// there (feedback). Neither a tab nor the hosted service has one.
-const DESKTOP_ONLY: [&str; 7] = [
+const DESKTOP_ONLY: [&str; 9] = [
     "feedback",
+    "library",
+    "edit_library",
     "plugins",
     "run_plugin",
     "video",
@@ -131,6 +133,8 @@ const CATEGORIES: &[(&str, &[&str])] = &[
             "measure",
             "model",
             "edit_model",
+            "library",
+            "edit_library",
             "fit_roof",
             "background",
             "edit_background",

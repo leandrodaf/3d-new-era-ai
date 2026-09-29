@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A model library, apart from projects: `edit_library action=publish` keeps a piece's model —
+  with the files it names, its product photos and measurements, unit, size, brand, page, notes on
+  what changed and how faithful it is — as the next version of an entry, never changed after;
+  `library` lists entries and versions. `place model=library:<name>` (or `@<v>`) puts one in any
+  project with its photos and measurements, at the size and in the unit it was published with,
+  and `edit_model replace file=library:<name>@<v>` goes back to an older one under the same id.
+  The library is on the desktop only (`NEWERA_LIBRARY`, or the config folder). Reusing a chair
+  meant finding its files again, and its photos and checks stayed in the study's folder.
+
 - `render_photo` answers for the machine it runs on: `estimate=true` gives the thread budget
   (half the cores, at most four, one render at a time) and the work — pixels, rays, triangles,
   images, memory estimated from their sizes — without rendering, and says that time,

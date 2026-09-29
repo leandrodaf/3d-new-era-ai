@@ -2155,6 +2155,78 @@
     },
     "title": "Change storeys"
   },
+  "edit_library": {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Publish to the model library"
+    },
+    "description": "Publish to the asset library: action=publish keeps a piece's model file — with its companion files, reference pictures, measured sizes, unit, box, brand and source link — as the next version of name, with notes on what changed and fidelity (what was estimated). A version never changes after; library lists them.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "description": "`publish`: the piece's model as the next version of `name`",
+          "enum": [
+            "publish"
+          ],
+          "type": "string"
+        },
+        "fidelity": {
+          "description": "publish: how far it can be trusted (what was estimated, what was measured)",
+          "type": "string"
+        },
+        "id": {
+          "description": "publish: the piece whose model, photos, measurements and unit are kept, e.g. `f12`",
+          "type": "string"
+        },
+        "name": {
+          "description": "publish: the entry, lowercase letters, digits, - and _ (e.g. `oak-armchair`)",
+          "type": "string"
+        },
+        "notes": {
+          "description": "publish: what changed in this version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "edit_library",
+    "outputSchema": {
+      "properties": {
+        "ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "rev": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "v": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "text"
+      ],
+      "type": "object"
+    },
+    "title": "Publish to the model library"
+  },
   "edit_lighting": {
     "annotations": {
       "destructiveHint": false,
@@ -2222,7 +2294,7 @@
       "readOnlyHint": false,
       "title": "Replace a model file"
     },
-    "description": "Change the imported model of placed pieces (ids), one undo step each; rev refuses a change if the plan moved on. replace swaps the file (every=true: on every piece using it), keeping id, place, size (size=natural takes the file's), finish, overrides and links; the new file is read first, and the reply gives the version loaded, overrides left matching nothing and what the file leaves out. material changes one material by the name model lists: color, mat (an image), repeat (texture scale: 2 halves it), clear. part hides, moves (offset cm: x across, y to the front, z up) or resizes one part by name — the back cushion alone. lod adds a lighter file drawn beyond a camera distance (beyond cm, default 400); detail=always holds the full one. reference keeps a product photo (file, view, part, source) that render_3d ref= shows beside the model; measure keeps a product size (dimension: width|depth|height|<part>.height, cm, source, confirmed) that model compares with the drawing. model inspects; place imports.",
+    "description": "Change the imported model of placed pieces (ids), one undo step each; rev refuses a change if the plan moved on. replace swaps the file (library:<name>@<v> too; every=true: on every piece using it), keeping id, place, size (size=natural takes the file's), finish, overrides and links; the new file is read first, and the reply gives the version loaded, overrides left matching nothing and what the file leaves out. material changes one material by the name model lists: color, mat (an image), repeat (texture scale: 2 halves it), clear. part hides, moves (offset cm: x across, y to the front, z up) or resizes one part by name — the back cushion alone. lod adds a lighter file drawn beyond a camera distance (beyond cm, default 400); detail=always holds the full one. reference keeps a product photo (file, view, part, source) that render_3d ref= shows beside the model; measure keeps a product size (dimension: width|depth|height|<part>.height, cm, source, confirmed) that model compares with the drawing. model inspects; place imports.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -3736,6 +3808,40 @@
       "type": "object"
     },
     "title": "List storeys"
+  },
+  "library": {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List the model library"
+    },
+    "description": "Versions kept in the asset library: approved revisions of model files, reusable in any project with place model=library:<name> or library:<name>@<v>; edit_model replace file=library:<name>@<v> goes back to an older one. Rows [name, latest, title, brand, versions]; name=<entry> lists its versions [v, title, size, unit, source, fidelity, notes, pictures, sizes]. edit_library publishes.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "One entry's versions instead of the list, e.g. `win`",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "library",
+    "outputSchema": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "rows": {
+          "type": "array"
+        },
+        "versions": {
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "title": "List the model library"
   },
   "lighting": {
     "annotations": {
