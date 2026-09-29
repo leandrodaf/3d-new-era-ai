@@ -513,6 +513,7 @@ async fn run_plugin(
             newera_plugins::RunError::NotFound(_) => axum::http::StatusCode::NOT_FOUND,
             newera_plugins::RunError::NoServer => axum::http::StatusCode::SERVICE_UNAVAILABLE,
             newera_plugins::RunError::Start(_) => axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            newera_plugins::RunError::Busy(_) => axum::http::StatusCode::CONFLICT,
         };
         (status, e.to_string())
     })?;

@@ -184,6 +184,16 @@ program reads and edits through the public API like any other client, under its
 own session, and its output is returned. `examples/plugins/room-areas` is an example in
 plain Python.
 
+A plugin as heavy as a modeler (a Blender bridge) declares `limits` —
+`{"heavy": true, "threads": 2, "memory_mb": 4096, "nice": 15, "timeout_s": 900}` — and
+they are applied to its process, not asked of it: on Linux, where the tools are
+installed, it is pinned to that many of the cores this process may use (`taskset`), its
+address space is capped (`prlimit`) and its priority lowered (`nice`, relative); a limit
+whose tool is missing, or elsewhere than Linux, is not applied and the answer says so; it gets `NEWERA_THREADS`/`OMP_NUM_THREADS` for the program's own
+thread flag. A heavy plugin shares one slot with photo renders, so heavy work runs one at
+a time. The answer reports the peak memory and processor time read from `/proc` (not
+measured elsewhere), the limits applied and those this system could not apply.
+
 ## Security
 
 The server binds to `127.0.0.1` by default. The MCP endpoint validates the `Host`

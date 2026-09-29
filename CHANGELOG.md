@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A plugin as heavy as a modeler declares `limits` in its `plugin.json` — `heavy`, `threads`,
+  `memory_mb`, `nice`, `timeout_s` — and they are applied to its process: on Linux it is pinned
+  to that many cores, its memory is capped and its priority lowered, and it gets
+  `NEWERA_THREADS` for the program's own thread flag (Blender's `--threads`). A heavy plugin
+  runs alone, sharing one slot with photo renders, so the machine's budget is not multiplied by
+  every caller. `run_plugin` answers the peak memory and processor time it used (read from
+  `/proc`; not measured elsewhere), the limits applied and those the system could not apply.
+  An external modeler ran with whatever affinity and priority the agent remembered to set.
+
 - A model library, apart from projects: `edit_library action=publish` keeps a piece's model —
   with the files it names, its product photos and measurements, unit, size, brand, page, notes on
   what changed and how faithful it is — as the next version of an entry, never changed after;

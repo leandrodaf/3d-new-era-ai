@@ -136,6 +136,19 @@ pub(super) async fn run(
         )
     })?;
     let tool = request.name.to_string();
+    // A photo shares one slot with heavy plugins (a modeler): the budget is
+    // the machine's, not each caller's.
+    let slot = if tool == "render_photo" {
+        Some(
+            newera_core::progress::heavy("render_photo").map_err(|holder| {
+                invalid(format!(
+                    "{holder} is running, and heavy work runs one at a time; wait for it (a plugin is not in `sessions` and cancel=true does not stop it: it ends by itself or at its timeout_s)"
+                ))
+            })?,
+        )
+    } else {
+        None
+    };
     let handle = tokio::runtime::Handle::current();
     let work_context = context.clone();
     supervise(
@@ -147,6 +160,7 @@ pub(super) async fn run(
             // Keep the permit until the actual worker has stopped, even if the
             // client abandoned its async request earlier.
             let _permit = permit;
+            let _slot = slot;
             handle.block_on(async {
                 let call = rmcp::handler::server::tool::ToolCallContext::new(
                     &server,

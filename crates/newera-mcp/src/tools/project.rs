@@ -292,7 +292,7 @@ impl NewEraMcp {
         self.plugins(Parameters(PluginsParams::default()))
     }
     #[tool(
-        description = "Run a plugin (an external program editing through the HTTP API) by name, with args as JSON: {ok,code,stdout,stderr,edits,revision}. The plugins tool lists them."
+        description = "Run a plugin (an external program editing through the HTTP API) by name, with args as JSON: {ok,code,stdout,stderr,edits,revision,usage {peak_mb,cpu_s,measured},limits,not_applied}. A plugin as heavy as a modeler gets the limits its plugin.json declares (cores, memory, priority, time) that this system can apply, not_applied naming the rest, and runs alone, never beside a photo render. The plugins tool lists them."
     )]
     pub(crate) fn run_plugin(
         &self,

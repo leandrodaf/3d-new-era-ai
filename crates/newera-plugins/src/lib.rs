@@ -49,8 +49,54 @@ pub struct Plugin {
     pub description: String,
     /// Program and arguments, run inside the plugin directory.
     pub command: Vec<String>,
+    /// What it may use: set for a program as heavy as a modeler.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limits: Option<Limits>,
     #[serde(skip)]
     pub dir: PathBuf,
+}
+
+/// The resources a plugin may use, applied to its process — not asked of
+/// it — where the system allows:
+///
+/// ```json
+/// "limits": {"heavy": true, "threads": 2, "memory_mb": 4096, "nice": 15, "timeout_s": 900}
+/// ```
+///
+/// On Linux `threads` pins it to that many cores (`taskset`), `memory_mb`
+/// caps its address space (`prlimit`) and `nice` lowers its priority; it
+/// also gets `NEWERA_THREADS` and `OMP_NUM_THREADS` (a Blender script
+/// passes `--threads $NEWERA_THREADS`). A `heavy` plugin runs alone: not
+/// beside a photo render or another heavy plugin. What could not be
+/// applied is said in the run's answer, never assumed.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Limits {
+    #[serde(default)]
+    pub heavy: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub threads: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_mb: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nice: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_s: Option<u64>,
+}
+
+impl Limits {
+    /// Threads it gets: as asked, else half the cores (at most four) when heavy.
+    fn threads(&self) -> Option<usize> {
+        let cores = std::thread::available_parallelism().map_or(2, std::num::NonZero::get);
+        self.threads
+            .or_else(|| self.heavy.then(|| (cores / 2).clamp(1, 4)))
+            .map(|t| t.clamp(1, cores))
+    }
+}
+
+/// A program on `PATH`.
+fn on_path(program: &str) -> bool {
+    std::env::var_os("PATH")
+        .is_some_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(program).is_file()))
 }
 
 impl Plugin {
@@ -73,13 +119,21 @@ pub struct Host {
 }
 
 /// What a finished run produced.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RunOutput {
     /// Exit code; `None` when killed (timeout) or ended by a signal.
     pub code: Option<i32>,
     pub stdout: String,
     pub stderr: String,
     pub timed_out: bool,
+    /// Peak resident memory, MB, where it could be measured.
+    pub peak_mb: Option<f64>,
+    /// Processor time used, seconds, where it could be measured.
+    pub cpu_s: Option<f64>,
+    /// Limits applied to the process: `threads 2 (taskset)`, …
+    pub applied: Vec<String>,
+    /// Limits asked for that this system could not apply, and why.
+    pub not_applied: Vec<String>,
 }
 
 impl RunOutput {
@@ -192,7 +246,75 @@ pub fn run(
     } else {
         program.into()
     };
-    let mut command = Command::new(program);
+    // Limits are applied by wrapping the program in tools that set them and
+    // then become it (`prlimit … nice … taskset … program`), so the plugin's
+    // own process carries them.
+    let limits = plugin.limits.clone().unwrap_or_default();
+    let (mut applied, mut not_applied) = (Vec::new(), Vec::new());
+    let mut chain: Vec<std::ffi::OsString> = Vec::new();
+    let linux = cfg!(target_os = "linux");
+    let mut wrap = |tool: &str, args: Vec<String>, what: String| {
+        if linux && on_path(tool) {
+            chain.push(tool.into());
+            chain.extend(args.into_iter().map(Into::into));
+            applied.push(format!("{what} ({tool})"));
+        } else {
+            not_applied.push(format!("{what}: no {tool} on this system"));
+        }
+    };
+    if let Some(mb) = limits.memory_mb {
+        wrap(
+            "prlimit",
+            vec![format!("--as={}", mb.saturating_mul(1024 * 1024))],
+            format!("memory {mb} MB"),
+        );
+    }
+    if let Some(nice) = limits.nice {
+        wrap(
+            "nice",
+            vec!["-n".into(), nice.clamp(0, 19).to_string()],
+            format!("priority nice +{}", nice.clamp(0, 19)),
+        );
+    }
+    let threads = limits.threads();
+    // Pinned to CPUs this process may use: in a container or under an
+    // inherited mask they need not start at 0.
+    let cpus = threads.map(|t| {
+        let allowed = std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|s| {
+                s.lines()
+                    .find_map(|l| l.strip_prefix("Cpus_allowed_list:"))
+                    .map(|a| a.trim().to_owned())
+            });
+        (t, allowed.and_then(|a| cpu_list(&a, t)))
+    });
+    if let Some((t, Some(list))) = &cpus {
+        wrap(
+            "taskset",
+            vec!["-c".into(), list.clone()],
+            format!("threads {t}"),
+        );
+    }
+    if let Some((t, None)) = cpus
+        && linux
+    {
+        not_applied.push(format!(
+            "threads {t}: the CPUs this process may use are unknown"
+        ));
+    }
+    chain.push(program);
+    let mut chain = chain.into_iter();
+    let Some(first) = chain.next() else {
+        return Err("empty command".into());
+    };
+    let mut command = Command::new(first);
+    command.args(chain);
+    if let Some(t) = threads {
+        command
+            .env("NEWERA_THREADS", t.to_string())
+            .env("OMP_NUM_THREADS", t.to_string());
+    }
     command
         .args(rest)
         .current_dir(&plugin.dir)
@@ -229,7 +351,14 @@ pub fn run(
 
     let started = Instant::now();
     let mut timed_out = false;
+    let pid = child.id();
+    let (mut peak_mb, mut cpu_s) = (None, None);
     let status = loop {
+        // Read while it runs: once it ends, its numbers are gone.
+        if let Some((peak, cpu)) = usage(pid) {
+            peak_mb = Some(peak);
+            cpu_s = Some(cpu);
+        }
         match child.try_wait() {
             Ok(Some(status)) => break Some(status),
             Ok(None) if started.elapsed() >= timeout => {
@@ -253,7 +382,30 @@ pub fn run(
         stdout: join(stdout),
         stderr: join(stderr),
         timed_out,
+        peak_mb,
+        cpu_s,
+        applied,
+        not_applied,
     })
+}
+
+/// Peak resident memory (MB) and processor time (s) of a running process,
+/// from `/proc` — Linux only; elsewhere they are not measured.
+fn usage(pid: u32) -> Option<(f64, f64)> {
+    let status = std::fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
+    let peak_kb: f64 = status
+        .lines()
+        .find_map(|l| l.strip_prefix("VmHWM:"))?
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()?;
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    // Fields after the command name, which may hold spaces: utime and
+    // stime are the 12th and 13th, in clock ticks (100 a second on Linux).
+    let fields: Vec<&str> = stat.rsplit_once(')')?.1.split_whitespace().collect();
+    let ticks: f64 = fields.get(11)?.parse::<f64>().ok()? + fields.get(12)?.parse::<f64>().ok()?;
+    Some((peak_kb / 1024.0, ticks / 100.0))
 }
 
 /// Why a plugin could not run for a document.
@@ -263,6 +415,8 @@ pub enum RunError {
     /// The document has no HTTP server to call back into.
     NoServer,
     Start(String),
+    /// A heavy plugin found heavy work already running.
+    Busy(String),
 }
 
 impl std::fmt::Display for RunError {
@@ -273,6 +427,10 @@ impl std::fmt::Display for RunError {
                 f.write_str("plugins need the HTTP server (start the editor or `newera serve`)")
             }
             Self::Start(err) => f.write_str(err),
+            Self::Busy(holder) => write!(
+                f,
+                "{holder} is running, and heavy work runs one at a time; wait for it or stop it"
+            ),
         }
     }
 }
@@ -309,7 +467,23 @@ pub fn run_for_document(
         token: server.token,
         session: Some(session.clone()),
     };
-    let result = run(&plugin, &host, args, DEFAULT_TIMEOUT);
+    let limits = plugin.limits.clone().unwrap_or_default();
+    let slot = if limits.heavy {
+        match newera_core::progress::heavy(&format!("plugin {}", plugin.name)) {
+            Ok(slot) => Some(slot),
+            Err(holder) => {
+                document.write().sessions_mut().leave(&session);
+                return Err(RunError::Busy(holder));
+            }
+        }
+    } else {
+        None
+    };
+    let timeout = limits
+        .timeout_s
+        .map_or(DEFAULT_TIMEOUT, Duration::from_secs);
+    let result = run(&plugin, &host, args, timeout);
+    drop(slot);
     let mut doc = document.write();
     let edits = doc.sessions().get(&session).map_or(0, |s| s.edits);
     doc.sessions_mut().leave(&session);
@@ -322,11 +496,46 @@ pub fn run_for_document(
         "stderr": output.stderr,
         "edits": edits,
         "revision": doc.revision(),
+        "usage": {
+            "peak_mb": output.peak_mb.map(|v| (v * 10.0).round() / 10.0),
+            "cpu_s": output.cpu_s.map(|v| (v * 100.0).round() / 100.0),
+            "measured": output.peak_mb.is_some(),
+        },
+        "limits": output.applied,
+        "not_applied": output.not_applied,
     }))
+}
+
+/// The first `t` CPUs of an allowed list like `0-3,8-11`, as `taskset -c`
+/// takes them (`0,1,2,3,8,9`); all of them when there are fewer.
+fn cpu_list(allowed: &str, t: usize) -> Option<String> {
+    let mut cpus = Vec::new();
+    for range in allowed.split(',').map(str::trim).filter(|r| !r.is_empty()) {
+        let (a, b) = range.split_once('-').unwrap_or((range, range));
+        let (a, b): (usize, usize) = (a.trim().parse().ok()?, b.trim().parse().ok()?);
+        cpus.extend(a..=b);
+    }
+    cpus.truncate(t);
+    (!cpus.is_empty()).then(|| {
+        cpus.iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    })
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn threads_are_pinned_to_cpus_the_process_may_use() {
+        use super::cpu_list;
+        assert_eq!(cpu_list("2-5", 2).as_deref(), Some("2,3"));
+        assert_eq!(cpu_list("0-3,8-11", 6).as_deref(), Some("0,1,2,3,8,9"));
+        assert_eq!(cpu_list("7", 4).as_deref(), Some("7"));
+        assert_eq!(cpu_list("", 2), None);
+        assert_eq!(cpu_list("x-y", 2), None);
+    }
+
     use super::*;
 
     fn temp_dir(name: &str) -> PathBuf {
@@ -420,6 +629,114 @@ mod tests {
                 DEFAULT_TIMEOUT
             )
             .is_err()
+        );
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_heavy_plugin_runs_inside_its_limits_and_says_what_it_used() {
+        let root = temp_dir("limits");
+        let dir = write_plugin(
+            &root,
+            "modeler",
+            r#"{"name":"modeler","limits":{"heavy":true,"threads":1,"memory_mb":512,"nice":10,"timeout_s":30},
+                "command":["sh","-c","echo threads=$NEWERA_THREADS; grep Cpus_allowed_list /proc/self/status; echo mem=$(ulimit -v); echo nice=$(nice); i=0; while [ $i -lt 30000 ]; do i=$((i+1)); done"]}"#,
+        );
+        let plugin = load(&dir).unwrap();
+        let out = run(
+            &plugin,
+            &Host::default(),
+            &serde_json::Value::Null,
+            DEFAULT_TIMEOUT,
+        )
+        .unwrap();
+        assert!(out.success(), "{out:?}");
+        assert!(out.stdout.contains("threads=1"), "{}", out.stdout);
+        // `nice` adds to the niceness this test already runs at.
+        let own: i32 = std::fs::read_to_string("/proc/self/stat")
+            .unwrap()
+            .rsplit_once(')')
+            .unwrap()
+            .1
+            .split_whitespace()
+            .nth(16)
+            .unwrap()
+            .parse()
+            .unwrap();
+        let nice = format!("nice={}", (own + 10).min(19));
+        for (tool, said) in [
+            ("taskset", "Cpus_allowed_list:\t0\n"),
+            ("prlimit", "mem=524288"),
+            ("nice", nice.as_str()),
+        ] {
+            if on_path(tool) {
+                assert!(out.stdout.contains(said), "{tool}: {}", out.stdout);
+                assert!(
+                    out.applied
+                        .iter()
+                        .any(|a| a.ends_with(&format!("({tool})"))),
+                    "{out:?}"
+                );
+            } else {
+                assert!(out.not_applied.iter().any(|a| a.contains(tool)), "{out:?}");
+            }
+        }
+        assert!(out.peak_mb.is_some_and(|m| m > 0.0), "{out:?}");
+        assert!(out.cpu_s.is_some(), "{out:?}");
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_heavy_plugin_waits_for_no_one_and_its_deadline_is_its_own() {
+        let root = temp_dir("heavy");
+        write_plugin(
+            &root,
+            "slow",
+            r#"{"name":"slow","limits":{"heavy":true,"timeout_s":1},"command":["sleep","5"]}"#,
+        );
+        let document = newera_core::SharedDocument::new(newera_core::Document::default());
+        document
+            .write()
+            .set_server(Some(newera_core::collab::ServerInfo {
+                url: "http://127.0.0.1:1".into(),
+                token: None,
+            }));
+        // A photo holds the heavy-work slot: the plugin is refused, not queued.
+        let photo = newera_core::progress::heavy("render_photo").unwrap();
+        let busy = run_for_document(
+            &document,
+            std::slice::from_ref(&root),
+            "slow",
+            &serde_json::Value::Null,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&busy, RunError::Busy(holder) if holder == "render_photo"),
+            "{busy}"
+        );
+        assert!(
+            document.read().sessions().list().is_empty(),
+            "its session is left"
+        );
+        drop(photo);
+        let started = Instant::now();
+        let done = run_for_document(
+            &document,
+            std::slice::from_ref(&root),
+            "slow",
+            &serde_json::Value::Null,
+        )
+        .unwrap();
+        assert_eq!(done["timed_out"], true);
+        assert!(
+            started.elapsed() < Duration::from_secs(4),
+            "timeout_s=1, not the default"
+        );
+        assert!(
+            newera_core::progress::heavy("next").is_ok(),
+            "the slot is free again"
         );
         std::fs::remove_dir_all(root).ok();
     }
