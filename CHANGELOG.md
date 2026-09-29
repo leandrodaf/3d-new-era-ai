@@ -118,6 +118,12 @@ All notable changes to this project are documented here. The format follows
   and their textures travel with saved projects; placement uses the existing catalog
   and MCP tools. Product proportions are preserved when resizing.
 
+### Changed
+
+- **Breaking for clients that validate output schemas:** `render_photo`'s output schema no
+  longer requires `mimeType`. `estimate=true` and `cancel=true` answer in text (JSON), not
+  with an image, so a client that required `mimeType` on every reply must accept both.
+
 ### Fixed
 
 - A glTF/GLB model keeps its textures. The importer read positions, normals and the base color

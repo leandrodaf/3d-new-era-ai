@@ -2586,6 +2586,10 @@ pub(crate) fn place_noting(doc: &mut Document, items: Vec<PlaceSpec>) -> EditRes
             piece.info.url = piece.info.url.take().or(entry.source);
             piece.references = entry.references;
             piece.measures = entry.measures;
+            piece.materials = entry.materials;
+            piece.model_parts = entry.model_parts;
+            piece.model_transform = entry.model_transform.unwrap_or_default();
+            piece.model_far = entry.model_far;
         }
         piece.color = spec.color.or(piece.color);
         if let Some(raw) = &spec.mat {

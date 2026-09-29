@@ -11,7 +11,7 @@ use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::furniture::{Measure, Reference};
+use crate::furniture::{FarModel, Measure, ModelMaterial, ModelPart, ModelTransform, Reference};
 
 /// What a version says about itself, in `asset.json`.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -47,6 +47,17 @@ pub struct Entry {
     /// When it was published, ms since the epoch.
     #[serde(default)]
     pub published_ms: u64,
+    /// The piece's own changes to the file, part of what was approved:
+    /// materials (images relative to the version's folder), parts, the
+    /// turn it is fitted with and its lighter file for afar.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub materials: Vec<ModelMaterial>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub model_parts: Vec<ModelPart>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_transform: Option<ModelTransform>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_far: Option<FarModel>,
 }
 
 /// Where the library lives: `NEWERA_LIBRARY`, or `<config>/3d-new-era-ai/library`.
@@ -128,6 +139,16 @@ pub fn get(root: &Path, name: &str, version: Option<u32>) -> Result<(Entry, Path
     for reference in &mut entry.references {
         reference.file = folder.join(&reference.file).display().to_string();
     }
+    for image in entry
+        .materials
+        .iter_mut()
+        .filter_map(|m| m.texture.as_mut()?.image.as_mut())
+    {
+        *image = folder.join(&*image).display().to_string();
+    }
+    if let Some(far) = &mut entry.model_far {
+        far.file = folder.join(&far.file).display().to_string();
+    }
     Ok((entry, model))
 }
 
@@ -170,6 +191,38 @@ fn copy(from: &Path, to: &Path) -> Result<(), String> {
     std::fs::write(to, bytes).map_err(|e| format!("{}: {e}", to.display()))
 }
 
+/// Copies `model` as `into/file_name`, with the files it names beside it.
+fn copy_model(model: &Path, into: &Path, file_name: &str) -> Result<(), String> {
+    copy(model, &into.join(file_name))?;
+    if let Some(dir) = model.parent() {
+        for companion in crate::model_companions(model) {
+            // A companion that would land outside the version is left out.
+            if let Some(relative) = inside(&companion)
+                && crate::vfs::exists(&dir.join(&relative))
+            {
+                copy(&dir.join(&relative), &into.join(&relative))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Creates the first free `v<N>` folder from `first` on and returns it: made
+/// by this call alone, so two publishing at once never share (or delete)
+/// one version.
+fn claim(dir: &Path, first: u32) -> Result<(u32, PathBuf), String> {
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let mut version = first;
+    loop {
+        let folder = dir.join(format!("v{version}"));
+        match std::fs::create_dir(&folder) {
+            Ok(()) => return Ok((version, folder)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => version += 1,
+            Err(e) => return Err(format!("{}: {e}", folder.display())),
+        }
+    }
+}
+
 /// Publishes `model` (with the files it names) and the photos of
 /// `entry.references` as the next version of `entry.name`. The photos'
 /// `file` are read as given and stored as copies in the version.
@@ -184,24 +237,39 @@ pub fn publish(root: &Path, model: &Path, mut entry: Entry) -> Result<Entry, Str
             entry.name
         ));
     }
-    let version = versions_of(root, &entry.name).last().map_or(1, |v| v + 1);
-    let folder = root.join(&entry.name).join(format!("v{version}"));
+    let first = versions_of(root, &entry.name).last().map_or(1, |v| v + 1);
+    let (version, folder) = claim(&root.join(&entry.name), first)?;
     let result = (|| {
         let file_name = model
             .file_name()
             .ok_or_else(|| format!("library: {} is not a file", model.display()))?
             .to_string_lossy()
             .into_owned();
-        copy(model, &folder.join(&file_name))?;
-        if let Some(dir) = model.parent() {
-            for companion in crate::model_companions(model) {
-                // A companion that would land outside the version is left out.
-                if let Some(relative) = inside(&companion)
-                    && crate::vfs::exists(&dir.join(&relative))
-                {
-                    copy(&dir.join(&relative), &folder.join(&relative))?;
-                }
-            }
+        copy_model(model, &folder, &file_name)?;
+        if let Some(far) = &mut entry.model_far {
+            let from = PathBuf::from(&far.file);
+            let name = format!(
+                "longe/{}",
+                from.file_name()
+                    .map_or_else(|| "modelo".into(), |n| n.to_string_lossy().into_owned())
+            );
+            copy_model(&from, &folder.join("longe"), &name["longe/".len()..])?;
+            far.file = name;
+        }
+        for (k, image) in entry
+            .materials
+            .iter_mut()
+            .filter_map(|m| m.texture.as_mut()?.image.as_mut())
+            .enumerate()
+        {
+            let from = PathBuf::from(&*image);
+            let name = format!(
+                "imagens/{k:02}-{}",
+                from.file_name()
+                    .map_or_else(|| "imagem".into(), |n| n.to_string_lossy().into_owned())
+            );
+            copy(&from, &folder.join(&name))?;
+            *image = name;
         }
         for (k, reference) in entry.references.iter_mut().enumerate() {
             let from = PathBuf::from(&reference.file);
@@ -228,6 +296,21 @@ pub fn publish(root: &Path, model: &Path, mut entry: Entry) -> Result<Entry, Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_version_taken_meanwhile_is_left_alone() {
+        let dir = std::env::temp_dir().join(format!("newera-library-claim-{}", std::process::id()));
+        // Another publisher claimed v3 after this one counted v2 as the last.
+        std::fs::create_dir_all(dir.join("v3")).unwrap();
+        std::fs::write(dir.join("v3/asset.json"), "theirs").unwrap();
+        let (version, folder) = claim(&dir, 3).unwrap();
+        assert_eq!((version, folder), (4, dir.join("v4")));
+        assert_eq!(
+            std::fs::read_to_string(dir.join("v3/asset.json")).unwrap(),
+            "theirs"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn versions_are_published_side_by_side_and_read_back() {

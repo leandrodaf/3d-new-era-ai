@@ -145,6 +145,25 @@ impl NewEraMcp {
             references,
             measures: piece.measures.clone(),
             published_ms: newera_core::collab::now_ms(),
+            // What was done to the file is part of what was approved.
+            materials: piece
+                .materials
+                .iter()
+                .map(|m| {
+                    let mut m = m.clone();
+                    if let Some(image) = m.texture.as_mut().and_then(|t| t.image.as_mut()) {
+                        *image = doc.resolve_asset(image).display().to_string();
+                    }
+                    m
+                })
+                .collect(),
+            model_parts: piece.model_parts.clone(),
+            model_transform: (piece.model_transform != newera_core::ModelTransform::default())
+                .then(|| piece.model_transform.clone()),
+            model_far: piece.model_far.as_ref().map(|far| newera_core::FarModel {
+                file: doc.resolve_asset(&far.file).display().to_string(),
+                ..far.clone()
+            }),
             ..Entry::default()
         };
         let published =
@@ -218,6 +237,36 @@ mod tests {
                 .to_owned(),
         )
         .unwrap();
+        // What was done to the file: a part hidden, a weave repeated, a
+        // lighter file for afar.
+        std::fs::write(work.join("win-longe.obj"), obj(80.0)).unwrap();
+        {
+            let mut doc = first.document.write();
+            let mut chair = doc
+                .home()
+                .find_piece("f1".parse().unwrap())
+                .unwrap()
+                .clone();
+            chair.model_parts.push(newera_core::ModelPart {
+                name: "braco".into(),
+                hidden: true,
+                ..newera_core::ModelPart::default()
+            });
+            chair.materials.push(newera_core::ModelMaterial {
+                name: "tecido".into(),
+                key: None,
+                color: Some([90, 60, 40]),
+                texture: None,
+                shininess: None,
+                repeat: Some(2.0),
+            });
+            chair.model_far = Some(newera_core::FarModel {
+                file: work.join("win-longe.obj").display().to_string(),
+                beyond: 500.0,
+                off: false,
+            });
+            doc.execute(newera_core::Command::update(chair)).unwrap();
+        }
         let publish = |notes: &str| {
             first
                 .edit_library(Parameters(
@@ -278,6 +327,18 @@ mod tests {
         assert_eq!(placed.info.brand.as_deref(), Some("Example Furniture"));
         assert_eq!((placed.references.len(), placed.measures.len()), (1, 1));
         assert!(std::path::Path::new(&placed.references[0].file).is_file());
+        // The approved edits come along, the lighter file from the library.
+        assert_eq!(
+            (placed.model_parts.len(), placed.model_parts[0].hidden),
+            (1, true)
+        );
+        assert_eq!(placed.materials[0].repeat, Some(2.0));
+        let far = placed.model_far.as_ref().unwrap();
+        assert!(
+            std::path::Path::new(&far.file).ends_with("win/v2/longe/win-longe.obj")
+                && std::path::Path::new(&far.file).is_file(),
+            "{far:?}"
+        );
         assert!(
             (placed.width - 80.0).abs() < 1e-6,
             "the published size: {}",
