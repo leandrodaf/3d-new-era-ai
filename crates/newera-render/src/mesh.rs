@@ -47,12 +47,38 @@ pub struct Vertex {
     pub color: [f32; 4],
     /// Texture coordinates in tiles.
     pub uv: [f32; 2],
-    /// 0 plain, `1..` procedural pattern, [`IMAGE_BASE`]`+n` image layer `n`.
+    /// 0 plain, `1..` procedural pattern, [`IMAGE_BASE`]`+n` image layer `n`;
+    /// with [`MASK_FLAG`], an image whose alpha cuts holes ([`kind_cutoff`]).
     pub kind: u32,
 }
 
 /// Material kinds at or above this sample image layer `kind - IMAGE_BASE`.
 pub const IMAGE_BASE: u32 = 100;
+
+/// Set on an image kind whose alpha cuts holes: where the image's alpha is
+/// under the cutoff in bits 23–30 (in 255ths), nothing is drawn.
+pub const MASK_FLAG: u32 = 1 << 31;
+
+/// The pattern or image layer of a kind, without its alpha mask.
+#[must_use]
+pub fn kind_layer(kind: u32) -> u32 {
+    kind & 0x007F_FFFF
+}
+
+/// The alpha under which an image kind has a hole, if it is masked.
+#[must_use]
+pub fn kind_cutoff(kind: u32) -> Option<f32> {
+    (kind & MASK_FLAG != 0).then(|| f32::from(((kind >> 23) & 0xFF) as u8) / 255.0)
+}
+
+/// An image kind cut where its alpha is under `cutoff` (0..1). Rounded up to
+/// 255ths, so an 8-bit alpha falls on the same side of it as of `cutoff`.
+#[must_use]
+pub fn masked(kind: u32, cutoff: f32) -> u32 {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let bits = (cutoff.clamp(0.0, 1.0) * 255.0 - 1e-3).ceil().max(0.0) as u32;
+    kind_layer(kind) | MASK_FLAG | (bits << 23)
+}
 
 #[derive(Debug, Default)]
 pub struct Mesh {
@@ -1308,6 +1334,9 @@ impl Mesh {
                 } else if let Some(layer) = layer {
                     color = [1.0; 3];
                     kind = *layer;
+                    if let Some(cutoff) = local.material_of(k).and_then(|m| m.cutoff) {
+                        kind = masked(kind, cutoff);
+                    }
                     uv = match planar {
                         Some(size) => tiled(planar_uv(position, normal, *size), *repeat),
                         // The shader flips v, matching OBJ's bottom-up convention.
@@ -1348,6 +1377,27 @@ impl Mesh {
                 &mut self.indices
             };
             target.extend(order.map(|i| base + i));
+            // A sheet seen from both sides (a cane weave) gets its back as
+            // faces of their own, facing the other way.
+            if local
+                .material_of(tri[0] as usize)
+                .is_some_and(|m| m.double_sided)
+                // A transparent face is drawn from both sides already.
+                && !clear
+            {
+                let back = self.next_index();
+                for &i in order.iter().rev() {
+                    let mut v = self.vertices[(base + i) as usize];
+                    v.normal = v.normal.map(|c| -c);
+                    self.vertices.push(v);
+                }
+                let target = if clear {
+                    &mut self.transparent
+                } else {
+                    &mut self.indices
+                };
+                target.extend([back, back + 1, back + 2]);
+            }
         }
     }
 
@@ -2190,6 +2240,8 @@ mod material_tests {
                 alpha: 1.0,
                 texture: None,
                 shininess: 0.0,
+                cutoff: None,
+                double_sided: false,
             }],
             parts: vec![],
         };
@@ -2229,6 +2281,59 @@ mod material_tests {
     }
 
     #[test]
+    fn an_eight_bit_alpha_falls_on_the_side_of_the_cutoff_it_should() {
+        let kind = masked(IMAGE_BASE + 7, 0.5);
+        assert_eq!(kind_layer(kind), IMAGE_BASE + 7);
+        let cutoff = kind_cutoff(kind).unwrap();
+        // 128/255 is over 0.5, 127/255 under it.
+        assert!(
+            128.0 / 255.0 >= cutoff && 127.0 / 255.0 < cutoff,
+            "{cutoff}"
+        );
+        // A cutoff that is a whole 255th stays that one: equal is drawn.
+        let cutoff = kind_cutoff(masked(IMAGE_BASE, 102.0 / 255.0)).unwrap();
+        assert!(
+            102.0 / 255.0 >= cutoff && 101.0 / 255.0 < cutoff,
+            "{cutoff}"
+        );
+    }
+
+    #[test]
+    fn a_see_through_sheet_is_drawn_once_and_a_masked_one_from_both_sides() {
+        let sheet = |alpha: f32| {
+            let model = ModelMesh {
+                positions: vec![[0.0, 4.0, 0.0], [60.0, 4.0, 0.0], [60.0, 4.0, 50.0]],
+                normals: vec![[0.0, 1.0, 0.0]; 3],
+                colors: vec![[1.0; 3]; 3],
+                finishable: vec![],
+                indices: vec![0, 2, 1],
+                uvs: vec![],
+                vertex_materials: vec![0; 3],
+                materials: vec![MeshMaterial {
+                    name: "voile".into(),
+                    color: [1.0; 3],
+                    alpha,
+                    texture: None,
+                    shininess: 0.0,
+                    cutoff: None,
+                    double_sided: true,
+                }],
+                parts: vec![],
+            };
+            let piece = Furniture {
+                width: 60.0,
+                depth: 50.0,
+                height: 4.0,
+                ..Furniture::default()
+            };
+            let mesh = Mesh::piece_alone(&piece, &model);
+            (mesh.indices.len() / 3, mesh.transparent.len() / 3)
+        };
+        assert_eq!(sheet(0.5), (0, 1));
+        assert_eq!(sheet(1.0), (2, 0));
+    }
+
+    #[test]
     fn a_repeated_uv_stays_finite() {
         let near = |a: [f32; 2], b: [f32; 2]| a.iter().zip(b).all(|(a, b)| (a - b).abs() < 1e-6);
         assert!(near(tiled([0.25, -0.5], 2.0), [0.5, -1.0]));
@@ -2253,6 +2358,8 @@ mod material_tests {
                 alpha: 1.0,
                 texture: Some("trama.png".into()),
                 shininess: 0.0,
+                cutoff: None,
+                double_sided: false,
             }],
             parts: vec![],
         };

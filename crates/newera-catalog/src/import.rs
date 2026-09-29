@@ -229,6 +229,10 @@ fn load_obj(path: &Path, report: &mut ImportReport) -> Result<Mesh, ImportError>
                     .filter(|t| !t.trim().is_empty())
                     .map(|t| dir.join(t.trim())),
                 shininess: m.shininess.unwrap_or(0.0),
+                // An opacity map that is the color image itself cuts holes
+                // where its alpha is low: how an MTL says "cane weave".
+                cutoff: own_alpha(m).then_some(0.5),
+                double_sided: own_alpha(m),
             })
             .collect(),
         ..Mesh::default()
@@ -289,6 +293,19 @@ fn load_obj(path: &Path, report: &mut ImportReport) -> Result<Mesh, ImportError>
     Ok(mesh)
 }
 
+/// Whether an MTL material's opacity map is its color image: its alpha
+/// then cuts the surface.
+fn own_alpha(m: &tobj::Material) -> bool {
+    let trimmed = |t: &Option<String>| {
+        t.as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(str::to_owned)
+    };
+    trimmed(&m.dissolve_texture).is_some()
+        && trimmed(&m.dissolve_texture) == trimmed(&m.diffuse_texture)
+}
+
 /// What of an MTL material is not drawn, or not found.
 fn obj_material_warnings(m: &tobj::Material, dir: &Path, warnings: &mut Vec<String>) {
     let name = &m.name;
@@ -304,7 +321,14 @@ fn obj_material_warnings(m: &tobj::Material, dir: &Path, warnings: &mut Vec<Stri
         (&m.normal_texture, "normal/bump map"),
         (&m.specular_texture, "specular map"),
         (&m.shininess_texture, "shininess map"),
-        (&m.dissolve_texture, "opacity map (map_d)"),
+        (
+            if own_alpha(m) {
+                &None
+            } else {
+                &m.dissolve_texture
+            },
+            "opacity map (map_d) other than its color image",
+        ),
         (&m.ambient_texture, "ambient map"),
     ];
     for (map, what) in maps {
@@ -524,6 +548,8 @@ fn load_gltf(path: &Path, report: &mut ImportReport) -> Result<Mesh, ImportError
                             alpha: 1.0,
                             texture: None,
                             shininess: 0.0,
+                            cutoff: None,
+                            double_sided: false,
                         });
                     }
                     fallback
@@ -595,8 +621,9 @@ fn gltf_warnings(
             ),
             (m.emissive_factor().iter().any(|c| *c > 0.0), "emission"),
             (
-                m.alpha_mode() == gltf::material::AlphaMode::Mask,
-                "alpha mask (drawn opaque)",
+                m.alpha_mode() == gltf::material::AlphaMode::Blend
+                    && m.pbr_metallic_roughness().base_color_texture().is_some(),
+                "image alpha of a BLEND material (blended by its factor only)",
             ),
         ];
         for (present, what) in maps {
@@ -712,21 +739,29 @@ fn percent_decode(uri: &str) -> String {
 fn gltf_material(m: &gltf::Material<'_>, images: &[Option<std::path::PathBuf>]) -> MeshMaterial {
     let pbr = m.pbr_metallic_roughness();
     let [r, g, b, a] = pbr.base_color_factor();
+    let a = a.clamp(0.0, 1.0);
+    let cutoff = m.alpha_cutoff().unwrap_or(0.5).clamp(0.0, 1.0);
     MeshMaterial {
         name: m.name().map_or_else(
             || format!("material{}", m.index().unwrap_or_default()),
             str::to_owned,
         ),
         color: [r, g, b],
-        alpha: if m.alpha_mode() == gltf::material::AlphaMode::Blend {
-            a.clamp(0.0, 1.0)
-        } else {
-            1.0
+        alpha: match m.alpha_mode() {
+            gltf::material::AlphaMode::Blend => a.clamp(0.0, 1.0),
+            // Under the cutoff whatever the image says: not there at all.
+            gltf::material::AlphaMode::Mask if a < cutoff => 0.0,
+            _ => 1.0,
         },
         texture: pbr
             .base_color_texture()
             .and_then(|t| images.get(t.texture().source().index())?.clone()),
         shininess: 0.0,
+        // The image's alpha times the factor's against the cutoff: the image's
+        // alone against the cutoff over the factor.
+        cutoff: (m.alpha_mode() == gltf::material::AlphaMode::Mask && a >= cutoff)
+            .then(|| (cutoff / a.max(1e-6)).min(1.0)),
+        double_sided: m.double_sided(),
     }
 }
 
@@ -816,6 +851,11 @@ mod memory_tests {
 
     /// [`textured_glb`] with more JSON in its material and at its root.
     pub(crate) fn glb_with(image: &[u8], material: &str, root: &str) -> Vec<u8> {
+        glb_with_pbr(image, material, "", root)
+    }
+
+    /// [`glb_with`], with more of `pbrMetallicRoughness` after its texture.
+    pub(crate) fn glb_with_pbr(image: &[u8], material: &str, pbr: &str, root: &str) -> Vec<u8> {
         let mut bin = Vec::new();
         for v in [[0.0f32, 0.0, 0.0], [100.0, 0.0, 0.0], [0.0, 100.0, 0.0]] {
             bin.extend(v.iter().flat_map(|c| c.to_le_bytes()));
@@ -831,7 +871,7 @@ mod memory_tests {
         let json = format!(
             r#"{{"asset":{{"version":"2.0"}},{root}"scene":0,"scenes":[{{"nodes":[0]}}],"nodes":[{{"mesh":0,"name":"assento"}}],
             "meshes":[{{"primitives":[{{"attributes":{{"POSITION":0,"TEXCOORD_0":1}},"material":0}}]}}],
-            "materials":[{{"name":"tecido",{material}"pbrMetallicRoughness":{{"baseColorTexture":{{"index":0}}}}}}],
+            "materials":[{{"name":"tecido",{material}"pbrMetallicRoughness":{{"baseColorTexture":{{"index":0}}{pbr}}}}}],
             "textures":[{{"source":0}}],"images":[{{"bufferView":2,"mimeType":"image/png"}}],
             "buffers":[{{"byteLength":{len}}}],
             "bufferViews":[{{"buffer":0,"byteLength":36}},{{"buffer":0,"byteOffset":36,"byteLength":24}},{{"buffer":0,"byteOffset":{image_at},"byteLength":{image_len}}}],
@@ -1007,12 +1047,14 @@ mod memory_tests {
             assert!(maps.iter().any(|w| w.contains(said)), "{said}: {maps:?}");
         }
 
-        let pbr = load_model(&dir.join("pbr.glb")).unwrap().report;
+        let pbr = load_model(&dir.join("pbr.glb")).unwrap();
+        // The mask is drawn now: a cutoff, not a warning.
+        assert_eq!(pbr.mesh.materials[0].cutoff, Some(0.5));
+        let pbr = pbr.report;
         assert_eq!(pbr.meshes, 1);
         for said in [
             "extension KHR_materials_transmission is not supported",
             "normal map of material tecido is not drawn",
-            "alpha mask (drawn opaque) of material tecido is not drawn",
         ] {
             assert!(
                 pbr.warnings.iter().any(|w| w.contains(said)),
@@ -1104,6 +1146,72 @@ mod memory_tests {
                 .any(|w| w.contains("glTF numbers are meters")),
             "{glb:?}"
         );
+        newera_core::vfs::unmount(dir);
+    }
+
+    #[test]
+    fn an_image_whose_alpha_cuts_holes_is_a_mask() {
+        let dir = Path::new("/virtual/catalog-mask-test");
+        newera_core::vfs::mount(
+            dir,
+            [
+                (
+                    "cane.obj".to_owned(),
+                    b"mtllib cane.mtl\nusemtl palha\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n".to_vec(),
+                ),
+                (
+                    "cane.mtl".to_owned(),
+                    b"newmtl palha\nmap_Kd palha.png\nmap_d palha.png\n".to_vec(),
+                ),
+                ("palha.png".to_owned(), b"png".to_vec()),
+                (
+                    "cane.glb".to_owned(),
+                    glb_with(
+                        b"png",
+                        r#""alphaMode":"MASK","alphaCutoff":0.3,"doubleSided":true,"#,
+                        "",
+                    ),
+                ),
+            ],
+        );
+        let obj = load_model(&dir.join("cane.obj")).unwrap();
+        let m = &obj.mesh.materials[0];
+        assert_eq!((m.cutoff, m.double_sided), (Some(0.5), true));
+        assert!(obj.report.warnings.is_empty(), "{:?}", obj.report.warnings);
+        let glb = load_model(&dir.join("cane.glb")).unwrap();
+        let m = &glb.mesh.materials[0];
+        assert_eq!((m.cutoff, m.double_sided), (Some(0.3), true));
+        newera_core::vfs::unmount(dir);
+    }
+
+    #[test]
+    fn a_mask_counts_the_color_factor_alpha_against_its_cutoff() {
+        let dir = Path::new("/virtual/catalog-mask-factor-test");
+        let with_factor = |a: f32| {
+            glb_with_pbr(
+                b"png",
+                r#""alphaMode":"MASK","alphaCutoff":0.3,"#,
+                &format!(r#","baseColorFactor":[1,1,1,{a}]"#),
+                "",
+            )
+        };
+        newera_core::vfs::mount(
+            dir,
+            [
+                ("half.glb".to_owned(), with_factor(0.6)),
+                ("faint.glb".to_owned(), with_factor(0.2)),
+            ],
+        );
+        // Image alpha × 0.6 under 0.3: the image's own alpha under 0.5.
+        let half = &load_model(&dir.join("half.glb")).unwrap().mesh.materials[0];
+        assert!(
+            half.cutoff.is_some_and(|c| (c - 0.5).abs() < 1e-6),
+            "{half:?}"
+        );
+        assert!((half.alpha - 1.0).abs() < 1e-6, "{half:?}");
+        // 0.2 is under 0.3 whatever the image: not drawn.
+        let faint = &load_model(&dir.join("faint.glb")).unwrap().mesh.materials[0];
+        assert_eq!((faint.cutoff, faint.alpha), (None, 0.0), "{faint:?}");
         newera_core::vfs::unmount(dir);
     }
 

@@ -47,6 +47,11 @@ pub struct MeshMaterial {
     /// Image file for the diffuse color, absolute or relative to the model.
     pub texture: Option<std::path::PathBuf>,
     pub shininess: f32,
+    /// Alpha mask: where the image's alpha is under this, the surface has a
+    /// hole (a cane weave, leaves). `None` draws the image opaque.
+    pub cutoff: Option<f32>,
+    /// Seen from both sides: a masked weave is a single sheet.
+    pub double_sided: bool,
 }
 
 /// Window and door glass of the procedural models.

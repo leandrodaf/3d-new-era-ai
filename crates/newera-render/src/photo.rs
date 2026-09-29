@@ -229,6 +229,23 @@ impl Scene<'_> {
         self.nodes = nodes;
     }
 
+    /// Whether triangle `k` has a hole at barycentric `(u, v)`: a masked
+    /// image whose alpha there is under the cutoff lets rays through.
+    fn hole(&self, k: usize, u: f32, v: f32) -> bool {
+        let tri = self.tris[k];
+        let va = &self.mesh.vertices[tri[0] as usize];
+        if crate::mesh::kind_cutoff(va.kind).is_none() {
+            return false;
+        }
+        let [vb, vc] = [tri[1], tri[2]].map(|i| &self.mesh.vertices[i as usize]);
+        let w = 1.0 - u - v;
+        let uv = [
+            va.uv[0] * w + vb.uv[0] * u + vc.uv[0] * v,
+            va.uv[1] * w + vb.uv[1] * u + vc.uv[1] * v,
+        ];
+        self.images.cut(va.kind, uv)
+    }
+
     /// Nearest hit: `(t, triangle, u, v)`.
     fn intersect(&self, origin: Vec3, dir: Vec3, max_t: f32) -> Option<(f32, usize, f32, f32)> {
         if self.nodes.is_empty() {
@@ -257,6 +274,7 @@ impl Scene<'_> {
                         self.corner(t[2]),
                     ) && d > 1e-4
                         && d < best.map_or(max_t, |b| b.0)
+                        && !self.hole(k as usize, u, v)
                     {
                         best = Some((d, k as usize, u, v));
                     }
@@ -1060,5 +1078,54 @@ mod tests {
         assert!((hit.0 - 1.0).abs() < 1e-5);
         assert!(triangle_hit(Vec3::new(0.2, 0.2, -1.0), Vec3::Z, a, b, c).is_some());
         assert!(triangle_hit(Vec3::new(2.0, 2.0, 1.0), -Vec3::Z, a, b, c).is_none());
+    }
+
+    #[test]
+    fn a_ray_passes_through_the_holes_of_a_masked_image_and_stops_at_its_strands() {
+        // A 2 × 2 sheet at z = 0 whose image is clear on its left half.
+        let kind = crate::mesh::masked(crate::mesh::IMAGE_BASE, 0.5);
+        let corner = |x: f32, y: f32| crate::mesh::Vertex {
+            position: [x, y, 0.0],
+            normal: [0.0, 0.0, 1.0],
+            color: [1.0; 4],
+            uv: [x / 2.0, y / 2.0],
+            kind,
+        };
+        let mesh = Mesh {
+            vertices: vec![
+                corner(0.0, 0.0),
+                corner(2.0, 0.0),
+                corner(2.0, 2.0),
+                corner(0.0, 2.0),
+            ],
+            ..Mesh::default()
+        };
+        let mut image = RgbaImage::from_pixel(2, 1, Rgba([200, 180, 120, 255]));
+        image.put_pixel(0, 0, Rgba([200, 180, 120, 0]));
+        let mut scene = Scene {
+            mesh: &mesh,
+            tris: vec![[0, 1, 2], [0, 2, 3]],
+            transparent: vec![false; 2],
+            nodes: Vec::new(),
+            images: Images {
+                loaded: vec![Some(image)],
+                _source: std::marker::PhantomData,
+            },
+        };
+        scene.build();
+        let down = Vec3::new(0.0, 0.0, -1.0);
+        assert!(
+            scene
+                .intersect(Vec3::new(0.5, 1.0, 5.0), down, 100.0)
+                .is_none()
+        );
+        assert!(
+            scene
+                .intersect(Vec3::new(1.5, 1.0, 5.0), down, 100.0)
+                .is_some()
+        );
+        // Light too: sun through the holes, shade under the strands.
+        assert!((scene.transmittance(Vec3::new(0.5, 1.0, -1.0), -down, 10.0) - 1.0).abs() < 1e-6);
+        assert!(scene.transmittance(Vec3::new(1.5, 1.0, -1.0), -down, 10.0) < 1e-6);
     }
 }

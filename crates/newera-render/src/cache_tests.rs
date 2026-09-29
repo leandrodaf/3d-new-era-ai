@@ -421,3 +421,79 @@ fn a_hidden_part_is_not_drawn_and_the_rest_keeps_its_place() {
         "fitted before hiding"
     );
 }
+
+#[test]
+fn a_masked_weave_shows_what_is_under_its_holes() {
+    let assets = Assets::new();
+    // Clear on its left half: the holes of the weave.
+    let mut pixels = image::RgbaImage::from_pixel(8, 8, image::Rgba([200, 170, 110, 255]));
+    for x in 0..4 {
+        for y in 0..8 {
+            pixels.put_pixel(x, y, image::Rgba([200, 170, 110, 0]));
+        }
+    }
+    let mut png = std::io::Cursor::new(Vec::new());
+    pixels.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    assets.mount("palha.png", &png.into_inner());
+    assets.mount(
+        "test.obj",
+        b"mtllib test.mtl\nv -1 0 -1\nv 1 0 -1\nv 1 0 1\nv -1 0 1\nvt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nusemtl palha\nf 1/1 4/4 3/3\nf 1/1 3/3 2/2\n",
+    );
+    let drawn = |mtl: &[u8]| {
+        assets.mount("test.mtl", mtl);
+        let views = TopViews::new(
+            assets.0.join(format!("png{}", mtl.len())),
+            Some(assets.0.clone()),
+            true,
+        );
+        let top = image::open(views.image_for(&Assets::piece()).unwrap())
+            .unwrap()
+            .to_rgba8();
+        top.pixels().filter(|p| p[3] > 0).count()
+    };
+    let solid = drawn(b"newmtl palha\nmap_Kd palha.png\n");
+    let masked = drawn(b"newmtl palha\nmap_Kd palha.png\nmap_d palha.png\n");
+    assert!(solid > 0);
+    #[allow(clippy::cast_precision_loss)]
+    let share = masked as f64 / solid as f64;
+    assert!((0.35..0.65).contains(&share), "{masked} of {solid} drawn");
+}
+
+#[test]
+fn a_masked_weave_is_seen_from_both_sides_and_exported_as_a_mask() {
+    let assets = Assets::new();
+    let pixels = image::RgbaImage::from_pixel(2, 2, image::Rgba([200, 170, 110, 0]));
+    let mut png = std::io::Cursor::new(Vec::new());
+    pixels.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    assets.mount("palha.png", &png.into_inner());
+    assets.mount(
+        "test.obj",
+        b"mtllib test.mtl\nv -1 0 -1\nv 1 0 -1\nv 1 0 1\nvt 0 0\nvt 1 0\nvt 1 1\nusemtl palha\nf 1/1 3/3 2/2\n",
+    );
+    assets.mount(
+        "test.mtl",
+        b"newmtl palha\nmap_Kd palha.png\nmap_d palha.png\n",
+    );
+    let mut home = newera_core::Home::default();
+    home.furniture.push(Assets::piece());
+    let cache = ModelCache::default();
+    let models = |piece: &Furniture| cache.piece_model(piece, Some(&assets.0));
+    let mesh = crate::Mesh::from_home(&home, &crate::Selection::new(), &models);
+    let masked: Vec<_> = mesh
+        .vertices
+        .iter()
+        .filter(|v| crate::mesh::kind_cutoff(v.kind).is_some())
+        .collect();
+    // One triangle, and its back facing the other way.
+    assert_eq!(masked.len(), 6);
+    assert!((masked[0].normal[1] + masked[3].normal[1]).abs() < 1e-6);
+    let out = assets.0.join("export");
+    std::fs::create_dir_all(&out).unwrap();
+    crate::export_home(&home, &out.join("sala.glb"), Some(&assets.0)).unwrap();
+    let back = newera_catalog::load_model(&out.join("sala.glb")).unwrap();
+    assert!(
+        back.mesh.materials.iter().any(|m| m.cutoff.is_some()),
+        "{:?}",
+        back.mesh.materials
+    );
+}

@@ -4,7 +4,7 @@
 use glam::{Mat4, Vec3, Vec4};
 use image::{Rgba, RgbaImage};
 
-use crate::mesh::{IMAGE_BASE, Mesh, Vertex};
+use crate::mesh::{IMAGE_BASE, Mesh, Vertex, kind_cutoff, kind_layer};
 use crate::patterns;
 
 /// Everything a software render needs besides the mesh.
@@ -91,6 +91,33 @@ pub(crate) struct Images<'a> {
 }
 
 impl Images<'_> {
+    /// Alpha of the image at `(u, v)` (nearest texel, repeating), 1 where
+    /// there is no image.
+    pub(crate) fn alpha(&self, layer: usize, u: f32, v: f32) -> f32 {
+        let Some(Some(image)) = self.loaded.get(layer) else {
+            return 1.0;
+        };
+        let (w, h) = (image.width().max(1), image.height().max(1));
+        #[allow(
+            clippy::cast_precision_loss,
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss
+        )]
+        let (x, y) = (
+            (((u - u.floor()) * w as f32) as u32).min(w - 1),
+            (((v - v.floor()) * h as f32) as u32).min(h - 1),
+        );
+        f32::from(image.get_pixel(x, y)[3]) / 255.0
+    }
+
+    /// Whether an image kind has a hole at `uv` (its alpha under the cutoff).
+    pub(crate) fn cut(&self, kind: u32, uv: [f32; 2]) -> bool {
+        kind_cutoff(kind).is_some_and(|cutoff| {
+            kind_layer(kind) >= IMAGE_BASE
+                && self.alpha((kind_layer(kind) - IMAGE_BASE) as usize, uv[0], -uv[1]) < cutoff
+        })
+    }
+
     pub(crate) fn sample(&self, layer: usize, u: f32, v: f32) -> Vec3 {
         let Some(Some(image)) = self.loaded.get(layer) else {
             return Vec3::splat(0.7);
@@ -134,6 +161,7 @@ pub(crate) fn albedo(
 /// What a texture image or pattern contributes on top of the flat color
 /// (white when there is none).
 pub(crate) fn detail(kind: u32, uv: [f32; 2], pixel: f32, images: &Images<'_>) -> Vec3 {
+    let kind = kind_layer(kind);
     if kind >= IMAGE_BASE {
         images.sample((kind - IMAGE_BASE) as usize, uv[0], -uv[1])
     } else if kind > 0 {
@@ -237,6 +265,10 @@ fn raster_triangle(
             }
             let p = perspective(b);
             let uv = uv_at(p);
+            // A hole in a masked image: neither drawn nor hiding what is behind.
+            if images.cut(kind, uv) {
+                continue;
+            }
             let pixel = if kind > 0 && kind < IMAGE_BASE {
                 let next = uv_at(perspective(weights(sx + 1.0, sy)));
                 (next[0] - uv[0]).hypot(next[1] - uv[1])

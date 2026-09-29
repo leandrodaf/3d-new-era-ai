@@ -17,20 +17,24 @@ struct Look {
     image: Option<usize>,
     color: [f32; 3],
     alpha: f32,
+    /// Alpha mask cutoff of the image, when it cuts holes.
+    cutoff: Option<f32>,
 }
 
-type LookKey = (Option<usize>, [u32; 4]);
+type LookKey = (Option<usize>, [u32; 4], Option<u32>);
 
 /// Encoded bytes and file extension of an image layer.
 pub type ImageSource<'a> = &'a dyn Fn(&str) -> Option<(Vec<u8>, String)>;
 
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn key(v: &Vertex) -> LookKey {
-    let image = (v.kind >= IMAGE_BASE).then(|| (v.kind - IMAGE_BASE) as usize);
+    let layer = crate::mesh::kind_layer(v.kind);
+    let image = (layer >= IMAGE_BASE).then(|| (layer - IMAGE_BASE) as usize);
     let q = |c: f32| (c.clamp(0.0, 1.0) * 255.0).round() as u32;
     (
         image,
         [q(v.color[0]), q(v.color[1]), q(v.color[2]), q(v.color[3])],
+        crate::mesh::kind_cutoff(v.kind).map(q),
     )
 }
 
@@ -55,6 +59,7 @@ fn look(key: &LookKey) -> Look {
         image: key.0,
         color: [key.1[0], key.1[1], key.1[2]].map(|c| c as f32 / 255.0),
         alpha: key.1[3] as f32 / 255.0,
+        cutoff: key.2.map(|c| c as f32 / 255.0),
     }
 }
 
@@ -185,8 +190,11 @@ pub fn glb(mesh: &Mesh, images: ImageSource<'_>) -> Vec<u8> {
             let _ = write!(material, r#","baseColorTexture":{{"index":{t}}}"#);
         }
         material.push('}');
+        // One mode: a see-through color blends, the image's alpha included.
         if l.alpha < 0.99 {
             material.push_str(r#","alphaMode":"BLEND","doubleSided":true"#);
+        } else if let (Some(cutoff), Some(_)) = (l.cutoff, texture) {
+            let _ = write!(material, r#","alphaMode":"MASK","alphaCutoff":{cutoff}"#);
         }
         material.push('}');
         materials.push(material);
@@ -235,6 +243,21 @@ pub fn glb(mesh: &Mesh, images: ImageSource<'_>) -> Vec<u8> {
     out
 }
 
+/// An image whose alpha is only clear (under `cutoff`) or solid, as PNG.
+fn cut_at(bytes: &[u8], cutoff: f32) -> Option<Vec<u8>> {
+    let mut image = image::load_from_memory(bytes).ok()?.to_rgba8();
+    for p in image.pixels_mut() {
+        p[3] = if f32::from(p[3]) / 255.0 < cutoff {
+            0
+        } else {
+            255
+        };
+    }
+    let mut png = std::io::Cursor::new(Vec::new());
+    image.write_to(&mut png, image::ImageFormat::Png).ok()?;
+    Some(png.into_inner())
+}
+
 /// OBJ + MTL (named like `path`), textures copied beside them.
 fn obj(mesh: &Mesh, path: &Path, images: ImageSource<'_>) -> Result<(), ExportError> {
     let stem = path
@@ -257,7 +280,7 @@ fn obj(mesh: &Mesh, path: &Path, images: ImageSource<'_>) -> Result<(), ExportEr
     for v in &mesh.vertices {
         let _ = writeln!(obj, "vt {} {}", v.uv[0], v.uv[1]);
     }
-    let mut written_images: BTreeMap<usize, Option<String>> = BTreeMap::new();
+    let mut written_images: BTreeMap<(usize, Option<u32>), Option<String>> = BTreeMap::new();
     for (n, (k, indices)) in groups(mesh).into_iter().enumerate() {
         let l = look(&k);
         let name = format!("m{n}");
@@ -267,14 +290,26 @@ fn obj(mesh: &Mesh, path: &Path, images: ImageSource<'_>) -> Result<(), ExportEr
             l.color[0], l.color[1], l.color[2], l.alpha
         );
         if let Some(layer) = l.image {
-            let file = written_images.entry(layer).or_insert_with(|| {
+            let file = written_images.entry((layer, k.2)).or_insert_with(|| {
                 let (bytes, ext) = images(mesh.images.get(layer)?)?;
-                let file = format!("{stem}_tex{layer}.{ext}");
+                // MTL has no cutoff and is read back at half: the image's
+                // alpha is cut at this one beforehand.
+                let (bytes, file) = match l.cutoff {
+                    Some(cutoff) => (
+                        cut_at(&bytes, cutoff)?,
+                        format!("{stem}_tex{layer}_cut{}.png", k.2.unwrap_or_default()),
+                    ),
+                    None => (bytes, format!("{stem}_tex{layer}.{ext}")),
+                };
                 std::fs::write(dir.join(&file), bytes).ok()?;
                 Some(file)
             });
             if let Some(file) = file {
                 let _ = writeln!(mtl, "map_Kd {file}");
+                // Its own alpha cuts the holes, as the importer reads it back.
+                if l.cutoff.is_some() {
+                    let _ = writeln!(mtl, "map_d {file}");
+                }
             }
         }
         let _ = writeln!(obj, "usemtl {name}");
@@ -341,6 +376,68 @@ mod tests {
             export_mesh(&mesh, &dir.join("casa.fbx"), &|_| None),
             Err(ExportError::Format(_))
         ));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// One textured triangle cut at `cutoff`, `alpha` opaque, and its image:
+    /// a single texel at alpha 0.4.
+    fn masked_triangle(cutoff: f32, alpha: f32) -> (Mesh, Vec<u8>) {
+        let kind = crate::mesh::masked(crate::mesh::IMAGE_BASE, cutoff);
+        let vertex = |position: [f32; 3], uv: [f32; 2]| Vertex {
+            position,
+            normal: [0.0, 1.0, 0.0],
+            color: [1.0, 1.0, 1.0, alpha],
+            uv,
+            kind,
+        };
+        let mesh = Mesh {
+            vertices: vec![
+                vertex([0.0, 0.0, 0.0], [0.0, 0.0]),
+                vertex([1.0, 0.0, 0.0], [1.0, 0.0]),
+                vertex([0.0, 0.0, 1.0], [0.0, 1.0]),
+            ],
+            indices: vec![0, 1, 2],
+            transparent: vec![],
+            images: vec!["palha.png".into()],
+        };
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::RgbaImage::from_pixel(1, 1, image::Rgba([200, 170, 110, 102]))
+            .write_to(&mut png, image::ImageFormat::Png)
+            .unwrap();
+        (mesh, png.into_inner())
+    }
+
+    #[test]
+    fn a_masked_see_through_material_has_one_alpha_mode() {
+        let (mesh, png) = masked_triangle(0.3, 0.5);
+        let glb = glb(&mesh, &|_| Some((png.clone(), "png".into())));
+        let json_len = u32::from_le_bytes(glb[12..16].try_into().unwrap()) as usize;
+        let json = std::str::from_utf8(&glb[20..20 + json_len]).unwrap();
+        assert_eq!(json.matches("alphaMode").count(), 1, "{json}");
+        assert!(json.contains(r#""alphaMode":"BLEND""#), "{json}");
+    }
+
+    #[test]
+    fn a_mask_keeps_its_cutoff_through_obj() {
+        // Alpha 0.4 over a 0.3 cutoff is solid; MTL is read back at 0.5.
+        let (mesh, png) = masked_triangle(0.3, 1.0);
+        let dir = std::env::temp_dir().join(format!("newera-export-cut-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        export_mesh(&mesh, &dir.join("cadeira.obj"), &|_| {
+            Some((png.clone(), "png".into()))
+        })
+        .unwrap();
+        let mtl = std::fs::read_to_string(dir.join("cadeira.mtl")).unwrap();
+        let file = mtl
+            .lines()
+            .find_map(|l| l.strip_prefix("map_d "))
+            .unwrap()
+            .to_owned();
+        assert!(mtl.contains(&format!("map_Kd {file}")), "{mtl}");
+        let texel = image::open(dir.join(&file)).unwrap().to_rgba8();
+        assert_eq!(texel.get_pixel(0, 0)[3], 255);
+        let back = newera_catalog::load_model(&dir.join("cadeira.obj")).unwrap();
+        assert_eq!(back.mesh.materials[0].cutoff, Some(0.5));
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
