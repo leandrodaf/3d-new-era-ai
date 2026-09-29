@@ -135,11 +135,44 @@ pub(crate) struct Render3dParams {
 struct Deadline {
     inner: Option<Arc<dyn newera_core::progress::Watcher>>,
     until: std::time::Instant,
+    /// What stopped the render first: [`RUNNING`], [`LATE`] or [`STOPPED`].
+    stop: std::sync::atomic::AtomicU8,
 }
 
+const RUNNING: u8 = 0;
+/// `max_s` ran out.
+const LATE: u8 = 1;
+/// Cancelled from outside (cancel=true, the client gone).
+const STOPPED: u8 = 2;
+
 impl Deadline {
-    fn passed(&self) -> bool {
-        std::time::Instant::now() >= self.until
+    fn new(
+        inner: Option<Arc<dyn newera_core::progress::Watcher>>,
+        until: std::time::Instant,
+    ) -> Self {
+        Self {
+            inner,
+            until,
+            stop: std::sync::atomic::AtomicU8::new(RUNNING),
+        }
+    }
+
+    /// Why the render stopped, decided once, at the first check that saw it.
+    fn stopped(&self) -> u8 {
+        use std::sync::atomic::Ordering;
+        let now = if self.inner.as_ref().is_some_and(|w| w.cancelled()) {
+            STOPPED
+        } else if std::time::Instant::now() >= self.until {
+            LATE
+        } else {
+            RUNNING
+        };
+        if now != RUNNING {
+            let _ = self
+                .stop
+                .compare_exchange(RUNNING, now, Ordering::SeqCst, Ordering::SeqCst);
+        }
+        self.stop.load(Ordering::SeqCst)
     }
 }
 
@@ -150,7 +183,7 @@ impl newera_core::progress::Watcher for Deadline {
         }
     }
     fn cancelled(&self) -> bool {
-        self.passed() || self.inner.as_ref().is_some_and(|w| w.cancelled())
+        self.stopped() != RUNNING
     }
 }
 
@@ -355,6 +388,19 @@ impl NewEraMcp {
         let isolated;
         let mut photo: Option<String> = None;
         let (home, framed) = match &p.piece {
+            // The piece frames its own shot, alone with no walls: a camera, an
+            // angle, a section or lowered walls would be dropped without a word.
+            Some(_)
+                if p.cam.is_some()
+                    || p.cut.is_some()
+                    || p.yaw.is_some()
+                    || p.pitch.is_some()
+                    || matches!(p.walls.as_deref(), Some("cutaway" | "down")) =>
+            {
+                return Err(invalid(
+                    "piece draws it alone, framed on its own: leave cam, cut, yaw, pitch and walls out",
+                ));
+            }
             Some(raw) => {
                 let id: newera_core::FurnitureId =
                     raw.parse().map_err(|e| invalid(format!("piece: {e}")))?;
@@ -462,24 +508,7 @@ impl NewEraMcp {
                 .and_then(|b| newera_core::images::decode(&b).map_err(|e| e.to_string()))
                 .map_err(|e| invalid(format!("{file}: {e}")))?
                 .to_rgba8();
-            #[allow(
-                clippy::cast_possible_truncation,
-                clippy::cast_sign_loss,
-                clippy::cast_precision_loss
-            )]
-            let width = ((reference.width() as f32 * h as f32 / reference.height().max(1) as f32)
-                .round() as u32)
-                .clamp(1, 1600);
-            let left = image::imageops::resize(
-                &reference,
-                width,
-                h,
-                image::imageops::FilterType::Triangle,
-            );
-            let mut both = image::RgbaImage::from_pixel(width + w, h, image::Rgba([255; 4]));
-            image::imageops::overlay(&mut both, &left, 0, 0);
-            image::imageops::overlay(&mut both, &image, i64::from(width), 0);
-            image = both;
+            image = side_by_side(&reference, &image);
         }
         let mut png = Vec::new();
         image::DynamicImage::ImageRgba8(image)
@@ -579,21 +608,28 @@ impl NewEraMcp {
                 newera_render::photo_home(&home, &view, time, w, h, assets.as_deref(), quality)
             })
         };
-        let image = match p.max_s {
+        // A deadline too far to be counted is none.
+        let until = p.max_s.and_then(|seconds| {
+            let span = std::time::Duration::try_from_secs_f64(seconds).ok()?;
+            Some((seconds, std::time::Instant::now().checked_add(span)?))
+        });
+        let image = match until {
             None => render(),
-            Some(seconds) => {
-                let deadline = Arc::new(Deadline {
-                    inner: newera_core::progress::listener(),
-                    until: std::time::Instant::now() + std::time::Duration::from_secs_f64(seconds),
-                });
+            Some((seconds, until)) => {
+                let deadline = Arc::new(Deadline::new(newera_core::progress::listener(), until));
                 let watcher: Arc<dyn newera_core::progress::Watcher> = deadline.clone();
                 let image = newera_core::progress::watched(&watcher, render);
-                if deadline.passed() {
-                    return Err(invalid(format!(
-                        "stopped after max_s={seconds} s; nothing in the project changed (estimate=true says what it takes; draft, fewer pixels or threads cost less)"
-                    )));
+                // Only what the render itself saw: one that finished in time
+                // is not refused by a late look at the clock.
+                match deadline.stop.load(std::sync::atomic::Ordering::SeqCst) {
+                    LATE => {
+                        return Err(invalid(format!(
+                            "stopped after max_s={seconds} s; nothing in the project changed (estimate=true says what it takes; draft, fewer pixels or threads cost less)"
+                        )));
+                    }
+                    STOPPED => return Err(invalid(newera_core::progress::CANCELLED)),
+                    _ => image,
                 }
-                image
             }
         };
         let mut png = Vec::new();
@@ -662,8 +698,61 @@ impl NewEraMcp {
     }
 }
 
+/// The product photo at the render's height, at most 1600 px wide and in
+/// its own proportions (a very wide one is shorter, centered), then the render.
+fn side_by_side(photo: &image::RgbaImage, render: &image::RgbaImage) -> image::RgbaImage {
+    let (w, h) = render.dimensions();
+    let (pw, ph) = (photo.width().max(1), photo.height().max(1));
+    let scale = (f64::from(h) / f64::from(ph)).min(1600.0 / f64::from(pw));
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let size = |v: u32| ((f64::from(v) * scale).round() as u32).max(1);
+    let (width, height) = (size(pw), size(ph).min(h));
+    let left = image::imageops::resize(photo, width, height, image::imageops::FilterType::Triangle);
+    let mut both = image::RgbaImage::from_pixel(width + w, h, image::Rgba([255; 4]));
+    image::imageops::overlay(&mut both, &left, 0, i64::from((h - height) / 2));
+    image::imageops::overlay(&mut both, render, i64::from(width), 0);
+    both
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_render_stopped_from_outside_is_cancelled_not_late() {
+        use super::{Deadline, LATE, RUNNING, STOPPED};
+        use std::sync::Arc;
+        struct Cancelled;
+        impl newera_core::progress::Watcher for Cancelled {
+            fn step(&self, _: &str, _: u64, _: u64) {}
+            fn cancelled(&self) -> bool {
+                true
+            }
+        }
+        let later = std::time::Instant::now() + std::time::Duration::from_secs(3600);
+        let outside = Deadline::new(Some(Arc::new(Cancelled)), later);
+        assert_eq!(outside.stopped(), STOPPED);
+        let late = Deadline::new(None, std::time::Instant::now());
+        assert_eq!(late.stopped(), LATE);
+        // Decided at the first look that saw it, not later.
+        let running = Deadline::new(None, later);
+        assert_eq!(
+            running.stop.load(std::sync::atomic::Ordering::SeqCst),
+            RUNNING
+        );
+    }
+    #[test]
+    fn a_very_wide_photo_keeps_its_proportions_beside_the_render() {
+        let photo = image::RgbaImage::from_pixel(4000, 100, image::Rgba([200, 30, 30, 255]));
+        let render = image::RgbaImage::from_pixel(96, 72, image::Rgba([0, 0, 0, 255]));
+        let both = side_by_side(&photo, &render);
+        // 1600 wide at most, so 40 tall, centered in the render's 72.
+        assert_eq!(both.dimensions(), (1600 + 96, 72));
+        assert_eq!(both.get_pixel(800, 2).0, [255; 4]);
+        assert_eq!(both.get_pixel(800, 36).0, [200, 30, 30, 255]);
+        // An ordinary one is as tall as the render.
+        let photo = image::RgbaImage::from_pixel(200, 100, image::Rgba([200, 30, 30, 255]));
+        assert_eq!(side_by_side(&photo, &render).dimensions(), (144 + 96, 72));
+    }
+
     use super::*;
     use crate::edit::CreateParams;
     use crate::tools::server;
@@ -790,6 +879,21 @@ mod tests {
             ))
             .is_err()
         );
+        // The piece frames its own shot: a camera or a section is refused.
+        for extra in [
+            r#""cam":0"#,
+            r#""cut":100"#,
+            r#""yaw":30"#,
+            r#""pitch":10"#,
+            r#""walls":"down""#,
+        ] {
+            let refused = s
+                .render_3d(Parameters(
+                    serde_json::from_str(&format!(r#"{{"piece":"{id}",{extra}}}"#)).unwrap(),
+                ))
+                .unwrap_err();
+            assert!(refused.message.contains("leave cam, cut"), "{refused:?}");
+        }
         std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]
@@ -830,6 +934,8 @@ mod tests {
             late.message.contains("stopped after max_s=0.05"),
             "{late:?}"
         );
+        // A deadline too far to count is no deadline, not a crash.
+        photo(r#"{"quality":"draft","w":64,"h":64,"threads":1,"max_s":1e300}"#).unwrap();
         // cancel=true acts on whatever render runs in this process, so it is
         // tried where one is known to run (native_job's tests).
     }
