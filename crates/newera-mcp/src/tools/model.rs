@@ -937,6 +937,10 @@ mod tests {
             ))
             .unwrap_err();
         assert!(beam.message.contains("for model="), "{beam:?}");
+        // With the file gone, the same path repeats a piece: its unit stays that piece's.
+        std::fs::remove_file(dir.join("puxador.obj")).unwrap();
+        let repeated = place(r#","unit":"m""#).unwrap_err();
+        assert!(repeated.message.contains("this repeats f1"), "{repeated:?}");
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
