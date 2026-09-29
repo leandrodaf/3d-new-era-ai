@@ -579,12 +579,17 @@ impl NewEraMcp {
                 newera_render::photo_home(&home, &view, time, w, h, assets.as_deref(), quality)
             })
         };
-        let image = match p.max_s {
+        // A deadline too far to be counted is none.
+        let until = p.max_s.and_then(|seconds| {
+            let span = std::time::Duration::try_from_secs_f64(seconds).ok()?;
+            Some((seconds, std::time::Instant::now().checked_add(span)?))
+        });
+        let image = match until {
             None => render(),
-            Some(seconds) => {
+            Some((seconds, until)) => {
                 let deadline = Arc::new(Deadline {
                     inner: newera_core::progress::listener(),
-                    until: std::time::Instant::now() + std::time::Duration::from_secs_f64(seconds),
+                    until,
                 });
                 let watcher: Arc<dyn newera_core::progress::Watcher> = deadline.clone();
                 let image = newera_core::progress::watched(&watcher, render);
@@ -830,6 +835,8 @@ mod tests {
             late.message.contains("stopped after max_s=0.05"),
             "{late:?}"
         );
+        // A deadline too far to count is no deadline, not a crash.
+        photo(r#"{"quality":"draft","w":64,"h":64,"threads":1,"max_s":1e300}"#).unwrap();
         // cancel=true acts on whatever render runs in this process, so it is
         // tried where one is known to run (native_job's tests).
     }

@@ -65,6 +65,7 @@ struct Unregister;
 impl Drop for Unregister {
     fn drop(&mut self) {
         running().take();
+        THREADS.store(0, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -173,7 +174,9 @@ async fn supervise(
         state: Mutex::new(State::default()),
     });
     let listener: Arc<dyn newera_core::progress::Watcher> = watcher.clone();
-    let _unregister = tool.map(|tool| {
+    // Listed until the worker itself stops: a cancelled or abandoned call
+    // returns early, and the render still holds its slot until then.
+    let unregister = tool.map(|tool| {
         *running() = Some(Running {
             tool,
             started: std::time::Instant::now(),
@@ -183,6 +186,7 @@ async fn supervise(
         Unregister
     });
     let mut worker = tokio::task::spawn_blocking(move || {
+        let _unregister = unregister;
         if listener.cancelled() {
             return Err(invalid(newera_core::progress::CANCELLED));
         }
@@ -436,7 +440,14 @@ mod tests {
         .await
         .expect("worker must stop after its client cancels/disconnects/fails ping");
         if mode == "stop" {
-            assert!(status().is_none(), "a finished render is no longer listed");
+            // `stopped` is set inside the worker, just before it returns.
+            tokio::time::timeout(Duration::from_secs(1), async {
+                while status().is_some() {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .expect("a finished render is no longer listed");
             assert!(!cancel_running());
         }
     }
