@@ -319,6 +319,19 @@ impl NewEraMcp {
         let isolated;
         let mut photo: Option<String> = None;
         let (home, framed) = match &p.piece {
+            // The piece frames its own shot, alone with no walls: a camera, an
+            // angle, a section or lowered walls would be dropped without a word.
+            Some(_)
+                if p.cam.is_some()
+                    || p.cut.is_some()
+                    || p.yaw.is_some()
+                    || p.pitch.is_some()
+                    || matches!(p.walls.as_deref(), Some("cutaway" | "down")) =>
+            {
+                return Err(invalid(
+                    "piece draws it alone, framed on its own: leave cam, cut, yaw, pitch and walls out",
+                ));
+            }
             Some(raw) => {
                 let id: newera_core::FurnitureId =
                     raw.parse().map_err(|e| invalid(format!("piece: {e}")))?;
@@ -711,6 +724,21 @@ mod tests {
             ))
             .is_err()
         );
+        // The piece frames its own shot: a camera or a section is refused.
+        for extra in [
+            r#""cam":0"#,
+            r#""cut":100"#,
+            r#""yaw":30"#,
+            r#""pitch":10"#,
+            r#""walls":"down""#,
+        ] {
+            let refused = s
+                .render_3d(Parameters(
+                    serde_json::from_str(&format!(r#"{{"piece":"{id}",{extra}}}"#)).unwrap(),
+                ))
+                .unwrap_err();
+            assert!(refused.message.contains("leave cam, cut"), "{refused:?}");
+        }
         std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]
