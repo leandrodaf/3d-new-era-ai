@@ -488,6 +488,10 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
                 ),
                 ("images", int("Images its materials use")),
                 ("uv", flag("Whether it has texture coordinates")),
+                (
+                    "parts",
+                    list("[name, triangles, min [x,y,z], max, materials] cm of the piece"),
+                ),
                 ("warnings", strings("What is not drawn as the file says")),
                 ("piece", object("With id: {id, size cm, scale per axis}")),
             ],

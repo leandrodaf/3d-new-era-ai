@@ -3842,7 +3842,7 @@
       "readOnlyHint": true,
       "title": "Inspect an imported model"
     },
-    "description": "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken for its numbers and its natural size, triangles, its materials with their images, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, alpha masks, extensions). For a piece that looks wrong after place model=…, instead of reading the file. Reply {file, format, unit, raw (file units), size cm, tris, materials [[name, color, image, tris]], images, uv, warnings}; with id also piece {size, scale per axis}. place model=… imports one.",
+    "description": "Inspect an imported 3D model, a piece's (id) or a file before placing it: the unit taken for its numbers and its natural size, triangles, its materials with their images, its named parts (OBJ objects and groups, glTF nodes: arms, seat, frame) with their bounds and materials, and warnings for what is not drawn as the file says (a texture or material library not found, normal and roughness maps, alpha masks, extensions). For a piece that looks wrong after place model=…, instead of reading the file. part=<words> keeps the parts named so. Reply {file, format, unit, raw (file units), size cm, tris, materials [[name, color, image, tris]], images, uv, parts [[name, tris, min, max, materials]] in cm of the piece (x across, y to the front, z up), warnings}; with id also piece {size, scale per axis}. place model=… imports one.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -3852,6 +3852,10 @@
         },
         "id": {
           "description": "A piece that uses an imported model, e.g. `f12`",
+          "type": "string"
+        },
+        "part": {
+          "description": "Only the parts whose name has these words (`braco`), all of them",
           "type": "string"
         }
       },
@@ -3874,6 +3878,9 @@
         },
         "meshes": {
           "type": "integer"
+        },
+        "parts": {
+          "type": "array"
         },
         "piece": {
           "type": "object"

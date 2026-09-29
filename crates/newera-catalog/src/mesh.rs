@@ -22,6 +22,19 @@ pub struct Mesh {
     /// mesh only has vertex colors.
     pub vertex_materials: Vec<u16>,
     pub materials: Vec<MeshMaterial>,
+    /// Named pieces of an imported model (OBJ objects and groups, glTF
+    /// nodes), in the order of their triangles; empty for built meshes.
+    pub parts: Vec<MeshPart>,
+}
+
+/// A named piece of an imported model: triangles `start..start + count`,
+/// that is `indices[start * 3..(start + count) * 3]`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MeshPart {
+    /// The file's name for it, made unique with `#2`, `#3`… when repeated.
+    pub name: String,
+    pub start: usize,
+    pub count: usize,
 }
 
 /// Surface of an imported model.
@@ -240,6 +253,15 @@ impl Mesh {
             );
         }
         let base = self.next();
+        let triangles = self.indices.len() / 3;
+        for p in &other.parts {
+            let name = self.unique_part_name(&p.name);
+            self.parts.push(MeshPart {
+                name,
+                start: p.start + triangles,
+                count: p.count,
+            });
+        }
         let had_extra = !self.uvs.is_empty() || !self.vertex_materials.is_empty();
         let has_extra = !other.uvs.is_empty() || !other.vertex_materials.is_empty();
         if had_extra || has_extra {
@@ -304,6 +326,49 @@ impl Mesh {
         }
     }
 
+    /// Where a part starting now begins: the next triangle. [`Self::end_part`]
+    /// names what was added since.
+    pub fn begin_part(&self) -> usize {
+        self.indices.len() / 3
+    }
+
+    /// Records the triangles added since `start` as a part, when there are any.
+    pub fn end_part(&mut self, name: &str, start: usize) {
+        let count = self.indices.len() / 3 - start;
+        if count == 0 {
+            return;
+        }
+        let name = self.unique_part_name(name);
+        self.parts.push(MeshPart { name, start, count });
+    }
+
+    /// `name`, or `name#2`, `name#3`… when a part already has it.
+    fn unique_part_name(&self, name: &str) -> String {
+        let taken = |n: &str| self.parts.iter().any(|p| p.name == n);
+        let mut unique = name.to_owned();
+        let mut k = 2;
+        while taken(&unique) {
+            unique = format!("{name}#{k}");
+            k += 1;
+        }
+        unique
+    }
+
+    /// Bounds of the triangles of a part, `(min, max)` in cm.
+    pub fn part_bounds(&self, part: &MeshPart) -> Option<(V3, V3)> {
+        let from = part.start * 3;
+        let to = (part.start + part.count) * 3;
+        self.indices.get(from..to)?.iter().fold(None, |acc, &i| {
+            let p = *self.positions.get(i as usize)?;
+            let (mut min, mut max) = acc.unwrap_or((p, p));
+            for k in 0..3 {
+                min[k] = min[k].min(p[k]);
+                max[k] = max[k].max(p[k]);
+            }
+            Some((min, max))
+        })
+    }
+
     /// Axis-aligned bounds `(min, max)` in cm.
     pub fn bounds(&self) -> Option<(V3, V3)> {
         self.positions.iter().fold(None, |acc, p| {
@@ -361,6 +426,20 @@ pub(crate) mod tests {
         assert!(body.finishable[..count].iter().all(|v| *v));
         assert!(body.finishable[count..count * 2].iter().all(|v| !*v));
         assert!(body.finishable[count * 2..].iter().all(|v| *v));
+    }
+
+    #[test]
+    fn combining_meshes_keeps_part_names_unique() {
+        let mut seat = Mesh::default();
+        let start = seat.begin_part();
+        seat.cuboid([0.0; 3], [1.0; 3], [0.5; 3]);
+        seat.end_part("leg", start);
+        let mut chair = seat.clone();
+        chair.append(&seat);
+        chair.append(&seat);
+        let names: Vec<&str> = chair.parts.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["leg", "leg#2", "leg#3"]);
+        assert_eq!(chair.parts[2].start, 24);
     }
 
     pub(crate) fn assert_outward(mesh: &Mesh) {

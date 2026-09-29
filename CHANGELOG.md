@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- An imported model keeps its named parts — OBJ objects and groups, glTF nodes — and `model`
+  lists them: `[name, triangles, min, max, materials]`, in cm of the piece (x across, y to the
+  front, z up), with `part=<words>` to keep only some (`braco`). A repeated name gets `#2`. The
+  names come from the file, so they are the same after saving and reopening. The chair was one
+  lump: telling the left arm from the right, or the seat cushion from the back, meant opening
+  the file in another program.
+
 - `edit_model` `action=replace` puts a new version of a model file in placed pieces in one undo
   step, keeping each piece's id, position, angle, storey, size (`size=natural` takes the file's),
   finish, material overrides, names and links; `every=true` does it for every piece on the same

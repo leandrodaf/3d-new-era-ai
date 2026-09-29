@@ -2175,6 +2175,7 @@ mod material_tests {
                 texture: None,
                 shininess: 0.0,
             }],
+            parts: vec![],
         };
         let mut piece = Furniture {
             width: 100.0,
