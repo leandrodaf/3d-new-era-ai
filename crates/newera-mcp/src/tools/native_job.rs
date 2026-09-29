@@ -141,7 +141,7 @@ pub(super) async fn run(
         Some(
             newera_core::progress::heavy("render_photo").map_err(|holder| {
                 invalid(format!(
-                    "{holder} is running, and heavy work runs one at a time; wait for it"
+                    "{holder} is running, and heavy work runs one at a time; wait for it (a plugin is not in `sessions` and cancel=true does not stop it: it ends by itself or at its timeout_s)"
                 ))
             })?,
         )

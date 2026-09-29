@@ -277,12 +277,31 @@ pub fn run(
         );
     }
     let threads = limits.threads();
-    if let Some(t) = threads {
+    // Pinned to CPUs this process may use: in a container or under an
+    // inherited mask they need not start at 0.
+    let cpus = threads.map(|t| {
+        let allowed = std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|s| {
+                s.lines()
+                    .find_map(|l| l.strip_prefix("Cpus_allowed_list:"))
+                    .map(|a| a.trim().to_owned())
+            });
+        (t, allowed.and_then(|a| cpu_list(&a, t)))
+    });
+    if let Some((t, Some(list))) = &cpus {
         wrap(
             "taskset",
-            vec!["-c".into(), format!("0-{}", t - 1)],
+            vec!["-c".into(), list.clone()],
             format!("threads {t}"),
         );
+    }
+    if let Some((t, None)) = cpus
+        && linux
+    {
+        not_applied.push(format!(
+            "threads {t}: the CPUs this process may use are unknown"
+        ));
     }
     chain.push(program);
     let mut chain = chain.into_iter();
@@ -487,8 +506,36 @@ pub fn run_for_document(
     }))
 }
 
+/// The first `t` CPUs of an allowed list like `0-3,8-11`, as `taskset -c`
+/// takes them (`0,1,2,3,8,9`); all of them when there are fewer.
+fn cpu_list(allowed: &str, t: usize) -> Option<String> {
+    let mut cpus = Vec::new();
+    for range in allowed.split(',').map(str::trim).filter(|r| !r.is_empty()) {
+        let (a, b) = range.split_once('-').unwrap_or((range, range));
+        let (a, b): (usize, usize) = (a.trim().parse().ok()?, b.trim().parse().ok()?);
+        cpus.extend(a..=b);
+    }
+    cpus.truncate(t);
+    (!cpus.is_empty()).then(|| {
+        cpus.iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn threads_are_pinned_to_cpus_the_process_may_use() {
+        use super::cpu_list;
+        assert_eq!(cpu_list("2-5", 2).as_deref(), Some("2,3"));
+        assert_eq!(cpu_list("0-3,8-11", 6).as_deref(), Some("0,1,2,3,8,9"));
+        assert_eq!(cpu_list("7", 4).as_deref(), Some("7"));
+        assert_eq!(cpu_list("", 2), None);
+        assert_eq!(cpu_list("x-y", 2), None);
+    }
+
     use super::*;
 
     fn temp_dir(name: &str) -> PathBuf {
