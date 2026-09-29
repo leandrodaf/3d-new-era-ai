@@ -259,8 +259,8 @@ run it without asking, and asks before each change.
 | `lighting` / `edit_lighting` | Lux per room by photometry against NBR ISO/CIE 8995-1; place the fixtures a room needs |
 | `electrical` / `plumbing` | Electrical and plumbing projects over the plan, changed through `edit_electrical` / `edit_plumbing` |
 | `measure` | Free floor around a piece, the gap between two, what a straight probe runs into, how far a piece can grow |
-| `model` | What an imported OBJ/glTF/GLB became: unit taken, size, triangles, materials and images, and what is not drawn |
-| `edit_model` | Swap the file of placed pieces for a new version in one undo step, keeping ids, size, finishes and links |
+| `model` | What an imported OBJ/glTF/GLB became: unit taken, size, triangles, materials, named parts, and what is not drawn; `check=clashes` finds parts passing through one another |
+| `edit_model` | Swap the file of placed pieces in one undo step (keeping ids, size, finishes and links), change a material or a part by name, or give a lighter file for distant views |
 | `accept` | Mark findings of any review as seen, with the reason |
 | `rules` | What a review checks against: the standards' tables, what each layout problem means, how ergonomics scores |
 | `materials` / `disciplines` / `annotations` | Finishes, visible projects and layers, dimension chains and schedules; `stale` finds notes that no longer match the drawing |

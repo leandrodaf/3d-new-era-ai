@@ -357,10 +357,8 @@ pub(crate) struct SceneView {
     /// What the GPU mesh was built from.
     built_for: Option<BuiltFor>,
     framed_once: bool,
-    /// Imported models by resolved path; `None` when a file failed to load.
-    models: std::cell::RefCell<
-        std::collections::HashMap<std::path::PathBuf, Option<newera_catalog::Mesh>>,
-    >,
+    /// Imported models, reloaded when a file or its companions change.
+    models: newera_render::ModelCache,
 }
 
 impl std::fmt::Debug for SceneView {
@@ -382,7 +380,7 @@ impl SceneView {
             walls: Walls::Up,
             built_for: None,
             framed_once: false,
-            models: std::cell::RefCell::default(),
+            models: newera_render::ModelCache::default(),
         }
     }
 
@@ -492,34 +490,11 @@ impl SceneView {
             far,
         );
         if self.built_for.as_ref() != Some(&key) {
-            let load = |file: &str| {
-                let path = newera_core::resolve_asset(project, file);
-                let mut cache = self.models.borrow_mut();
-                cache
-                    .entry(path.clone())
-                    .or_insert_with(|| match newera_catalog::load_model(&path) {
-                        Ok(model) => Some(model.mesh),
-                        Err(err) => {
-                            tracing::warn!("cannot load model {}: {err}", path.display());
-                            None
-                        }
-                    })
-                    .clone()
-            };
+            // The same cache as photos: a file replaced under the same path
+            // (edit_model replace or lod) is read again, not kept.
             let models = |piece: &newera_core::Furniture| {
-                let own = piece.model.as_deref()?;
-                // A lighter file that cannot be read leaves the piece drawn
-                // in full, never missing from afar.
-                let mut mesh = piece
-                    .model_far
-                    .as_ref()
-                    .and_then(|far| far.file_at(Some(distance(piece))))
-                    .and_then(load)
-                    .or_else(|| load(own))?;
-                mesh.rotate(piece.model_transform.rotation);
-                mesh.fit_to(piece.width, piece.depth, piece.height);
-                mesh.edit_parts(&piece.model_parts, true);
-                Some(mesh)
+                self.models
+                    .piece_model_seen(piece, project, Some(distance(piece)))
             };
             let mesh = Mesh::from_home_cut(home, selection, &models, key.2.as_ref());
             gpu.upload_images(rs, &mesh.images, project);

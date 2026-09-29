@@ -259,10 +259,14 @@ impl Mesh {
         }
         let base = self.next();
         let triangles = self.indices.len() / 3;
-        self.parts.extend(other.parts.iter().map(|p| MeshPart {
-            start: p.start + triangles,
-            ..p.clone()
-        }));
+        for p in &other.parts {
+            let name = self.unique_part_name(&p.name);
+            self.parts.push(MeshPart {
+                name,
+                start: p.start + triangles,
+                count: p.count,
+            });
+        }
         let had_extra = !self.uvs.is_empty() || !self.vertex_materials.is_empty();
         let has_extra = !other.uvs.is_empty() || !other.vertex_materials.is_empty();
         if had_extra || has_extra {
@@ -339,6 +343,12 @@ impl Mesh {
         if count == 0 {
             return;
         }
+        let name = self.unique_part_name(name);
+        self.parts.push(MeshPart { name, start, count });
+    }
+
+    /// `name`, or `name#2`, `name#3`… when a part already has it.
+    fn unique_part_name(&self, name: &str) -> String {
         let taken = |n: &str| self.parts.iter().any(|p| p.name == n);
         let mut unique = name.to_owned();
         let mut k = 2;
@@ -346,11 +356,7 @@ impl Mesh {
             unique = format!("{name}#{k}");
             k += 1;
         }
-        self.parts.push(MeshPart {
-            name: unique,
-            start,
-            count,
-        });
+        unique
     }
 
     /// Bounds of the triangles of a part, `(min, max)` in cm.
@@ -498,6 +504,20 @@ pub(crate) mod tests {
         assert!(body.finishable[..count].iter().all(|v| *v));
         assert!(body.finishable[count..count * 2].iter().all(|v| !*v));
         assert!(body.finishable[count * 2..].iter().all(|v| *v));
+    }
+
+    #[test]
+    fn combining_meshes_keeps_part_names_unique() {
+        let mut seat = Mesh::default();
+        let start = seat.begin_part();
+        seat.cuboid([0.0; 3], [1.0; 3], [0.5; 3]);
+        seat.end_part("leg", start);
+        let mut chair = seat.clone();
+        chair.append(&seat);
+        chair.append(&seat);
+        let names: Vec<&str> = chair.parts.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["leg", "leg#2", "leg#3"]);
+        assert_eq!(chair.parts[2].start, 24);
     }
 
     pub(crate) fn assert_outward(mesh: &Mesh) {
