@@ -315,6 +315,13 @@ impl NewEraMcp {
         drop(doc);
         let isolated;
         let (home, framed) = match &p.piece {
+            // The piece frames its own shot: a camera or a section would be
+            // dropped without a word.
+            Some(_) if p.cam.is_some() || p.cut.is_some() => {
+                return Err(invalid(
+                    "piece draws it alone, framed on its own: leave cam and cut out",
+                ));
+            }
             Some(raw) => {
                 let id: newera_core::FurnitureId =
                     raw.parse().map_err(|e| invalid(format!("piece: {e}")))?;
@@ -645,6 +652,18 @@ mod tests {
             ))
             .is_err()
         );
+        // The piece frames its own shot: a camera or a section is refused.
+        for extra in [r#""cam":0"#, r#""cut":100"#] {
+            let refused = s
+                .render_3d(Parameters(
+                    serde_json::from_str(&format!(r#"{{"piece":"{id}",{extra}}}"#)).unwrap(),
+                ))
+                .unwrap_err();
+            assert!(
+                refused.message.contains("leave cam and cut out"),
+                "{refused:?}"
+            );
+        }
         std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]
