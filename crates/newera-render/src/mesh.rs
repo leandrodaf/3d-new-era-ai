@@ -1309,7 +1309,7 @@ impl Mesh {
                     color = [1.0; 3];
                     kind = *layer;
                     uv = match planar {
-                        Some(size) => planar_uv(position, normal, *size),
+                        Some(size) => tiled(planar_uv(position, normal, *size), *repeat),
                         // The shader flips v, matching OBJ's bottom-up convention.
                         None => local
                             .uvs
@@ -2219,6 +2219,13 @@ mod material_tests {
         assert!((span - 4.0).abs() < 1e-3, "{us:?}");
         assert!(mesh.vertices.iter().all(|v| v.kind == IMAGE_BASE));
         assert_eq!(mesh.images, ["marble.png"]);
+        // Repeated twice, the same image is drawn at half the size: eight tiles.
+        piece.materials[0].repeat = Some(2.0);
+        let mesh = Mesh::piece_alone(&piece, &model);
+        let us: Vec<f32> = mesh.vertices.iter().map(|v| v.uv[0]).collect();
+        let span = us.iter().copied().fold(f32::MIN, f32::max)
+            - us.iter().copied().fold(f32::MAX, f32::min);
+        assert!((span - 8.0).abs() < 1e-3, "{us:?}");
     }
 
     #[test]
