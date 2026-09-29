@@ -457,6 +457,15 @@ impl NewEraMcp {
                 if let Some(r) = p.repeat {
                     m.repeat = ((r - 1.0).abs() > 1e-9).then_some(r);
                 }
+                // An override left with nothing to change is none at all.
+                if m.key.is_none()
+                    && m.color.is_none()
+                    && m.texture.is_none()
+                    && m.shininess.is_none()
+                    && m.repeat.is_none()
+                {
+                    piece.materials.remove(k);
+                }
             }
             commands.push(newera_core::Command::update(piece));
         }
@@ -1131,6 +1140,12 @@ mod tests {
         assert!(pattern.message.contains("an image"), "{pattern:?}");
         edit(r#"{"action":"material","ids":["f1"],"material":"tecido","clear":true}"#).unwrap();
         assert!(overrides().is_empty());
+        // Back to repeat 1 with nothing else set, no override stays behind.
+        edit(r#"{"action":"material","ids":["f1"],"material":"tecido","repeat":2}"#).unwrap();
+        edit(r#"{"action":"material","ids":["f1"],"material":"tecido","repeat":1}"#).unwrap();
+        assert!(overrides().is_empty(), "{:?}", overrides());
+        edit(r#"{"action":"material","ids":["f1"],"material":"tecido","repeat":1}"#).unwrap();
+        assert!(overrides().is_empty(), "{:?}", overrides());
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
