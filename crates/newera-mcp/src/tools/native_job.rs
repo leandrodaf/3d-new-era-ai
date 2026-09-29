@@ -13,6 +13,62 @@ use super::{NewEraMcp, reply::invalid};
 
 static RENDER: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 
+/// The render running now, for `sessions` to show and `cancel` to stop.
+struct Running {
+    tool: String,
+    started: std::time::Instant,
+    cancel: CancellationToken,
+    watcher: Arc<Watcher>,
+}
+
+static RUNNING: Mutex<Option<Running>> = Mutex::new(None);
+
+fn running() -> std::sync::MutexGuard<'static, Option<Running>> {
+    RUNNING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// What the render running now is doing: `{tool, seconds, phase, done,
+/// total, threads}`, or `None` when none is.
+pub(crate) fn status() -> Option<serde_json::Value> {
+    let guard = running();
+    let run = guard.as_ref()?;
+    let s = run
+        .watcher
+        .state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    Some(serde_json::json!({
+        "tool": run.tool,
+        "seconds": run.started.elapsed().as_secs(),
+        "phase": s.phase,
+        "done": s.done,
+        "total": s.total,
+        "threads": THREADS.load(std::sync::atomic::Ordering::Relaxed),
+    }))
+}
+
+/// Threads the running photo was given.
+pub(crate) static THREADS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Stops the render running now; whether there was one.
+pub(crate) fn cancel_running() -> bool {
+    running().as_ref().is_some_and(|run| {
+        run.cancel.cancel();
+        true
+    })
+}
+
+/// Forgets the running render when its supervisor ends, however it ends.
+struct Unregister;
+impl Drop for Unregister {
+    fn drop(&mut self) {
+        running().take();
+        THREADS.store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 #[derive(Default)]
 struct State {
     phase: String,
@@ -56,12 +112,34 @@ pub(super) async fn run(
     request: CallToolRequestParams,
     context: RequestContext<RoleServer>,
 ) -> Result<CallToolResponse, ErrorData> {
+    // `render_photo cancel=true` stops the render running, instead of queuing.
+    if request.name == "render_photo"
+        && request
+            .arguments
+            .as_ref()
+            .and_then(|a| a.get("cancel"))
+            .and_then(serde_json::Value::as_bool)
+            == Some(true)
+    {
+        let text = if cancel_running() {
+            "cancelled: the render running stops at its next row; nothing in the project changed"
+        } else {
+            "no render is running"
+        };
+        return Ok(CallToolResponse::Complete(
+            rmcp::model::CallToolResult::success(vec![rmcp::model::ContentBlock::text(text)]),
+        ));
+    }
     let permit = RENDER.try_acquire().map_err(|_| {
-        invalid("A render is already running; wait for it or cancel it before starting another.")
+        invalid(
+            "A render is already running (`sessions` shows how far it is); wait for it or stop it with render_photo cancel=true.",
+        )
     })?;
+    let tool = request.name.to_string();
     let handle = tokio::runtime::Handle::current();
     let work_context = context.clone();
     supervise(
+        Some(tool),
         context,
         Duration::from_secs(20),
         Duration::from_secs(10),
@@ -83,6 +161,7 @@ pub(super) async fn run(
 }
 
 async fn supervise(
+    tool: Option<String>,
     context: RequestContext<RoleServer>,
     heartbeat: Duration,
     response_timeout: Duration,
@@ -95,7 +174,19 @@ async fn supervise(
         state: Mutex::new(State::default()),
     });
     let listener: Arc<dyn newera_core::progress::Watcher> = watcher.clone();
+    // Listed until the worker itself stops: a cancelled or abandoned call
+    // returns early, and the render still holds its slot until then.
+    let unregister = tool.map(|tool| {
+        *running() = Some(Running {
+            tool,
+            started: std::time::Instant::now(),
+            cancel: cancel.clone(),
+            watcher: watcher.clone(),
+        });
+        Unregister
+    });
     let mut worker = tokio::task::spawn_blocking(move || {
+        let _unregister = unregister;
         if listener.cancelled() {
             return Err(invalid(newera_core::progress::CANCELLED));
         }
@@ -169,8 +260,9 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
     use tower::ServiceExt;
 
+    /// Stops when told; with a name, it is registered as the render running.
     #[derive(Clone)]
-    struct SlowServer(Arc<AtomicBool>);
+    struct SlowServer(Arc<AtomicBool>, Option<&'static str>);
     impl ServerHandler for SlowServer {
         async fn call_tool(
             &self,
@@ -179,6 +271,7 @@ mod tests {
         ) -> Result<CallToolResponse, ErrorData> {
             let stopped = self.0.clone();
             supervise(
+                self.1.map(str::to_owned),
                 context,
                 Duration::from_millis(50),
                 Duration::from_millis(400),
@@ -217,9 +310,9 @@ mod tests {
             .await
             .unwrap()
     }
-    async fn setup() -> (Router, String, Arc<AtomicBool>) {
+    async fn setup(name: Option<&'static str>) -> (Router, String, Arc<AtomicBool>) {
         let stopped = Arc::new(AtomicBool::new(false));
-        let server = SlowServer(stopped.clone());
+        let server = SlowServer(stopped.clone(), name);
         let mut sessions = LocalSessionManager::default();
         sessions.session_config.keep_alive = Some(Duration::from_secs(1));
         let service = StreamableHttpService::new(
@@ -248,7 +341,7 @@ mod tests {
         (router, session, stopped)
     }
     async fn exercise(mode: &str) {
-        let (router, session, stopped) = setup().await;
+        let (router, session, stopped) = setup((mode == "stop").then_some("render_photo")).await;
         let mut params = json!({"name":"slow"});
         if mode != "success" {
             params["_meta"] = json!({"progressToken":"progress"});
@@ -296,7 +389,14 @@ mod tests {
                             .as_str()
                             .is_some_and(|m| m.starts_with("Test render"))
                     {
-                        if mode == "cancel" {
+                        if mode == "stop" {
+                            // Another call sees it running, and stops it.
+                            let running = status().expect("the render is registered");
+                            assert_eq!(running["tool"], "render_photo");
+                            assert_eq!(running["phase"], "Test render");
+                            assert!(cancel_running());
+                            interrupted = true;
+                        } else if mode == "cancel" {
                             post(&router, Some(&session), json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":2,"reason":"test"}})).await;
                             interrupted = true;
                         } else if mode == "disconnect" {
@@ -339,6 +439,21 @@ mod tests {
         })
         .await
         .expect("worker must stop after its client cancels/disconnects/fails ping");
+        if mode == "stop" {
+            // `stopped` is set inside the worker, just before it returns.
+            tokio::time::timeout(Duration::from_secs(1), async {
+                while status().is_some() {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .expect("a finished render is no longer listed");
+            assert!(!cancel_running());
+        }
+    }
+    #[tokio::test]
+    async fn a_running_render_is_listed_and_stopped_from_another_call() {
+        exercise("stop").await;
     }
     #[tokio::test]
     async fn http_long_job_survives_short_session_idle_limit_without_progress_token() {

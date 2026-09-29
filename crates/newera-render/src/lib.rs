@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 
 pub use camera::{Side, View};
 pub use mesh::{CUTAWAY_HEIGHT, Cutaway, IMAGE_BASE, Mesh, ModelSource, Selection, Vertex};
+pub use photo::{thread_budget, with_thread_cap};
 pub use raster::{RenderOptions, render};
 
 /// Top-view images of pieces for the plan, rendered once and cached as PNG
@@ -498,6 +499,61 @@ impl PhotoQuality {
             Self::Good => (48, 3),
             Self::Best => (192, 4),
         }
+    }
+}
+
+/// What a photo of the home would take, worked out without rendering it:
+/// the work (pixels, samples, bounces, primary rays), the scene (triangles,
+/// images) and memory estimated from their sizes. Time is not given — it
+/// depends on a processor and its temperature, which are not measured.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PhotoEstimate {
+    pub pixels: u64,
+    pub samples: u32,
+    pub bounces: u32,
+    /// Camera rays: pixels × samples (each bounces up to `bounces` times).
+    pub rays: u64,
+    pub triangles: u64,
+    pub images: u64,
+    /// Mesh, its ray-tracing tree, images (at 256×256) and the frame, bytes.
+    pub memory_bytes: u64,
+}
+
+/// [`PhotoEstimate`] for [`photo_home`] with the same arguments.
+#[must_use]
+pub fn photo_estimate(
+    home: &newera_core::Home,
+    view: &View,
+    width: u32,
+    height: u32,
+    assets: Option<&Path>,
+    quality: PhotoQuality,
+) -> PhotoEstimate {
+    let cache = ModelCache::default();
+    let models = |piece: &newera_core::Furniture| {
+        cache.piece_model_seen(piece, assets, Some(camera_distance(home, piece, view.eye)))
+    };
+    let mesh = Mesh::from_home(home, &Selection::new(), &models);
+    let (samples, bounces) = quality.budget();
+    let pixels = u64::from(width) * u64::from(height);
+    let triangles = ((mesh.indices.len() + mesh.transparent.len()) / 3) as u64;
+    let images = mesh.images.len() as u64;
+    let vertex = std::mem::size_of::<Vertex>() as u64;
+    let memory_bytes = mesh.vertices.len() as u64 * vertex
+        + (mesh.indices.len() + mesh.transparent.len()) as u64 * 4
+        // Triangle list, flags and tree nodes of the path tracer.
+        + triangles * (12 + 1 + 24)
+        + images * 256 * 256 * 4
+        // Color and surface per pixel.
+        + pixels * 48;
+    PhotoEstimate {
+        pixels,
+        samples,
+        bounces,
+        rays: pixels * u64::from(samples),
+        triangles,
+        images,
+        memory_bytes,
     }
 }
 

@@ -1,8 +1,10 @@
 //! Pictures and files: the plan, the 3D view, a photo, and the exports.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use base64::Engine as _;
+
 use newera_core::{Document, Point2};
 use newera_draw::{RenderOptions, SceneOptions, SvgOptions, plan_scene, render_png, to_svg};
 use rmcp::handler::server::wrapper::Parameters;
@@ -83,6 +85,16 @@ pub(crate) struct PhotoParams {
     w: Option<u32>,
     /// Height px (default 360, 64..1200).
     h: Option<u32>,
+    /// Threads it may use, under the budget (half the cores, at most 4).
+    threads: Option<usize>,
+    /// Seconds it may take; past them it stops, and nothing is returned.
+    max_s: Option<f64>,
+    /// Answer the budget and what the photo would take, without rendering.
+    #[serde(default)]
+    estimate: bool,
+    /// Stop the photo being rendered now (`sessions` shows it).
+    #[serde(default)]
+    cancel: bool,
 }
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub(crate) struct Render3dParams {
@@ -118,6 +130,63 @@ pub(crate) struct Render3dParams {
     #[serde(rename = "ref")]
     reference: Option<usize>,
 }
+/// Stops a photo past its `max_s`, passing progress and the caller's own
+/// cancellation on.
+struct Deadline {
+    inner: Option<Arc<dyn newera_core::progress::Watcher>>,
+    until: std::time::Instant,
+    /// What stopped the render first: [`RUNNING`], [`LATE`] or [`STOPPED`].
+    stop: std::sync::atomic::AtomicU8,
+}
+
+const RUNNING: u8 = 0;
+/// `max_s` ran out.
+const LATE: u8 = 1;
+/// Cancelled from outside (cancel=true, the client gone).
+const STOPPED: u8 = 2;
+
+impl Deadline {
+    fn new(
+        inner: Option<Arc<dyn newera_core::progress::Watcher>>,
+        until: std::time::Instant,
+    ) -> Self {
+        Self {
+            inner,
+            until,
+            stop: std::sync::atomic::AtomicU8::new(RUNNING),
+        }
+    }
+
+    /// Why the render stopped, decided once, at the first check that saw it.
+    fn stopped(&self) -> u8 {
+        use std::sync::atomic::Ordering;
+        let now = if self.inner.as_ref().is_some_and(|w| w.cancelled()) {
+            STOPPED
+        } else if std::time::Instant::now() >= self.until {
+            LATE
+        } else {
+            RUNNING
+        };
+        if now != RUNNING {
+            let _ = self
+                .stop
+                .compare_exchange(RUNNING, now, Ordering::SeqCst, Ordering::SeqCst);
+        }
+        self.stop.load(Ordering::SeqCst)
+    }
+}
+
+impl newera_core::progress::Watcher for Deadline {
+    fn step(&self, what: &str, done: u64, of: u64) {
+        if let Some(inner) = &self.inner {
+            inner.step(what, done, of);
+        }
+    }
+    fn cancelled(&self) -> bool {
+        self.stopped() != RUNNING
+    }
+}
+
 /// Plan options as the user sees them: backgrounds, and top views for
 /// imported models.
 #[cfg(not(target_arch = "wasm32"))]
@@ -452,12 +521,25 @@ impl NewEraMcp {
         )]))
     }
     #[tool(
-        description = "Realistic photo (path traced: sun from compass location and time, lamps, glass). cam=i stored view, or view=visitor/aerial (yaw,pitch). quality draft (~10 s) | good | best; hour = local solar time (e.g. 9, 15.5, 20); w/h small. Returns PNG."
+        description = "Realistic photo (path traced: sun from compass location and time, lamps, glass). cam=i stored view, or view=visitor/aerial (yaw,pitch). quality draft (~10 s) | good | best; hour = local solar time (e.g. 9, 15.5, 20); w/h small. Returns PNG. One runs at a time, on at most half the cores (4): threads lowers that, max_s stops it past a deadline, estimate=true answers the budget and the work (pixels, rays, triangles, memory) without rendering, cancel=true stops the one running (sessions shows it)."
     )]
     pub(crate) fn render_photo(
         &self,
         Parameters(p): Parameters<PhotoParams>,
     ) -> Result<CallToolResult, ErrorData> {
+        if p.cancel {
+            #[cfg(not(target_arch = "wasm32"))]
+            let stopped = super::native_job::cancel_running();
+            #[cfg(target_arch = "wasm32")]
+            let stopped = false;
+            return Ok(CallToolResult::success(vec![ContentBlock::text(
+                if stopped {
+                    "cancelled: the render running stops at its next row; nothing in the project changed"
+                } else {
+                    "no render is running"
+                },
+            )]));
+        }
         let (w, h) = (
             p.w.unwrap_or(480).clamp(64, 1600),
             p.h.unwrap_or(360).clamp(64, 1200),
@@ -499,7 +581,57 @@ impl NewEraMcp {
         let time = p.hour.map_or(time, |hour| {
             newera_render::at_local_hour(time, hour, home.compass.longitude.unwrap_or(-46.63))
         });
-        let image = newera_render::photo_home(&home, &view, time, w, h, assets.as_deref(), quality);
+        let budget = newera_render::thread_budget();
+        let threads = p.threads.unwrap_or(budget).clamp(1, budget);
+        if p.estimate {
+            let e = newera_render::photo_estimate(&home, &view, w, h, assets.as_deref(), quality);
+            let cores = std::thread::available_parallelism().map_or(0, std::num::NonZero::get);
+            #[allow(clippy::cast_precision_loss)]
+            let answer = serde_json::json!({
+                "budget": {"threads": threads, "of": budget, "cores": cores, "one_at_a_time": true},
+                "work": {"pixels": e.pixels, "samples": e.samples, "bounces": e.bounces, "rays": e.rays,
+                         "triangles": e.triangles, "images": e.images},
+                "memory_mb": (e.memory_bytes / 104_858) as f64 / 10.0,
+                "measured": "memory is estimated from the sizes; time, temperature and power are not measured here",
+            });
+            return Ok(CallToolResult::success(vec![ContentBlock::text(
+                answer.to_string(),
+            )]));
+        }
+        if p.max_s.is_some_and(|s| !(s.is_finite() && s > 0.0)) {
+            return Err(invalid("max_s: seconds above 0"));
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        super::native_job::THREADS.store(threads, std::sync::atomic::Ordering::Relaxed);
+        let render = || {
+            newera_render::with_thread_cap(threads, || {
+                newera_render::photo_home(&home, &view, time, w, h, assets.as_deref(), quality)
+            })
+        };
+        // A deadline too far to be counted is none.
+        let until = p.max_s.and_then(|seconds| {
+            let span = std::time::Duration::try_from_secs_f64(seconds).ok()?;
+            Some((seconds, std::time::Instant::now().checked_add(span)?))
+        });
+        let image = match until {
+            None => render(),
+            Some((seconds, until)) => {
+                let deadline = Arc::new(Deadline::new(newera_core::progress::listener(), until));
+                let watcher: Arc<dyn newera_core::progress::Watcher> = deadline.clone();
+                let image = newera_core::progress::watched(&watcher, render);
+                // Only what the render itself saw: one that finished in time
+                // is not refused by a late look at the clock.
+                match deadline.stop.load(std::sync::atomic::Ordering::SeqCst) {
+                    LATE => {
+                        return Err(invalid(format!(
+                            "stopped after max_s={seconds} s; nothing in the project changed (estimate=true says what it takes; draft, fewer pixels or threads cost less)"
+                        )));
+                    }
+                    STOPPED => return Err(invalid(newera_core::progress::CANCELLED)),
+                    _ => image,
+                }
+            }
+        };
         let mut png = Vec::new();
         image::DynamicImage::ImageRgba8(image)
             .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
@@ -584,6 +716,29 @@ fn side_by_side(photo: &image::RgbaImage, render: &image::RgbaImage) -> image::R
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_render_stopped_from_outside_is_cancelled_not_late() {
+        use super::{Deadline, LATE, RUNNING, STOPPED};
+        use std::sync::Arc;
+        struct Cancelled;
+        impl newera_core::progress::Watcher for Cancelled {
+            fn step(&self, _: &str, _: u64, _: u64) {}
+            fn cancelled(&self) -> bool {
+                true
+            }
+        }
+        let later = std::time::Instant::now() + std::time::Duration::from_secs(3600);
+        let outside = Deadline::new(Some(Arc::new(Cancelled)), later);
+        assert_eq!(outside.stopped(), STOPPED);
+        let late = Deadline::new(None, std::time::Instant::now());
+        assert_eq!(late.stopped(), LATE);
+        // Decided at the first look that saw it, not later.
+        let running = Deadline::new(None, later);
+        assert_eq!(
+            running.stop.load(std::sync::atomic::Ordering::SeqCst),
+            RUNNING
+        );
+    }
     #[test]
     fn a_very_wide_photo_keeps_its_proportions_beside_the_render() {
         let photo = image::RgbaImage::from_pixel(4000, 100, image::Rgba([200, 30, 30, 255]));
@@ -740,6 +895,49 @@ mod tests {
             assert!(refused.message.contains("leave cam, cut"), "{refused:?}");
         }
         std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn a_photo_says_its_budget_and_cost_first_and_stops_at_its_deadline() {
+        let s = server();
+        s.create(Parameters(
+            serde_json::from_str(
+                r#"{"walls":[{"pts":[[0,0],[400,0],[400,300],[0,300]],"closed":true}]}"#,
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let photo = |json: &str| s.render_photo(Parameters(serde_json::from_str(json).unwrap()));
+        let text = |result: CallToolResult| {
+            let ContentBlock::Text(t) = &result.content[0] else {
+                panic!("expected text")
+            };
+            t.text.clone()
+        };
+        let estimate: serde_json::Value = serde_json::from_str(&text(
+            photo(r#"{"estimate":true,"threads":1,"w":100,"h":80,"quality":"good"}"#).unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(estimate["budget"]["threads"], 1);
+        assert_eq!(estimate["work"]["pixels"], 8000);
+        assert_eq!(estimate["work"]["rays"], 8000 * 48);
+        assert!(estimate["work"]["triangles"].as_u64().unwrap() > 0);
+        assert!(estimate["memory_mb"].as_f64().unwrap() > 0.0);
+        assert!(
+            estimate["measured"]
+                .as_str()
+                .unwrap()
+                .contains("not measured")
+        );
+        let late =
+            photo(r#"{"quality":"best","w":400,"h":300,"threads":1,"max_s":0.05}"#).unwrap_err();
+        assert!(
+            late.message.contains("stopped after max_s=0.05"),
+            "{late:?}"
+        );
+        // A deadline too far to count is no deadline, not a crash.
+        photo(r#"{"quality":"draft","w":64,"h":64,"threads":1,"max_s":1e300}"#).unwrap();
+        // cancel=true acts on whatever render runs in this process, so it is
+        // tried where one is known to run (native_job's tests).
     }
     #[test]
     fn render_3d_returns_a_png() {

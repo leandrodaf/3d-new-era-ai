@@ -332,7 +332,7 @@ impl NewEraMcp {
         }
     }
     #[tool(
-        description = "People and agents on this project now: rows [id,name,cursor,selection,edits]."
+        description = "People and agents on this project now: rows [id,name,cursor,selection,edits]; render, while one runs: {tool, seconds, phase, done, total, threads} (render_photo cancel=true stops it)."
     )]
     pub(crate) fn sessions(&self) -> String {
         let mut doc = self.document.write();
@@ -354,7 +354,17 @@ impl NewEraMcp {
                 ])
             })
             .collect();
-        serde_json::json!({ "rev": doc.revision(), "rows": rows }).to_string()
+        let out = serde_json::json!({ "rev": doc.revision(), "rows": rows });
+        // A render running here, on the desktop (a tab renders on its own).
+        #[cfg(not(target_arch = "wasm32"))]
+        let out = {
+            let mut out = out;
+            if let Some(render) = super::native_job::status() {
+                out["render"] = render;
+            }
+            out
+        };
+        out.to_string()
     }
     #[tool(
         name = "variants",

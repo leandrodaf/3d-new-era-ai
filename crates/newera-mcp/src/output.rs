@@ -556,6 +556,10 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
                     "rows",
                     list("[id, name, cursor [x,y]|null, selection, edits]"),
                 ),
+                (
+                    "render",
+                    object("While one runs: {tool, seconds, phase, done, total, threads}"),
+                ),
             ],
             &["rev", "rows"],
         ),
@@ -765,7 +769,27 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
             fields.extend(cut_list_fields());
             shape(&fields, &[])
         }
-        "render_plan" | "render_3d" | "render_photo" => image(),
+        "render_plan" | "render_3d" => image(),
+        "render_photo" => shape(
+            &[
+                (
+                    "mimeType",
+                    text("Type of the image in the content (image/png)"),
+                ),
+                (
+                    "budget",
+                    object("estimate: {threads, of, cores, one_at_a_time}"),
+                ),
+                (
+                    "work",
+                    object("estimate: {pixels, samples, bounces, rays, triangles, images}"),
+                ),
+                ("memory_mb", num("estimate: memory it needs, estimated")),
+                ("measured", text("estimate: what is and is not measured")),
+                ("text", text("cancel: what was stopped")),
+            ],
+            &[],
+        ),
         "show_plan" => shape(
             &[
                 ("name", text("Project name")),
@@ -1209,6 +1233,7 @@ mod tests {
                 json!({"file": dir.join("box.obj"), "check": "clashes"}),
             ),
             ("sessions", json!({})),
+            ("render_photo", json!({"estimate": true, "threads": 1})),
             ("cameras", json!({})),
             ("edit_cameras", json!({"action": "store", "name": "A"})),
             ("video", json!({})),

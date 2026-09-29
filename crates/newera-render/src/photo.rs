@@ -830,7 +830,10 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
 /// Worker threads for a photo: `NEWERA_RENDER_THREADS` when set, otherwise
 /// half the cores. Every core flat out for minutes has tripped a desktop's
 /// power protection, and the machine stays usable while it renders.
-fn render_threads() -> usize {
+/// The threads a photo may use: half the cores, at most four, fewer when
+/// `NEWERA_RENDER_THREADS` says so.
+#[must_use]
+pub fn thread_budget() -> usize {
     let budget =
         (std::thread::available_parallelism().map_or(2, std::num::NonZero::get) / 2).clamp(1, 4);
     std::env::var("NEWERA_RENDER_THREADS")
@@ -838,6 +841,30 @@ fn render_threads() -> usize {
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(budget)
         .clamp(1, budget)
+}
+
+thread_local! {
+    static THREAD_CAP: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
+/// Runs `work` with the photos it renders on this thread using at most
+/// `threads` — never more than [`thread_budget`], whatever is asked.
+pub fn with_thread_cap<R>(threads: usize, work: impl FnOnce() -> R) -> R {
+    struct Restore(Option<usize>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            THREAD_CAP.with(|cap| cap.set(self.0));
+        }
+    }
+    let _restore = Restore(THREAD_CAP.with(|cap| cap.replace(Some(threads.max(1)))));
+    work()
+}
+
+fn render_threads() -> usize {
+    let budget = thread_budget();
+    THREAD_CAP
+        .with(std::cell::Cell::get)
+        .map_or(budget, |cap| cap.clamp(1, budget))
 }
 
 /// How far photos are pulled toward neutral (0 none, 1 full gray world):
@@ -1127,5 +1154,14 @@ mod tests {
         // Light too: sun through the holes, shade under the strands.
         assert!((scene.transmittance(Vec3::new(0.5, 1.0, -1.0), -down, 10.0) - 1.0).abs() < 1e-6);
         assert!(scene.transmittance(Vec3::new(1.5, 1.0, -1.0), -down, 10.0) < 1e-6);
+    }
+
+    #[test]
+    fn a_photo_uses_the_threads_it_is_given_and_never_more_than_the_budget() {
+        let budget = thread_budget();
+        assert!((1..=4).contains(&budget));
+        assert_eq!(with_thread_cap(1, render_threads), 1);
+        assert_eq!(with_thread_cap(64, render_threads), budget);
+        assert_eq!(render_threads(), budget, "the cap ends with its call");
     }
 }
