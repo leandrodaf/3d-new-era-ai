@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-10-01
+
 ### Added
 
 - Radiators in the catalog: `radiator-60`, `radiator-100` and `radiator-120` (panel, 10 cm deep,
@@ -1036,7 +1038,8 @@ MCP server, with everything below.
 - `scripts/mcp.sh` / `make mcp` to call MCP tools from the shell.
 - CI for formatting, clippy, tests on Linux/macOS/Windows, MCP smoke test, MSRV and cargo-deny; release builds.
 
-[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.10.0...v2.0.0
 [1.10.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v1.9.2...v1.10.0
