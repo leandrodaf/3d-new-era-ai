@@ -322,13 +322,24 @@ pub fn layer<S>() -> impl tracing_subscriber::Layer<S>
 where
     S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
 {
-    sentry::integrations::tracing::layer().event_filter(|meta| match *meta.level() {
-        tracing::Level::ERROR => sentry::integrations::tracing::EventFilter::Event,
-        tracing::Level::WARN | tracing::Level::INFO => {
-            sentry::integrations::tracing::EventFilter::Breadcrumb
+    sentry::integrations::tracing::layer().event_filter(|meta| filter(*meta.level(), meta.target()))
+}
+
+/// Where a log line goes: `error!` is a report, `warn!` and `info!` are
+/// breadcrumbs. The clipboard logs as an error a paste that finds nothing it
+/// can read (an empty clipboard, an image where text was asked), which is the
+/// user's clipboard and not a fault, so it stays a breadcrumb.
+#[cfg(not(target_arch = "wasm32"))]
+fn filter(level: tracing::Level, target: &str) -> sentry::integrations::tracing::EventFilter {
+    use sentry::integrations::tracing::EventFilter;
+    match level {
+        tracing::Level::ERROR if target.starts_with("egui_winit::clipboard") => {
+            EventFilter::Breadcrumb
         }
-        _ => sentry::integrations::tracing::EventFilter::Ignore,
-    })
+        tracing::Level::ERROR => EventFilter::Event,
+        tracing::Level::WARN | tracing::Level::INFO => EventFilter::Breadcrumb,
+        _ => EventFilter::Ignore,
+    }
 }
 
 /// A note about what could work better, from whoever is using the program —
@@ -478,6 +489,23 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         use_config_dir(dir.join("3d-new-era-ai"));
         dir
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn an_empty_clipboard_is_a_breadcrumb_not_a_report() {
+        use sentry::integrations::tracing::EventFilter;
+        use tracing::Level;
+        let goes = |level, target| filter(level, target).bits();
+        assert_eq!(
+            goes(Level::ERROR, "egui_winit::clipboard"),
+            EventFilter::Breadcrumb.bits()
+        );
+        assert_eq!(
+            goes(Level::ERROR, "eframe::native::run"),
+            EventFilter::Event.bits()
+        );
+        assert_eq!(goes(Level::DEBUG, "newera_app"), EventFilter::Ignore.bits());
     }
 
     #[test]

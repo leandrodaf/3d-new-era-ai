@@ -78,7 +78,7 @@ pub(crate) struct RoomSpec {
     pub room_use: Option<newera_core::RoomUse>,
     /// The room's name, e.g. `Sala` or `Banheiro`.
     pub name: String,
-    /// Floor polygon. Omit and give `at` to detect the room enclosed by walls.
+    /// Floor polygon; or omit and give `at`.
     pub pts: Option<Vec<Point2>>,
     /// A point inside a space enclosed by walls (auto-detects the polygon).
     pub at: Option<Point2>,
@@ -86,8 +86,7 @@ pub(crate) struct RoomSpec {
     pub floor_mat: Option<String>,
     /// Ceiling finish.
     pub ceil_mat: Option<String>,
-    /// Ceiling flat at storey height (true, default) or following the wall
-    /// profiles (false).
+    /// Flat ceiling at storey height (default) or following wall profiles (false).
     pub ceiling_flat: Option<bool>,
 }
 
@@ -173,11 +172,10 @@ pub(crate) struct CreateParams {
     /// Free lines: annotations, arrows, electrical or plumbing runs.
     #[serde(default)]
     pub polylines: Vec<PolylineSpec>,
-    /// Pitched roofs over a rectangle, built as one group of sloping panels.
+    /// Pitched roofs over a rectangle, as one group of panels.
     #[serde(default)]
     pub roofs: Vec<RoofSpec>,
-    /// Solids: plan outlines raised by `h` (slabs, decks) or cross-sections
-    /// swept from `a` to `b` (gables, ramps).
+    /// Solids: outlines raised by `h` (slabs) or sections swept `a`→`b` (gables, ramps).
     #[serde(default)]
     pub solids: Vec<SolidSpec>,
     /// Plan version (tab) to write to; switches to it first.
@@ -185,6 +183,9 @@ pub(crate) struct CreateParams {
     /// Points are background-image pixels; lengths stay in cm.
     #[serde(default)]
     pub px: bool,
+    /// Keep wall ends as given; no snap onto nearby walls.
+    #[serde(default)]
+    pub exact: bool,
 }
 
 impl CreateParams {
@@ -347,7 +348,7 @@ pub(crate) struct RoofSpec {
     pub kind: Option<String>,
     /// Slope in degrees (default 30), unless `ridge_h` is given.
     pub pitch: Option<f64>,
-    /// Height of the ridge (gable) or high side (shed) above the storey floor, cm.
+    /// Ridge (gable) or high side (shed) height above the floor, cm.
     pub ridge_h: Option<f64>,
     /// Eave height above the storey floor, cm (default 250).
     pub h: Option<f64>,
@@ -376,9 +377,12 @@ pub(crate) struct RoofSpec {
 /// holds together without the caller having to work out the face it should
 /// stop at. Ends further than [`newera_core::TOUCH_TOLERANCE`] from anything
 /// are left exactly where they were.
-fn weld(doc: &Document, walls: &mut [Wall]) {
+///
+/// Returns each end it moved, `w3.b→[x,y]` (`a` the start, `b` the end), so
+/// the caller is told its coordinates changed.
+fn weld(doc: &Document, walls: &mut [Wall]) -> Vec<String> {
     if walls.is_empty() {
-        return;
+        return Vec::new();
     }
     let home = doc.home();
     let mut all: Vec<Wall> = home
@@ -389,6 +393,7 @@ fn weld(doc: &Document, walls: &mut [Wall]) {
         .collect();
     all.extend(walls.iter().cloned());
     let ids: Vec<newera_core::WallId> = walls.iter().map(|w| w.id).collect();
+    let mut moved = Vec::new();
     for (id, at_start, to) in newera_core::weld_ends(&all, &ids) {
         if let Some(wall) = walls.iter_mut().find(|w| w.id == id) {
             if at_start {
@@ -396,12 +401,23 @@ fn weld(doc: &Document, walls: &mut [Wall]) {
             } else {
                 wall.end = to;
             }
+            let end = if at_start { 'a' } else { 'b' };
+            moved.push(format!("{id}.{end}→[{:.1},{:.1}]", to.x, to.y));
         }
     }
+    moved
 }
 
-/// Creates everything in one undoable step and returns the new ids in order.
-pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec<String>> {
+/// What [`create`] made: the new ids in order, and the wall ends it moved
+/// onto walls they nearly touched (see [`weld`]).
+#[derive(Debug, Default)]
+pub(crate) struct Created {
+    pub ids: Vec<String>,
+    pub welded: Vec<String>,
+}
+
+/// Creates everything in one undoable step.
+pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Created> {
     let mut commands = Vec::new();
     let mut ids = Vec::new();
     let mut new_walls = Vec::new();
@@ -451,7 +467,11 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
             new_walls.push(wall);
         }
     }
-    weld(doc, &mut new_walls);
+    let welded = if params.exact {
+        Vec::new()
+    } else {
+        weld(doc, &mut new_walls)
+    };
     commands.extend(new_walls.iter().cloned().map(Command::insert));
 
     // Dividers already on this storey plus the ones created now.
@@ -604,7 +624,7 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Vec
         return Err("nothing to create".into());
     }
     doc.execute(Command::Batch { commands }).map_err(core)?;
-    Ok(ids)
+    Ok(Created { ids, welded })
 }
 
 /// Fields to change; each applies only to the kinds that have it, and any
@@ -1125,7 +1145,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
         }
         commands.push(Command::Update { element: updated });
     }
-    weld(doc, &mut reshaped);
+    let _ = weld(doc, &mut reshaped);
     for wall in reshaped {
         if let Some(command) = commands
             .iter_mut()
@@ -1568,6 +1588,7 @@ mod tests {
             },
         )
         .unwrap()
+        .ids
     }
 
     #[test]
@@ -1600,7 +1621,8 @@ mod tests {
                 ..CreateParams::default()
             },
         )
-        .unwrap();
+        .unwrap()
+        .ids;
         assert_eq!(ids, ["w1", "w2", "w3", "w4", "r5", "t6"]);
         assert_eq!(doc.revision(), 1, "single undoable step");
         let room = &doc.home().rooms[0];
@@ -1629,6 +1651,45 @@ mod tests {
         .unwrap_err();
         assert!(err.contains("no space enclosed"));
         assert!(doc.home().walls.is_empty());
+    }
+
+    #[test]
+    fn measured_walls_stay_exact_and_welds_are_reported() {
+        let make = |exact: bool| {
+            let mut doc = Document::default();
+            let wall = |pts: [[f64; 2]; 2]| WallPath {
+                pts: pts.iter().map(|p| Point2::new(p[0], p[1])).collect(),
+                ..WallPath::default()
+            };
+            create(
+                &mut doc,
+                CreateParams {
+                    walls: vec![wall([[0.0, 0.0], [400.0, 0.0]])],
+                    ..CreateParams::default()
+                },
+            )
+            .unwrap();
+            // A stub that stops 3 cm short of the wall's face.
+            let created = create(
+                &mut doc,
+                CreateParams {
+                    walls: vec![wall([[200.0, 200.0], [200.0, 10.5]])],
+                    exact,
+                    ..CreateParams::default()
+                },
+            )
+            .unwrap();
+            (doc.home().walls[1].end, created.welded)
+        };
+
+        let (end, welded) = make(false);
+        assert!(end.y < 10.5, "a near end is pulled onto the wall");
+        assert_eq!(welded.len(), 1, "and the reply says so: {welded:?}");
+        assert!(welded[0].starts_with("w2.b→"), "{welded:?}");
+
+        let (end, welded) = make(true);
+        assert_eq!(end, Point2::new(200.0, 10.5), "exact keeps the point given");
+        assert!(welded.is_empty());
     }
 
     #[test]
@@ -1765,7 +1826,8 @@ mod tests {
                 ..CreateParams::default()
             },
         )
-        .unwrap();
+        .unwrap()
+        .ids;
         assert_eq!(ids, ["d5"]);
         assert!((doc.home().dimensions[0].length() - 400.0).abs() < 1e-9);
     }

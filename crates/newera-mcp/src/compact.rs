@@ -457,7 +457,11 @@ pub(crate) fn catalog(query: Option<&str>, category: Option<&str>, limit: usize)
     if items.len() > limit {
         out["more"] = json!(items.len() - limit);
     }
-    if query.is_none() && category.is_none() {
+    // An unknown category answers with the ones there are, not a bare empty
+    // list that reads as "nothing like that exists".
+    let unknown =
+        category.is_some_and(|c| !newera_catalog::Category::ALL.iter().any(|k| k.id() == c));
+    if (query.is_none() && category.is_none()) || unknown {
         out["categories"] = json!(
             newera_catalog::Category::ALL
                 .iter()
@@ -906,6 +910,19 @@ mod tests {
     use newera_core::WallId;
 
     use super::*;
+
+    #[test]
+    fn an_unknown_category_says_which_there_are() {
+        let out = catalog(None, Some("hvac"), 40);
+        assert_eq!(out["items"], json!([]));
+        assert!(
+            out["categories"]
+                .as_array()
+                .is_some_and(|c| c.contains(&json!("living")))
+        );
+        let known = catalog(None, Some("living"), 40);
+        assert!(known.get("categories").is_none(), "a known one stays lean");
+    }
 
     #[test]
     fn compact_light_preserves_the_rating_and_emitting_side() {

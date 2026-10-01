@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Radiators in the catalog: `radiator-60`, `radiator-100` and `radiator-120` (panel, 10 cm deep,
+  50 cm tall) and `convector-100`, hung 15 cm off the floor and found by `radiador`,
+  `radiator`, `aquecedor`, `heater`, `convector` or `hvac`. A radiator under a window had to be
+  drawn as a generic solid, with no place in counts.
+- `create exact=true` keeps every wall point where it was given. Otherwise wall ends that nearly
+  touch a wall are still pulled onto it, and the reply now lists each one it moved
+  (`welded=w14.a→[615.7,448.7]`). Walls traced from measured pixels came back with ends moved
+  and nothing saying so.
+
+### Fixed
+
+- The editor no longer closes at launch on older Intel Macs (macOS 12): wgpu's validation of
+  indirect draws builds a compute pipeline the Metal compiler there fails on, which lost the
+  device. Nothing draws indirectly, so the check is off (`WGPU_VALIDATION_INDIRECT_CALL=1` turns
+  it back on).
+- A wall meeting a stepped junction — the end of a wide pier beside its axis — no longer shares
+  that junction and gets a sloping long face in the plan.
+- `catalog cat=<unknown>` answers with the categories there are instead of an empty list.
+- A paste with nothing readable on the clipboard is no longer reported as an error.
+
 ## [3.0.0] - 2026-09-29
 
 ### Added

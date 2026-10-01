@@ -83,6 +83,10 @@ const FRONTS: &[(&str, Front)] = &[
     ("tv-stand", wall("doors", "back panel")),
     ("tv", wall("screen", "back")),
     ("bookcase", wall("shelves", "back panel")),
+    ("radiator-60", wall("panel", "back")),
+    ("radiator-100", wall("panel", "back")),
+    ("radiator-120", wall("panel", "back")),
+    ("convector-100", wall("grille", "back")),
     // Dining
     ("chair", free("seat", "backrest")),
     ("sideboard", wall("doors", "back panel")),

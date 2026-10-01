@@ -711,7 +711,7 @@
               "type": "array"
             },
             "ridge_h": {
-              "description": "Height of the ridge (gable) or high side (shed) above the storey floor, cm",
+              "description": "Ridge (gable) or high side (shed) height above the floor, cm",
               "type": "number"
             },
             "skylights": {
@@ -742,7 +742,7 @@
               "type": "string"
             },
             "ceiling_flat": {
-              "description": "Ceiling flat at storey height (true, default) or following the wall profiles (false)",
+              "description": "Flat ceiling at storey height (default) or following wall profiles (false)",
               "type": "boolean"
             },
             "floor_mat": {
@@ -754,7 +754,7 @@
               "type": "string"
             },
             "pts": {
-              "description": "Floor polygon. Omit and give `at` to detect the room enclosed by walls",
+              "description": "Floor polygon; or omit and give `at`",
               "items": {
                 "$ref": "#/$defs/Point2"
               },
@@ -921,6 +921,10 @@
           },
           "type": "array"
         },
+        "exact": {
+          "description": "Keep wall ends as given; no snap onto nearby walls",
+          "type": "boolean"
+        },
         "labels": {
           "description": "Text on the plan",
           "items": {
@@ -940,7 +944,7 @@
           "type": "boolean"
         },
         "roofs": {
-          "description": "Pitched roofs over a rectangle, built as one group of sloping panels",
+          "description": "Pitched roofs over a rectangle, as one group of panels",
           "items": {
             "$ref": "#/$defs/RoofSpec"
           },
@@ -954,7 +958,7 @@
           "type": "array"
         },
         "solids": {
-          "description": "Solids: plan outlines raised by `h` (slabs, decks) or cross-sections swept from `a` to `b` (gables, ramps)",
+          "description": "Solids: outlines raised by `h` (slabs) or sections swept `a`→`b` (gables, ramps)",
           "items": {
             "$ref": "#/$defs/SolidSpec"
           },

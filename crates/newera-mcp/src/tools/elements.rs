@@ -156,8 +156,13 @@ impl NewEraMcp {
             let bg = background_scale(&doc)?;
             p.map_points(&|q| bg.point(q));
         }
-        let ids = edit::create(&mut doc, p).map_err(invalid)?;
-        Ok(ok(&doc, &ids))
+        let created = edit::create(&mut doc, p).map_err(invalid)?;
+        let mut reply = ok(&doc, &created.ids);
+        if !created.welded.is_empty() {
+            reply.push_str(" welded=");
+            reply.push_str(&created.welded.join(","));
+        }
+        Ok(reply)
     }
     #[tool(
         description = "Change fields of elements by id; each field applies only to the kinds that have it (furniture mat/opacity/pitch, wall h_end, room auto/ceiling_flat, polyline divider). A part of a group takes name, brand, model_name and url on its own; its size and place belong to the group. anchor on a resize holds one face still instead of growing around the center; stretch=[part ids] on a group resize grows only those parts and moves the rest along (uprights keep 5.8 cm while the opening grows). dry=true answers what it would do without writing: changed fields, clearances around each piece it touches (negative: cm it would sit inside what it faces), issues_resolved/issues_new [{ids, kind, extent|cm|over}] with the kinds `layout` gives, and issues_changed (extent_was); dry=\"summary\" leaves out the parts a group rebuilds. Otherwise the reply names what changed. rename {pattern, to, what} renames in bulk by a regex (Rust syntax, `(?i)` for any case, `$1` in to) in one step; with dry it lists them first."

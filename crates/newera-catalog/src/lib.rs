@@ -531,6 +531,54 @@ pub static CATALOG: &[CatalogItem] = &[
         Model::Rug,
         "rug carpet tapete",
     ),
+    raised(
+        item(
+            "radiator-60",
+            "Radiador de painel 60×10×50",
+            C::Living,
+            [60.0, 10.0, 50.0],
+            WHITE,
+            Model::Box,
+            "radiador radiator aquecedor aquecimento calefacao heater heating hvac termo painel panel agua water hidronico",
+        ),
+        15.0,
+    ),
+    raised(
+        item(
+            "radiator-100",
+            "Radiador de painel 100×10×50",
+            C::Living,
+            [100.0, 10.0, 50.0],
+            WHITE,
+            Model::Box,
+            "radiador radiator aquecedor aquecimento calefacao heater heating hvac termo painel panel agua water hidronico",
+        ),
+        15.0,
+    ),
+    raised(
+        item(
+            "radiator-120",
+            "Radiador de painel 120×10×50",
+            C::Living,
+            [120.0, 10.0, 50.0],
+            WHITE,
+            Model::Box,
+            "radiador radiator aquecedor aquecimento calefacao heater heating hvac termo painel panel agua water hidronico",
+        ),
+        15.0,
+    ),
+    raised(
+        item(
+            "convector-100",
+            "Convector elétrico 100×10×45",
+            C::Living,
+            [100.0, 10.0, 45.0],
+            WHITE,
+            Model::Box,
+            "radiador radiator aquecedor aquecimento calefacao heater heating hvac termo convector convetor eletrico electric",
+        ),
+        15.0,
+    ),
     lit(
         item(
             "floor-lamp",
@@ -1957,6 +2005,29 @@ mod tests {
     use newera_core::{FurnitureId, Point2};
 
     use super::*;
+
+    #[test]
+    fn a_radiator_is_found_in_either_language() {
+        for q in [
+            "radiator",
+            "radiador",
+            "aquecedor",
+            "heater convector",
+            "hvac",
+        ] {
+            let first = search(q)[0];
+            assert!(
+                first.id.starts_with("radiator") || first.id.starts_with("convector"),
+                "{q} found {}",
+                first.id
+            );
+        }
+        let widths: Vec<f64> = ["radiator-60", "radiator-100", "radiator-120"]
+            .iter()
+            .map(|id| find(id).unwrap().size[0])
+            .collect();
+        assert_eq!(widths, [60.0, 100.0, 120.0]);
+    }
 
     #[test]
     fn a_resized_flight_keeps_its_steps_a_step_high() {

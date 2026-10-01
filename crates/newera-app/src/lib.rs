@@ -52,6 +52,7 @@ pub fn run(document: SharedDocument, options: AppOptions) -> eframe::Result {
     }
     let native = eframe::NativeOptions {
         viewport,
+        wgpu_options: wgpu_options(),
         ..Default::default()
     };
     eframe::run_native(
@@ -65,6 +66,26 @@ pub fn run(document: SharedDocument, options: AppOptions) -> eframe::Result {
             Ok(Box::new(app))
         }),
     )
+}
+
+/// The default wgpu setup, minus the validation of indirect draws.
+///
+/// wgpu builds a compute pipeline for that check when the device is created,
+/// and the Metal compiler of older Intel Macs (macOS 12) fails on it, which
+/// loses the device and closes the editor at launch. Nothing here draws
+/// indirectly, so the check guards nothing; `WGPU_VALIDATION_INDIRECT_CALL=1`
+/// still turns it back on.
+#[cfg(not(target_arch = "wasm32"))]
+fn wgpu_options() -> eframe::egui_wgpu::WgpuConfiguration {
+    use eframe::{egui_wgpu::WgpuSetup, wgpu::InstanceFlags};
+    let mut options = eframe::egui_wgpu::WgpuConfiguration::default();
+    if let WgpuSetup::CreateNew(setup) = &mut options.wgpu_setup {
+        let flags = &mut setup.instance_descriptor.flags;
+        *flags = flags
+            .difference(InstanceFlags::VALIDATION_INDIRECT_CALL)
+            .with_env();
+    }
+    options
 }
 
 /// The app mark (`assets/icon.svg`), for the window, dock and taskbar.
@@ -119,4 +140,20 @@ pub async fn start_web(
             }),
         )
         .await
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use eframe::{egui_wgpu::WgpuSetup, wgpu::InstanceFlags};
+
+    #[test]
+    fn the_editor_does_not_validate_indirect_draws() {
+        let WgpuSetup::CreateNew(setup) = super::wgpu_options().wgpu_setup else {
+            panic!("the editor creates its own wgpu instance");
+        };
+        let flags = setup.instance_descriptor.flags;
+        if std::env::var_os("WGPU_VALIDATION_INDIRECT_CALL").is_none() {
+            assert!(!flags.contains(InstanceFlags::VALIDATION_INDIRECT_CALL));
+        }
+    }
 }
