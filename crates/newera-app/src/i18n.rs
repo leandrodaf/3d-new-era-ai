@@ -1286,6 +1286,26 @@ fn translations(pt: &str) -> Option<[&'static str; 3]> {
         "Televisão 55\"" => ["55\" television", "Televisor de 55\"", "Téléviseur 55\""],
         "Estante" => ["Shelving unit", "Estantería", "Étagère"],
         "Tapete" => ["Rug", "Alfombra", "Tapis"],
+        "Radiador de painel 60×10×50" => [
+            "Panel radiator 60×10×50",
+            "Radiador de panel 60×10×50",
+            "Radiateur à panneau 60×10×50",
+        ],
+        "Radiador de painel 100×10×50" => [
+            "Panel radiator 100×10×50",
+            "Radiador de panel 100×10×50",
+            "Radiateur à panneau 100×10×50",
+        ],
+        "Radiador de painel 120×10×50" => [
+            "Panel radiator 120×10×50",
+            "Radiador de panel 120×10×50",
+            "Radiateur à panneau 120×10×50",
+        ],
+        "Convector elétrico 100×10×45" => [
+            "Electric convector 100×10×45",
+            "Convector eléctrico 100×10×45",
+            "Convecteur électrique 100×10×45",
+        ],
         "Luminária de piso" => ["Floor lamp", "Lámpara de pie", "Lampadaire"],
         "Abajur de mesa" => ["Table lamp", "Lámpara de mesa", "Lampe de table"],
         "Spot embutido LED 7 W" => [

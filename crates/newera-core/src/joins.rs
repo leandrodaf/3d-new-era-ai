@@ -592,7 +592,16 @@ fn tees(walls: &[Wall], boxes: &[[f64; 4]], nodes: &mut Vec<Node>) {
         // Such an end joins that junction instead.
         let reach = walls[host].thickness / 2.0 + JOIN_TOLERANCE;
         let beside = nodes.iter().position(|n| {
-            n.center.distance(at) <= reach && n.refs.iter().any(|r| r.wall() == host)
+            n.center.distance(at) <= reach
+                && n.refs.iter().any(|r| r.wall() == host)
+                // A nearby junction can sit beside the incoming wall's axis
+                // (e.g. the end of a wide structural pier). Sharing that node
+                // would skew its entire long face instead of just joining it.
+                && nodes[k].refs.iter().all(|r| {
+                    line_of(&walls[r.wall()]).is_none_or(|(origin, dir, _)| {
+                        project(origin, dir, n.center).1.abs() <= 1e-7
+                    })
+                })
         });
         match beside {
             Some(m) if m != k => {
@@ -885,6 +894,27 @@ mod tests {
     /// footprint, with no overlap between walls and no gap at the junction.
     fn covered(walls: &[Wall]) -> f64 {
         wall_outlines(walls).iter().map(|o| polygon_area(o)).sum()
+    }
+
+    #[test]
+    fn stepped_bathroom_mass_does_not_tilt_the_long_wall_faces() {
+        let walls = [
+            wall(1, (601.882, 420.603), (892.107, 420.603), 10.716),
+            wall(2, (601.882, 433.5515), (983.193, 433.5515), 15.181),
+            wall(3, (888.535, 463.9135), (983.193, 463.9135), 45.543),
+            wall(4, (976.4955, 486.685), (976.4955, 654.569), 13.395),
+            wall(5, (601.882, 659.4805), (983.193, 659.4805), 9.823),
+        ];
+        let outlines = wall_outlines(&walls);
+        for edge in outlines[3].iter().zip(outlines[3].iter().cycle().skip(1)) {
+            if edge.0.distance(*edge.1) > 40.0 {
+                assert!(
+                    (edge.0.x - edge.1.x).abs() < 1e-7,
+                    "vertical bathroom wall acquired a sloping face: {:?}",
+                    outlines[3]
+                );
+            }
+        }
     }
 
     #[test]
