@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Two rooms that follow their walls no longer turn into copies of each other when the wall
+  between them is moved away. The first takes the space; the other keeps the outline it had,
+  and the reply names it (`rooms_kept`) so it can be deleted or redrawn.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
