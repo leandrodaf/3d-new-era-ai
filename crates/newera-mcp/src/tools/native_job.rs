@@ -224,22 +224,22 @@ async fn supervise(
                 let now = tokio::time::Instant::now();
                 if now >= next_ping {
                     // Ping is part of MCP even when no progress token was
-                    // supplied. Require a reply: notifications alone could
-                    // keep an abandoned HTTP session alive indefinitely.
-                    let ping = async {
-                        context.peer.send_request_with_option(
-                            ServerRequest::PingRequest(PingRequest { method: rmcp::model::PingRequestMethod, extensions: rmcp::model::Extensions::default() }),
-                            PeerRequestOptions::with_timeout(response_timeout),
-                        ).await?.await_response().await
-                    };
-                    tokio::select! {
-                        result = &mut worker => return result.map_err(|e| invalid(format!("The render failed: {e}")))?,
-                        () = cancel.cancelled() => return Err(invalid(newera_core::progress::CANCELLED)),
-                        result = tokio::time::timeout(response_timeout, ping) => {
-                            if !matches!(result, Ok(Ok(_))) { return Err(invalid("The client stopped answering; the render was cancelled.")); }
-                        }
-                    }
-                    next_ping = tokio::time::Instant::now() + heartbeat;
+                    // supplied, and it keeps an HTTP session from idling out.
+                    // An answer is not required: many clients never answer a
+                    // ping while a call is open, and a render must not die
+                    // for that. A gone client closes the transport or cancels
+                    // the call; a photo also stops at its max_s.
+                    let peer = context.peer.clone();
+                    tokio::spawn(async move {
+                        let ping = async {
+                            peer.send_request_with_option(
+                                ServerRequest::PingRequest(PingRequest { method: rmcp::model::PingRequestMethod, extensions: rmcp::model::Extensions::default() }),
+                                PeerRequestOptions::with_timeout(response_timeout),
+                            ).await?.await_response().await
+                        };
+                        let _ = tokio::time::timeout(response_timeout, ping).await;
+                    });
+                    next_ping = now + heartbeat;
                 }
                 if now >= next_progress {
                     if let Some(token) = &token {
@@ -436,12 +436,15 @@ mod tests {
                 }
             }
         }
-        if mode == "success" {
+        if mode == "success" || mode == "unresponsive" {
             assert!(
                 pings >= 2,
                 "long request must heartbeat without a progress token"
             );
-            assert!(result.unwrap().get("result").is_some());
+            assert!(
+                result.unwrap().get("result").is_some(),
+                "a client that never answers a ping still gets its render"
+            );
         } else {
             assert!(progress > 0);
             assert!(result.as_ref().is_none_or(|r| r.get("error").is_some()));
@@ -452,7 +455,7 @@ mod tests {
             }
         })
         .await
-        .expect("worker must stop after its client cancels/disconnects/fails ping");
+        .expect("worker must stop after it ends or its client cancels/disconnects");
         if mode == "stop" {
             // `stopped` is set inside the worker, just before it returns.
             tokio::time::timeout(Duration::from_secs(1), async {
@@ -482,7 +485,7 @@ mod tests {
         exercise("disconnect").await;
     }
     #[tokio::test]
-    async fn http_unresponsive_client_stops_worker() {
+    async fn http_client_that_never_answers_pings_gets_its_render() {
         exercise("unresponsive").await;
     }
 }

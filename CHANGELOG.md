@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A render (`render_plan`, `render_3d`, `render_photo`, `edit_video`) is no longer cancelled
+  because the client did not answer a ping within 10 s. Pings are still sent to keep the session
+  alive, but a render stops only when the client cancels it, disconnects, or a photo passes its
+  `max_s`.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
