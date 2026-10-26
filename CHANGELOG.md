@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Hiding a roof no longer refits the walls and panels fitted to it: they were cut and split
+  as if the roof were gone. Hiding is a display change; editing or deleting the roof still
+  refits them.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
