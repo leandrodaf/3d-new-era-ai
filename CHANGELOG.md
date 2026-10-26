@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A scene too big for one GPU buffer (over 256 MiB of vertices or indices: a large project with
+  detailed models) no longer closes the editor. The device asks for the largest buffer the GPU
+  takes, and a scene larger than that goes up and is drawn in parts.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
