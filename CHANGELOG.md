@@ -8,9 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- The first storey added to an empty project is the only one. An empty "Térreo" was created
-  beside it, at the same elevation, and the reply named only the storey asked for. Over a plan
-  already drawn, the ground storey made for it is still added, and `edit_levels` now names both
+- The first storey `edit_levels add` makes in an empty project is the only one. An empty
+  "Térreo" was created beside it, at the same elevation, and the reply named only the storey
+  asked for. Over a plan already drawn, the ground storey made for it is still added, and `edit_levels` now names both
   (`ids=lv1,lv2`, and a line saying which holds what was drawn).
 - `edit_levels` says that storeys belong to each plan version: with several versions, its reply
   names the one it changed (`storeys are per version: this changed v=4 only`), and its
