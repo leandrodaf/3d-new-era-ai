@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A checkpoint set before the project was opened is no longer reverted to. Its place in the undo
+  history was saved, but the history was not: after reopening, `history` called it "0 changes
+  ago" and `edit_history revert` undid whatever had been done since. `history` now marks it
+  `restorable` false and revert refuses it with nothing changed; checkpoints set in this session
+  work as before.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
