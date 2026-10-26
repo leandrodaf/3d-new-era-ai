@@ -174,6 +174,9 @@ pub(super) async fn run(
     .await
 }
 
+/// A ping on its way, until it is answered or times out.
+type Ping = std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>;
+
 async fn supervise(
     tool: Option<String>,
     context: RequestContext<RoleServer>,
@@ -215,30 +218,34 @@ async fn supervise(
     let mut poll = tokio::time::interval(Duration::from_millis(250));
     let mut next_ping = tokio::time::Instant::now() + heartbeat;
     let mut next_progress = tokio::time::Instant::now();
+    let mut ping: Option<Ping> = None;
     loop {
         tokio::select! {
             result = &mut worker => return result.map_err(|e| invalid(format!("The render failed: {e}")))?,
             () = cancel.cancelled() => return Err(invalid(newera_core::progress::CANCELLED)),
+            () = async { ping.as_mut().expect("guarded").await }, if ping.is_some() => ping = None,
             _ = poll.tick() => {
                 if context.peer.is_transport_closed() { return Err(invalid("The client disconnected; the render was cancelled.")); }
                 let now = tokio::time::Instant::now();
-                if now >= next_ping {
+                if now >= next_ping && ping.is_none() {
                     // Ping is part of MCP even when no progress token was
                     // supplied, and it keeps an HTTP session from idling out.
                     // An answer is not required: many clients never answer a
                     // ping while a call is open, and a render must not die
                     // for that. A gone client closes the transport or cancels
-                    // the call; a photo also stops at its max_s.
+                    // the call; a photo also stops at its max_s. The ping is
+                    // awaited here, alongside the rest, so it goes out on
+                    // this call's own stream.
                     let peer = context.peer.clone();
-                    tokio::spawn(async move {
-                        let ping = async {
+                    ping = Some(Box::pin(async move {
+                        let answer = async {
                             peer.send_request_with_option(
                                 ServerRequest::PingRequest(PingRequest { method: rmcp::model::PingRequestMethod, extensions: rmcp::model::Extensions::default() }),
                                 PeerRequestOptions::with_timeout(response_timeout),
                             ).await?.await_response().await
                         };
-                        let _ = tokio::time::timeout(response_timeout, ping).await;
-                    });
+                        let _ = tokio::time::timeout(response_timeout, answer).await;
+                    }));
                     next_ping = now + heartbeat;
                 }
                 if now >= next_progress {
