@@ -10,6 +10,11 @@ All notable changes to this project are documented here. The format follows
 
 - `cabinet_run room=` takes the room's name as well as its id (`room=Cozinha`), in any case and
   with or without accents. A name was refused as an invalid id.
+- `cabinet_run room=` puts the cabinets on the face of the wall the room is on, looked for just
+  past the wall, and the notes say which face (`Frentes para Cozinha (r1): no lado de w5 voltado
+  para [250, 40]`). The side used to be the one toward the room's centroid, which in an L-shaped
+  room lies past its own inner walls: the run came out on the far side, outside the room. A room
+  on neither face of the wall is refused.
 
 ## [3.1.0] - 2026-10-01
 
