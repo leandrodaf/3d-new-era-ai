@@ -378,9 +378,12 @@ pub(crate) struct RoofSpec {
 /// stop at. Ends further than [`newera_core::TOUCH_TOLERANCE`] from anything
 /// are left exactly where they were.
 ///
+/// Ends listed in `fixed` (`(wall, at_start)`) are left alone: an `update`
+/// that moved one end of a wall must not pull the other one somewhere.
+///
 /// Returns each end it moved, `w3.b→[x,y]` (`a` the start, `b` the end), so
 /// the caller is told its coordinates changed.
-fn weld(doc: &Document, walls: &mut [Wall]) -> Vec<String> {
+fn weld(doc: &Document, walls: &mut [Wall], fixed: &[(newera_core::WallId, bool)]) -> Vec<String> {
     if walls.is_empty() {
         return Vec::new();
     }
@@ -395,6 +398,9 @@ fn weld(doc: &Document, walls: &mut [Wall]) -> Vec<String> {
     let ids: Vec<newera_core::WallId> = walls.iter().map(|w| w.id).collect();
     let mut moved = Vec::new();
     for (id, at_start, to) in newera_core::weld_ends(&all, &ids) {
+        if fixed.contains(&(id, at_start)) {
+            continue;
+        }
         if let Some(wall) = walls.iter_mut().find(|w| w.id == id) {
             if at_start {
                 wall.start = to;
@@ -470,7 +476,7 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Cre
     let welded = if params.exact {
         Vec::new()
     } else {
-        weld(doc, &mut new_walls)
+        weld(doc, &mut new_walls, &[])
     };
     commands.extend(new_walls.iter().cloned().map(Command::insert));
 
@@ -840,9 +846,13 @@ pub(crate) fn missing(home: &newera_core::Home, id: ElementId) -> String {
     format!("{id} not found")
 }
 
-pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<()> {
+/// Changes elements by id in one step. Returns the wall ends it welded onto
+/// walls they nearly touch (see [`weld`]); only ends that were given move.
+pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<Vec<String>> {
     let mut commands = Vec::with_capacity(items.len());
     let mut reshaped: Vec<Wall> = Vec::new();
+    // The ends of reshaped walls that were not given: they stay put.
+    let mut kept_ends: Vec<(newera_core::WallId, bool)> = Vec::new();
     for spec in items {
         let id: ElementId = spec.id.parse().map_err(|e| format!("{e}"))?;
         let Some(element) = doc.home().element(id) else {
@@ -968,9 +978,16 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 if let Some(arc) = spec.arc {
                     w.arc_extent = (arc != 0.0).then_some(arc);
                 }
-                // An end that was moved is welded like a new one.
+                // An end that was moved is welded like a new one; the other
+                // stays where it is.
                 if spec.a.is_some() || spec.b.is_some() {
                     reshaped.push(w.clone());
+                    if spec.a.is_none() {
+                        kept_ends.push((w.id, true));
+                    }
+                    if spec.b.is_none() {
+                        kept_ends.push((w.id, false));
+                    }
                 }
                 Element::Wall(w)
             }
@@ -1145,7 +1162,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
         }
         commands.push(Command::Update { element: updated });
     }
-    let _ = weld(doc, &mut reshaped);
+    let welded = weld(doc, &mut reshaped, &kept_ends);
     for wall in reshaped {
         if let Some(command) = commands
             .iter_mut()
@@ -1156,7 +1173,8 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
             };
         }
     }
-    doc.execute(Command::Batch { commands }).map_err(core)
+    doc.execute(Command::Batch { commands }).map_err(core)?;
+    Ok(welded)
 }
 
 /// A rename by rule: `pattern` replaced by `to` wherever it matches.
@@ -1690,6 +1708,43 @@ mod tests {
         let (end, welded) = make(true);
         assert_eq!(end, Point2::new(200.0, 10.5), "exact keeps the point given");
         assert!(welded.is_empty());
+    }
+
+    #[test]
+    fn update_welds_only_the_ends_it_was_given() {
+        let mut doc = Document::default();
+        let wall = Wall::new(
+            doc.new_wall_id(),
+            Point2::new(0.0, 0.0),
+            Point2::new(400.0, 0.0),
+        );
+        // A stub drawn exactly, 3 cm short of the wall's face.
+        let stub = Wall::new(
+            doc.new_wall_id(),
+            Point2::new(200.0, 200.0),
+            Point2::new(200.0, 10.5),
+        );
+        let id = stub.id.to_string();
+        doc.execute(Command::Batch {
+            commands: vec![Command::insert(wall), Command::insert(stub)],
+        })
+        .unwrap();
+        let set = |doc: &mut Document, change: serde_json::Value| {
+            update(doc, vec![serde_json::from_value(change).unwrap()]).unwrap()
+        };
+
+        // Moving its far end leaves the near one where it was drawn.
+        let welded = set(&mut doc, serde_json::json!({"id": id, "a": [200, 250]}));
+        let stub = &doc.home().walls[1];
+        assert_eq!(stub.start, Point2::new(200.0, 250.0));
+        assert_eq!(stub.end, Point2::new(200.0, 10.5), "b was not given");
+        assert!(welded.is_empty(), "{welded:?}");
+
+        // The end that is given is welded, and the reply says so.
+        let welded = set(&mut doc, serde_json::json!({"id": id, "b": [200, 10.5]}));
+        assert!(doc.home().walls[1].end.y < 10.5);
+        assert_eq!(welded.len(), 1, "{welded:?}");
+        assert!(welded[0].starts_with(&format!("{id}.b→")), "{welded:?}");
     }
 
     #[test]
