@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A `measure` probe through a door or passage no longer reports the wall there: where the
+  opening covers the whole height probed (`z`, 0–200 by default) the wall is free floor. Wall
+  beside the opening, a lintel or a window sill inside that height still count.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
