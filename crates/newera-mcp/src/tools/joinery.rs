@@ -489,7 +489,11 @@ mod tests {
         );
         // A size given in the change wins over the one the piece has.
         let shallower = joinery(&format!(r#"{{"id":"{id}","p":{{"d":40}}}}"#));
-        assert_eq!(shallower["size"], serde_json::json!([60, 40, 45]), "{shallower}");
+        assert_eq!(
+            shallower["size"],
+            serde_json::json!([60, 40, 45]),
+            "{shallower}"
+        );
     }
     #[test]
     fn a_group_drawn_by_hand_is_cut_from_its_boards() {
