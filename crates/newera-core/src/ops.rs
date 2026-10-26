@@ -552,7 +552,9 @@ pub fn snap_openings(doc: &mut Document, ids: &[ElementId], max_distance: f64) -
 
 /// Adds a storey on top of the highest one and selects it. The first call on
 /// a single-level house also creates the ground level ("Térreo") for the
-/// existing elements. Returns the new level's id.
+/// existing elements; on an empty project, with nothing to hold, the storey
+/// asked for is the only one, at the ground (default name "Térreo").
+/// Returns the new level's id.
 ///
 /// # Panics
 /// Never: the level list is non-empty once the ground level exists.
@@ -564,6 +566,20 @@ pub fn add_level(
     use crate::elements::Level;
     let mut commands = Vec::new();
     let mut levels: Vec<Level> = doc.home().levels.clone();
+    if levels.is_empty() && doc.home().elements().next().is_none() {
+        let level = Level {
+            id: doc.new_level_id(),
+            name: name.unwrap_or_else(|| "Térreo".to_owned()),
+            elevation: 0.0,
+            height: height.unwrap_or(Level::DEFAULT_HEIGHT),
+            floor_thickness: Level::DEFAULT_FLOOR_THICKNESS,
+            ..Level::default()
+        };
+        let id = level.id;
+        doc.execute(Command::insert(level))?;
+        doc.select_level(Some(id));
+        return Ok(id);
+    }
     if levels.is_empty() {
         let ground = Level {
             id: doc.new_level_id(),
@@ -760,6 +776,18 @@ mod tests {
         move_wall_point(&mut doc, a, false, Point2::new(450.0, 20.0)).unwrap();
         assert_eq!(doc.home().wall(a).unwrap().end, Point2::new(450.0, 20.0));
         assert_eq!(doc.home().wall(b).unwrap().start, Point2::new(450.0, 20.0));
+    }
+
+    #[test]
+    fn the_first_storey_of_an_empty_project_is_the_only_one() {
+        let mut doc = Document::default();
+        let first = add_level(&mut doc, Some("Ground".into()), Some(300.0)).unwrap();
+        let home = doc.home();
+        assert_eq!(home.levels.len(), 1, "no implicit ground beside it");
+        let level = home.level(first).unwrap();
+        assert_eq!(level.name, "Ground");
+        assert!(level.elevation.abs() < 1e-9 && (level.height - 300.0).abs() < 1e-9);
+        assert_eq!(home.selected_level, Some(first));
     }
 
     #[test]
