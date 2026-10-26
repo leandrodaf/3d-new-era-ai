@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- An unknown wall `type` is refused with the list of wall types there are, instead of a pointer
+  to the `materials` tool.
+- `glass` (on `place` and `update`) lists its four kinds in the schema, so a client can offer them
+  and check them before the call.
+- The schemas say what agents got wrong: `v` is the index of a plan version in `variants`
+  (0-based), not a revision; `render_3d` `yaw` and `pitch` do not go with `piece`; and `fixed`
+  marks a piece built-in, not locked in place.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
