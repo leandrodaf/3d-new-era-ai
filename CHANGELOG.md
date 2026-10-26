@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A solid outline or profile enclosing under 1 cm² is refused saying how much it encloses and that
+  coordinates are cm (`encloses 0.98 cm²; … metres ×100?`), instead of "needs at least 3 points
+  enclosing an area", which did not say the points were read as centimetres.
+- `create` names the walls it drew shorter than they are thick (`short=w1`), the mark of a plan
+  typed in metres, so the reply says so before the rest of the plan is built on it.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
