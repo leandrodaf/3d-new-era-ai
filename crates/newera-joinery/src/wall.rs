@@ -907,6 +907,24 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
         .copied()
         .collect();
     let (modules, plan_notes) = crate::plan_run(&gaps, &over, &joints, &params)?;
+    // A sink or cooktop where nothing can stand (in front of another run's
+    // sink, behind the fridge) is said, not dropped in silence.
+    if params.row == RunRow::Base {
+        for (name, center, role) in [
+            ("A pia", params.sink, crate::Role::Sink),
+            ("O cooktop", params.cooktop, crate::Role::Cooktop),
+        ] {
+            if let Some(c) = center.filter(|c| (from..=to).contains(c))
+                && !gaps.iter().any(|g| c > g.from && c < g.to)
+                && !modules.iter().any(|m| m.role == role)
+            {
+                notes.push(format!(
+                    "{name} em {} cm de {wall_id} ficou sem módulo: ali não há trecho livre.",
+                    brazilian(c)
+                ));
+            }
+        }
+    }
     let removed: Vec<FurnitureId> = removed
         .into_iter()
         .filter(|id| !kept_back.contains(id))
