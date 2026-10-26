@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `file save` says what it did to the images and models it bundles: the big JPEGs it stored
+  recompressed (name, bytes before and after; the originals are untouched) and the files the
+  project refers to that were not found and were left out. It answered a bare `ok` either way.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
