@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `update` takes `layer` on a label or a line, as `home` shows it there: `electrical`, `plumbing`, or
+  empty for the architectural plan. It was refused as a field that does not apply, so a note or a
+  line drawn on the wrong project could not be moved to the right one.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
