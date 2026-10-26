@@ -854,6 +854,10 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
                 list("Asked ids that came out as they were: {id, now}"),
             ),
             ("unchanged_note", text("Why they did not change")),
+            (
+                "overridden",
+                list("Asked values a piece's mount set aside: {id, elev, note}"),
+            ),
         ]),
         "move" => write_or_dry(&[]),
         "place" => write_or_dry(&[

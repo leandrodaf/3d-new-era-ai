@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- An `elev` a ceiling piece does not keep is said. A downlight or presence sensor given `elev`
+  goes back onto the ceiling, and `update` answered that it "already had the values asked for"
+  while it sat 27 cm higher; `place` said nothing. `update` now lists it under `overridden`
+  (`elev 240 snapped to the ceiling at 267`) and `place` adds a line per piece after its ids.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
