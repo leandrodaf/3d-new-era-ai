@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- On macOS the editor no longer closes while a file dialog is open (open, save, export, import,
+  photo, video, a finish image). The dialog used to wait for its answer inside the frame that
+  opened it, and an event that arrived meanwhile closed the program. File dialogs now open as a
+  sheet on the window (a dialog of their own elsewhere), and the window keeps drawing until the
+  answer comes.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
