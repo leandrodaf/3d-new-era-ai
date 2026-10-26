@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Moving a wall takes its doors and windows with it. They stayed where the wall had been,
+  standing in the air, and a door moved together with its wall was pulled back to the old
+  place. `update` of a wall's `a`/`b` keeps each opening at the same distance from the start,
+  inside the wall; one that no longer fits is left where it was and named in the reply
+  (`openings_left=`).
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
