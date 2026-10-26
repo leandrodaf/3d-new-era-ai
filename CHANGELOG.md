@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- An imported model with a side under 1 cm keeps it: a shelf 8 mm thick comes in 0.8 cm deep. Every
+  side was raised to at least 1 cm, so thin panels, plates and knobs grew; only a side with no
+  thickness at all (a plane) is now given the least size, 0.01 cm.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
