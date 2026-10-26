@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A door hinged on the right (`hinge_right`) has its handle on the left in 3D, away from the
+  hinges, as the plan swing shows. The 3D handle always stayed on the right.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
