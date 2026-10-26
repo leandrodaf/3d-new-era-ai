@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `layout` no longer says a roof slope blocks a window or door under it when the slope passes
+  above the opening's head: a tilted plate was judged by its whole height range, from eave to
+  ridge, instead of where it actually is over the opening.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
