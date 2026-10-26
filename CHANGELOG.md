@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `update` resizing a group and renaming one of its parts in the same call resizes the parts
+  too, in either order: they kept their old size and place, and with the rename first the resize
+  also undid the rename.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
