@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- An editor that closes at launch because of its graphics driver no longer does so on every
+  launch: if the last launch closed before it drew, the next one tries the next graphics backend
+  of the system (on Windows Direct3D 12, then Vulkan, then OpenGL; on Linux OpenGL) and keeps the
+  one that works until the next version. `WGPU_BACKEND` still chooses by hand. A GPU lost while
+  the editor is open is now named as such in the crash report.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
