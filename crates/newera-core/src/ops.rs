@@ -552,9 +552,7 @@ pub fn snap_openings(doc: &mut Document, ids: &[ElementId], max_distance: f64) -
 
 /// Adds a storey on top of the highest one and selects it. The first call on
 /// a single-level house also creates the ground level ("Térreo") for the
-/// existing elements; on an empty project, with nothing to hold, the storey
-/// asked for is the only one, at the ground (default name "Térreo").
-/// Returns the new level's id.
+/// existing elements. Returns the new level's id.
 ///
 /// # Panics
 /// Never: the level list is non-empty once the ground level exists.
@@ -566,20 +564,6 @@ pub fn add_level(
     use crate::elements::Level;
     let mut commands = Vec::new();
     let mut levels: Vec<Level> = doc.home().levels.clone();
-    if levels.is_empty() && doc.home().elements().next().is_none() {
-        let level = Level {
-            id: doc.new_level_id(),
-            name: name.unwrap_or_else(|| "Térreo".to_owned()),
-            elevation: 0.0,
-            height: height.unwrap_or(Level::DEFAULT_HEIGHT),
-            floor_thickness: Level::DEFAULT_FLOOR_THICKNESS,
-            ..Level::default()
-        };
-        let id = level.id;
-        doc.execute(Command::insert(level))?;
-        doc.select_level(Some(id));
-        return Ok(id);
-    }
     if levels.is_empty() {
         let ground = Level {
             id: doc.new_level_id(),
@@ -609,6 +593,33 @@ pub fn add_level(
     let id = level.id;
     commands.push(Command::insert(level));
     doc.execute(Command::Batch { commands })?;
+    doc.select_level(Some(id));
+    Ok(id)
+}
+
+/// The storey an agent asks for: [`add_level`], except on an empty project
+/// (no storeys, nothing drawn), where there is nothing for a ground storey
+/// to hold — the one asked for is the only one, at the ground (default name
+/// "Térreo"). Returns its id.
+pub fn add_storey(
+    doc: &mut Document,
+    name: Option<String>,
+    height: Option<f64>,
+) -> CoreResult<crate::ids::LevelId> {
+    use crate::elements::Level;
+    if !doc.home().levels.is_empty() || doc.home().elements().next().is_some() {
+        return add_level(doc, name, height);
+    }
+    let level = Level {
+        id: doc.new_level_id(),
+        name: name.unwrap_or_else(|| "Térreo".to_owned()),
+        elevation: 0.0,
+        height: height.unwrap_or(Level::DEFAULT_HEIGHT),
+        floor_thickness: Level::DEFAULT_FLOOR_THICKNESS,
+        ..Level::default()
+    };
+    let id = level.id;
+    doc.execute(Command::insert(level))?;
     doc.select_level(Some(id));
     Ok(id)
 }
@@ -781,13 +792,17 @@ mod tests {
     #[test]
     fn the_first_storey_of_an_empty_project_is_the_only_one() {
         let mut doc = Document::default();
-        let first = add_level(&mut doc, Some("Ground".into()), Some(300.0)).unwrap();
+        let first = add_storey(&mut doc, Some("Ground".into()), Some(300.0)).unwrap();
         let home = doc.home();
         assert_eq!(home.levels.len(), 1, "no implicit ground beside it");
         let level = home.level(first).unwrap();
         assert_eq!(level.name, "Ground");
         assert!(level.elevation.abs() < 1e-9 && (level.height - 300.0).abs() < 1e-9);
         assert_eq!(home.selected_level, Some(first));
+        // Over a plan already drawn, the ground storey is made for it.
+        let (mut doc, ..) = doc_with_l();
+        add_storey(&mut doc, None, None).unwrap();
+        assert_eq!(doc.home().levels.len(), 2);
     }
 
     #[test]

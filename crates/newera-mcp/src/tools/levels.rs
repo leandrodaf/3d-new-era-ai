@@ -89,7 +89,7 @@ impl NewEraMcp {
             "add" => {
                 let before: Vec<newera_core::LevelId> =
                     doc.home().levels.iter().map(|l| l.id).collect();
-                let level = ops::add_level(&mut doc, p.name.clone(), p.h).map_err(core)?;
+                let level = ops::add_storey(&mut doc, p.name.clone(), p.h).map_err(core)?;
                 if let Some(elev) = p.elev
                     && let Some(mut raised) = doc.home().level(level).cloned()
                 {
