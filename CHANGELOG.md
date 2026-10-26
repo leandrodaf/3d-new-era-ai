@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `update h_end`, `update level` and `update opacity` are said as changes. The compact rows a
+  write is compared on had no wall height at its end, no storey and no piece opacity, so these
+  writes were applied but answered as if the element already had the values. Reads now show
+  `h_end` on a sloping wall and `opacity` on a piece that has one, and a move to another storey
+  is named as `level` in the reply.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
