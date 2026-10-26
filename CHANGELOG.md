@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `place` with `defaults={unit:...}` (or `stretch`) no longer hands them to the catalog items in the
+  batch. Every catalog piece was refused with "unit and stretch are for model=<file>"; now only the
+  items that import a model take them, and an item that sets them itself is still told.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
