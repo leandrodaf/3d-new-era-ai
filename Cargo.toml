@@ -74,6 +74,8 @@ too_many_lines = "allow"
 struct_excessive_bools = "allow"
 large_enum_variant = "allow"
 
+# Stripped. The released binaries are built with debug line tables on top
+# (release.yml), whose debug files go to Sentry and not into the download.
 [profile.release]
 lto = "thin"
 codegen-units = 1
