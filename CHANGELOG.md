@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A light's `z` outside 0..1 in `place` or `update` is refused with "z is a fraction of the piece's
+  height (0 = bottom face), not cm". A height in cm such as `z:268.5` was clamped to 1 without a
+  word, and the source landed on the top face of the fixture.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
