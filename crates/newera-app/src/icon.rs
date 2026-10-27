@@ -85,6 +85,7 @@ pub(crate) const HOUSE_LINE: &str = "\u{E2C4}";
 pub(crate) const IMAGE: &str = "\u{E2CA}";
 pub(crate) const INFO: &str = "\u{E2CE}";
 pub(crate) const KEYBOARD: &str = "\u{E2D8}";
+pub(crate) const KEY_RETURN: &str = "\u{E782}";
 pub(crate) const LIGHTBULB: &str = "\u{E2DC}";
 pub(crate) const LIGHTNING: &str = "\u{E2DE}";
 pub(crate) const LINE_SEGMENTS: &str = "\u{E6D4}";
