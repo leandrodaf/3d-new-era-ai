@@ -288,7 +288,7 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                     image::ImageFormat::Png,
                 )
                 .map_err(|e| e.to_string())?;
-            Ok(bytes)
+            Ok::<_, String>(bytes)
         };
         #[cfg(target_arch = "wasm32")]
         match crate::files::save_bytes("PNG", "png", "foto.png", png) {
