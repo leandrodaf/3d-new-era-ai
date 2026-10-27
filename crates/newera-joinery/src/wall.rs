@@ -962,10 +962,19 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
         })
         .unwrap_or_default();
     // Old cabinets outside every free stretch (behind a shaft, beside the
-    // laundry sink) stay: nothing would take their place.
+    // laundry sink) stay: nothing would take their place. Not where another
+    // run now stands, or in front of its sink: that run took the place.
     let along_of = |id: &FurnitureId| {
         piece(*id)
             .map(|f| (f.position.x - wall.start.x) * u.0 + (f.position.y - wall.start.y) * u.1)
+    };
+    let taken = |c: f64| {
+        run.obstacles.iter().any(|o| {
+            c >= o.from
+                && c <= o.to
+                && matches!(&o.block, RunBlock::Piece { id, .. }
+                    if piece(*id).and_then(other_run).is_some())
+        })
     };
     let kept_back: Vec<FurnitureId> = removed
         .iter()
@@ -973,6 +982,7 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
             along_of(id).is_some_and(|c| {
                 !gaps.iter().any(|g| c >= g.from - 1.0 && c <= g.to + 1.0)
                     && !over.iter().any(|o| c >= o.from - 1.0 && c <= o.to + 1.0)
+                    && !taken(c)
             })
         })
         .copied()
