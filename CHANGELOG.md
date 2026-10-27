@@ -6,12 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- `export` to `.png` says the size it wrote (`ok plan.png 2048x1536 px`). A side past 2048 px was
-  cut down to 2048 with only `ok <path>` in reply; now the reply also gives the size asked and
-  the limits, and `w`/`h` say they are 64..2048.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
