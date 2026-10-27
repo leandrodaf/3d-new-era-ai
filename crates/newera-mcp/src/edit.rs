@@ -45,9 +45,13 @@ fn wall_type(raw: &str) -> EditResult<Option<&'static newera_core::WallType>> {
     if raw == "none" {
         return Ok(None);
     }
-    newera_core::wall_type(raw)
-        .map(Some)
-        .ok_or_else(|| format!("unknown wall type `{raw}` (see the materials tool)"))
+    newera_core::wall_type(raw).map(Some).ok_or_else(|| {
+        let ids: Vec<&str> = newera_core::WALL_TYPES.iter().map(|t| t.id).collect();
+        format!(
+            "unknown wall type `{raw}`: one of {}, or none to clear",
+            ids.join(", ")
+        )
+    })
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -65,7 +69,7 @@ pub(crate) struct WallPath {
     pub hs: Option<Vec<f64>>,
     /// Arc extent in degrees applied to every segment (positive bulges left).
     pub arc: Option<f64>,
-    /// Wall type id, e.g. `drywall-95`; sets the thickness unless `t` is given.
+    /// Wall type id, e.g. `drywall-95`; sets thickness unless `t` given.
     #[serde(rename = "type")]
     pub kind: Option<String>,
     /// Finish on both sides, e.g. `#f2efe6` or `subway 20x10`.
@@ -86,7 +90,7 @@ pub(crate) struct RoomSpec {
     pub floor_mat: Option<String>,
     /// Ceiling finish.
     pub ceil_mat: Option<String>,
-    /// Flat ceiling at storey height (default) or following wall profiles (false).
+    /// Flat ceiling at storey height (default) or along wall profiles (false).
     pub ceiling_flat: Option<bool>,
 }
 
@@ -178,7 +182,7 @@ pub(crate) struct CreateParams {
     /// Solids: outlines raised by `h` (slabs) or sections swept `a`→`b` (gables, ramps).
     #[serde(default)]
     pub solids: Vec<SolidSpec>,
-    /// Plan version (tab) to write to; switches to it first.
+    /// `variants` index, 0-based (not a revision); made active.
     pub v: Option<usize>,
     /// Points are background-image pixels; lengths stay in cm.
     #[serde(default)]
@@ -627,8 +631,8 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Cre
     Ok(Created { ids, welded })
 }
 
-/// Fields to change; each applies only to the kinds that have it, and any
-/// other is refused.
+/// Fields to change; each applies only to the kinds that have it, any other
+/// is refused.
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct UpdateSpec {
@@ -743,15 +747,15 @@ pub(crate) struct UpdateSpec {
     /// Door hinge on the right.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hinge_right: Option<bool>,
-    /// Glass of a guard or a closure: `laminated`, `tempered`,
-    /// `tempered-laminated` or `wired`.
+    /// Glass of a guard or a closure.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("enum" = ["laminated", "tempered", "tempered-laminated", "wired"]))]
     pub glass: Option<String>,
     /// Clear gap between a railing's bars, cm.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gap: Option<f64>,
-    /// Furniture: `true` fixed joinery, `false` free-standing; `""` lets the
-    /// name decide.
+    /// Furniture: `true` built-in (not a lock), `false` free-standing; `""`
+    /// the name decides.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fixed: Option<Fixed>,
     /// Move the element to this level id (e.g. `lv2`).
@@ -760,7 +764,7 @@ pub(crate) struct UpdateSpec {
     /// Level slab thickness cm.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub slab: Option<f64>,
-    /// Wall type id (sets thickness unless `t` is given); `none` clears.
+    /// Wall type id (sets thickness unless `t` given); `none` clears.
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
     /// Wall finish on the left of a→b; `none` clears.
@@ -840,17 +844,30 @@ pub(crate) fn missing(home: &newera_core::Home, id: ElementId) -> String {
     format!("{id} not found")
 }
 
-pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<()> {
+/// Changes elements by id in one step. Returns the doors and windows of a
+/// reshaped wall that no longer fit in it and were left where they were.
+pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<Vec<String>> {
     let mut commands = Vec::with_capacity(items.len());
     let mut reshaped: Vec<Wall> = Vec::new();
+    // Each wall whose ends moved, as it was: its openings follow it.
+    let mut reshaped_from: Vec<Wall> = Vec::new();
+    let asked: Vec<ElementId> = items.iter().filter_map(|i| i.id.parse().ok()).collect();
     for spec in items {
         let id: ElementId = spec.id.parse().map_err(|e| format!("{e}"))?;
         let Some(element) = doc.home().element(id) else {
             rename_part(doc.home(), id, spec, &mut commands)?;
             continue;
         };
+        // A piece already changed earlier in this call — a part of it
+        // renamed — is changed further from that copy, not from the plan.
+        let element = match element {
+            Element::Furniture(f) => {
+                Element::Furniture(take_pending(&mut commands, f.id).unwrap_or(f))
+            }
+            other => other,
+        };
         let allowed: &[&str] = match element {
-            Element::Polyline(_) => &["pts", "t", "color", "level", "divider"],
+            Element::Polyline(_) => &["pts", "t", "color", "level", "divider", "layer"],
             Element::Wall(_) => &[
                 "a", "b", "t", "h", "h_end", "arc", "level", "type", "left", "right", "sides",
             ],
@@ -869,7 +886,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
             Element::Dimension(_) => &["a", "b", "off", "level", "in3d", "elev", "pitch"],
             Element::Label(_) => &[
                 "text", "at", "size", "angle", "level", "bold", "italic", "align", "color", "in3d",
-                "elev", "pitch", "about",
+                "elev", "pitch", "about", "layer",
             ],
             Element::Level(_) => &["name", "elev", "h", "slab"],
             Element::Furniture(_) => &[
@@ -932,6 +949,9 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 if let Some(divider) = spec.divider {
                     p.room_divider = divider;
                 }
+                if let Some(raw) = &spec.layer {
+                    p.discipline = discipline(raw)?;
+                }
                 Element::Polyline(p)
             }
             Element::Level(mut l) => {
@@ -942,6 +962,9 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 Element::Level(l)
             }
             Element::Wall(mut w) => {
+                if spec.a.is_some() || spec.b.is_some() {
+                    reshaped_from.push(w.clone());
+                }
                 w.start = spec.a.unwrap_or(w.start);
                 w.end = spec.b.unwrap_or(w.end);
                 if let Some(raw) = &spec.kind {
@@ -1039,6 +1062,9 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                     (Some(true), None) => l.pitch.or(Some(90.0)),
                     (None, None) => l.pitch.or(spec.elev.map(|_| 90.0)),
                 };
+                if let Some(raw) = &spec.layer {
+                    l.discipline = discipline(raw)?;
+                }
                 Element::Label(l)
             }
             Element::Furniture(mut f) => {
@@ -1076,7 +1102,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                 f.mirrored = spec.mirror.unwrap_or(f.mirrored);
                 f.visible = spec.visible.unwrap_or(f.visible);
                 if let Some(light) = &spec.light {
-                    apply_light(&mut f, light);
+                    apply_light(&mut f, light)?;
                 }
                 let text = |v: Option<String>, old: Option<String>| match v {
                     Some(v) if v.is_empty() => None,
@@ -1137,6 +1163,12 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
                     }
                     None => {}
                 }
+                // A group's pieces follow its new box here rather than when
+                // the batch is applied, so a part renamed in the same call
+                // is renamed on the pieces that moved.
+                if spec.stretch.is_none() && f.is_group() && f.children == before.children {
+                    f.follow_group_change(&before);
+                }
                 Element::Furniture(f)
             }
         };
@@ -1156,7 +1188,28 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<(
             };
         }
     }
-    doc.execute(Command::Batch { commands }).map_err(core)
+    // The doors and windows of a wall whose ends moved go with it, at the
+    // same distance from its start: left behind, they stood in the air.
+    let mut left = Vec::new();
+    for old in &reshaped_from {
+        let Some(now) = commands.iter().find_map(|c| match c {
+            Command::Update {
+                element: Element::Wall(w),
+            } if w.id == old.id => Some(w.clone()),
+            _ => None,
+        }) else {
+            continue;
+        };
+        let (carried, stayed) = newera_core::ops::carry_openings(doc.home(), old, &now, &asked);
+        commands.extend(carried.into_iter().map(Command::update));
+        left.extend(
+            stayed
+                .into_iter()
+                .map(|id| format!("{id} no longer fits in {}; left where it was", old.id)),
+        );
+    }
+    doc.execute(Command::Batch { commands }).map_err(core)?;
+    Ok(left)
 }
 
 /// A rename by rule: `pattern` replaced by `to` wherever it matches.
@@ -1271,11 +1324,41 @@ fn set_layer(piece: &mut newera_core::Furniture, raw: &str) -> EditResult<()> {
     Ok(())
 }
 
+/// The project a label or line belongs to, as `home` shows it in `layer`:
+/// `electrical`, `plumbing`, or empty (or `none`) for the architectural plan.
+fn discipline(raw: &str) -> EditResult<Option<newera_core::Discipline>> {
+    match raw.trim() {
+        "" | "none" => Ok(None),
+        "electrical" => Ok(Some(newera_core::Discipline::Electrical)),
+        "plumbing" => Ok(Some(newera_core::Discipline::Plumbing)),
+        other => Err(format!(
+            "layer of a label or line: electrical, plumbing, or empty (not {other})"
+        )),
+    }
+}
+
 /// Renames a part of a group, or says why it cannot be edited alone.
 ///
 /// A part's name is where a joiner writes its size ("tampo aberto 110 × 30"),
 /// and after the group is resized it is the part's name that is wrong — the
 /// one thing `stale` rightly reports and nobody could fix.
+/// The piece an earlier item of this call already changed, taken out of
+/// `commands` to be changed further.
+fn take_pending(
+    commands: &mut Vec<Command>,
+    id: newera_core::FurnitureId,
+) -> Option<newera_core::Furniture> {
+    let at = commands.iter().position(
+        |c| matches!(c, Command::Update { element: Element::Furniture(f) } if f.id == id),
+    )?;
+    match commands.remove(at) {
+        Command::Update {
+            element: Element::Furniture(f),
+        } => Some(f),
+        _ => unreachable!("matched above"),
+    }
+}
+
 fn rename_part(
     home: &newera_core::Home,
     id: ElementId,
@@ -1326,18 +1409,7 @@ fn rename_part(
         ));
     }
     // Two parts of one group in one call edit the same copy of the group.
-    let at = commands.iter().position(
-        |c| matches!(c, Command::Update { element: Element::Furniture(f) } if f.id == owner.id),
-    );
-    let mut group = match at {
-        Some(k) => match commands.remove(k) {
-            Command::Update {
-                element: Element::Furniture(f),
-            } => f,
-            _ => unreachable!("matched above"),
-        },
-        None => owner.clone(),
-    };
+    let mut group = take_pending(commands, owner.id).unwrap_or_else(|| owner.clone());
     let piece = find(&mut group, part).ok_or_else(|| missing(home, id))?;
     let text = |v: Option<String>, old: Option<String>| match v {
         Some(v) if v.is_empty() => None,
@@ -1722,13 +1794,66 @@ mod tests {
         assert_eq!(wall.right_side.as_ref().unwrap().to_string(), "brick");
 
         let bad: UpdateSpec = serde_json::from_str(r#"{"id":"w1","type":"papelao"}"#).unwrap();
-        assert!(
-            update(&mut doc, vec![bad])
-                .unwrap_err()
-                .contains("unknown wall type")
-        );
+        let why = update(&mut doc, vec![bad]).unwrap_err();
+        assert!(why.contains("unknown wall type"), "{why}");
+        // The refusal names the types there are, instead of sending the
+        // agent to another tool to find them.
+        for id in newera_core::WALL_TYPES.iter().map(|t| t.id) {
+            assert!(why.contains(id), "{id} missing: {why}");
+        }
         let bad: UpdateSpec = serde_json::from_str(r#"{"id":"r5","floor_mat":"lava"}"#).unwrap();
         assert!(update(&mut doc, vec![bad]).is_err());
+    }
+
+    #[test]
+    fn a_reshaped_wall_keeps_its_doors() {
+        let mut doc = Document::default();
+        let wall = Wall::new(
+            doc.new_wall_id(),
+            Point2::new(0.0, 0.0),
+            Point2::new(400.0, 0.0),
+        );
+        let mut door = newera_core::Furniture {
+            id: doc.new_furniture_id(),
+            catalog: "door".into(),
+            width: 80.0,
+            depth: 15.0,
+            height: 210.0,
+            opening: Some(newera_core::Opening::default()),
+            ..newera_core::Furniture::default()
+        };
+        newera_core::align_to_wall(&mut door, &wall, 300.0);
+        let (w, d) = (wall.id.to_string(), door.id);
+        doc.execute(Command::Batch {
+            commands: vec![Command::insert(wall), Command::insert(door)],
+        })
+        .unwrap();
+        let reshape = |doc: &mut Document, change: serde_json::Value| {
+            update(doc, vec![serde_json::from_value(change).unwrap()]).unwrap()
+        };
+        let at = |doc: &Document| doc.home().find_piece(d).unwrap().position;
+
+        // Moved off its line, the wall takes the door along.
+        let left = reshape(
+            &mut doc,
+            serde_json::json!({"id": w, "a": [0, 20], "b": [400, 20]}),
+        );
+        assert!(left.is_empty(), "{left:?}");
+        assert_eq!(at(&doc), Point2::new(300.0, 20.0));
+        // Shortened past it, the door is kept inside.
+        reshape(&mut doc, serde_json::json!({"id": w, "b": [300, 20]}));
+        let p = at(&doc);
+        assert!(
+            (p.x - 260.0).abs() < 1e-9 && (p.y - 20.0).abs() < 1e-9,
+            "{p:?}"
+        );
+        // Too short to hold it: left where it was, and the reply says so.
+        let left = reshape(&mut doc, serde_json::json!({"id": w, "b": [60, 20]}));
+        assert_eq!(at(&doc), p);
+        assert!(
+            left[0].starts_with(&format!("{d} no longer fits")),
+            "{left:?}"
+        );
     }
 
     #[test]
@@ -1801,6 +1926,56 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("does not apply"), "{err}");
+    }
+
+    #[test]
+    fn labels_and_lines_take_the_layer_home_shows() {
+        let mut doc = Document::default();
+        let ids = create(
+            &mut doc,
+            CreateParams {
+                labels: vec![LabelSpec {
+                    text: "QD".into(),
+                    at: Point2::new(10.0, 10.0),
+                    ..LabelSpec::default()
+                }],
+                polylines: vec![PolylineSpec {
+                    pts: vec![Point2::new(0.0, 0.0), Point2::new(100.0, 0.0)],
+                    ..PolylineSpec::default()
+                }],
+                ..CreateParams::default()
+            },
+        )
+        .unwrap()
+        .ids;
+        let layer = |id: &str, layer: &str| UpdateSpec {
+            id: id.into(),
+            layer: Some(layer.into()),
+            ..UpdateSpec::default()
+        };
+        update(
+            &mut doc,
+            vec![layer(&ids[0], "electrical"), layer(&ids[1], "plumbing")],
+        )
+        .unwrap();
+        let home = doc.home();
+        assert_eq!(
+            home.labels[0].discipline,
+            Some(newera_core::Discipline::Electrical)
+        );
+        assert_eq!(
+            home.polylines[0].discipline,
+            Some(newera_core::Discipline::Plumbing)
+        );
+        assert_eq!(
+            crate::compact::label(&home.labels[0])["layer"],
+            serde_json::json!("electrical"),
+            "the same word home shows"
+        );
+        update(&mut doc, vec![layer(&ids[0], "")]).unwrap();
+        assert_eq!(doc.home().labels[0].discipline, None);
+        let err = update(&mut doc, vec![layer(&ids[1], "lighting")]).unwrap_err();
+        assert!(err.contains("electrical, plumbing"), "{err}");
     }
 
     #[test]
@@ -1973,8 +2148,8 @@ pub(crate) struct PlaceSpec {
     pub mirror: Option<bool>,
     /// Doors: hinge on the right.
     pub hinge_right: Option<bool>,
-    /// Glass of a guard or a balcony closure: `laminated`, `tempered`,
-    /// `tempered-laminated` or `wired`.
+    /// Glass of a guard or a balcony closure.
+    #[schemars(extend("enum" = ["laminated", "tempered", "tempered-laminated", "wired"]))]
     pub glass: Option<String>,
     /// Clear gap between a railing's bars, cm.
     pub gap: Option<f64>,
@@ -2012,7 +2187,17 @@ pub(crate) struct LightSpec {
 }
 
 /// Applies a light spec over the piece's current light.
-pub(crate) fn apply_light(piece: &mut newera_core::Furniture, spec: &LightSpec) {
+///
+/// A `z` outside 0..1 is refused rather than clamped: 268.5 is a height in
+/// cm, and clamped to 1 it put the source on the top face without a word.
+pub(crate) fn apply_light(piece: &mut newera_core::Furniture, spec: &LightSpec) -> EditResult<()> {
+    if let Some(z) = spec.z
+        && !(0.0..=1.0).contains(&z)
+    {
+        return Err(format!(
+            "light.z {z}: z is a fraction of the piece's height (0 = bottom face), not cm"
+        ));
+    }
     let mut light = piece
         .light
         .clone()
@@ -2023,7 +2208,7 @@ pub(crate) fn apply_light(piece: &mut newera_core::Furniture, spec: &LightSpec) 
     if spec.on == Some(false) {
         light.lumens = Some(0.0);
         piece.light = Some(light);
-        return;
+        return Ok(());
     }
     if spec.on == Some(true) && light.lumens == Some(0.0) {
         light.lumens = newera_catalog::light_for(piece).and_then(|l| l.lumens);
@@ -2050,12 +2235,13 @@ pub(crate) fn apply_light(piece: &mut newera_core::Furniture, spec: &LightSpec) 
         light.sources = vec![newera_core::LightSource {
             x: 0.5,
             y: 0.5,
-            z: z.clamp(0.0, 1.0),
+            z,
             color: [255, 255, 255],
             diameter: None,
         }];
     }
     piece.light = Some(light);
+    Ok(())
 }
 
 /// Shortens a beam from `a` toward `b` to where its top would
@@ -2485,6 +2671,9 @@ pub(crate) fn place_noting(doc: &mut Document, items: Vec<PlaceSpec>) -> EditRes
     let mut placed_here: Vec<newera_core::Furniture> = Vec::new();
     let count = items.len();
     let mut refused: Vec<String> = Vec::new();
+    // A refused batch hands its ids back: the next piece placed is not
+    // numbered as if the refused ones had been.
+    let mark = doc.id_mark();
     let mut one = |mut spec: PlaceSpec| -> EditResult<()> {
         // `library:<name>@<v>`: that version's file, at the size, in the
         // unit and with the photos and measurements it was published with.
@@ -2687,7 +2876,7 @@ pub(crate) fn place_noting(doc: &mut Document, items: Vec<PlaceSpec>) -> EditRes
             piece.light = newera_catalog::light_for(&piece);
         }
         if let Some(light) = &spec.light {
-            apply_light(&mut piece, light);
+            apply_light(&mut piece, light)?;
         }
         if let (Some(right), Some(opening)) = (spec.hinge_right, piece.opening.as_mut()) {
             opening.hinge_right = right;
@@ -2840,17 +3029,18 @@ pub(crate) fn place_noting(doc: &mut Document, items: Vec<PlaceSpec>) -> EditRes
             });
         }
     }
-    match refused.len() {
-        0 => {}
-        _ if count == 1 => return Err(refused.remove(0)),
-        n => {
-            return Err(format!(
-                "nothing placed: {n} of the {count} items refused, the others are fine as given — {}",
-                refused.join(" | ")
-            ));
-        }
+    let refusal = match refused.len() {
+        0 => doc.execute(Command::Batch { commands }).map_err(core).err(),
+        _ if count == 1 => Some(refused.remove(0)),
+        n => Some(format!(
+            "nothing placed: {n} of the {count} items refused, the others are fine as given — {}",
+            refused.join(" | ")
+        )),
+    };
+    if let Some(why) = refusal {
+        doc.rewind_ids(mark);
+        return Err(why);
     }
-    doc.execute(Command::Batch { commands }).map_err(core)?;
     Ok(Placed {
         ids,
         turned,
@@ -3021,6 +3211,39 @@ mod place_tests {
     }
 
     #[test]
+    fn a_light_height_in_cm_is_refused_not_clamped() {
+        let mut doc = Document::default();
+        let lamp = |z: f64| PlaceSpec {
+            cat: "wardrobe".into(),
+            at: Some(Point2::new(100.0, 100.0)),
+            light: Some(LightSpec {
+                z: Some(z),
+                ..LightSpec::default()
+            }),
+            ..PlaceSpec::default()
+        };
+        let why = place(&mut doc, vec![lamp(268.5)]).unwrap_err();
+        assert!(why.contains("fraction of the piece's height"), "{why}");
+        assert!(doc.home().furniture.is_empty());
+        let ids = place(&mut doc, vec![lamp(1.0)]).unwrap();
+        let why = update(
+            &mut doc,
+            vec![UpdateSpec {
+                id: ids[0].clone(),
+                light: Some(LightSpec {
+                    z: Some(-0.2),
+                    ..LightSpec::default()
+                }),
+                ..UpdateSpec::default()
+            }],
+        )
+        .unwrap_err();
+        assert!(why.contains("not cm"), "{why}");
+        let light = doc.home().furniture[0].light.clone().unwrap();
+        assert!((light.sources[0].z - 1.0).abs() < 1e-9, "left as it was");
+    }
+
+    #[test]
     fn a_batch_says_every_item_it_refuses_and_places_none() {
         let mut doc = Document::default();
         let spec = |cat: &str, x: f64| PlaceSpec {
@@ -3052,6 +3275,9 @@ mod place_tests {
         // Alone, an item is refused in its own words.
         let alone = place(&mut doc, vec![spec("no-such-thing", 300.0)]).unwrap_err();
         assert!(alone.starts_with("unknown catalog id"), "{alone}");
+        // The refused batches took no ids: the next piece is the first one.
+        let ids = place(&mut doc, vec![spec("bed-double", 100.0)]).unwrap();
+        assert_eq!(ids, ["f1"]);
     }
 
     #[test]
