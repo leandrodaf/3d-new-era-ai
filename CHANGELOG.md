@@ -6,12 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Changed
-
-- Crash reports from the released builds now name the function and line where the program
-  crashed. Each release uploads its debug files to Sentry; the downloads stay stripped and the
-  same size.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
