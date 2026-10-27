@@ -581,8 +581,10 @@ fn corner_of(walls: &[Wall], a: &Node, b: &Node) -> Option<Point2> {
 }
 
 /// Whether `end`, a lone wall end off the line to `node`'s center, slides
-/// along its own line onto the body of a wall meeting at `node` — away from
-/// that wall's tips — so a T there keeps it straight.
+/// along its own line onto the body of a wall meeting at `node`, clear of the
+/// corner — farther from that wall's tips than half of any wall meeting at
+/// either node — so a T there keeps it straight. Ends only a few centimetres
+/// off, as drawn coordinates are, still close the corner.
 fn lands_on_body(walls: &[Wall], end: &Node, node: &Node) -> bool {
     let [Ref::Tip(w, at_start)] = end.refs.as_slice() else {
         return false;
@@ -593,6 +595,12 @@ fn lands_on_body(walls: &[Wall], end: &Node, node: &Node) -> bool {
     if project(end.center, u, node.center).1.abs() <= JOIN_TOLERANCE {
         return false; // the center is on its line: joining there leans nothing
     }
+    let clear = end
+        .refs
+        .iter()
+        .chain(&node.refs)
+        .map(|r| walls[r.wall()].thickness / 2.0)
+        .fold(JOIN_TOLERANCE, f64::max);
     node.refs.iter().any(|r| {
         let host = &walls[r.wall()];
         let Some((a, e, len)) = line_of(host) else {
@@ -604,8 +612,8 @@ fn lands_on_body(walls: &[Wall], end: &Node, node: &Node) -> bool {
         let at = Point2::new(end.center.x + u.0 * s, end.center.y + u.1 * s);
         let (on, _) = project(a, e, at);
         at.distance(end.center) <= host.thickness / 2.0 + TOUCH_TOLERANCE
-            && on > JOIN_TOLERANCE
-            && on < len - JOIN_TOLERANCE
+            && on > clear
+            && on < len - clear
     })
 }
 
