@@ -94,7 +94,7 @@ mod desktop {
             filters
                 .iter()
                 .fold(rfd::AsyncFileDialog::new(), |dialog, (name, exts)| {
-                    dialog.add_filter(*name, *exts)
+                    dialog.add_filter(*name, exts)
                 }),
         )
     }

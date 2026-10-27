@@ -364,10 +364,10 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
         window.job = None;
     }
     #[cfg(target_arch = "wasm32")]
-    if let Some(file) = render_to {
-        if let Err(error) = window.start_web(app, ctx) {
-            window.last = Some((file, Err(error)));
-        }
+    if let Some(file) = render_to
+        && let Err(error) = window.start_web(app, ctx)
+    {
+        window.last = Some((file, Err(error)));
     }
     if open {
         app.video = Some(window);
