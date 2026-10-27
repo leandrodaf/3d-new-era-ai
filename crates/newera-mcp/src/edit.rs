@@ -263,6 +263,12 @@ pub(crate) struct SolidSpec {
     pub name: Option<String>,
 }
 
+/// Why a polygon enclosing under 1 cm² is refused: almost always one
+/// written in metres.
+fn too_small(what: &str, area: f64) -> String {
+    format!("the {what} encloses {area:.2} cm², under 1 cm²; coordinates are cm (metres ×100?)")
+}
+
 /// A piece built from a polygon.
 fn solid(doc: &mut Document, spec: &SolidSpec) -> EditResult<newera_core::Furniture> {
     use newera_core::SolidShape;
@@ -289,8 +295,12 @@ fn solid(doc: &mut Document, spec: &SolidSpec) -> EditResult<newera_core::Furnit
     };
     match (&spec.pts, &spec.profile) {
         (Some(pts), None) => {
-            if pts.len() < 3 || newera_core::polygon_area(pts) < 1.0 {
+            if pts.len() < 3 {
                 return Err("a solid outline needs at least 3 points enclosing an area".into());
+            }
+            let area = newera_core::polygon_area(pts);
+            if area < 1.0 {
+                return Err(too_small("solid outline", area));
             }
             let (lo, hi) = bounds(pts);
             let center = Point2::new(f64::midpoint(lo.x, hi.x), f64::midpoint(lo.y, hi.y));
@@ -309,8 +319,12 @@ fn solid(doc: &mut Document, spec: &SolidSpec) -> EditResult<newera_core::Furnit
             let (Some(a), Some(b)) = (spec.a, spec.b) else {
                 return Err("a profile solid needs `a` and `b` (the path it runs along)".into());
             };
-            if profile.len() < 3 || newera_core::polygon_area(profile) < 1.0 {
+            if profile.len() < 3 {
                 return Err("a profile needs at least 3 points enclosing an area".into());
+            }
+            let area = newera_core::polygon_area(profile);
+            if area < 1.0 {
+                return Err(too_small("profile", area));
             }
             let (dx, dy) = (b.x - a.x, b.y - a.y);
             let length = dx.hypot(dy);
@@ -382,9 +396,12 @@ pub(crate) struct RoofSpec {
 /// stop at. Ends further than [`newera_core::TOUCH_TOLERANCE`] from anything
 /// are left exactly where they were.
 ///
+/// Ends listed in `fixed` (`(wall, at_start)`) are left alone: an `update`
+/// that moved one end of a wall must not pull the other one somewhere.
+///
 /// Returns each end it moved, `w3.b→[x,y]` (`a` the start, `b` the end), so
 /// the caller is told its coordinates changed.
-fn weld(doc: &Document, walls: &mut [Wall]) -> Vec<String> {
+fn weld(doc: &Document, walls: &mut [Wall], fixed: &[(newera_core::WallId, bool)]) -> Vec<String> {
     if walls.is_empty() {
         return Vec::new();
     }
@@ -396,9 +413,19 @@ fn weld(doc: &Document, walls: &mut [Wall]) -> Vec<String> {
         .filter(|w| !walls.iter().any(|edited| edited.id == w.id))
         .collect();
     all.extend(walls.iter().cloned());
-    let ids: Vec<newera_core::WallId> = walls.iter().map(|w| w.id).collect();
+    // A wall shorter than it is thick (a plan typed in metres) is left where
+    // it was written: pulling its ends onto its neighbours' corners would
+    // collapse it to nothing, and `create` points it out instead.
+    let ids: Vec<newera_core::WallId> = walls
+        .iter()
+        .filter(|w| w.start.distance(w.end) >= w.thickness)
+        .map(|w| w.id)
+        .collect();
     let mut moved = Vec::new();
     for (id, at_start, to) in newera_core::weld_ends(&all, &ids) {
+        if fixed.contains(&(id, at_start)) {
+            continue;
+        }
         if let Some(wall) = walls.iter_mut().find(|w| w.id == id) {
             if at_start {
                 wall.start = to;
@@ -414,10 +441,21 @@ fn weld(doc: &Document, walls: &mut [Wall]) -> Vec<String> {
 
 /// What [`create`] made: the new ids in order, and the wall ends it moved
 /// onto walls they nearly touched (see [`weld`]).
+/// What [`update`] did besides the changes asked: the wall ends it moved onto
+/// walls they nearly touched, and the openings a reshaped wall left behind.
+#[derive(Debug, Default)]
+pub(crate) struct Updated {
+    pub welded: Vec<String>,
+    pub left: Vec<String>,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Created {
     pub ids: Vec<String>,
     pub welded: Vec<String>,
+    /// Walls shorter than they are thick, `w3`: most often a plan typed in
+    /// metres, which draws a house of 4 × 3 cm.
+    pub short: Vec<String>,
 }
 
 /// Creates everything in one undoable step.
@@ -474,8 +512,13 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Cre
     let welded = if params.exact {
         Vec::new()
     } else {
-        weld(doc, &mut new_walls)
+        weld(doc, &mut new_walls, &[])
     };
+    let short = new_walls
+        .iter()
+        .filter(|w| w.start.distance(w.end) < w.thickness)
+        .map(|w| w.id.to_string())
+        .collect();
     commands.extend(new_walls.iter().cloned().map(Command::insert));
 
     // Dividers already on this storey plus the ones created now.
@@ -628,7 +671,7 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Cre
         return Err("nothing to create".into());
     }
     doc.execute(Command::Batch { commands }).map_err(core)?;
-    Ok(Created { ids, welded })
+    Ok(Created { ids, welded, short })
 }
 
 /// Fields to change; each applies only to the kinds that have it, any other
@@ -844,11 +887,15 @@ pub(crate) fn missing(home: &newera_core::Home, id: ElementId) -> String {
     format!("{id} not found")
 }
 
-/// Changes elements by id in one step. Returns the doors and windows of a
-/// reshaped wall that no longer fit in it and were left where they were.
-pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<Vec<String>> {
+/// Changes elements by id in one step. Returns the wall ends it welded onto
+/// walls they nearly touch (see [`weld`]; only ends that were given move), and
+/// the doors and windows of a reshaped wall that no longer fit in it and were
+/// left where they were.
+pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<Updated> {
     let mut commands = Vec::with_capacity(items.len());
     let mut reshaped: Vec<Wall> = Vec::new();
+    // The ends of reshaped walls that were not given: they stay put.
+    let mut kept_ends: Vec<(newera_core::WallId, bool)> = Vec::new();
     // Each wall whose ends moved, as it was: its openings follow it.
     let mut reshaped_from: Vec<Wall> = Vec::new();
     let asked: Vec<ElementId> = items.iter().filter_map(|i| i.id.parse().ok()).collect();
@@ -991,9 +1038,16 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<V
                 if let Some(arc) = spec.arc {
                     w.arc_extent = (arc != 0.0).then_some(arc);
                 }
-                // An end that was moved is welded like a new one.
+                // An end that was moved is welded like a new one; the other
+                // stays where it is.
                 if spec.a.is_some() || spec.b.is_some() {
                     reshaped.push(w.clone());
+                    if spec.a.is_none() {
+                        kept_ends.push((w.id, true));
+                    }
+                    if spec.b.is_none() {
+                        kept_ends.push((w.id, false));
+                    }
                 }
                 Element::Wall(w)
             }
@@ -1177,7 +1231,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<V
         }
         commands.push(Command::Update { element: updated });
     }
-    let _ = weld(doc, &mut reshaped);
+    let welded = weld(doc, &mut reshaped, &kept_ends);
     for wall in reshaped {
         if let Some(command) = commands
             .iter_mut()
@@ -1209,7 +1263,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<V
         );
     }
     doc.execute(Command::Batch { commands }).map_err(core)?;
-    Ok(left)
+    Ok(Updated { welded, left })
 }
 
 /// A rename by rule: `pattern` replaced by `to` wherever it matches.
@@ -1765,6 +1819,45 @@ mod tests {
     }
 
     #[test]
+    fn update_welds_only_the_ends_it_was_given() {
+        let mut doc = Document::default();
+        let wall = Wall::new(
+            doc.new_wall_id(),
+            Point2::new(0.0, 0.0),
+            Point2::new(400.0, 0.0),
+        );
+        // A stub drawn exactly, 3 cm short of the wall's face.
+        let stub = Wall::new(
+            doc.new_wall_id(),
+            Point2::new(200.0, 200.0),
+            Point2::new(200.0, 10.5),
+        );
+        let id = stub.id.to_string();
+        doc.execute(Command::Batch {
+            commands: vec![Command::insert(wall), Command::insert(stub)],
+        })
+        .unwrap();
+        let set = |doc: &mut Document, change: serde_json::Value| {
+            update(doc, vec![serde_json::from_value(change).unwrap()])
+                .unwrap()
+                .welded
+        };
+
+        // Moving its far end leaves the near one where it was drawn.
+        let welded = set(&mut doc, serde_json::json!({"id": id, "a": [200, 250]}));
+        let stub = &doc.home().walls[1];
+        assert_eq!(stub.start, Point2::new(200.0, 250.0));
+        assert_eq!(stub.end, Point2::new(200.0, 10.5), "b was not given");
+        assert!(welded.is_empty(), "{welded:?}");
+
+        // The end that is given is welded, and the reply says so.
+        let welded = set(&mut doc, serde_json::json!({"id": id, "b": [200, 10.5]}));
+        assert!(doc.home().walls[1].end.y < 10.5);
+        assert_eq!(welded.len(), 1, "{welded:?}");
+        assert!(welded[0].starts_with(&format!("{id}.b→")), "{welded:?}");
+    }
+
+    #[test]
     fn wall_types_and_finishes() {
         let mut doc = Document::default();
         let params: CreateParams = serde_json::from_str(
@@ -1829,7 +1922,9 @@ mod tests {
         })
         .unwrap();
         let reshape = |doc: &mut Document, change: serde_json::Value| {
-            update(doc, vec![serde_json::from_value(change).unwrap()]).unwrap()
+            update(doc, vec![serde_json::from_value(change).unwrap()])
+                .unwrap()
+                .left
         };
         let at = |doc: &Document| doc.home().find_piece(d).unwrap().position;
 
@@ -1898,6 +1993,37 @@ mod tests {
             doc.home().furniture[0].is_stairs(),
             "a flight built by hand"
         );
+    }
+
+    #[test]
+    fn a_plan_typed_in_metres_is_pointed_out() {
+        let mut doc = Document::default();
+        let m = |c: &[(f64, f64)]| c.iter().map(|&(x, y)| Point2::new(x, y)).collect();
+        let err = create(
+            &mut doc,
+            CreateParams {
+                solids: vec![SolidSpec {
+                    pts: Some(m(&[(0.0, 0.0), (1.4, 0.0), (1.4, 0.7), (0.0, 0.7)])),
+                    ..SolidSpec::default()
+                }],
+                ..CreateParams::default()
+            },
+        )
+        .unwrap_err();
+        assert!(err.contains("encloses 0.98 cm²"), "{err}");
+        assert!(err.contains("metres ×100"), "{err}");
+        let created = create(
+            &mut doc,
+            CreateParams {
+                walls: vec![WallPath {
+                    pts: m(&[(0.0, 0.0), (4.0, 0.0), (4.0, 300.0)]),
+                    ..WallPath::default()
+                }],
+                ..CreateParams::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(created.short, [created.ids[0].clone()]);
     }
 
     #[test]
@@ -2575,9 +2701,19 @@ pub(crate) fn with_defaults(
     items
         .into_iter()
         .map(|item| {
+            // `unit` and `stretch` are about a model file: a catalog piece in
+            // a batch of imports does not take them (it would be refused).
+            let model = item
+                .model
+                .as_deref()
+                .or(defaults.model.as_deref())
+                .is_some_and(|m| !m.is_empty());
             let mut value = serde_json::to_value(&item).map_err(|e| e.to_string())?;
             if let (Some(target), Some(base)) = (value.as_object_mut(), base.as_object()) {
                 for (key, default) in base {
+                    if !model && (key == "unit" || key == "stretch") {
+                        continue;
+                    }
                     let missing = match target.get(key) {
                         None | Some(serde_json::Value::Null) => true,
                         Some(serde_json::Value::String(s)) => s.is_empty(),
@@ -3151,6 +3287,53 @@ mod place_tests {
         let repainted = piece(&doc, &ids[1]);
         assert_eq!(repainted.color, Some([0x44, 0x55, 0x66]));
         assert_eq!(repainted.texture, None, "the wood is gone");
+    }
+
+    #[test]
+    fn a_default_unit_is_left_off_catalog_items() {
+        let defaults = PlaceSpec {
+            unit: Some("m".into()),
+            stretch: Some(true),
+            color: Some([1, 2, 3]),
+            ..PlaceSpec::default()
+        };
+        let items = with_defaults(
+            vec![
+                PlaceSpec {
+                    cat: "wardrobe".into(),
+                    at: Some(Point2::new(100.0, 100.0)),
+                    ..PlaceSpec::default()
+                },
+                PlaceSpec {
+                    model: Some("chair.obj".into()),
+                    at: Some(Point2::new(300.0, 100.0)),
+                    ..PlaceSpec::default()
+                },
+            ],
+            Some(&defaults),
+        )
+        .unwrap();
+        assert_eq!((items[0].unit.as_deref(), items[0].stretch), (None, None));
+        assert_eq!(items[0].color, Some([1, 2, 3]), "the rest still applies");
+        assert_eq!(
+            (items[1].unit.as_deref(), items[1].stretch),
+            (Some("m"), Some(true))
+        );
+        // The catalog piece is placed, not refused.
+        let mut doc = Document::default();
+        place(&mut doc, vec![items[0].clone()]).unwrap();
+        // Set on the item itself, it is still a mistake worth saying.
+        let why = place(
+            &mut doc,
+            vec![PlaceSpec {
+                cat: "wardrobe".into(),
+                at: Some(Point2::new(100.0, 300.0)),
+                unit: Some("m".into()),
+                ..PlaceSpec::default()
+            }],
+        )
+        .unwrap_err();
+        assert!(why.contains("unit and stretch are for model"), "{why}");
     }
 
     #[test]
