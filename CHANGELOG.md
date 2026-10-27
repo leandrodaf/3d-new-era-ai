@@ -6,11 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- A door or window only cuts the walls of its own storey. The same wall drawn again upstairs,
-  right over it, was opened too, and could be named the opening's wall in `home` and `measure`.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
