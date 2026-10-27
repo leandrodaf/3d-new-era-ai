@@ -6,12 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- A refused `place` no longer uses up ids. The pieces it would have placed took their numbers anyway,
-  so after a refused batch of three the next piece came out `f4` instead of `f1`, and an agent
-  that had planned its ids found them shifted.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
