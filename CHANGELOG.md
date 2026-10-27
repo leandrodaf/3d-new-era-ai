@@ -6,13 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- A `render_plan` or `render_3d` asked for while another render runs waits for its turn instead of
-  being refused with "A render is already running"; an agent drawing two views at once got one
-  and an error. `render_photo` and `edit_video`, which take minutes, are still refused while
-  another render runs, and the descriptions say one render runs at a time.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
