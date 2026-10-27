@@ -998,6 +998,12 @@
         },
         "v": {
           "type": "integer"
+        },
+        "welded": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -2093,7 +2099,7 @@
       "readOnlyHint": false,
       "title": "Change storeys"
     },
-    "description": "Change the storeys. add {name?,h?,elev?} adds one on top (or at elev cm) and selects it; select {id}; delete {id} removes it and its content. update {id, elev?|h?|name?|reference?}: elev raises a storey with its walls, floors and openings (houses on stilts); reference=true marks it a tracing layer (imported plan, older version) that checks and ergonomics skip, which is what you want when two storeys share an elevation. Other tools act on the selected storey. The list is the levels tool.",
+    "description": "Change the storeys. add {name?,h?,elev?} adds one on top (or at elev cm) and selects it; select {id}; delete {id} removes it and its content. update {id, elev?|h?|name?|reference?}: elev raises a storey with its walls, floors and openings (houses on stilts); reference=true marks it a tracing layer (imported plan, older version) that checks and ergonomics skip, which is what you want when two storeys share an elevation. Other tools act on the selected storey. Storeys belong to each plan version (variants): a change applies to the active one. The list is the levels tool.",
     "inputSchema": {
       "properties": {
         "action": {
@@ -3144,7 +3150,7 @@
     "inputSchema": {
       "properties": {
         "h": {
-          "description": "For `plan`, `.png` only: height px (default 1200)",
+          "description": "For `plan`, `.png` only: height px (default 1200, 64..2048)",
           "type": "integer"
         },
         "ids": {
@@ -3163,7 +3169,7 @@
           "type": "number"
         },
         "w": {
-          "description": "For `plan`, `.png` only: width px (default 1600)",
+          "description": "For `plan`, `.png` only: width px (default 1600, 64..2048)",
           "type": "integer"
         },
         "what": {
@@ -4431,7 +4437,7 @@
               "type": "array"
             },
             "along": {
-              "description": "Distance along the wall from its start, cm (default: middle)",
+              "description": "Distance along the wall from its start, cm (default: `at`'s, or middle)",
               "type": "number"
             },
             "angle": {
@@ -4440,7 +4446,7 @@
             },
             "at": {
               "$ref": "#/$defs/Point2",
-              "description": "Center on the plan. Optional when `wall` is given; a door or window placed `at` a point near a wall snaps into it"
+              "description": "Center on the plan, optional with `wall`; a door or window `at` a point near a wall snaps into it"
             },
             "b": {
               "description": "With `cat:\"beam\"`: the other end point `[x,y,z]` cm",
@@ -4783,7 +4789,7 @@
       "readOnlyHint": true,
       "title": "Render a 3D view"
     },
-    "description": "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations — front looks from the plan's bottom edge (large y) toward y=0, back from y=0 toward large y, left from x=0, right from large x; cut=cm makes a section keeping only what is beyond that plane from the viewer (front cut=200 keeps y<200, so the wall at y=0 stays as the backdrop; to remove it look from back), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). walls=cutaway drops the walls between the eye and a room to 40 cm, walls=down drops them all; either hides ceilings, roofs and the doors, windows and wall pieces of lowered walls, to see the furniture from the side. piece=<id> draws it alone, seen from its own side (view; aerial is three-quarter), framed the same wherever it stands; part=<name> frames one part of its model; ref=i puts its reference photo beside it, from the photo's side. Keep w/h small.",
+    "description": "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations — front looks from the plan's bottom edge (large y) toward y=0, back from y=0 toward large y, left from x=0, right from large x; cut=cm makes a section keeping only what is beyond that plane from the viewer (front cut=200 keeps y<200, so the wall at y=0 stays as the backdrop; to remove it look from back), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). walls=cutaway drops the walls between the eye and a room to 40 cm, walls=down drops them all; either hides ceilings, roofs and the doors, windows and wall pieces of lowered walls, to see the furniture from the side. piece=<id> draws it alone, seen from its own side (view; aerial is three-quarter), framed the same wherever it stands; part=<name> frames one part of its model; ref=i puts its reference photo beside it, from the photo's side. Keep w/h small. One render runs at a time; this waits its turn.",
     "inputSchema": {
       "properties": {
         "cam": {
@@ -4965,7 +4971,7 @@
       "readOnlyHint": true,
       "title": "Render the floor plan"
     },
-    "description": "PNG of the floor plan, exactly as the user sees it. region=[[minx,miny],[maxx,maxy]] frames a place — it is fitted to the image's aspect by growing the short side, never by cropping, so everything asked for is in the picture — or room=<id|name> with pad cm (default 30) frames a room without working the rectangle out. bg=0..1 overlays the background image to compare with the reference. Keep w/h small to save tokens.",
+    "description": "PNG of the floor plan, exactly as the user sees it. region=[[minx,miny],[maxx,maxy]] frames a place — it is fitted to the image's aspect by growing the short side, never by cropping, so everything asked for is in the picture — or room=<id|name> with pad cm (default 30) frames a room without working the rectangle out. bg=0..1 overlays the background image to compare with the reference. Keep w/h small to save tokens. One render runs at a time; this waits its turn.",
     "inputSchema": {
       "$defs": {
         "Point2": {
@@ -5194,7 +5200,7 @@
       "readOnlyHint": true,
       "title": "Show the plan"
     },
-    "description": "Show the plan to the user as an interactive viewer (pan, zoom, 3D view, open in the editor) where the chat client can display one. Reply: a one-line summary for you; the drawing goes to the viewer. To look at the plan yourself use render_plan.",
+    "description": "Show the plan to the user as an interactive viewer (pan, zoom, 3D view, open in the editor) where the chat client can display one. Reply: a one-line summary for you; the drawing goes to the viewer (none to a client without one). To look at the plan yourself use render_plan.",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -5217,7 +5223,6 @@
       },
       "required": [
         "name",
-        "svg",
         "summary",
         "editor"
       ],
@@ -5381,7 +5386,7 @@
               "description": "Start point (wall, dimension)"
             },
             "about": {
-              "description": "The piece a note is about (e.g. `f1185`), checked by `annotations` stale; `\"\"` unties it",
+              "description": "The piece a note is about, checked by `annotations` stale; `\"\"` unties it",
               "type": "string"
             },
             "align": {
@@ -5405,7 +5410,7 @@
               "description": "Position (label, furniture center)"
             },
             "auto": {
-              "description": "Room follows its walls (re-detected when they change); `pts` turns it off",
+              "description": "Room follows its walls (re-detected); `pts` turns it off",
               "type": "boolean"
             },
             "b": {
@@ -5429,7 +5434,7 @@
               "type": "boolean"
             },
             "ceiling_flat": {
-              "description": "Room ceiling flat at storey height (true) or following the wall profiles (false)",
+              "description": "Room ceiling flat at storey height (true) or following the walls (false)",
               "type": "boolean"
             },
             "color": {
@@ -5568,7 +5573,7 @@
             },
             "room_use": {
               "$ref": "#/$defs/RoomUse",
-              "description": "Declared room program, independent of name; auto restores inference"
+              "description": "Room program"
             },
             "sides": {
               "description": "Wall finish on both sides",
@@ -5612,6 +5617,10 @@
             "w": {
               "description": "Furniture width cm",
               "type": "number"
+            },
+            "into": {
+              "$ref": "#/$defs/Point2",
+              "description": "Door: a point on the side it swings into"
             }
           },
           "required": [
@@ -5738,6 +5747,12 @@
         },
         "v": {
           "type": "integer"
+        },
+        "welded": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "type": "object"
