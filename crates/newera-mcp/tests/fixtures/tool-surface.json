@@ -998,6 +998,12 @@
         },
         "v": {
           "type": "integer"
+        },
+        "welded": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -5709,6 +5715,9 @@
         "ok": {
           "type": "boolean"
         },
+        "overridden": {
+          "type": "array"
+        },
         "properties": {
           "items": {
             "type": "string"
@@ -5738,6 +5747,12 @@
         },
         "v": {
           "type": "integer"
+        },
+        "welded": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "type": "object"

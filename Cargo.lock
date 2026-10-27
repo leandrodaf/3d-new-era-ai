@@ -3633,6 +3633,7 @@ dependencies = [
  "console_error_panic_hook",
  "log",
  "newera-app",
+ "newera-catalog",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
