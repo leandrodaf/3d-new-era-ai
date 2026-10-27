@@ -6,12 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- A joinery build resized with `update` (`d=60 h=45`) keeps that size when it is changed again
-  with `joinery` (`p.color`): it was rebuilt at the size its parameters remembered. The reply
-  notes the sizes it took; a size given in the change still wins.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
