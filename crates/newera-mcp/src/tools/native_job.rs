@@ -170,10 +170,13 @@ pub(super) async fn run(
     .await
 }
 
+/// How long a plan or a 3D view waits for the render ahead of it.
+const QUEUE_WAIT: Duration = Duration::from_secs(240);
+
 /// The render slot for `tool`. A plan or a 3D view is quick, so it waits
-/// for the render ahead of it (until its caller cancels); a photo or a video
-/// takes minutes, so it is refused while another render runs instead of
-/// queuing behind it unseen.
+/// for the render ahead of it (until its caller cancels, or for
+/// [`QUEUE_WAIT`]); a photo or a video takes minutes, so it is refused while
+/// another render runs instead of queuing behind it unseen.
 async fn take_turn<'a>(
     slot: &'a tokio::sync::Semaphore,
     tool: &str,
@@ -188,6 +191,9 @@ async fn take_turn<'a>(
         tokio::select! {
             permit = slot.acquire() => permit.map_err(|_| busy()),
             () = ct.cancelled() => Err(invalid(newera_core::progress::CANCELLED)),
+            // Nothing is sent while it waits, and an idle HTTP session ends
+            // after five minutes: past this it says busy instead.
+            () = tokio::time::sleep(QUEUE_WAIT) => Err(busy()),
         }
     } else {
         slot.try_acquire().map_err(|_| busy())
