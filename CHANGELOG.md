@@ -6,12 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- `edit_model action=material` refuses an image it cannot read (`mat:img:…` with a wrong path
-  or a broken file) and names the full path it looked at, changing nothing. It answered ok and
-  the material was drawn without its image.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
