@@ -74,6 +74,9 @@ const frames = async (times) => {
 // The request for support comes up at every launch, over what the checks
 // click; Escape closes it, on a frame.
 const dismissSupport = async () => {
+  // Keys reach egui only through its canvas, which a fresh page has not
+  // focused yet.
+  await evaluate("document.querySelector('canvas')?.focus()");
   for (let i = 0; i < 3; i++) {
     await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
     await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });

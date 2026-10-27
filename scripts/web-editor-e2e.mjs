@@ -159,6 +159,9 @@ await send("Page.enable");
       }
     };
     // The request for support comes up at every launch; Escape closes it.
+    // Keys reach egui only through its canvas, which a fresh page has not
+    // focused yet.
+    await evaluate("document.querySelector('canvas')?.focus()");
     // The tab only answers a key on a frame, so ask for pictures meanwhile.
     for (let i = 0; i < 3; i++) {
       await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });

@@ -1276,6 +1276,10 @@ impl NewEraApp {
     // --- Input -----------------------------------------------------------------
 
     fn shortcuts(&mut self, ctx: &egui::Context) {
+        // The request for support is a modal: nothing behind it answers keys.
+        if self.support_ask && self.dialog.is_none() {
+            return;
+        }
         let cmd = Modifiers::COMMAND;
         let cmd_shift = Modifiers::COMMAND.plus(Modifiers::SHIFT);
         let pressed = |m: Modifiers, k: Key| {
@@ -1471,7 +1475,10 @@ impl NewEraApp {
         modal.area = modal.area.accessible_name(title);
         let response =
             modal.show(ctx, |ui| {
-                ui.set_width(480.0);
+                // As wide as the other dialogs, less on a phone: the modal's
+                // own margins and the window's edge take the rest.
+                let width = (ctx.content_rect().width() - 64.0).clamp(200.0, 480.0);
+                ui.set_width(width);
                 crate::theme::title(ui, title);
                 crate::theme::body(ui, |ui| {
                     for paragraph in [
@@ -1492,21 +1499,31 @@ impl NewEraApp {
                         ui.add_space(8.0);
                     }
                 });
-                crate::theme::footer(ui, |ui| {
+                let actions = |ui: &mut egui::Ui, open: &mut bool| {
                     if crate::theme::primary(ui, crate::i18n::tr("Apoiar no Buy Me a Coffee"))
                         .clicked()
                     {
                         ui.ctx().open_url(egui::OpenUrl::new_tab(SUPPORT_URL));
-                        open = false;
+                        *open = false;
                     }
                     if crate::theme::secondary(ui, crate::i18n::tr("Abrir o GitHub")).clicked() {
                         ui.ctx().open_url(egui::OpenUrl::new_tab(REPOSITORY_URL));
-                        open = false;
+                        *open = false;
                     }
                     if crate::theme::secondary(ui, crate::i18n::tr("Agora não")).clicked() {
-                        open = false;
+                        *open = false;
                     }
-                });
+                };
+                // Three buttons do not fit side by side on a phone: there
+                // they stack, the one the dialog is for on top.
+                if width >= 420.0 {
+                    crate::theme::footer(ui, |ui| actions(ui, &mut open));
+                } else {
+                    ui.add_space(14.0);
+                    crate::theme::hairline(ui);
+                    ui.add_space(10.0);
+                    ui.vertical_centered_justified(|ui| actions(ui, &mut open));
+                }
             });
         open && !response.should_close()
     }
