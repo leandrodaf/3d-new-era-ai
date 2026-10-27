@@ -6,17 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- `cabinet_run p.sink=null` (or `cooktop=null`) takes the sink out of the run: the bowl set into
-  the old countertop brought it back every time. A sink or cooktop asked for in the call moves
-  the bowl or cooktop already there instead of being overruled by it.
-- A sink or cooktop asked for where another wall's run turns the corner keeps its place: that run
-  is planned again and stops short of it and of the room to open its doors, and stays so when
-  either wall is planned again. The sink was pushed along or lost to a blind panel, and a stretch
-  the corner panels took whole said "não cabe no vão de -61 cm"; that case is now an error
-  naming the cabinets in the way.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
