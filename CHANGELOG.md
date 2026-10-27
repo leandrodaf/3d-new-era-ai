@@ -13,6 +13,13 @@ All notable changes to this project are documented here. The format follows
   while it sat 27 cm higher; `place` said nothing. `update` now lists it under `overridden`
   (`elev 240 snapped to the ceiling at 267`) and `place` adds a line per piece after its ids.
 
+### Security
+
+- Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
+  SUID bits), `rustls-webpki`, `webpki-roots` and `webpki-root-certs` (distrusted emSign
+  intermediates) and `ctutils` (non-constant-time comparisons). Also `glam` 0.34, `rmcp` 3.5,
+  `tokio` 1.53.3, `serde_json`, `schemars`, `sha2`, `uuid` and `winresource`.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
