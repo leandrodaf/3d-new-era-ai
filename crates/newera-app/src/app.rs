@@ -70,6 +70,33 @@ const SUPPORT_URL: &str = "https://buymeacoffee.com/leandrodaf/membership";
 /// Where issues and pull requests go.
 const REPOSITORY_URL: &str = "https://github.com/leandrodaf/3d-new-era-ai";
 
+/// Counts what was done with the request for support — `shown`, `coffee`,
+/// `github` or `dismiss` — under the same switch as the rest of the usage
+/// count: the desktop through the site's ping, the web editor through the
+/// page's own Google tag. A window built for a test counts nothing.
+fn count_support(action: &'static str) {
+    if cfg!(test) {
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    newera_telemetry::analytics::support(action);
+    #[cfg(target_arch = "wasm32")]
+    {
+        use wasm_bindgen::JsCast;
+        let gtag = js_sys::Reflect::get(&js_sys::global(), &"gtag".into()).ok();
+        if let Some(gtag) = gtag.as_ref().and_then(|g| g.dyn_ref::<js_sys::Function>()) {
+            let params = js_sys::Object::new();
+            let _ = js_sys::Reflect::set(&params, &"action".into(), &action.into());
+            let _ = gtag.call3(
+                &wasm_bindgen::JsValue::NULL,
+                &"event".into(),
+                &"support_prompt".into(),
+                &params,
+            );
+        }
+    }
+}
+
 /// On a screen too narrow for three columns, one of these is on show.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum Pane {
@@ -1465,9 +1492,10 @@ impl NewEraApp {
 
     /// The request for support shown at every launch: why the project needs
     /// it, where to give it, and that issues and pull requests are welcome.
-    /// Returns whether it is still open.
-    fn support_dialog(ctx: &egui::Context) -> bool {
-        let mut open = true;
+    /// Returns what closed it — `coffee`, `github` or `dismiss` — on the
+    /// frame it closes, and `None` while it is still up.
+    fn support_dialog(ctx: &egui::Context) -> Option<&'static str> {
+        let mut answer = None;
         let title = crate::i18n::tr("Apoiar o projeto");
         // The dialog role comes with the modal; its name, read out by a
         // screen reader, is the title.
@@ -1499,33 +1527,40 @@ impl NewEraApp {
                         ui.add_space(8.0);
                     }
                 });
-                let actions = |ui: &mut egui::Ui, open: &mut bool| {
+                let actions = |ui: &mut egui::Ui, answer: &mut Option<&'static str>| {
                     if crate::theme::primary(ui, crate::i18n::tr("Apoiar no Buy Me a Coffee"))
                         .clicked()
                     {
                         ui.ctx().open_url(egui::OpenUrl::new_tab(SUPPORT_URL));
-                        *open = false;
+                        *answer = Some("coffee");
                     }
                     if crate::theme::secondary(ui, crate::i18n::tr("Abrir o GitHub")).clicked() {
                         ui.ctx().open_url(egui::OpenUrl::new_tab(REPOSITORY_URL));
-                        *open = false;
+                        *answer = Some("github");
                     }
                     if crate::theme::secondary(ui, crate::i18n::tr("Agora não")).clicked() {
-                        *open = false;
+                        *answer = Some("dismiss");
                     }
                 };
                 // Three buttons do not fit side by side on a phone: there
                 // they stack, the one the dialog is for on top.
                 if width >= 420.0 {
-                    crate::theme::footer(ui, |ui| actions(ui, &mut open));
+                    crate::theme::footer(ui, |ui| actions(ui, &mut answer));
                 } else {
                     ui.add_space(14.0);
                     crate::theme::hairline(ui);
                     ui.add_space(10.0);
-                    ui.vertical_centered_justified(|ui| actions(ui, &mut open));
+                    ui.vertical_centered_justified(|ui| actions(ui, &mut answer));
                 }
             });
-        open && !response.should_close()
+        // Escape or a click beside it is a "not now" too.
+        answer.or_else(|| response.should_close().then_some("dismiss"))
+    }
+
+    /// Asks for support on this launch, and counts that it was asked.
+    pub(crate) fn ask_support(&mut self) {
+        self.support_ask = true;
+        count_support("shown");
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
@@ -2948,8 +2983,11 @@ impl eframe::App for NewEraApp {
                 }
                 DialogOutcome::Close => {}
             }
-        } else if self.support_ask {
-            self.support_ask = Self::support_dialog(&ctx);
+        } else if self.support_ask
+            && let Some(action) = Self::support_dialog(&ctx)
+        {
+            self.support_ask = false;
+            count_support(action);
         }
 
         ctx.request_repaint_after(EXTERNAL_CHANGES_POLL);
