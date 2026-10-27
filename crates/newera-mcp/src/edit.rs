@@ -406,7 +406,14 @@ fn weld(doc: &Document, walls: &mut [Wall]) -> Vec<String> {
         .filter(|w| !walls.iter().any(|edited| edited.id == w.id))
         .collect();
     all.extend(walls.iter().cloned());
-    let ids: Vec<newera_core::WallId> = walls.iter().map(|w| w.id).collect();
+    // A wall shorter than it is thick (a plan typed in metres) is left where
+    // it was written: pulling its ends onto its neighbours' corners would
+    // collapse it to nothing, and `create` points it out instead.
+    let ids: Vec<newera_core::WallId> = walls
+        .iter()
+        .filter(|w| w.start.distance(w.end) >= w.thickness)
+        .map(|w| w.id)
+        .collect();
     let mut moved = Vec::new();
     for (id, at_start, to) in newera_core::weld_ends(&all, &ids) {
         if let Some(wall) = walls.iter_mut().find(|w| w.id == id) {
