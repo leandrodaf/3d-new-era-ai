@@ -1357,8 +1357,11 @@ fn rename_part(
         .find(|f| !takes.contains(&f.as_str()))
     {
         // A group joined with `arrange` is undone the same way; the group
-        // itself rarely takes what was meant for one of its pieces.
-        let whose = if owner.catalog == "group" {
+        // itself rarely takes what was meant for one of its pieces. Joinery
+        // is a group too, but its parts are rebuilt from its parameters.
+        let arranged =
+            owner.catalog == "group" && !owner.properties.contains_key(newera_joinery::KIND_KEY);
+        let whose = if arranged {
             format!(
                 "to change its `{bad}`, take it out with arrange ungroup ids=[{}] and group again after",
                 owner.id
