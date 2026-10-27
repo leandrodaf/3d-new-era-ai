@@ -6,12 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- `place` with `defaults={unit:...}` (or `stretch`) no longer hands them to the catalog items in the
-  batch. Every catalog piece was refused with `unit and stretch are for model=<file>`; now only the
-  items that import a model take them, and an item that sets them itself is still told.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
