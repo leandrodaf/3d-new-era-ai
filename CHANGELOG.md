@@ -6,13 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- An export to `.glb` or `.obj` holds every storey of the building. It held only the storeys up to
-  the one selected in the editor, as the 3D view shows them, so exporting with the ground floor
-  selected lost the floors above. `export` now lists the storeys it wrote (`levels=…`); a storey
-  hidden on purpose stays out.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
