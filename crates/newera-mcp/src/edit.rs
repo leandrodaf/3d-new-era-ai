@@ -269,6 +269,42 @@ fn too_small(what: &str, area: f64) -> String {
     format!("the {what} encloses {area:.2} cm², under 1 cm²; coordinates are cm (metres ×100?)")
 }
 
+/// Gives a solid the plan outline `pts`: centered on their bounds, as wide
+/// and deep as they are, unturned (the points are where it stands).
+fn set_outline(piece: &mut newera_core::Furniture, pts: &[Point2]) -> EditResult<()> {
+    if pts.len() < 3 {
+        return Err("a solid outline needs at least 3 points enclosing an area".into());
+    }
+    let area = newera_core::polygon_area(pts);
+    if area < 1.0 {
+        return Err(too_small("solid outline", area));
+    }
+    let (lo, hi) = pts.iter().fold(
+        (
+            Point2::new(f64::MAX, f64::MAX),
+            Point2::new(f64::MIN, f64::MIN),
+        ),
+        |(lo, hi), p| {
+            (
+                Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+            )
+        },
+    );
+    let center = Point2::new(f64::midpoint(lo.x, hi.x), f64::midpoint(lo.y, hi.y));
+    piece.position = center;
+    piece.angle = 0.0;
+    piece.mirrored = false;
+    piece.width = (hi.x - lo.x).max(0.1);
+    piece.depth = (hi.y - lo.y).max(0.1);
+    piece.shape = Some(newera_core::SolidShape::Outline(
+        pts.iter()
+            .map(|p| [p.x - center.x, p.y - center.y])
+            .collect(),
+    ));
+    Ok(())
+}
+
 /// A piece built from a polygon.
 fn solid(doc: &mut Document, spec: &SolidSpec) -> EditResult<newera_core::Furniture> {
     use newera_core::SolidShape;
@@ -295,25 +331,9 @@ fn solid(doc: &mut Document, spec: &SolidSpec) -> EditResult<newera_core::Furnit
     };
     match (&spec.pts, &spec.profile) {
         (Some(pts), None) => {
-            if pts.len() < 3 {
-                return Err("a solid outline needs at least 3 points enclosing an area".into());
-            }
-            let area = newera_core::polygon_area(pts);
-            if area < 1.0 {
-                return Err(too_small("solid outline", area));
-            }
-            let (lo, hi) = bounds(pts);
-            let center = Point2::new(f64::midpoint(lo.x, hi.x), f64::midpoint(lo.y, hi.y));
-            piece.position = center;
-            piece.width = (hi.x - lo.x).max(0.1);
-            piece.depth = (hi.y - lo.y).max(0.1);
+            set_outline(&mut piece, pts)?;
             piece.height = spec.h.unwrap_or(15.0).max(0.1);
             piece.elevation = spec.elev.unwrap_or(0.0);
-            piece.shape = Some(SolidShape::Outline(
-                pts.iter()
-                    .map(|p| [p.x - center.x, p.y - center.y])
-                    .collect(),
-            ));
         }
         (None, Some(profile)) => {
             let (Some(a), Some(b)) = (spec.a, spec.b) else {
@@ -679,7 +699,7 @@ pub(crate) fn create(doc: &mut Document, params: CreateParams) -> EditResult<Cre
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct UpdateSpec {
-    /// Declared room program, independent of name; auto restores inference.
+    /// Room program.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub room_use: Option<newera_core::RoomUse>,
     /// The element to change.
@@ -706,8 +726,8 @@ pub(crate) struct UpdateSpec {
     /// Room polygon.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pts: Option<Vec<Point2>>,
-    /// The piece a note is about (e.g. `f1185`), checked by `annotations`
-    /// stale; `""` unties it.
+    /// The piece a note is about, checked by `annotations` stale; `""`
+    /// unties it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub about: Option<String>,
     /// Room floor visible.
@@ -716,8 +736,8 @@ pub(crate) struct UpdateSpec {
     /// Room ceiling visible.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ceiling: Option<bool>,
-    /// Room ceiling flat at storey height (true) or following the wall
-    /// profiles (false).
+    /// Room ceiling flat at storey height (true) or following the walls
+    /// (false).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ceiling_flat: Option<bool>,
     /// Label text.
@@ -744,7 +764,7 @@ pub(crate) struct UpdateSpec {
     /// Elevation cm (furniture, level, 3D label/dimension).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub elev: Option<f64>,
-    /// Room follows its walls (re-detected when they change); `pts` turns it off.
+    /// Room follows its walls (re-detected); `pts` turns it off.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto: Option<bool>,
     /// Polyline is a room divider.
@@ -790,6 +810,9 @@ pub(crate) struct UpdateSpec {
     /// Door hinge on the right.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hinge_right: Option<bool>,
+    /// Door: a point on the side it swings into.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub into: Option<Point2>,
     /// Glass of a guard or a closure.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(extend("enum" = ["laminated", "tempered", "tempered-laminated", "wired"]))]
@@ -916,7 +939,8 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<U
         let allowed: &[&str] = match element {
             Element::Polyline(_) => &["pts", "t", "color", "level", "divider", "layer"],
             Element::Wall(_) => &[
-                "a", "b", "t", "h", "h_end", "arc", "level", "type", "left", "right", "sides",
+                "a", "b", "pts", "t", "h", "h_end", "arc", "level", "type", "left", "right",
+                "sides",
             ],
             Element::Room(_) => &[
                 "room_use",
@@ -937,6 +961,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<U
             ],
             Element::Level(_) => &["name", "elev", "h", "slab"],
             Element::Furniture(_) => &[
+                "pts",
                 "at",
                 "angle",
                 "w",
@@ -956,6 +981,7 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<U
                 "layer",
                 "visible",
                 "hinge_right",
+                "into",
                 "glass",
                 "gap",
                 "fixed",
@@ -1009,8 +1035,22 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<U
                 Element::Level(l)
             }
             Element::Wall(mut w) => {
-                if spec.a.is_some() || spec.b.is_some() {
+                if let Some(pts) = &spec.pts {
+                    if pts.len() != 2 {
+                        return Err(format!(
+                            "a wall takes `a` and `b`; `pts` only as its 2 ends (got {}): more points are more walls, drawn with create",
+                            pts.len()
+                        ));
+                    }
+                    if spec.a.is_some() || spec.b.is_some() {
+                        return Err("give a wall `a`/`b` or `pts`, not both".into());
+                    }
+                }
+                if spec.a.is_some() || spec.b.is_some() || spec.pts.is_some() {
                     reshaped_from.push(w.clone());
+                }
+                if let Some([a, b]) = spec.pts.as_deref() {
+                    (w.start, w.end) = (*a, *b);
                 }
                 w.start = spec.a.unwrap_or(w.start);
                 w.end = spec.b.unwrap_or(w.end);
@@ -1040,12 +1080,12 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<U
                 }
                 // An end that was moved is welded like a new one; the other
                 // stays where it is.
-                if spec.a.is_some() || spec.b.is_some() {
+                if spec.a.is_some() || spec.b.is_some() || spec.pts.is_some() {
                     reshaped.push(w.clone());
-                    if spec.a.is_none() {
+                    if spec.a.is_none() && spec.pts.is_none() {
                         kept_ends.push((w.id, true));
                     }
-                    if spec.b.is_none() {
+                    if spec.b.is_none() && spec.pts.is_none() {
                         kept_ends.push((w.id, false));
                     }
                 }
@@ -1122,6 +1162,14 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<U
                 Element::Label(l)
             }
             Element::Furniture(mut f) => {
+                if let Some(pts) = &spec.pts {
+                    if !matches!(f.shape, Some(newera_core::SolidShape::Outline(_))) {
+                        return Err(format!(
+                            "`pts` applies to a solid drawn from an outline; {id} is not one"
+                        ));
+                    }
+                    set_outline(&mut f, pts)?;
+                }
                 let before = f.clone();
                 let was = (f.width, f.depth, f.height, f.elevation);
                 f.position = spec.at.unwrap_or(f.position);
@@ -1187,6 +1235,12 @@ pub(crate) fn update(doc: &mut Document, items: Vec<UpdateSpec>) -> EditResult<U
                 }
                 if let (Some(right), Some(opening)) = (spec.hinge_right, f.opening.as_mut()) {
                     opening.hinge_right = right;
+                }
+                if let Some(into) = spec.into {
+                    if newera_core::door_swing(&f).is_none() {
+                        return Err(format!("`into` is for a door with a leaf; {id} has none"));
+                    }
+                    swing_into(&mut f, into);
                 }
                 if let Some(glass) = &spec.glass {
                     let glass = glass.trim().to_lowercase();
@@ -1451,8 +1505,21 @@ fn rename_part(
         .into_iter()
         .find(|f| !takes.contains(&f.as_str()))
     {
+        // A group joined with `arrange` is undone the same way; the group
+        // itself rarely takes what was meant for one of its pieces. Joinery
+        // is a group too, but its parts are rebuilt from its parameters.
+        let arranged =
+            owner.catalog == "group" && !owner.properties.contains_key(newera_joinery::KIND_KEY);
+        let whose = if arranged {
+            format!(
+                "to change its `{bad}`, take it out with arrange ungroup ids=[{}] and group again after",
+                owner.id
+            )
+        } else {
+            format!("`{bad}` belongs to the group")
+        };
         return Err(format!(
-            "{}; {} takes only {} on its own (`{bad}` belongs to the group)",
+            "{}; {} takes only {} on its own ({whose})",
             missing(home, id),
             if embedded {
                 "an item set into it"
@@ -2055,6 +2122,126 @@ mod tests {
     }
 
     #[test]
+    fn update_redraws_an_outline_solid_and_takes_a_wall_by_its_ends() {
+        let mut doc = Document::default();
+        let walls = square(&mut doc);
+        let pts = |c: &[(f64, f64)]| c.iter().map(|&(x, y)| Point2::new(x, y)).collect();
+        let ids = create(
+            &mut doc,
+            CreateParams {
+                solids: vec![SolidSpec {
+                    pts: Some(pts(&[(0.0, 0.0), (100.0, 0.0), (100.0, 50.0), (0.0, 50.0)])),
+                    h: Some(20.0),
+                    ..SolidSpec::default()
+                }],
+                ..CreateParams::default()
+            },
+        )
+        .unwrap()
+        .ids;
+        let slab = ids[0].clone();
+        update(
+            &mut doc,
+            vec![UpdateSpec {
+                id: slab.clone(),
+                pts: Some(pts(&[(200.0, 100.0), (300.0, 100.0), (250.0, 180.0)])),
+                ..UpdateSpec::default()
+            }],
+        )
+        .unwrap();
+        let piece = doc.home().furniture[0].clone();
+        assert_eq!(piece.position, Point2::new(250.0, 140.0));
+        assert_eq!(
+            (piece.width, piece.depth, piece.height),
+            (100.0, 80.0, 20.0)
+        );
+        let Some(newera_core::SolidShape::Outline(ring)) = &piece.shape else {
+            panic!("{:?}", piece.shape);
+        };
+        assert_eq!(ring.len(), 3);
+        // A piece that is not an outline solid does not take `pts`.
+        let bed = place(
+            &mut doc,
+            vec![PlaceSpec {
+                cat: "bed-double".into(),
+                at: Some(Point2::new(200.0, 150.0)),
+                ..PlaceSpec::default()
+            }],
+        )
+        .unwrap();
+        let err = update(
+            &mut doc,
+            vec![UpdateSpec {
+                id: bed[0].clone(),
+                pts: Some(pts(&[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)])),
+                ..UpdateSpec::default()
+            }],
+        )
+        .unwrap_err();
+        assert!(err.contains("outline"), "{err}");
+        // A wall takes `pts` as its two ends, and only two.
+        let wall = walls[0].clone();
+        update(
+            &mut doc,
+            vec![UpdateSpec {
+                id: wall.clone(),
+                pts: Some(pts(&[(0.0, 0.0), (400.0, 0.0)])),
+                t: Some(20.0),
+                ..UpdateSpec::default()
+            }],
+        )
+        .unwrap();
+        assert!((doc.home().walls[0].thickness - 20.0).abs() < 1e-9);
+        let err = update(
+            &mut doc,
+            vec![UpdateSpec {
+                id: wall,
+                pts: Some(pts(&[(0.0, 0.0), (200.0, 0.0), (400.0, 0.0)])),
+                ..UpdateSpec::default()
+            }],
+        )
+        .unwrap_err();
+        assert!(err.contains("a wall takes `a` and `b`"), "{err}");
+    }
+
+    #[test]
+    fn a_part_of_an_arranged_group_points_at_ungroup() {
+        let mut doc = Document::default();
+        let ids = place(
+            &mut doc,
+            vec![
+                PlaceSpec {
+                    cat: "wardrobe".into(),
+                    at: Some(Point2::new(100.0, 100.0)),
+                    ..PlaceSpec::default()
+                },
+                PlaceSpec {
+                    cat: "wardrobe".into(),
+                    at: Some(Point2::new(300.0, 100.0)),
+                    ..PlaceSpec::default()
+                },
+            ],
+        )
+        .unwrap();
+        let parts: Vec<ElementId> = ids.iter().map(|i| i.parse().unwrap()).collect();
+        let group = newera_core::arrange::group(&mut doc, &parts, "").unwrap();
+        let err = update(
+            &mut doc,
+            vec![UpdateSpec {
+                id: ids[0].clone(),
+                w: Some(80.0),
+                ..UpdateSpec::default()
+            }],
+        )
+        .unwrap_err();
+        assert!(
+            err.contains(&format!("arrange ungroup ids=[{group}]")),
+            "{err}"
+        );
+        assert!(!err.contains("belongs to the group"), "{err}");
+    }
+
+    #[test]
     fn labels_and_lines_take_the_layer_home_shows() {
         let mut doc = Document::default();
         let ids = create(
@@ -2236,12 +2423,12 @@ pub(crate) struct PlaceSpec {
     /// parts — to `at` or `wall`, with any size, angle or name given here
     /// on top.
     pub copy: Option<String>,
-    /// Center on the plan. Optional when `wall` is given; a door or window
-    /// placed `at` a point near a wall snaps into it.
+    /// Center on the plan, optional with `wall`; a door or window `at` a
+    /// point near a wall snaps into it.
     pub at: Option<Point2>,
     /// Put it in/against this wall (doors and windows cut it).
     pub wall: Option<String>,
-    /// Distance along the wall from its start, cm (default: middle).
+    /// Distance along the wall from its start, cm (default: `at`'s, or middle).
     pub along: Option<f64>,
     /// Clockwise degrees: 0 turns the front to +y (down the plan), 90 to
     /// −x, 180 to −y, 270 to +x. `facing` says the same without the sums.
@@ -2665,6 +2852,23 @@ fn nearest_wall(doc: &Document, at: Point2) -> Option<(newera_core::Wall, f64)> 
         .map(|(_, w, along)| (w.clone(), along))
 }
 
+/// Where along `wall` a piece `width` wide goes when no `along` was given:
+/// `at` projected onto the wall, kept far enough from the ends for the piece
+/// to fit, or the middle without `at` (or when it does not fit at all).
+fn along_from(wall: &Wall, at: Option<Point2>, width: f64) -> f64 {
+    let (a, b) = (wall.start, wall.end);
+    let len = a.distance(b);
+    let half = width.max(0.0) / 2.0;
+    match at {
+        Some(at) if len > 1e-9 && len >= 2.0 * half => {
+            let (dx, dy) = (b.x - a.x, b.y - a.y);
+            let along = ((at.x - a.x) * dx + (at.y - a.y) * dy) / len;
+            along.clamp(half, len - half)
+        }
+        _ => len / 2.0,
+    }
+}
+
 /// Turns a door so its leaf swings to the side of `into`, keeping the hinge
 /// at the same end of the opening.
 fn swing_into(piece: &mut newera_core::Furniture, into: Point2) {
@@ -3041,7 +3245,7 @@ pub(crate) fn place_noting(doc: &mut Document, items: Vec<PlaceSpec>) -> EditRes
                 piece.level = doc.home().resolve_level(wall.level);
                 let along = spec
                     .along
-                    .unwrap_or_else(|| wall.start.distance(wall.end) / 2.0);
+                    .unwrap_or_else(|| along_from(&wall, spec.at, piece.width));
                 newera_core::align_to_wall(&mut piece, &wall, along);
                 if let Some(depth) = spec.d {
                     piece.depth = depth;
@@ -3463,6 +3667,143 @@ mod place_tests {
             .find(|f| f.id.to_string() == ids[0])
             .unwrap();
         assert!((door.position.y - 300.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn update_turns_a_door_to_swing_into_the_other_side() {
+        let mut doc = Document::default();
+        create(
+            &mut doc,
+            CreateParams {
+                walls: vec![WallPath {
+                    pts: vec![Point2::new(0.0, 0.0), Point2::new(500.0, 0.0)],
+                    ..WallPath::default()
+                }],
+                ..CreateParams::default()
+            },
+        )
+        .unwrap();
+        let ids = place(
+            &mut doc,
+            vec![PlaceSpec {
+                cat: "door".into(),
+                wall: Some("w1".into()),
+                along: Some(200.0),
+                into: Some(Point2::new(200.0, 100.0)),
+                ..PlaceSpec::default()
+            }],
+        )
+        .unwrap();
+        let door = |doc: &Document| {
+            doc.home()
+                .furniture
+                .iter()
+                .find(|f| f.id.to_string() == ids[0])
+                .unwrap()
+                .clone()
+        };
+        let swing_y = |door: &newera_core::Furniture| {
+            let swing = newera_core::door_swing(door).unwrap();
+            #[allow(clippy::cast_precision_loss)]
+            let n = swing.len() as f64;
+            swing.iter().map(|p| p.y).sum::<f64>() / n
+        };
+        let before = door(&doc);
+        assert!(swing_y(&before) > 0.0);
+        let jambs = |d: &newera_core::Furniture| {
+            let mut xs: Vec<f64> = d.footprint().iter().map(|p| p.x).collect();
+            xs.sort_by(f64::total_cmp);
+            (xs[0], xs[xs.len() - 1])
+        };
+        update(
+            &mut doc,
+            vec![UpdateSpec {
+                id: ids[0].clone(),
+                into: Some(Point2::new(200.0, -100.0)),
+                ..UpdateSpec::default()
+            }],
+        )
+        .unwrap();
+        let after = door(&doc);
+        assert!(swing_y(&after) < 0.0, "swings into -y now");
+        assert_eq!(after.position, before.position, "same opening");
+        let (a, b) = (jambs(&before), jambs(&after));
+        assert!((a.0 - b.0).abs() < 1e-6 && (a.1 - b.1).abs() < 1e-6);
+        // Hinged on the same jamb: the swing starts from the same point x.
+        let hinge = |d: &newera_core::Furniture| newera_core::door_swing(d).unwrap()[0].x;
+        assert!((hinge(&before) - hinge(&after)).abs() < 1e-6);
+        // A piece without a leaf is told.
+        let bed = place(
+            &mut doc,
+            vec![PlaceSpec {
+                cat: "bed-double".into(),
+                at: Some(Point2::new(200.0, 200.0)),
+                ..PlaceSpec::default()
+            }],
+        )
+        .unwrap();
+        let err = update(
+            &mut doc,
+            vec![UpdateSpec {
+                id: bed[0].clone(),
+                into: Some(Point2::new(0.0, 0.0)),
+                ..UpdateSpec::default()
+            }],
+        )
+        .unwrap_err();
+        assert!(err.contains("`into` is for a door"), "{err}");
+    }
+
+    #[test]
+    fn a_piece_given_a_wall_and_a_point_goes_where_the_point_is() {
+        let mut doc = Document::default();
+        create(
+            &mut doc,
+            CreateParams {
+                walls: vec![WallPath {
+                    pts: vec![Point2::new(0.0, 0.0), Point2::new(500.0, 0.0)],
+                    ..WallPath::default()
+                }],
+                ..CreateParams::default()
+            },
+        )
+        .unwrap();
+        let wall = doc.home().walls[0].id.to_string();
+        let door_at = |doc: &mut Document, at: Option<Point2>| {
+            let ids = place(
+                doc,
+                vec![PlaceSpec {
+                    cat: "door".into(),
+                    wall: Some(wall.clone()),
+                    at,
+                    ..PlaceSpec::default()
+                }],
+            )
+            .unwrap();
+            doc.home()
+                .furniture
+                .iter()
+                .find(|f| f.id.to_string() == ids[0])
+                .unwrap()
+                .clone()
+        };
+        let door = door_at(&mut doc, Some(Point2::new(100.0, 0.0)));
+        assert!(
+            (door.position.x - 100.0).abs() < 1e-6,
+            "{:?}",
+            door.position
+        );
+        assert!(door.position.y.abs() < 1e-6);
+        // Past the end it stops where the whole leaf still fits.
+        let door = door_at(&mut doc, Some(Point2::new(520.0, 40.0)));
+        assert!(
+            (door.position.x - (500.0 - door.width / 2.0)).abs() < 1e-6,
+            "{:?}",
+            door.position
+        );
+        // Without a point, the middle.
+        let door = door_at(&mut doc, None);
+        assert!((door.position.x - 250.0).abs() < 1e-6);
     }
 
     #[test]
