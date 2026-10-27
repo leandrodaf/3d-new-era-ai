@@ -660,8 +660,8 @@ impl PlanView {
             && let Some(p) = raw
         {
             let s = self.camera.to_screen(rect, p) + Vec2::new(16.0, 16.0);
-            // No text font has ⏎; the icon font has the Return key.
-            let text = format!("{} cm {}", self.typed_length, crate::icon::KEY_RETURN);
+            // No font of the window has ⏎; the key's name reads the same anywhere.
+            let text = format!("{} cm · Enter", self.typed_length);
             let galley =
                 painter.layout_no_wrap(text, egui::FontId::proportional(14.0), Color32::WHITE);
             let bg = Rect::from_min_size(s, galley.size() + Vec2::splat(8.0));
