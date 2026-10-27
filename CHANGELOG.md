@@ -6,13 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- A countertop changed with `joinery` (shorter, with its cutouts moved) keeps the real sink and
-  cooktop set into it in their cutouts: they kept their distance from the countertop's middle,
-  so cutting 76 cm off one end moved the cooktop 38 cm off its hole. One whose cutout is gone
-  stays where it stood, and the reply says so.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
