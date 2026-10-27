@@ -13,6 +13,13 @@ All notable changes to this project are documented here. The format follows
   so cutting 76 cm off one end moved the cooktop 38 cm off its hole. One whose cutout is gone
   stays where it stood, and the reply says so.
 
+### Security
+
+- Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
+  SUID bits), `rustls-webpki`, `webpki-roots` and `webpki-root-certs` (distrusted emSign
+  intermediates) and `ctutils` (non-constant-time comparisons). Also `glam` 0.34, `rmcp` 3.5,
+  `tokio` 1.53.3, `serde_json`, `schemars`, `sha2`, `uuid` and `winresource`.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
