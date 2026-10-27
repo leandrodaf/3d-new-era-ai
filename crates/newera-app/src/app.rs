@@ -1464,10 +1464,15 @@ impl NewEraApp {
     /// Returns whether it is still open.
     fn support_dialog(ctx: &egui::Context) -> bool {
         let mut open = true;
+        let title = crate::i18n::tr("Apoiar o projeto");
+        // The dialog role comes with the modal; its name, read out by a
+        // screen reader, is the title.
+        let mut modal = crate::theme::modal(ctx, egui::Id::new("newera-support"));
+        modal.area = modal.area.accessible_name(title);
         let response =
-            crate::theme::modal(ctx, egui::Id::new("newera-support")).show(ctx, |ui| {
+            modal.show(ctx, |ui| {
                 ui.set_width(480.0);
-                crate::theme::title(ui, crate::i18n::tr("Apoiar o projeto"));
+                crate::theme::title(ui, title);
                 crate::theme::body(ui, |ui| {
                     for paragraph in [
                         crate::i18n::tr(
