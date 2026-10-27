@@ -2425,13 +2425,6 @@ impl NewEraApp {
                         }
                     });
             }
-            if let Some(version) = self.newer.get() {
-                ui.separator();
-                ui.hyperlink_to(
-                    crate::i18n::fill("Nova versão {} disponível", &[version]),
-                    RELEASES_URL,
-                );
-            }
             let narrow = ui.ctx().content_rect().width() < NARROW;
             if narrow {
                 // A phone's status bar holds the lamp, the zoom and whatever
@@ -2449,6 +2442,7 @@ impl NewEraApp {
                         self.status = None;
                     }
                 }
+                self.release_link(ui);
                 return;
             }
             ui.separator();
@@ -2486,7 +2480,20 @@ impl NewEraApp {
                     self.status = None;
                 }
             }
+            self.release_link(ui);
         });
+    }
+
+    /// A newer release, last in the status bar: what just happened is said
+    /// first, and this is what a narrow window cuts off.
+    fn release_link(&self, ui: &mut egui::Ui) {
+        if let Some(version) = self.newer.get() {
+            ui.separator();
+            ui.hyperlink_to(
+                crate::i18n::fill("Nova versão {} disponível", &[version]),
+                RELEASES_URL,
+            );
+        }
     }
 
     fn update_title(&mut self, ctx: &egui::Context) {
