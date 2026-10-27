@@ -18,6 +18,10 @@ newera-draw.workspace = true
 newera-render.workspace = true
 serde_json.workspace = true
 
+# In a browser the randomness comes from the page: zip asks getrandom for it.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.4", features = ["wasm_js"] }
+
 # The JavaScript boundary needs raw pointers, so this crate cannot forbid
 # `unsafe` like the rest of the workspace; everything else matches it.
 [lints.rust]

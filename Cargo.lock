@@ -3641,6 +3641,7 @@ dependencies = [
 name = "newera-web"
 version = "3.1.0"
 dependencies = [
+ "getrandom 0.4.3",
  "image",
  "newera-core",
  "newera-draw",
