@@ -6,12 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- `cabinets` with a `sink_w` under 60 or a `cooktop_w` under 58 no longer closes the program:
-  the cutout was kept 30 cm (29 for the cooktop) from each side of a cabinet narrower than that.
-  It now goes to the middle of such a cabinet.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
