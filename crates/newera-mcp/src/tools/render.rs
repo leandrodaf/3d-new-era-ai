@@ -1,5 +1,6 @@
 //! Pictures and files: the plan, the 3D view, a photo, and the exports.
 
+use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -45,9 +46,9 @@ pub(crate) struct ExportSchema {
     /// Default `plan`: the drawing or the 3D model. `cut_list`: the boards of the joinery.
     #[schemars(extend("enum" = ["plan", "cut_list"]))]
     what: Option<String>,
-    /// For `plan`, `.png` only: width px (default 1600).
+    /// For `plan`, `.png` only: width px (default 1600, 64..2048).
     w: Option<u32>,
-    /// For `plan`, `.png` only: height px (default 1200).
+    /// For `plan`, `.png` only: height px (default 1200, 64..2048).
     h: Option<u32>,
     /// For `plan`, `.pdf`: scale denominator (50 → 1:50); omitted fits the sheet.
     scale: Option<f64>,
@@ -58,9 +59,9 @@ pub(crate) struct ExportSchema {
 pub(crate) struct ExportParams {
     /// Output file: `.pdf`, `.svg`, `.png`, `.glb` or `.obj`.
     path: String,
-    /// `.png` only: width px (default 1600).
+    /// `.png` only: width px (default 1600, 64..2048).
     w: Option<u32>,
-    /// `.png` only: height px (default 1200).
+    /// `.png` only: height px (default 1200, 64..2048).
     h: Option<u32>,
     /// PDF scale denominator (50 → 1:50); omitted fits the sheet.
     scale: Option<f64>,
@@ -215,6 +216,15 @@ fn scene_options_for(_doc: &Document) -> SceneOptions {
         ..SceneOptions::default()
     }
 }
+/// The smallest and largest side of a plan PNG, in pixels.
+const PNG_MIN: u32 = 64;
+const PNG_MAX: u32 = 2048;
+
+/// The size a plan PNG asked at `(w, h)` comes out at.
+fn png_size((w, h): (u32, u32)) -> (u32, u32) {
+    (w.clamp(PNG_MIN, PNG_MAX), h.clamp(PNG_MIN, PNG_MAX))
+}
+
 impl NewEraMcp {
     fn render(
         &self,
@@ -234,7 +244,7 @@ impl NewEraMcp {
         grid: bool,
         bg: Option<f64>,
     ) -> Result<Vec<u8>, ErrorData> {
-        let (w, h) = (w.clamp(64, 2048), h.clamp(64, 2048));
+        let (w, h) = png_size((w, h));
         let doc = self.document.read();
         let mut view = doc.home().level_view(doc.home().current_level());
         if let Some(opacity) = bg {
@@ -270,12 +280,61 @@ impl NewEraMcp {
         render_png(&scene, &options, &load)
             .map_err(|e| ErrorData::internal_error(e.to_string(), None))
     }
+
+    /// What `show_plan` answers. The SVG goes only to a client with a viewer
+    /// to draw it: to any other it would be the model's to read, and a plan
+    /// of a few rooms is 150k characters.
+    pub(crate) fn shown_plan(&self, viewer: bool) -> CallToolResult {
+        let doc = self.document.read();
+        let home = doc.home().level_view(doc.home().current_level());
+        let scene = plan_scene(
+            &home,
+            &SceneOptions {
+                show_background: false,
+                ..SceneOptions::default()
+            },
+        );
+        #[allow(clippy::cast_precision_loss)]
+        // An empty sum is -0.0, and "-0 m²" reads as a bug: + 0.0 makes it 0.
+        let area = (home.rooms.iter().map(newera_core::Room::area).sum::<f64>() / 1000.0).round()
+            / 10.0
+            + 0.0;
+        let summary = serde_json::json!({
+            "rooms": home.rooms.len(),
+            "area": area,
+            "walls": home.walls.len(),
+            "pieces": home.furniture.len(),
+        });
+        let counts = format!(
+            "{} rooms, {area} m², {} walls, {} pieces",
+            home.rooms.len(),
+            home.walls.len(),
+            home.furniture.len()
+        );
+        let editor = "https://3dneweraai.com/app/";
+        let mut fields = serde_json::json!({
+            "name": home.name,
+            "summary": summary,
+            "editor": editor,
+        });
+        let text = if viewer {
+            fields["svg"] = to_svg(&scene, &SvgOptions::default()).into();
+            format!("shown: {counts}")
+        } else {
+            format!(
+                "no viewer in this client, so nothing was drawn here: {counts}; the person opens it in the editor ({editor}), render_plan shows it to you"
+            )
+        };
+        let mut result = CallToolResult::success(vec![ContentBlock::text(text)]);
+        result.structured_content = Some(fields);
+        result
+    }
 }
 
 #[tool_router(router = render_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "PNG of the floor plan, exactly as the user sees it. region=[[minx,miny],[maxx,maxy]] frames a place — it is fitted to the image's aspect by growing the short side, never by cropping, so everything asked for is in the picture — or room=<id|name> with pad cm (default 30) frames a room without working the rectangle out. bg=0..1 overlays the background image to compare with the reference. Keep w/h small to save tokens."
+        description = "PNG of the floor plan, exactly as the user sees it. region=[[minx,miny],[maxx,maxy]] frames a place — it is fitted to the image's aspect by growing the short side, never by cropping, so everything asked for is in the picture — or room=<id|name> with pad cm (default 30) frames a room without working the rectangle out. bg=0..1 overlays the background image to compare with the reference. Keep w/h small to save tokens. One render runs at a time; this waits its turn."
     )]
     pub(crate) fn render_plan(
         &self,
@@ -314,47 +373,18 @@ impl NewEraMcp {
         )]))
     }
     #[tool(
-        description = "Show the plan to the user as an interactive viewer (pan, zoom, 3D view, open in the editor) where the chat client can display one. Reply: a one-line summary for you; the drawing goes to the viewer. To look at the plan yourself use render_plan."
+        description = "Show the plan to the user as an interactive viewer (pan, zoom, 3D view, open in the editor) where the chat client can display one. Reply: a one-line summary for you; the drawing goes to the viewer (none to a client without one). To look at the plan yourself use render_plan."
     )]
-    pub(crate) fn show_plan(&self) -> CallToolResult {
-        let doc = self.document.read();
-        let home = doc.home().level_view(doc.home().current_level());
-        let scene = plan_scene(
-            &home,
-            &SceneOptions {
-                show_background: false,
-                ..SceneOptions::default()
-            },
-        );
-        let svg = to_svg(&scene, &SvgOptions::default());
-        #[allow(clippy::cast_precision_loss)]
-        // An empty sum is -0.0, and "-0 m²" reads as a bug: + 0.0 makes it 0.
-        let area = (home.rooms.iter().map(newera_core::Room::area).sum::<f64>() / 1000.0).round()
-            / 10.0
-            + 0.0;
-        let summary = serde_json::json!({
-            "rooms": home.rooms.len(),
-            "area": area,
-            "walls": home.walls.len(),
-            "pieces": home.furniture.len(),
-        });
-        let text = format!(
-            "shown: {} rooms, {area} m², {} walls, {} pieces",
-            home.rooms.len(),
-            home.walls.len(),
-            home.furniture.len()
-        );
-        let mut result = CallToolResult::success(vec![ContentBlock::text(text)]);
-        result.structured_content = Some(serde_json::json!({
-            "name": home.name,
-            "svg": svg,
-            "summary": summary,
-            "editor": "https://3dneweraai.com/app/",
-        }));
-        result
+    // The router hands extractors over by value.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn show_plan(&self, peer: rmcp::Peer<rmcp::RoleServer>) -> CallToolResult {
+        let viewer = peer
+            .peer_info()
+            .is_some_and(|client| crate::app::shows_apps(&client.capabilities));
+        self.shown_plan(viewer)
     }
     #[tool(
-        description = "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations — front looks from the plan's bottom edge (large y) toward y=0, back from y=0 toward large y, left from x=0, right from large x; cut=cm makes a section keeping only what is beyond that plane from the viewer (front cut=200 keeps y<200, so the wall at y=0 stays as the backdrop; to remove it look from back), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). walls=cutaway drops the walls between the eye and a room to 40 cm, walls=down drops them all; either hides ceilings, roofs and the doors, windows and wall pieces of lowered walls, to see the furniture from the side. piece=<id> draws it alone, seen from its own side (view; aerial is three-quarter), framed the same wherever it stands; part=<name> frames one part of its model; ref=i puts its reference photo beside it, from the photo's side. Keep w/h small."
+        description = "PNG of the home in 3D (software render with outlines, no GPU needed). view: front|back|left|right|top orthographic elevations — front looks from the plan's bottom edge (large y) toward y=0, back from y=0 toward large y, left from x=0, right from large x; cut=cm makes a section keeping only what is beyond that plane from the viewer (front cut=200 keeps y<200, so the wall at y=0 stays as the backdrop; to remove it look from back), aerial (default; frames the whole building; yaw degrees: 0 from east/+x, 90 from south/plan bottom (default 60); pitch down; zoom >1 farther), visitor (current visitor camera) or cam=i (stored point of view). walls=cutaway drops the walls between the eye and a room to 40 cm, walls=down drops them all; either hides ceilings, roofs and the doors, windows and wall pieces of lowered walls, to see the furniture from the side. piece=<id> draws it alone, seen from its own side (view; aerial is three-quarter), framed the same wherever it stands; part=<name> frames one part of its model; ref=i puts its reference photo beside it, from the photo's side. Keep w/h small. One render runs at a time; this waits its turn."
     )]
     pub(crate) fn render_3d(
         &self,
@@ -694,7 +724,22 @@ impl NewEraMcp {
                 let scene = plan_scene(&view, &scene_options_for(&doc));
                 to_svg(&scene, &SvgOptions::default()).into_bytes()
             }
-            Some("png") => self.render(p.w.unwrap_or(1600), p.h.unwrap_or(1200), None, false)?,
+            Some("png") => {
+                let asked = (p.w.unwrap_or(1600), p.h.unwrap_or(1200));
+                let size = png_size(asked);
+                let png = self.render(asked.0, asked.1, None, false)?;
+                std::fs::write(&path, png)
+                    .map_err(|e| invalid(format!("cannot write {}: {e}", path.display())))?;
+                let mut reply = format!("ok {} {}x{} px", path.display(), size.0, size.1);
+                if size != asked {
+                    let _ = write!(
+                        reply,
+                        " (asked {}x{}; w and h are {PNG_MIN}..{PNG_MAX})",
+                        asked.0, asked.1
+                    );
+                }
+                return Ok(reply);
+            }
             _ => return Err(invalid("path must end with .pdf, .svg, .png, .glb or .obj")),
         };
         std::fs::write(&path, bytes)
@@ -1123,5 +1168,32 @@ mod tests {
             }))
             .is_err()
         );
+    }
+    #[test]
+    fn a_png_export_says_the_size_it_wrote_and_why_not_the_one_asked() {
+        let dir = std::env::temp_dir().join(format!("newera-export-png-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("plan.png");
+        let document = newera_core::SharedDocument::new(newera_core::Document::default());
+        let call = |w: u32| {
+            let answer = crate::call(
+                document.clone(),
+                "export",
+                serde_json::json!({"path": path, "w": w, "h": 300}),
+            )
+            .unwrap();
+            answer.content[0].as_text().unwrap().text.clone()
+        };
+        let fits = call(400);
+        assert!(fits.ends_with(" 400x300 px"), "{fits}");
+        let clamped = call(4000);
+        assert!(
+            clamped.contains(" 2048x300 px (asked 4000x300; w and h are 64..2048)"),
+            "{clamped}"
+        );
+        // The PNG header's width is what the reply says.
+        let png = std::fs::read(&path).unwrap();
+        assert_eq!(u32::from_be_bytes(png[16..20].try_into().unwrap()), 2048);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
