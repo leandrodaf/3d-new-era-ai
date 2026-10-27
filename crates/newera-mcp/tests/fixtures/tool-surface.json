@@ -5741,6 +5741,12 @@
         },
         "v": {
           "type": "integer"
+        },
+        "welded": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "type": "object"

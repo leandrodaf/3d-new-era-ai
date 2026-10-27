@@ -891,6 +891,10 @@ pub(crate) fn schema(name: &str) -> Option<Value> {
                 list("Asked ids that came out as they were: {id, now}"),
             ),
             ("unchanged_note", text("Why they did not change")),
+            (
+                "welded",
+                strings("Wall ends pulled onto a wall: \"<wall>.<a|b>→[x,y]\""),
+            ),
         ]),
         "move" => write_or_dry(&[]),
         "place" => write_or_dry(&[
