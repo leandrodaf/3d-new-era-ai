@@ -67,6 +67,8 @@ const SETTINGS_KEY: &str = "newera-settings";
 /// Where the support button goes. The membership is charged in US dollars,
 /// wherever the app is being used from.
 const SUPPORT_URL: &str = "https://buymeacoffee.com/leandrodaf/membership";
+/// Where issues and pull requests go.
+const REPOSITORY_URL: &str = "https://github.com/leandrodaf/3d-new-era-ai";
 
 /// On a screen too narrow for three columns, one of these is on show.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -166,6 +168,9 @@ pub(crate) struct NewEraApp {
     /// in which case the page should not open the demo over it.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub(crate) restored: bool,
+    /// Whether the window still has to ask for support. The app turns it on
+    /// at every launch; a window built for a test leaves it off.
+    pub(crate) support_ask: bool,
     /// The last autosave attempt revision and time; not confirmation of persistence.
     #[cfg(target_arch = "wasm32")]
     mirrored: (u64, Instant, bool),
@@ -253,6 +258,7 @@ impl NewEraApp {
             #[cfg(target_arch = "wasm32")]
             background_dir: None,
             restored: false,
+            support_ask: false,
             #[cfg(target_arch = "wasm32")]
             mirrored: (0, Instant::now(), false),
             catalog_query: String::new(),
@@ -1451,6 +1457,53 @@ impl NewEraApp {
         if response.on_hover_text(words).clicked() {
             ui.ctx().open_url(egui::OpenUrl::new_tab(SUPPORT_URL));
         }
+    }
+
+    /// The request for support shown at every launch: why the project needs
+    /// it, where to give it, and that issues and pull requests are welcome.
+    /// Returns whether it is still open.
+    fn support_dialog(ctx: &egui::Context) -> bool {
+        let mut open = true;
+        let response =
+            crate::theme::modal(ctx, egui::Id::new("newera-support")).show(ctx, |ui| {
+                ui.set_width(480.0);
+                crate::theme::title(ui, crate::i18n::tr("Apoiar o projeto"));
+                crate::theme::body(ui, |ui| {
+                    for paragraph in [
+                        crate::i18n::tr(
+                            "Muita gente usa o 3D New Era AI todos os dias, mas quase ninguém apoia o projeto.",
+                        ),
+                        crate::i18n::tr(
+                            "As IAs que usam a ferramenta enviam sozinhas relatos de problemas e sugestões de melhoria, e eles chegam em grande número. Quero corrigir todos, mas me falta tempo e dinheiro para pagar as ferramentas de IA e os tokens que esse trabalho exige.",
+                        ),
+                        crate::i18n::tr(
+                            "Se a ferramenta é útil para você, considere apoiar no Buy Me a Coffee.",
+                        ),
+                        crate::i18n::tr(
+                            "Também dá para ajudar com código: abra issues e pull requests no GitHub. Todos serão avaliados, e o que for aceito entra na próxima versão.",
+                        ),
+                    ] {
+                        ui.label(paragraph);
+                        ui.add_space(8.0);
+                    }
+                });
+                crate::theme::footer(ui, |ui| {
+                    if crate::theme::primary(ui, crate::i18n::tr("Apoiar no Buy Me a Coffee"))
+                        .clicked()
+                    {
+                        ui.ctx().open_url(egui::OpenUrl::new_tab(SUPPORT_URL));
+                        open = false;
+                    }
+                    if crate::theme::secondary(ui, crate::i18n::tr("Abrir o GitHub")).clicked() {
+                        ui.ctx().open_url(egui::OpenUrl::new_tab(REPOSITORY_URL));
+                        open = false;
+                    }
+                    if crate::theme::secondary(ui, crate::i18n::tr("Agora não")).clicked() {
+                        open = false;
+                    }
+                });
+            });
+        open && !response.should_close()
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
@@ -2873,6 +2926,8 @@ impl eframe::App for NewEraApp {
                 }
                 DialogOutcome::Close => {}
             }
+        } else if self.support_ask {
+            self.support_ask = Self::support_dialog(&ctx);
         }
 
         ctx.request_repaint_after(EXTERNAL_CHANGES_POLL);
@@ -2927,6 +2982,23 @@ mod tests {
 
     fn walls(h: &Harness<'_, NewEraApp>) -> Vec<Wall> {
         h.state().document.read().home().walls.clone()
+    }
+
+    #[test]
+    fn the_request_for_support_shows_until_it_is_answered() {
+        let mut h = app_with_wall();
+        assert!(
+            h.query_by_label("Agora não").is_none(),
+            "off in a test window"
+        );
+        h.state_mut().support_ask = true;
+        h.run_steps(3);
+        h.get_by_label("Apoiar no Buy Me a Coffee");
+        h.get_by_label("Abrir o GitHub");
+        h.get_by_label("Agora não").click();
+        h.run_steps(3);
+        assert!(h.query_by_label("Agora não").is_none());
+        assert!(!h.state().support_ask);
     }
 
     #[test]
