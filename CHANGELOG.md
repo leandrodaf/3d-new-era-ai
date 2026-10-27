@@ -6,12 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- A `create` that welds wall ends gives the ids it created as they are in `structuredContent`.
-  The `welded=` list after them was read as more ids (`"w2.a→[965.0"`, `"580.0]"`), so a client
-  reading the fields got ids that do not exist. `welded` is now its own list, one entry per end.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
