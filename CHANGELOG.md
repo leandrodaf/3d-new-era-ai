@@ -6,13 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- `show_plan` in a client with no viewer (Claude Code, a CLI) no longer answers with the whole plan
-  as SVG — 150 to 330 thousand characters the client refused or spilled to disk. The drawing goes
-  only to a client that declared the MCP Apps extension (`io.modelcontextprotocol/ui`) when it
-  connected; any other gets the one-line summary and the editor link.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
