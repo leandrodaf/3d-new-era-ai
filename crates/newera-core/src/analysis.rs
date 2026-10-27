@@ -1744,9 +1744,10 @@ mod tests {
             kind: OpeningKind::Window,
             ..Opening::default()
         });
-        // A roof plate falling 37 cm per metre along y, 250 cm over the
-        // middle of the window: about 230 cm over its low jamb.
-        let mut roof = piece(2, (200.0, 200.0), (400.0, 400.0, 2.0));
+        // A 12 cm roof plate falling 37 cm per metre along y, 250 cm over
+        // the middle of the window: about 230 cm over its low jamb. (A plate
+        // 2 cm thick would be dismissed as flat before the slope is looked at.)
+        let mut roof = piece(2, (200.0, 200.0), (400.0, 400.0, 12.0));
         roof.name = "Água do telhado".into();
         roof.pitch = 0.3724_f64.atan().to_degrees();
         roof.elevation = 250.0;
