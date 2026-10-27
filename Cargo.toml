@@ -73,6 +73,9 @@ too_many_lines = "allow"
 # element variants differ in size by nature; boxing them buys nothing.
 struct_excessive_bools = "allow"
 large_enum_variant = "allow"
+# Clippy 1.99: `assert!(x.is_empty())` is how the tests read; `assert_eq!(x, "")`
+# needs a different empty value per type and says no more on failure.
+assert_is_empty = "allow"
 
 [profile.release]
 lto = "thin"
