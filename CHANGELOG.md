@@ -6,12 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- `place` with `wall` and `at` but no `along` puts the piece at the point projected onto the wall,
-  kept far enough from the ends for it to fit. It used to ignore `at` and centre the piece on the
-  wall, so a door asked for near a corner came out in the middle.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
