@@ -546,7 +546,12 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
     // never lists them as given, so a neighbor planned again doesn't push back.
     let mut yielded: Vec<FurnitureId> = Vec::new();
     let mut neighbors: Vec<String> = Vec::new();
-    if params.row == RunRow::Base {
+    // As deep as the fronts that would cover it (see `covering` below): the
+    // other run's modules behind its corner one would still take the stretch.
+    let reach = (params.row == RunRow::Base)
+        .then(|| newera_core::wall_run(home, wall_id, side, d + DOOR_SWING, z, &|_| false))
+        .flatten();
+    if let Some(reach) = &reach {
         for (key, center, width) in [
             ("sink", params.sink, params.sink_w),
             ("cooktop", params.cooktop, params.cooktop_w),
@@ -555,7 +560,7 @@ fn plan(home: &Home, request: &Request) -> Result<Planned, String> {
                 continue;
             };
             let (a, b) = (center - width / 2.0, center + width / 2.0);
-            for o in first.obstacles.iter().filter(|o| o.from < b && o.to > a) {
+            for o in reach.obstacles.iter().filter(|o| o.from < b && o.to > a) {
                 if let RunBlock::Piece { id, .. } = &o.block
                     && let Some(t) = piece(*id).and_then(other_run)
                     && !yielded.contains(id)
