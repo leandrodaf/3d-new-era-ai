@@ -6,11 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- A cabinet's, run's or sofa's `color` takes `#rrggbb` as well as `[r,g,b]`, as `handle_color`
-  already did: `p.color="#d8d2c6"` was refused as an invalid type.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
