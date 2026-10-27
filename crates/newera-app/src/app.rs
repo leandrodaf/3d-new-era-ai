@@ -679,6 +679,11 @@ impl NewEraApp {
         if crate::jobs::busy(self) {
             return false;
         }
+        // A save already waiting on its dialog keeps what runs after it.
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.asking.is_some() || crate::files::dialog_open() {
+            return false;
+        }
         self.after_save = then;
         #[cfg(target_arch = "wasm32")]
         {
@@ -792,7 +797,7 @@ impl NewEraApp {
         dialog: crate::files::FileDialog,
         then: impl FnOnce(&mut Self, Option<PathBuf>) + 'static,
     ) -> bool {
-        if self.asking.is_some() {
+        if self.asking.is_some() || crate::files::dialog_open() {
             return false;
         }
         self.asking = Some((crate::files::ask(dialog, None), Box::new(then)));

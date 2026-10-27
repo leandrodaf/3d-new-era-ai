@@ -22,7 +22,7 @@ pub(crate) struct Picked {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) use desktop::{Answer, Asked, FileDialog, ask, open_dialog, save_dialog};
+pub(crate) use desktop::{Answer, Asked, FileDialog, ask, dialog_open, open_dialog, save_dialog};
 
 /// Native dialogs that stay open while the window keeps drawing.
 ///
@@ -38,6 +38,7 @@ mod desktop {
     use std::future::Future;
     use std::path::PathBuf;
     use std::pin::Pin;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
     use std::task::{Context, Poll, Wake, Waker};
 
@@ -107,6 +108,16 @@ mod desktop {
         )
     }
 
+    /// How many dialogs are open: counted up by [`ask`], down when the
+    /// dialog answers.
+    static OPEN: AtomicUsize = AtomicUsize::new(0);
+
+    /// Whether a dialog is open anywhere in the app. Only one is opened at a
+    /// time, so a second request can't replace the first one's answer.
+    pub(crate) fn dialog_open() -> bool {
+        OPEN.load(Ordering::Acquire) > 0
+    }
+
     /// Opens `dialog` without waiting for it. The answer shows up in the
     /// returned [`Asked`]; `ctx` is woken to read it.
     pub(crate) fn ask(dialog: FileDialog, ctx: Option<eframe::egui::Context>) -> Asked {
@@ -115,11 +126,24 @@ mod desktop {
             FileDialog::Open(dialog) => Box::pin(dialog.pick_file()),
             FileDialog::Save(dialog) => Box::pin(dialog.save_file()),
         };
+        wait_for(
+            async move { future.await.map(|file| file.path().to_path_buf()) },
+            ctx,
+        )
+    }
+
+    /// Waits for a dialog's `answer` on a thread of its own; the dialog
+    /// counts as open until it answers.
+    fn wait_for(
+        answer: impl Future<Output = Option<PathBuf>> + Send + 'static,
+        ctx: Option<eframe::egui::Context>,
+    ) -> Asked {
         let asked = Asked::waiting();
-        let answer = asked.clone();
+        let slot = asked.clone();
+        OPEN.fetch_add(1, Ordering::AcqRel);
         std::thread::spawn(move || {
-            let path = block_on(future).map(|file| file.path().to_path_buf());
-            answer.answer(path);
+            slot.answer(block_on(answer));
+            OPEN.fetch_sub(1, Ordering::AcqRel);
             if let Some(ctx) = ctx {
                 ctx.request_repaint();
             }
@@ -191,6 +215,27 @@ mod desktop {
         #[test]
         fn a_future_is_waited_for_until_it_is_woken() {
             assert_eq!(block_on(Later(Arc::default())), 7);
+        }
+
+        /// A dialog that has not answered keeps every other one from
+        /// opening, so no second request replaces its answer.
+        #[test]
+        fn a_dialog_is_open_until_it_answers() {
+            let (tx, rx) = std::sync::mpsc::channel::<()>();
+            let asked = wait_for(
+                async move {
+                    // Answers once the test lets it; the wait stays on the
+                    // dialog's thread.
+                    rx.recv().ok().map(|()| PathBuf::from("/foto.png"))
+                },
+                None,
+            );
+            assert!(dialog_open(), "open while waiting");
+            assert_eq!(asked.take(), Answer::Waiting);
+            tx.send(()).unwrap();
+            while asked.take() == Answer::Waiting {
+                std::thread::yield_now();
+            }
         }
 
         /// Every native dialog goes through [`ask`]: a dialog that waits for

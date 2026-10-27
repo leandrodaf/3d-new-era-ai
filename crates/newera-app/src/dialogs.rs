@@ -187,14 +187,14 @@ pub(crate) fn material_editor(
         match asked.take() {
             crate::files::Answer::Waiting => {}
             crate::files::Answer::Chosen(path) => {
-                ui.data_mut(|d| d.remove_temp::<crate::files::Asked>(image_dialog));
+                ui.data_mut(|d| d.remove::<crate::files::Asked>(image_dialog));
                 *material = Some(Material {
                     image: Some(path.display().to_string()),
                     ..Material::default()
                 });
             }
             crate::files::Answer::Cancelled => {
-                ui.data_mut(|d| d.remove_temp::<crate::files::Asked>(image_dialog));
+                ui.data_mut(|d| d.remove::<crate::files::Asked>(image_dialog));
             }
         }
     }
@@ -241,9 +241,15 @@ pub(crate) fn material_editor(
                 let image = material.as_ref().is_some_and(|m| m.image.is_some());
                 // The image arrives a few frames later; see above.
                 #[cfg(not(target_arch = "wasm32"))]
+                // One dialog at a time, across the whole app: a second one
+                // would replace the first one's unread answer.
                 if ui
                     .selectable_label(image, crate::i18n::tr("Imagem…"))
                     .clicked()
+                    && !crate::files::dialog_open()
+                    && ui
+                        .data(|d| d.get_temp::<crate::files::Asked>(image_dialog))
+                        .is_none()
                 {
                     let asked = crate::files::ask(
                         crate::files::open_dialog(&[(
