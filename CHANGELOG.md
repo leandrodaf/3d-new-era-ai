@@ -6,12 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- A wall that starts a step aside from an L corner — carrying on from one of its walls a few
-  centimetres off the corner's line — no longer has its end pulled into the corner and its
-  long faces drawn sloping. It meets the wall it touches as a T.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
