@@ -6,12 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- `edit_model action=material` with both an image (`mat:img:…`) and a `color` draws the image
-  tinted by the colour. The colour replaced it and the material came out flat. A colour alone
-  still repaints the file's own image.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
