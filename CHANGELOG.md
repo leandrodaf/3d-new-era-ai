@@ -6,13 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- `fit_roof` fits a wall to the roofs over its own storey, whichever storey is selected. A
-  double-height wall on the ground floor under a roof drawn on the floor above came out 245 cm
-  too low — the roof's heights from the upper floor were applied from the ground floor — and
-  with the ground floor selected it found no roof at all.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
