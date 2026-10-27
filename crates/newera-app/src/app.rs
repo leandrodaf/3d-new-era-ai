@@ -1497,10 +1497,7 @@ impl NewEraApp {
     fn support_dialog(ctx: &egui::Context) -> Option<&'static str> {
         let mut answer = None;
         let title = crate::i18n::tr("Apoiar o projeto");
-        // The dialog role comes with the modal; its name, read out by a
-        // screen reader, is the title.
-        let mut modal = crate::theme::modal(ctx, egui::Id::new("newera-support"));
-        modal.area = modal.area.accessible_name(title);
+        let modal = crate::theme::modal(ctx, egui::Id::new("newera-support"));
         let response =
             modal.show(ctx, |ui| {
                 // As wide as the other dialogs, less on a phone: the modal's
