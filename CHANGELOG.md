@@ -6,13 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- `layout` checks a solid drawn as an outline by its outline, not by the rectangle around it:
-  a shelf drawn turned 10.5° along a sloped wall, or a countertop notched around a wall corner,
-  was reported `in_wall` because its bounds reached into the wall. Overlaps between pieces use
-  the outline too.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
