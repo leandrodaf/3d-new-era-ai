@@ -6,12 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- Brick given a colour (`brick #fbfaf7 25x7`) is drawn as painted brick in that colour: even
-  bricks with shadowed joints. Its strong light-and-dark tones and light mortar turned a white
-  brick wall into grey mottle. Brick with no colour is unchanged.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
