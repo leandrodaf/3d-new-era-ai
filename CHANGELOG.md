@@ -6,12 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- `update` resizing a group and renaming one of its parts in the same call resizes the parts
-  too, in either order: they kept their old size and place, and with the rename first the resize
-  also undid the rename.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
