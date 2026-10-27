@@ -1,5 +1,5 @@
 {
-  "total": 122975,
+  "total": 123054,
   "tools": {
     "accept": {
       "total": 1360,
@@ -110,8 +110,8 @@
       "output": 203
     },
     "edit_levels": {
-      "total": 1645,
-      "description": 491,
+      "total": 1729,
+      "description": 575,
       "input": 749,
       "output": 203
     },
@@ -266,9 +266,9 @@
       "output": 793
     },
     "place": {
-      "total": 7770,
+      "total": 7765,
       "description": 1043,
-      "input": 5594,
+      "input": 5589,
       "output": 896
     },
     "plugins": {
