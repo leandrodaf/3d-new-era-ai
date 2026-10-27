@@ -6,16 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- `update` takes `pts` on a solid drawn from an outline and redraws it there, as `create` would; it
-  was refused, and the only way to reshape a slab or a deck was to delete it and draw it again. A
-  wall takes `pts` as its two ends (the same as `a` and `b`), and more points are refused saying
-  that more walls are drawn with `create`.
-- Changing the size or place of a piece inside a group made with `arrange` says to take it out with
-  `arrange ungroup` and group again, instead of "belongs to the group", which the group did not
-  take either.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
