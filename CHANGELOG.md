@@ -6,13 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- `update` of one end of a wall (`a` or `b`) no longer moves the other one: only the ends given
-  are welded onto a wall they nearly touch, and the reply lists each one it moved
-  (`welded=w14.b→[615.7,448.7]`), as `create` does. The end left out could be pulled several
-  centimetres with nothing saying so, or the change come back as `unchanged`.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
