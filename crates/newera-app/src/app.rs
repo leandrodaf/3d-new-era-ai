@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use web_time::Instant;
 
+use crate::icon;
 use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText, Stroke};
-use egui_phosphor::regular as icon;
 use newera_core::{
     Command, CoreResult, Document, Element, ElementId, Home, LengthUnit, Point2, SharedDocument,
     ops,
@@ -218,7 +218,7 @@ impl NewEraApp {
         mcp_url: Option<String>,
     ) -> Self {
         let mut fonts = egui::FontDefinitions::default();
-        egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+        crate::icon::add_to_fonts(&mut fonts);
         cc.egui_ctx.set_fonts(fonts);
         crate::theme::apply(&cc.egui_ctx);
 

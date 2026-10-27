@@ -7,8 +7,8 @@
 //! wants, and the proof: who said hello, when, and the tools they are calling
 //! as they call them.
 
+use crate::icon;
 use eframe::egui::{self, RichText};
-use egui_phosphor::regular as icon;
 
 use crate::app::NewEraApp;
 

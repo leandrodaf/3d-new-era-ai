@@ -3,8 +3,8 @@
 //! notes, and a single row shape everywhere — so the eye learns one pattern
 //! and then reads the whole panel with it.
 
+use crate::icon;
 use eframe::egui::{self, RichText, Sense, Stroke, Vec2};
-use egui_phosphor::regular as icon;
 use newera_catalog::{CatalogItem, Category, SymbolShape};
 use newera_core::{ElementId, FurnitureId, Point2};
 

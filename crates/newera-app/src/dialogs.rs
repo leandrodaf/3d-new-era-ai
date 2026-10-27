@@ -1,7 +1,7 @@
 //! Modal dialogs: element properties, background calibration, home settings.
 
+use crate::icon;
 use eframe::egui::{self, DragValue, RichText};
-use egui_phosphor::regular as icon;
 use newera_core::{
     BackgroundImage, Command, Compass, Dimension, Element, Furniture, Label, Material, Pattern,
     Point2, Room, WALL_TYPES, Wall, WallId,
