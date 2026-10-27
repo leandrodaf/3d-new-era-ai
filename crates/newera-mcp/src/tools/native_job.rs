@@ -174,8 +174,9 @@ pub(super) async fn run(
     .await
 }
 
-/// A ping on its way, until it is answered or times out.
-type Ping = std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>;
+/// A ping on its way, until it is answered or times out; `true` when it
+/// could not be sent at all, because the client is gone.
+type Ping = std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>;
 
 async fn supervise(
     tool: Option<String>,
@@ -223,7 +224,10 @@ async fn supervise(
         tokio::select! {
             result = &mut worker => return result.map_err(|e| invalid(format!("The render failed: {e}")))?,
             () = cancel.cancelled() => return Err(invalid(newera_core::progress::CANCELLED)),
-            () = async { ping.as_mut().expect("guarded").await }, if ping.is_some() => ping = None,
+            gone = async { ping.as_mut().expect("guarded").await }, if ping.is_some() => {
+                if gone { return Err(invalid("The client disconnected; the render was cancelled.")); }
+                ping = None;
+            }
             _ = poll.tick() => {
                 if context.peer.is_transport_closed() { return Err(invalid("The client disconnected; the render was cancelled.")); }
                 let now = tokio::time::Instant::now();
@@ -244,7 +248,12 @@ async fn supervise(
                                 PeerRequestOptions::with_timeout(response_timeout),
                             ).await?.await_response().await
                         };
-                        let _ = tokio::time::timeout(response_timeout, answer).await;
+                        // Unanswered is fine; only a ping that could not
+                        // go out at all says the client is gone.
+                        matches!(
+                            tokio::time::timeout(response_timeout, answer).await,
+                            Ok(Err(rmcp::ServiceError::TransportSend(_) | rmcp::ServiceError::TransportClosed))
+                        )
                     }));
                     next_ping = now + heartbeat;
                 }
@@ -261,7 +270,11 @@ async fn supervise(
                             return Err(invalid("Progress could not be sent; the render was cancelled."));
                         }
                     }
-                    next_progress = now + Duration::from_secs(1);
+                    // A deleted HTTP session shows only here while its
+                    // transport drains: a ping there goes unanswered like
+                    // any other, but progress can no longer be sent. So a
+                    // short heartbeat (the tests') also checks it often.
+                    next_progress = now + heartbeat.min(Duration::from_secs(1));
                 }
             }
         }
