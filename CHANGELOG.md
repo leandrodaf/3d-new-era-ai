@@ -6,14 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- A cooktop embedded in a countertop counts as the kitchen's cooking zone whatever it is named:
-  the review read embedded items by their Portuguese names, so a `Варочная панель` set into the
-  stone left the kitchen "missing" its cooktop. Embedded items are now read by what their host
-  says they are, however deep in the group, and catalog `cooktop` and `sink-bowl` pieces count
-  as a cooktop and a sink.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
