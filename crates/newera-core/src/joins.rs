@@ -565,21 +565,47 @@ fn corner_of(walls: &[Wall], a: &Node, b: &Node) -> Option<Point2> {
             return Some(at);
         }
     }
-    // Anything else joins at the node that already has the most walls — as
-    // long as that point is on the line of every wall meeting there. One
-    // beside a wall's axis (a wall carrying on a step aside from an L
-    // corner) would lean that whole wall over to reach it.
-    let (first, second) = if a.refs.len() >= b.refs.len() {
-        (a.center, b.center)
+    // Anything else joins at the node that already has the most walls —
+    // unless that would lean a lone end over to reach it while the end's own
+    // line already lands on the body of a wall there (a wall carrying on a
+    // step aside from an L corner): then it stays apart and becomes a T.
+    let (busy, other) = if a.refs.len() >= b.refs.len() {
+        (a, b)
     } else {
-        (b.center, a.center)
+        (b, a)
     };
-    [first, second].into_iter().find(|&center| {
-        a.refs.iter().chain(&b.refs).all(|r| {
-            line_of(&walls[r.wall()]).is_none_or(|(origin, dir, _)| {
-                project(origin, dir, center).1.abs() <= JOIN_TOLERANCE
-            })
-        })
+    if lands_on_body(walls, other, busy) {
+        return None;
+    }
+    Some(busy.center)
+}
+
+/// Whether `end`, a lone wall end off the line to `node`'s center, slides
+/// along its own line onto the body of a wall meeting at `node` — away from
+/// that wall's tips — so a T there keeps it straight.
+fn lands_on_body(walls: &[Wall], end: &Node, node: &Node) -> bool {
+    let [Ref::Tip(w, at_start)] = end.refs.as_slice() else {
+        return false;
+    };
+    let Some(u) = tip(walls, *w, 0, *at_start).map(|e| e.dir) else {
+        return false;
+    };
+    if project(end.center, u, node.center).1.abs() <= JOIN_TOLERANCE {
+        return false; // the center is on its line: joining there leans nothing
+    }
+    node.refs.iter().any(|r| {
+        let host = &walls[r.wall()];
+        let Some((a, e, len)) = line_of(host) else {
+            return false;
+        };
+        let Some(s) = meet(end.center, u, a, e) else {
+            return false;
+        };
+        let at = Point2::new(end.center.x + u.0 * s, end.center.y + u.1 * s);
+        let (on, _) = project(a, e, at);
+        at.distance(end.center) <= host.thickness / 2.0 + TOUCH_TOLERANCE
+            && on > JOIN_TOLERANCE
+            && on < len - JOIN_TOLERANCE
     })
 }
 
