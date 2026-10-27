@@ -430,13 +430,14 @@ mod tests {
         }
         let issues = s.check_layout(Parameters(CheckParams::default())).unwrap();
         assert!(!issues.contains("overlap"), "{issues}");
-        // A real bowl set into the countertop…
-        let counter = role(&top, "countertop").unwrap()[0]
-            .as_str()
-            .unwrap()
-            .to_owned();
-        let embed: EmbedParams =
-            serde_json::from_str(&format!(r#"{{"cat":"sink-bowl","host":"{counter}"}}"#)).unwrap();
+        // A real bowl set into the countertop, in the sink's cutout…
+        let counter = role(&top, "countertop").unwrap();
+        let at = from + w / 2.0 - counter[2].as_f64().unwrap();
+        let counter = counter[0].as_str().unwrap().to_owned();
+        let embed: EmbedParams = serde_json::from_str(&format!(
+            r#"{{"cat":"sink-bowl","host":"{counter}","at":{at}}}"#
+        ))
+        .unwrap();
         let bowl: serde_json::Value =
             serde_json::from_str(&s.embed(Parameters(embed)).unwrap()).unwrap();
         let bowl = bowl["item"].as_str().unwrap().to_owned();
