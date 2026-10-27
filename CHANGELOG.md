@@ -6,13 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- `embed z=` into a cabinet hung on the wall is the height above the room floor, as the tool
-  says: a microwave asked at 160 cm in a cabinet at 150 cm sat 160 cm above the cabinet's base,
-  past its top. The item now sits on the niche that is built, and the reply's `bottom` is that
-  height above the floor.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
