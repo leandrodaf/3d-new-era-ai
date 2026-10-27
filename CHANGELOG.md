@@ -12,6 +12,13 @@ All notable changes to this project are documented here. The format follows
   between them is moved away. The first takes the space; the other keeps the outline it had,
   and the reply names it (`rooms_kept`) so it can be deleted or redrawn.
 
+### Security
+
+- Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
+  SUID bits), `rustls-webpki`, `webpki-roots` and `webpki-root-certs` (distrusted emSign
+  intermediates) and `ctutils` (non-constant-time comparisons). Also `glam` 0.34, `rmcp` 3.5,
+  `tokio` 1.53.3, `serde_json`, `schemars`, `sha2`, `uuid` and `winresource`.
+
 ## [3.1.0] - 2026-10-01
 
 ### Added
