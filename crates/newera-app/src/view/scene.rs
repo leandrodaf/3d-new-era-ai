@@ -343,7 +343,7 @@ fn split_mesh<T: Copy>(
     let mut slot = vec![u32::MAX; vertices.len()];
     let mut taken: Vec<u32> = Vec::new();
     for (glass, list) in [(false, opaque), (true, transparent)] {
-        for triangle in list.chunks_exact(3) {
+        for triangle in list.as_chunks::<3>().0 {
             let fresh = triangle
                 .iter()
                 .enumerate()
