@@ -6,12 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Added
-
-- `update` takes `into` on a door, the same point `place` takes: the door turns to swing into that
-  side, hinged on the same jamb. A door placed opening the wrong way had to be deleted and placed
-  again.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
