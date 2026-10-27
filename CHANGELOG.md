@@ -6,13 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- Adding a storey below the ground floor (`edit_levels add elev=-300`), or changing a storey's
-  elevation so another becomes the lowest, no longer moves the ground floor's walls, rooms and
-  pieces onto it. What was drawn before any storey existed belongs to "the lowest storey"; it is
-  now given that storey by name, in the same step, before the lowest one changes.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
