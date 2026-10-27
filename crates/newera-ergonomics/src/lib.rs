@@ -4874,13 +4874,13 @@ mod tests {
         home.furniture = vec![top];
         let report = review(&home, &Profile::default());
         assert!(
-            !report
-                .findings
-                .iter()
-                .any(
-                    |f| (f.message.contains("zonas de trabalho") && f.message.contains("cocção"))
-                        || f.message.contains("fogão ou cooktop")
-                ),
+            !report.findings.iter().any(|f| {
+                // Only the zones listed before the colon are missing: the
+                // flow after it always ends in cocção.
+                f.message.split_once(':').is_some_and(|(missing, _)| {
+                    missing.contains("zonas de trabalho") && missing.contains("cocção")
+                }) || f.message.contains("fogão ou cooktop")
+            }),
             "{report:#?}"
         );
     }
