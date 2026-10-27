@@ -652,19 +652,21 @@ mod tests {
 
     #[test]
     fn a_door_only_cuts_the_walls_of_its_storey() {
-        let mut home = Home::default();
-        home.levels = vec![
-            Level {
-                id: LevelId(1),
-                ..Level::default()
-            },
-            Level {
-                id: LevelId(2),
-                elevation: 262.0,
-                elevation_index: 1,
-                ..Level::default()
-            },
-        ];
+        let mut home = Home {
+            levels: vec![
+                Level {
+                    id: LevelId(1),
+                    ..Level::default()
+                },
+                Level {
+                    id: LevelId(2),
+                    elevation: 262.0,
+                    elevation_index: 1,
+                    ..Level::default()
+                },
+            ],
+            ..Home::default()
+        };
         // The same wall on both storeys, the upper one listed first.
         let wall = |id: u64, level: u64| Wall {
             level: Some(LevelId(level)),
