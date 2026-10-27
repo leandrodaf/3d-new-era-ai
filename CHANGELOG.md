@@ -6,14 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- A paste with nothing readable on the clipboard is really no longer reported as an error: the
-  clipboard writes through the `log` crate, and the check saw every such line under the target
-  `log` instead of its own. An MCP client that hangs up before its answer is sent, and a Vulkan
-  driver that fails to start while wgpu tries the next backend, are no longer reported either;
-  all three stay as breadcrumbs.
-
 ### Security
 
 - Dependencies updated past the open advisories: `zip` 9 (archive extraction through symlinks,
