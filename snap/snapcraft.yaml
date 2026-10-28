@@ -56,9 +56,9 @@ parts:
     override-prime: |
       craftctl default
       # snapd reads the entry from here and fills in the command; its icon
-      # comes from the snap's own.
+      # is the snap's own, which snapcraft puts at meta/gui/icon.png.
       sed -i -e 's|^Exec=.*|Exec=newera %f|' -e 's|^TryExec=.*||' \
-        -e 's|^Icon=.*|Icon=${SNAP}/meta/gui/newera.png|' \
+        -e 's|^Icon=.*|Icon=${SNAP}/meta/gui/icon.png|' \
         share/applications/newera.desktop
     stage-packages:
       - libvulkan1
