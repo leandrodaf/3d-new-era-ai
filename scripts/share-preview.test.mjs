@@ -23,6 +23,7 @@ const PAGES = {
   '/terms/': 'site/terms/index.html',
   '/refund/': 'site/refund/index.html',
   '/sweet-home-3d-alternative/': 'site/sweet-home-3d-alternative/index.html',
+  '/press/': 'site/press/index.html',
 };
 
 /** The content of the first `<meta>` whose `attr` is `name`. */
