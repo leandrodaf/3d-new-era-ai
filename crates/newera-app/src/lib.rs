@@ -65,6 +65,7 @@ pub fn run(document: SharedDocument, options: AppOptions) -> eframe::Result {
     let native = eframe::NativeOptions {
         viewport,
         wgpu_options: wgpu_options(gpu::launch()),
+        persistence_path: settings_file(),
         ..Default::default()
     };
     eframe::run_native(
@@ -83,6 +84,17 @@ pub fn run(document: SharedDocument, options: AppOptions) -> eframe::Result {
             Ok(Box::new(app))
         }),
     )
+}
+
+/// Where the settings live: language, theme, units, recent files. eframe would
+/// otherwise derive the folder from [`APP_ID`], and every install from before
+/// the window had an id would open with its settings gone; it stays the one
+/// the app has always used.
+#[cfg(not(target_arch = "wasm32"))]
+fn settings_file() -> Option<PathBuf> {
+    let dir = eframe::storage_dir("3D New Era AI")?;
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join("app.ron"))
 }
 
 /// The default wgpu setup, minus the validation of indirect draws.
@@ -246,19 +258,41 @@ mod tests {
 
 #[cfg(test)]
 mod desktop_identity {
+    const ENTRY: &str = include_str!("../../../assets/linux/newera.desktop");
+    const METAINFO: &str =
+        include_str!("../../../assets/linux/io.github.leandrodaf.newera.metainfo.xml");
+
     /// The menu entry and the window name each other: with `StartupWMClass`
     /// left at the old window title, docks showed a generic icon for the
     /// running app and a second one for the launcher.
     #[test]
     fn the_menu_entry_names_the_window() {
-        let entry = include_str!("../../../assets/linux/newera.desktop");
-        let class = entry
+        let class = ENTRY
             .lines()
             .find_map(|line| line.strip_prefix("StartupWMClass="))
             .expect("the menu entry has StartupWMClass");
         assert_eq!(class, super::APP_ID);
-        let metainfo =
-            include_str!("../../../assets/linux/io.github.leandrodaf.newera.metainfo.xml");
-        assert!(metainfo.contains(&format!("<id>{}</id>", super::APP_ID)));
+        assert!(METAINFO.contains(&format!("<id>{}</id>", super::APP_ID)));
+        // Wayland finds the launcher by the window's id: the entry is
+        // installed under it, and the metadata launches that file.
+        let launchable = format!(
+            "<launchable type=\"desktop-id\">{}.desktop</launchable>",
+            super::APP_ID
+        );
+        assert!(METAINFO.contains(&launchable));
+    }
+
+    /// Settings stay in the folder they were always in, whatever the window's
+    /// id: eframe would otherwise move them to one named after `APP_ID`.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn settings_stay_where_they_were() {
+        let file = super::settings_file().expect("a settings file");
+        assert_eq!(file.file_name().and_then(|n| n.to_str()), Some("app.ron"));
+        assert_eq!(
+            file.parent(),
+            eframe::storage_dir("3D New Era AI").as_deref()
+        );
+        assert_ne!(file.parent(), eframe::storage_dir(super::APP_ID).as_deref());
     }
 }

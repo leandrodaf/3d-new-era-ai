@@ -28,9 +28,6 @@ install -Dm755 "$src/newera" "$root/usr/bin/newera"
 install -Dm644 "$src/share/applications/newera.desktop" "$root/usr/share/applications/io.github.leandrodaf.newera.desktop"
 install -Dm644 "$src/share/mime/packages/newera.xml" "$root/usr/share/mime/packages/io.github.leandrodaf.newera.xml"
 install -Dm644 "$src/share/metainfo/io.github.leandrodaf.newera.metainfo.xml" "$root/usr/share/metainfo/io.github.leandrodaf.newera.metainfo.xml"
-# The metadata names the entry by its installed file.
-sed -i 's|<launchable type="desktop-id">newera.desktop</launchable>|<launchable type="desktop-id">io.github.leandrodaf.newera.desktop</launchable>|' \
-  "$root/usr/share/metainfo/io.github.leandrodaf.newera.metainfo.xml"
 mkdir -p "$root/usr/share/icons"
 cp -r "$src/share/icons/hicolor" "$root/usr/share/icons/"
 install -Dm644 "$src/LICENSE-MIT" "$root/usr/share/licenses/newera/LICENSE-MIT"
@@ -67,9 +64,8 @@ EOF
 dpkg-deb --root-owner-group --build "$deb" "$out/newera-linux-x64.deb"
 
 # --- .rpm -------------------------------------------------------------------
-# No library names here: Fedora and openSUSE spell them differently, and any
-# desktop that can show a window has them. The binary itself asks only for
-# glibc 2.35.
+# What the window loads at run time, by soname: Fedora and openSUSE package
+# the same libraries under different names, and both resolve these.
 rpmtop="$work/rpmbuild"
 mkdir -p "$rpmtop"/{BUILD,RPMS,SOURCES,SPECS,SRPMS,BUILDROOT}
 cat > "$rpmtop/SPECS/newera.spec" <<EOF
@@ -82,6 +78,17 @@ URL:            https://3dneweraai.com/
 BuildArch:      x86_64
 AutoReqProv:    no
 Requires:       glibc >= 2.35
+Requires:       libvulkan.so.1()(64bit)
+Requires:       libEGL.so.1()(64bit)
+Requires:       libX11.so.6()(64bit)
+Requires:       libXcursor.so.1()(64bit)
+Requires:       libXi.so.6()(64bit)
+Requires:       libxkbcommon.so.0()(64bit)
+Requires:       libxkbcommon-x11.so.0()(64bit)
+Requires:       libwayland-client.so.0()(64bit)
+Requires:       libwayland-egl.so.1()(64bit)
+Requires:       libfontconfig.so.1()(64bit)
+Requires:       libdbus-1.so.3()(64bit)
 
 %description
 $describe

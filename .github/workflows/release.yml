@@ -185,6 +185,8 @@ jobs:
     name: Pack the snap
     needs: build
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
     outputs:
       file: ${{ steps.pack.outputs.snap }}
     steps:
@@ -213,6 +215,8 @@ jobs:
     name: Pack .deb, .rpm and AppImage
     needs: build
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/linux-packaging
@@ -414,7 +418,8 @@ jobs:
           fi
 
   # The Snap Store, stable channel. Skipped until the SNAPCRAFT_STORE_CREDENTIALS
-  # secret exists (`snapcraft export-login --snaps=newera --acls=package_upload -`),
+  # secret exists (`snapcraft export-login --snaps=newera
+  # --acls=package_access,package_push,package_update,package_release -`),
   # and like winget and the Microsoft Store a refusal is said on the run and
   # leaves the release alone.
   snapstore:
@@ -422,6 +427,8 @@ jobs:
     needs: [publish, snap]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
     steps:

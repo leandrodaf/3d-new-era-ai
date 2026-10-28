@@ -19,8 +19,9 @@ flatpak run io.github.leandrodaf.newera
 
 ## Submit it to Flathub
 
-Flathub reviews the first submission by hand. After that, its bot opens a pull
-request for each new release.
+Flathub reviews the first submission by hand. After that, the app lives in its
+own repository under `flathub/io.github.leandrodaf.newera`, and each release is
+a pull request there.
 
 1. Fork [flathub/flathub](https://github.com/flathub/flathub) and branch off
    `new-pr`.
@@ -37,3 +38,15 @@ request for each new release.
 3. Open a pull request against `new-pr` titled `Add io.github.leandrodaf.newera`.
    The `io.github.leandrodaf` id is verified through the `leandrodaf` GitHub
    account.
+
+## Each release after that
+
+Flathub's update bot only follows sources marked with `x-checker-data`, and it
+cannot regenerate the crate list, so a release is updated by hand:
+
+1. In the app's Flathub repository, set the git source's `tag` and `commit` to
+   the new release.
+2. Run `scripts/flatpak-cargo-sources.sh` on that tag and copy the new
+   `cargo-sources.json` over the old one.
+3. Open the pull request. Flathub builds it, and merging publishes the update to
+   every install.

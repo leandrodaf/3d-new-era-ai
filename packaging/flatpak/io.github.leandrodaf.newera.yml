@@ -41,7 +41,6 @@ modules:
       - install -Dm644 assets/linux/newera.desktop /app/share/applications/io.github.leandrodaf.newera.desktop
       - sed -i -e 's/^Icon=newera$/Icon=io.github.leandrodaf.newera/' -e '/^TryExec=/d' /app/share/applications/io.github.leandrodaf.newera.desktop
       - install -Dm644 assets/linux/io.github.leandrodaf.newera.metainfo.xml /app/share/metainfo/io.github.leandrodaf.newera.metainfo.xml
-      - sed -i 's|<launchable type="desktop-id">newera.desktop</launchable>|<launchable type="desktop-id">io.github.leandrodaf.newera.desktop</launchable>|' /app/share/metainfo/io.github.leandrodaf.newera.metainfo.xml
       - install -Dm644 assets/linux/newera.xml /app/share/mime/packages/io.github.leandrodaf.newera.xml
       - sed -i 's/"application-x-newera"/"io.github.leandrodaf.newera.application-x-newera"/g' /app/share/mime/packages/io.github.leandrodaf.newera.xml
       - |
@@ -57,7 +56,13 @@ modules:
     sources:
       - type: dir
         path: ../..
+        # The checkout, minus build output: flatpak-builder run from the root
+        # leaves its state and build folder here too.
         skip:
           - target
           - .git
+          - .flatpak-builder
+          - build-dir
+          - repo
+          - _site
       - cargo-sources.json

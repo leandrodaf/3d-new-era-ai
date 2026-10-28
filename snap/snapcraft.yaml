@@ -33,8 +33,9 @@ architectures:
 
 apps:
   newera:
-    command: newera/newera
-    desktop: newera/share/applications/newera.desktop
+    # snapcraft strips the tarball's top folder: its files land at the root.
+    command: newera
+    desktop: share/applications/newera.desktop
     # The gnome extension brings the graphics stack the window opens with:
     # Mesa (OpenGL and Vulkan), EGL, X11, Wayland, xkbcommon, fontconfig and
     # the desktop portal behind the file dialogs.
@@ -58,7 +59,7 @@ parts:
       # comes from the snap's own.
       sed -i -e 's|^Exec=.*|Exec=newera %f|' -e 's|^TryExec=.*||' \
         -e 's|^Icon=.*|Icon=${SNAP}/meta/gui/newera.png|' \
-        newera/share/applications/newera.desktop
+        share/applications/newera.desktop
     stage-packages:
       - libvulkan1
       - libxkbcommon-x11-0

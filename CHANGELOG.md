@@ -32,8 +32,9 @@ All notable changes to this project are documented here. The format follows
   work from it as from the tarball.
 - Linux packages on every release, next to the tarball: `newera-linux-x64.deb` (Debian, Ubuntu,
   Mint, Pop!_OS: `sudo apt install ./newera-linux-x64.deb`), `newera-linux-x64.rpm` (Fedora, RHEL,
-  openSUSE) and `newera-linux-x64.AppImage` (any distro, one file). Each installs the `newera`
-  command, the menu entry, the icons and the `.newera` file type, and uninstalls cleanly.
+  openSUSE) and `newera-linux-x64.AppImage` (any distro, one file that runs as it is). The `.deb`
+  and the `.rpm` install the `newera` command, the menu entry, the icons and the `.newera` file
+  type, and uninstall cleanly.
 - The Linux app's store listing (AppStream metadata, read by GNOME Software, KDE Discover, the
   Ubuntu App Center and Flathub): five screenshots with captions, categories, keywords in four
   languages, the brand colors, release history and links to the code, help and donations.
