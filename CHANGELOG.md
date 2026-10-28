@@ -19,6 +19,10 @@ All notable changes to this project are documented here. The format follows
   about it and a picture of the editor, instead of a bare address. So do the viewer, the
   connector, pricing and the legal pages; a test keeps every public page that way.
 
+
+- The connector page (`/connector/`) opens in the visitor's language, with the PT · EN switch the
+  pricing and legal pages have. It always opened in Portuguese, with the English text below it.
+
 ## [3.2.0] - 2026-10-27
 
 ### Added
