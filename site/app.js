@@ -564,6 +564,8 @@
     frame.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
     frame.allowFullscreen = true;
     link.replaceWith(frame);
+    // The link had the focus; a keyboard keeps it on the player that took its place.
+    frame.focus();
   }));
 
   // ---- The menu a narrow window gets ----
