@@ -153,10 +153,11 @@ fn shown_in(name: &str, lang: Lang) -> String {
     if let Some(original) = name.strip_suffix(" (cópia)") {
         return format!("{}{}", shown_in(original, lang), say(" (cópia)", lang));
     }
-    if let Some(n) = name.strip_prefix("Versão ") {
-        if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) {
-            return fill_in("Versão {}", lang, &[&n]);
-        }
+    if let Some(n) = name.strip_prefix("Versão ")
+        && !n.is_empty()
+        && n.chars().all(|c| c.is_ascii_digit())
+    {
+        return fill_in("Versão {}", lang, &[&n]);
     }
     translations(name).map_or_else(|| name.to_owned(), |row| row[column].to_owned())
 }
