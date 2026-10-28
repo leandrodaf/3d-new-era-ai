@@ -81,3 +81,8 @@ body {
 /* A section hidden by the switch: `hidden` alone loses to `display: block`
    further up in some browsers' default sheets. */
 .legal [hidden] { display: none !important; }
+
+/* Comparison tables: full width, and a phone scrolls the table, not the page. */
+.legal table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.95em; display: block; overflow-x: auto; }
+.legal th, .legal td { text-align: left; padding: 0.5em 0.75em; border-bottom: 1px solid rgba(127, 127, 127, 0.25); vertical-align: top; }
+.legal thead th { font-weight: 600; }
