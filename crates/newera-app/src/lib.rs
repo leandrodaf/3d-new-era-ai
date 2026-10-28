@@ -44,8 +44,8 @@ pub struct AppOptions {
 }
 
 /// The name the window gives the desktop: the X11 class and the Wayland
-/// app_id. The menu entry's `StartupWMClass` says the same, and so do the
-/// Flatpak, the AppStream metadata and the .deb, .rpm and AppImage entries,
+/// `app_id`. The menu entry's `StartupWMClass` says the same, and so do the
+/// Flatpak, the `AppStream` metadata and the .deb, .rpm and `AppImage` entries,
 /// so the dock shows the app's own icon and groups its windows whichever way
 /// it was installed.
 pub const APP_ID: &str = "io.github.leandrodaf.newera";

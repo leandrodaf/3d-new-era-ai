@@ -67,9 +67,13 @@ jobs:
           test -f /usr/share/icons/hicolor/scalable/apps/newera.svg
           test -f /usr/share/metainfo/io.github.leandrodaf.newera.metainfo.xml
           grep -q 'application/x-newera' /usr/share/mime/globs2
-          sudo apt-get install -y -qq --no-install-recommends desktop-file-utils appstream
+          sudo apt-get install -y -qq --no-install-recommends desktop-file-utils
           desktop-file-validate /usr/share/applications/io.github.leandrodaf.newera.desktop
-          appstreamcli validate --no-net /usr/share/metainfo/io.github.leandrodaf.newera.metainfo.xml
+          # 22.04's appstreamcli predates the vcs-browser URL and the
+          # <developer> tag the stores read today: the metadata is checked
+          # with a current one instead.
+          docker run --rm -v /usr/share/metainfo:/m:ro ubuntu:24.04 sh -c \
+            'apt-get update -qq && apt-get install -y -qq --no-install-recommends appstream >/dev/null && appstreamcli validate --no-net --pedantic /m/io.github.leandrodaf.newera.metainfo.xml'
       - name: Uninstall
         run: |
           sudo apt-get remove -y newera
