@@ -16,7 +16,6 @@ All notable changes to this project are documented here. The format follows
   pieces names catalog items in the window's language ("French door", not "Porta-janela").
   The file keeps what it held; a name somebody typed is shown as typed.
 
-
 - A shared link to the browser editor (`3dneweraai.com/app/`) shows a card with a title, a line
   about it and a picture of the editor, instead of a bare address. So do the viewer, the
   connector, pricing and the legal pages; a test keeps every public page that way.
