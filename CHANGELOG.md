@@ -12,6 +12,13 @@ All notable changes to this project are documented here. The format follows
   Ubuntu GitHub runs (glibc 2.35) instead of the newest. The 3.2.0 one asked for glibc 2.43 and
   failed to start on Ubuntu 24.04 with `GLIBC_2.43 not found`.
 
+||||||| parent of 0e17feb (fix(app): the defaults a project starts with follow the window's language)
+
+- In English, Spanish and French the editor no longer shows its own defaults in Portuguese: the
+  first tab reads "Version 1" (not "Versão 1"), a new project "New home", and the list of
+  pieces names catalog items in the window's language ("French door", not "Porta-janela").
+  The file keeps what it held; a name somebody typed is shown as typed.
+
 ## [3.2.0] - 2026-10-27
 
 ### Added
