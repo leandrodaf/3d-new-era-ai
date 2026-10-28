@@ -62,7 +62,7 @@ jobs:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: release-${{ matrix.target }}
+          shared-key: release-${{ matrix.target }}-${{ matrix.os }}
       - run: cargo build -p newera --release --locked --target ${{ matrix.target }}
         env:
           CARGO_PROFILE_RELEASE_DEBUG: line-tables-only

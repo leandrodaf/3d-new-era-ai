@@ -59,7 +59,7 @@ jobs:
       # never an earlier tag's, so saving one here would only be thrown away.
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: release-${{ matrix.target }}
+          shared-key: release-${{ matrix.target }}-${{ matrix.os }}
           save-if: false
       # The Sentry DSN is baked into released binaries only; it lives in the
       # repository's secrets, never in its files, and CI builds go without it.
