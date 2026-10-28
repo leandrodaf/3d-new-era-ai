@@ -11,9 +11,6 @@ All notable changes to this project are documented here. The format follows
 - The Linux tarball opens on Ubuntu 22.04, Debian 12, Fedora 36 and newer: it is built on the oldest
   Ubuntu GitHub runs (glibc 2.35) instead of the newest. The 3.2.0 one asked for glibc 2.43 and
   failed to start on Ubuntu 24.04 with `GLIBC_2.43 not found`.
-
-||||||| parent of 0e17feb (fix(app): the defaults a project starts with follow the window's language)
-
 - In English, Spanish and French the editor no longer shows its own defaults in Portuguese: the
   first tab reads "Version 1" (not "Versão 1"), a new project "New home", and the list of
   pieces names catalog items in the window's language ("French door", not "Porta-janela").
