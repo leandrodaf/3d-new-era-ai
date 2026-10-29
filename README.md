@@ -52,7 +52,7 @@ Uninstall with `install-macos.sh --uninstall`, or from *Settings → Apps* on Wi
 
 On Windows, it is also in the Microsoft Store:
 
-[<img src="https://3dneweraai.com/microsoft-store.svg" alt="Get it from Microsoft" width="161" height="44">](https://apps.microsoft.com/detail/9MT55M4M7B76)
+[![Get it from Microsoft](https://3dneweraai.com/microsoft-store.svg)](https://apps.microsoft.com/detail/9MT55M4M7B76)
 
 Prefer a plain download?
 

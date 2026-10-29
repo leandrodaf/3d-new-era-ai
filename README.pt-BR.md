@@ -52,7 +52,7 @@ Claude Code e no Codex se você os tiver, e o mesmo comando atualiza. Para desin
 
 No Windows, ele também está na Microsoft Store:
 
-[<img src="https://3dneweraai.com/microsoft-store.svg" alt="Baixe na Microsoft Store" width="161" height="44">](https://apps.microsoft.com/detail/9MT55M4M7B76)
+[![Baixe na Microsoft Store](https://3dneweraai.com/microsoft-store.svg)](https://apps.microsoft.com/detail/9MT55M4M7B76)
 
 Prefere baixar o arquivo?
 
