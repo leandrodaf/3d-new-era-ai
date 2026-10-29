@@ -582,3 +582,5 @@ button { font: inherit; color: inherit; }
   .nav__links { display: none; }
   .nav__toggle { display: inline-flex; }
 }
+.store { display: inline-flex; align-self: flex-start; margin-bottom: 6px; border-radius: 6px; }
+.store img { display: block; }

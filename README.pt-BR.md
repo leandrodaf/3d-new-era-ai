@@ -50,6 +50,10 @@ Menu Iniciar ou no Launchpad, o `newera` entra no `PATH`, o servidor MCP é regi
 Claude Code e no Codex se você os tiver, e o mesmo comando atualiza. Para desinstalar, use
 `install-macos.sh --uninstall` ou *Configurações → Aplicativos* no Windows.
 
+No Windows, ele também está na Microsoft Store:
+
+[<img src="https://3dneweraai.com/microsoft-store.svg" alt="Baixe na Microsoft Store" width="161" height="44">](https://apps.microsoft.com/detail/9MT55M4M7B76)
+
 Prefere baixar o arquivo?
 
 | [Windows (x64)](https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-windows-x64.zip) | [macOS Apple Silicon](https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-macos-apple-silicon.zip) | [macOS Intel](https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-macos-intel.zip) | [Linux (x64)](https://github.com/leandrodaf/3d-new-era-ai/releases/latest/download/newera-linux-x64.tar.gz) |
