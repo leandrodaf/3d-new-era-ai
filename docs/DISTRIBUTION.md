@@ -45,8 +45,8 @@ apart.
 2. The cloud is optional. A cloud project is the same `.newera` file as on the
    desktop and can be downloaded at any time.
 3. There is one tool surface. No channel gets a fork of `newera-mcp`.
-4. Only what costs server time is paid. Anything that runs on the user's machine
-   stays free.
+4. Nothing is sold. Everything is free, and anything that runs on the user's
+   machine stays free.
 
 ## Channels
 
@@ -90,7 +90,7 @@ them fails CI:
   (`every_hosted_tool_asks_for_the_account`).
 
 Inside an AI client nothing is sold: no prices, no upgrade buttons and no
-checkout links in tool output. The free plan must be useful on its own.
+checkout links in tool output.
 
 ## Release flow
 

@@ -522,6 +522,26 @@ async fn an_ai_client_is_allowed_in_and_reaches_the_tab() {
     )
     .await;
     assert_eq!(renamed["content"][0]["text"], "ok saved Apartamento");
+    // A limit written back into a plan holds again, with no code: one project,
+    // one draft photo a day (already taken) and no storage.
+    sqlx::query(
+        r#"update plans set limits = '{"projects": 1, "draft_renders_per_day": 1, "storage_mb": 0}'"#,
+    )
+    .execute(&state.db)
+    .await
+    .unwrap();
+    for (id, name, arguments) in [
+        (54, "file", json!({"action": "new"})),
+        (55, "render_photo", json!({"w": 64, "h": 48})),
+        (56, "file", json!({"action": "save"})),
+    ] {
+        let limited = call(id, name, arguments).await;
+        assert_eq!(limited["isError"], true, "{name}: {limited}");
+    }
+    sqlx::query("update plans set limits = '{}'")
+        .execute(&state.db)
+        .await
+        .unwrap();
     // "Open in the editor" is this project, which the site may fetch with the
     // person's cookie — and nobody else may.
     let shown = call(50, "show_plan", json!({})).await;

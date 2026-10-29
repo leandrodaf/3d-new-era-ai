@@ -31,7 +31,6 @@ reports from automated scanners without a working proof of concept.
 - The local server binds to `127.0.0.1`, validates the `Host` header against DNS
   rebinding, and refuses to listen beyond loopback without a token.
 - The relay stores no project data; it forwards messages between a tab and an AI client.
-- The hosted service keeps secrets only as hashes, jails each project's file reads, and
-  verifies every payment webhook signature.
+- The hosted service keeps secrets only as hashes and jails each project's file reads.
 
 More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#security).
