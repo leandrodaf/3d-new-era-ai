@@ -21,7 +21,7 @@ release.
 ## Scope
 
 In scope: the `newera` binary and its local HTTP/MCP server, the browser editor, the relay
-and the hosted service (accounts, OAuth, cloud projects, billing webhooks).
+and the hosted service (accounts, OAuth, cloud projects).
 
 Out of scope: denial of service by volume, findings that need a compromised machine, and
 reports from automated scanners without a working proof of concept.
