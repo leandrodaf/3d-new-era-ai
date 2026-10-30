@@ -32,6 +32,10 @@ pub(crate) struct EditLibraryParams {
     notes: Option<String>,
     /// publish: how far it can be trusted (what was estimated, what was measured).
     fidelity: Option<String>,
+    /// publish: the section the editor's catalog lists it under (`Bedroom`); kept from the last version when left out.
+    category: Option<String>,
+    /// publish: a small .png/.jpg for its catalog row; kept from the last version when left out.
+    icon: Option<String>,
 }
 
 /// The library, when this process may read it: a server confined to its
@@ -59,6 +63,8 @@ pub(crate) fn resolve(model: &str) -> Option<Result<(Entry, String), String>> {
 
 #[tool_router(router = library_router, vis = "pub(crate)")]
 impl NewEraMcp {
+    /// The `library` tool: every entry with its latest version, or with
+    /// `name`, every version of that one entry.
     #[allow(clippy::unused_self)] // tool methods need the receiver
     #[tool(
         description = "Versions kept in the asset library: approved revisions of model files, reusable in any project with place model=library:<name> or library:<name>@<v>; edit_model replace file=library:<name>@<v> goes back to an older one. Rows [name, latest, title, brand, versions]; name=<entry> lists its versions [v, title, size, unit, source, fidelity, notes, pictures, sizes]. edit_library publishes."
@@ -98,8 +104,11 @@ impl NewEraMcp {
         }
     }
 
+    /// The `edit_library` tool: publishes a piece of the open project as the
+    /// next version of `name`. The section and picture of the version before
+    /// carry over when they are not given again.
     #[tool(
-        description = "Publish to the asset library: action=publish keeps a piece's model file — with its companion files, reference pictures, measured sizes, unit, box, brand and source link — as the next version of name, with notes on what changed and fidelity (what was estimated). A version never changes after; library lists them."
+        description = "Publish to the asset library: action=publish keeps a piece's model file — with its companion files, reference pictures, measured sizes, unit, box, height above the floor, brand and source link — as the next version of name, with notes on what changed and fidelity (what was estimated). A version never changes after; library lists them."
     )]
     pub(crate) fn edit_library(
         &self,
@@ -115,6 +124,19 @@ impl NewEraMcp {
             .home()
             .find_piece(id)
             .ok_or_else(|| invalid(format!("{} not found", p.id)))?;
+        // Where it is listed and the picture it is listed with carry over:
+        // a new revision of a chair is still a chair.
+        let last = library::get(&root, &p.name, None)
+            .ok()
+            .map(|(entry, _)| entry);
+        let category = p
+            .category
+            .filter(|c| !c.trim().is_empty())
+            .or_else(|| last.as_ref().and_then(|e| e.category.clone()));
+        let icon = p
+            .icon
+            .map(|file| doc.resolve_asset(&file).display().to_string())
+            .or_else(|| last.and_then(|e| e.icon));
         let model = piece.model.as_deref().ok_or_else(|| {
             invalid(format!(
                 "{} is built from the catalog, not an imported model",
@@ -164,6 +186,11 @@ impl NewEraMcp {
                 file: doc.resolve_asset(&far.file).display().to_string(),
                 ..far.clone()
             }),
+            category,
+            // Where it hangs is part of what it is: a wall cabinet published
+            // at 140 cm comes back at 140 cm.
+            elevation: (piece.elevation > 0.0).then_some(piece.elevation),
+            icon,
             ..Entry::default()
         };
         let published =
@@ -189,6 +216,9 @@ mod tests {
     use super::*;
     use crate::tools::server;
 
+    /// A chair published from one project is placed in another from the
+    /// library, at the height it was published at, and can be taken back to an
+    /// older version.
     #[test]
     fn a_published_chair_goes_into_another_project_and_back_a_version() {
         let dir = std::env::temp_dir().join(format!("newera-library-tool-{}", std::process::id()));
@@ -222,7 +252,7 @@ mod tests {
             .unwrap();
         first
             .update(Parameters(
-                serde_json::from_str(r#"{"items":[{"id":"f1","brand":"Example Furniture","model_name":"Poltrona Win","url":"https://example.com/win"}]}"#)
+                serde_json::from_str(r#"{"items":[{"id":"f1","brand":"Example Furniture","model_name":"Poltrona Win","url":"https://example.com/win","elev":40}]}"#)
                     .unwrap(),
             ))
             .unwrap();
@@ -267,22 +297,32 @@ mod tests {
             });
             doc.execute(newera_core::Command::update(chair)).unwrap();
         }
-        let publish = |notes: &str| {
+        let publish = |notes: &str, more: &str| {
             first
                 .edit_library(Parameters(
                     serde_json::from_str(&format!(
-                        r#"{{"action":"publish","id":"f1","name":"win","notes":"{notes}","fidelity":"curvas estimadas"}}"#
+                        r#"{{"action":"publish","id":"f1","name":"win","notes":"{notes}","fidelity":"curvas estimadas"{more}}}"#
                     ))
                     .unwrap(),
                 ))
                 .unwrap()
         };
         assert_eq!(
-            publish("primeira"),
+            publish(
+                "primeira",
+                &format!(r#","category":"Sala","icon":"{photo}""#)
+            ),
             "ok published library:win@1 (1 photos, 1 measures)"
         );
         std::fs::write(work.join("win.obj"), obj(70.0)).unwrap();
-        assert!(publish("braços mais finos").starts_with("ok published library:win@2"));
+        assert!(publish("braços mais finos", "").starts_with("ok published library:win@2"));
+        // Where the catalog lists it, and its picture, carry over.
+        let (second_version, _) = library::get(&root().unwrap(), "win", Some(2)).unwrap();
+        assert_eq!(second_version.category.as_deref(), Some("Sala"));
+        assert!(
+            std::path::Path::new(second_version.icon.as_deref().unwrap())
+                .ends_with("win/v2/icon.png")
+        );
         // The originals can go: the library keeps its own copies.
         std::fs::remove_dir_all(&work).unwrap();
 
@@ -325,6 +365,11 @@ mod tests {
             placed.model
         );
         assert_eq!(placed.info.brand.as_deref(), Some("Example Furniture"));
+        assert!(
+            (placed.elevation - 40.0).abs() < 1e-9,
+            "{}",
+            placed.elevation
+        );
         assert_eq!((placed.references.len(), placed.measures.len()), (1, 1));
         assert!(std::path::Path::new(&placed.references[0].file).is_file());
         // The approved edits come along, the lighter file from the library.
@@ -355,6 +400,24 @@ mod tests {
             std::path::Path::new(piece(&second).model.as_deref().unwrap())
                 .ends_with("win/v1/win.obj"),
             "{reply}"
+        );
+        // A height asked for wins over the published one.
+        second
+            .place(Parameters(
+                serde_json::from_str(
+                    r#"{"items":[{"model":"library:win","at":[400,100],"elev":0}]}"#,
+                )
+                .unwrap(),
+            ))
+            .unwrap();
+        assert_eq!(
+            second
+                .document
+                .read()
+                .home()
+                .find_piece("f2".parse().unwrap())
+                .map(|f| f.elevation),
+            Some(0.0)
         );
         assert!(
             second
