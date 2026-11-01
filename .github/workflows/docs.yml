@@ -47,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # Rules live in .markdownlint-cli2.jsonc, so `make docs` runs the same set.
-      - uses: DavidAnson/markdownlint-cli2-action@v24.2.0
+      - uses: DavidAnson/markdownlint-cli2-action@v25.0.0
 
   spelling:
     name: Spelling
