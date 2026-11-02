@@ -3229,8 +3229,19 @@ mod tests {
         let doc = h.state().document.read();
         let piece = &doc.home().furniture[0];
         assert_eq!(piece.name, "Armário Ipê");
-        assert_eq!([piece.width, piece.depth, piece.height], [80.0, 85.0, 90.0]);
-        assert_eq!(piece.elevation, 140.0);
+        assert!(
+            [piece.width, piece.depth, piece.height]
+                .iter()
+                .zip([80.0, 85.0, 90.0])
+                .all(|(got, want)| (got - want).abs() < 1e-9),
+            "{:?}",
+            [piece.width, piece.depth, piece.height]
+        );
+        assert!(
+            (piece.elevation - 140.0).abs() < 1e-9,
+            "{}",
+            piece.elevation
+        );
         assert_eq!(piece.info.brand.as_deref(), Some("Example Furniture"));
         assert_eq!(
             piece

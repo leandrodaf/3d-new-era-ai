@@ -333,28 +333,82 @@ pub fn layer<S>() -> impl tracing_subscriber::Layer<S>
 where
     S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
 {
-    use sentry::integrations::tracing::{
-        EventFilter, EventMapping, breadcrumb_from_event, event_from_event,
-    };
-    use tracing_log::NormalizeEvent as _;
-    // A line written through the `log` crate (egui-winit, wgpu-hal) reaches
-    // `tracing` under the target `log`; its own target is in its fields.
-    sentry::integrations::tracing::layer().event_mapper(|event, _ctx| {
+    Reporter {
+        errors: sentry::integrations::tracing::ErrorLayer::new(),
+    }
+}
+
+/// The layer behind [`layer`]: every line goes through [`filter`], the
+/// reports to Sentry's own error layer, the breadcrumbs made here so that a
+/// line written through the `log` crate (egui-winit, wgpu-hal) is filed under
+/// the target it was written with and not under `log`, the target `tracing`
+/// hands it over with.
+#[cfg(not(target_arch = "wasm32"))]
+struct Reporter {
+    errors: sentry::integrations::tracing::ErrorLayer,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl<S> tracing_subscriber::Layer<S> for Reporter
+where
+    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+{
+    fn on_event(&self, event: &tracing::Event<'_>, ctx: tracing_subscriber::layer::Context<'_, S>) {
+        use tracing_log::NormalizeEvent as _;
         let normalized = event.normalized_metadata();
         let meta = normalized.as_ref().unwrap_or_else(|| event.metadata());
-        let target = meta.target();
-        let goes = filter(*meta.level(), target);
-        let no_span = None::<&tracing_subscriber::layer::Context<'_, S>>;
-        if goes.contains(EventFilter::Event) {
-            EventMapping::Event(Box::new(event_from_event(event, no_span)))
-        } else if goes.contains(EventFilter::Breadcrumb) {
-            let mut crumb = breadcrumb_from_event(event, no_span);
-            crumb.category = Some(target.to_owned());
-            EventMapping::Breadcrumb(crumb)
-        } else {
-            EventMapping::Ignore
+        match filter(*meta.level(), meta.target()) {
+            Goes::Report => self.errors.on_event(event, ctx),
+            Goes::Breadcrumb => {
+                let mut message = Message::default();
+                event.record(&mut message);
+                sentry::add_breadcrumb(sentry::Breadcrumb {
+                    category: Some(meta.target().to_owned()),
+                    ty: "log".into(),
+                    level: match *meta.level() {
+                        tracing::Level::ERROR => sentry::Level::Error,
+                        tracing::Level::WARN => sentry::Level::Warning,
+                        _ => sentry::Level::Info,
+                    },
+                    message: message.0,
+                    ..sentry::Breadcrumb::default()
+                });
+            }
+            Goes::Ignore => {}
         }
-    })
+    }
+}
+
+/// The `message` field of a line, as text, for its breadcrumb.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Default)]
+struct Message(Option<String>);
+
+#[cfg(not(target_arch = "wasm32"))]
+impl tracing::field::Visit for Message {
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        if field.name() == "message" {
+            self.0 = Some(format!("{value:?}"));
+        }
+    }
+
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        if field.name() == "message" {
+            self.0 = Some(value.to_owned());
+        }
+    }
+}
+
+/// What a log line becomes, by [`filter`].
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Goes {
+    /// An error report of its own.
+    Report,
+    /// A breadcrumb on the next report.
+    Breadcrumb,
+    /// Nothing.
+    Ignore,
 }
 
 /// Where a log line goes: `error!` is a report, `warn!` and `info!` are
@@ -364,8 +418,7 @@ where
 /// that hung up before its answer was sent; wgpu, a Vulkan driver that fails
 /// to start, after which it tries the next backend.
 #[cfg(not(target_arch = "wasm32"))]
-fn filter(level: tracing::Level, target: &str) -> sentry::integrations::tracing::EventFilter {
-    use sentry::integrations::tracing::EventFilter;
+fn filter(level: tracing::Level, target: &str) -> Goes {
     const NOT_FAULTS: [&str; 3] = [
         "egui_winit::clipboard",
         "rmcp::service",
@@ -373,11 +426,11 @@ fn filter(level: tracing::Level, target: &str) -> sentry::integrations::tracing:
     ];
     match level {
         tracing::Level::ERROR if NOT_FAULTS.iter().any(|t| target.starts_with(t)) => {
-            EventFilter::Breadcrumb
+            Goes::Breadcrumb
         }
-        tracing::Level::ERROR => EventFilter::Event,
-        tracing::Level::WARN | tracing::Level::INFO => EventFilter::Breadcrumb,
-        _ => EventFilter::Ignore,
+        tracing::Level::ERROR => Goes::Report,
+        tracing::Level::WARN | tracing::Level::INFO => Goes::Breadcrumb,
+        _ => Goes::Ignore,
     }
 }
 
@@ -533,30 +586,19 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn an_empty_clipboard_is_a_breadcrumb_not_a_report() {
-        use sentry::integrations::tracing::EventFilter;
         use tracing::Level;
-        let goes = |level, target| filter(level, target).bits();
         assert_eq!(
-            goes(Level::ERROR, "egui_winit::clipboard"),
-            EventFilter::Breadcrumb.bits()
+            filter(Level::ERROR, "egui_winit::clipboard"),
+            Goes::Breadcrumb
         );
+        assert_eq!(filter(Level::ERROR, "rmcp::service"), Goes::Breadcrumb);
         assert_eq!(
-            goes(Level::ERROR, "rmcp::service"),
-            EventFilter::Breadcrumb.bits()
+            filter(Level::ERROR, "wgpu_hal::vulkan::instance"),
+            Goes::Breadcrumb
         );
-        assert_eq!(
-            goes(Level::ERROR, "wgpu_hal::vulkan::instance"),
-            EventFilter::Breadcrumb.bits()
-        );
-        assert_eq!(
-            goes(Level::ERROR, "rmcp::transport"),
-            EventFilter::Event.bits()
-        );
-        assert_eq!(
-            goes(Level::ERROR, "eframe::native::run"),
-            EventFilter::Event.bits()
-        );
-        assert_eq!(goes(Level::DEBUG, "newera_app"), EventFilter::Ignore.bits());
+        assert_eq!(filter(Level::ERROR, "rmcp::transport"), Goes::Report);
+        assert_eq!(filter(Level::ERROR, "eframe::native::run"), Goes::Report);
+        assert_eq!(filter(Level::DEBUG, "newera_app"), Goes::Ignore);
     }
 
     /// egui-winit, wgpu-hal and others log through the `log` crate, which
@@ -585,6 +627,20 @@ mod tests {
         assert!(events.is_empty(), "{events:?}");
         let events = sentry::test::with_captured_events(|| log_line("eframe::native::run"));
         assert_eq!(events.len(), 1, "{events:?}");
+        // The breadcrumb before a report names the target the line was
+        // written with, not `log`.
+        let events = sentry::test::with_captured_events(|| {
+            log_line("egui_winit::clipboard");
+            log_line("eframe::native::run");
+        });
+        assert_eq!(events.len(), 1, "{events:?}");
+        let crumbs = &events[0].breadcrumbs.values;
+        assert_eq!(crumbs.len(), 1, "{crumbs:?}");
+        assert_eq!(crumbs[0].category.as_deref(), Some("egui_winit::clipboard"));
+        assert_eq!(
+            crumbs[0].message.as_deref(),
+            Some("Paste error: The clipboard contents were not available")
+        );
     }
 
     #[test]
