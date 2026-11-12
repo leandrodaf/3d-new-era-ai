@@ -14,7 +14,7 @@ projeta a marcenaria, confere iluminação e ergonomia pelas normas e renderiza 
 com cada alteração aparecendo na tela na hora e a um Ctrl+Z de distância.
 
 Uma alternativa ao Sweet Home 3D para Windows, macOS, Linux e navegador, em português,
-inglês, espanhol e francês.
+inglês, espanhol, francês e ucraniano.
 
 ![Editor com um apartamento de 105 m² mobiliado: catálogo, planta humanizada e vista 3D ao vivo](docs/images/editor.png)
 

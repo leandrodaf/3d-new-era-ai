@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The window speaks Ukrainian: pick "Українська" in Help → Language, or let it follow a
+  `uk_*` system locale (`NEWERA_LANG=uk`) or a browser set to Ukrainian. Every label, the
+  catalog and the materials are translated, and so are the Linux desktop installer, the
+  browser editor's loading and failure messages, the web viewer and the plan viewer an AI
+  client shows.
+- Counts on screen agree with their number where the language needs it: Ukrainian says
+  "1 стіна", "2 стіни", "5 стін" in the home's summary, the catalog, the video and the
+  ergonomics capacity line.
+
 ## [3.3.0] - 2026-11-02
 
 ### Fixed

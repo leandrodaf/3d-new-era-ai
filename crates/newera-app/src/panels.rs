@@ -391,7 +391,7 @@ pub(crate) fn left(app: &mut NewEraApp, ui: &mut egui::Ui) {
                 ui,
                 icon::ARMCHAIR,
                 crate::i18n::tr("Catálogo"),
-                &format!("{pieces} {}", crate::i18n::tr("peças")),
+                &crate::i18n::count(pieces as u64, "peças"),
             );
             let mut query = std::mem::take(&mut app.catalog_query);
             search(ui, &mut query);
@@ -576,13 +576,10 @@ fn outliner(app: &mut NewEraApp, ui: &mut egui::Ui) {
     ui.label(crate::theme::fig(
         ui.visuals(),
         &format!(
-            "{} {} · {} {} · {} {}",
-            home.walls.len(),
-            crate::i18n::tr("paredes"),
-            home.rooms.len(),
-            crate::i18n::tr("cômodos"),
-            home.furniture.len(),
-            crate::i18n::tr("móveis"),
+            "{} · {} · {}",
+            crate::i18n::count(home.walls.len() as u64, "paredes"),
+            crate::i18n::count(home.rooms.len() as u64, "cômodos"),
+            crate::i18n::count(home.furniture.len() as u64, "móveis"),
         ),
     ));
     ui.add_space(6.0);

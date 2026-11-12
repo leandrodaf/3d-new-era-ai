@@ -4,8 +4,14 @@ const planBox = document.getElementById("plan");
 const viewBox = document.getElementById("view");
 const image = document.getElementById("image");
 
-// The page is written in Portuguese; these are the other three languages the
-// app speaks, picked by what the browser asks for.
+// The page is written in Portuguese; these are the other languages the app
+// speaks, picked by what the browser asks for.
+// A number and what it counts in Ukrainian, which has three forms: after 1,
+// after 2–4 and after the rest (1 стіна, 2 стіни, 5 стін).
+const uk = (n, [one, few, many]) => {
+  const unit = n % 10, tens = n % 100;
+  return `${n} ${unit === 1 && tens !== 11 ? one : unit >= 2 && unit <= 4 && (tens < 12 || tens > 14) ? few : many}`;
+};
 const WORDS = {
   en: { open: "Open a project (.newera)", loading: "Loading the engine…", plan: "Floor plan", drag: "Drag to orbit",
         ready: "Ready. Open a .newera project.", failed: (n, e) => `Could not open ${n}: ${e}`,
@@ -16,6 +22,9 @@ const WORDS = {
   fr: { open: "Ouvrir un projet (.newera)", loading: "Chargement du moteur…", plan: "Plan", drag: "Glissez pour pivoter",
         ready: "Prêt. Ouvrez un projet .newera.", failed: (n, e) => `Impossible d'ouvrir ${n} : ${e}`,
         about: (i) => `${i.name} : ${i.walls} murs, ${i.rooms} pièces, ${i.furniture} meubles` },
+  uk: { open: "Відкрити проєкт (.newera)", loading: "Завантаження рушія…", plan: "План", drag: "Перетягніть, щоб обертати",
+        ready: "Готово. Відкрийте проєкт .newera.", failed: (n, e) => `Не вдалося відкрити ${n}: ${e}`,
+        about: (i) => `${i.name}: ${uk(i.walls, ["стіна", "стіни", "стін"])}, ${uk(i.rooms, ["кімната", "кімнати", "кімнат"])}, ${uk(i.furniture, ["предмет меблів", "предмети меблів", "предметів меблів"])}` },
   pt: { ready: "Pronto. Abra um projeto .newera.", failed: (n, e) => `Não foi possível abrir ${n}: ${e}`,
         about: (i) => `${i.name}: ${i.walls} paredes, ${i.rooms} cômodos, ${i.furniture} móveis` },
 };

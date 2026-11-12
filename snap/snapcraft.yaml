@@ -15,8 +15,8 @@ description: |
   up on screen, with undo. It checks lighting and ergonomics against real
   standards and renders photoreal pictures of the rooms.
 
-  Free and open source, no account, no ads. In English, Portuguese, Spanish
-  and French.
+  Free and open source, no account, no ads. In English, Portuguese, Spanish,
+  French and Ukrainian.
 
   Connect an AI from a terminal with `newera mcp`, or point it at the editor's
   server at http://127.0.0.1:7878/mcp while the window is open.

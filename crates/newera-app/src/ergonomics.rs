@@ -195,11 +195,9 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                     ui.label(RichText::new(crate::i18n::tr("nota de habitabilidade")).weak());
                     let c = &report.capacity;
                     ui.label(format!(
-                        "{} {} · {} {} · {} {} · {} {} · {} cm {}",
-                        c.beds,
-                        crate::i18n::tr("lugares para dormir"),
-                        c.bathrooms,
-                        crate::i18n::tr("banheiros"),
+                        "{} · {} · {} {} · {} {} · {} cm {}",
+                        crate::i18n::count(u64::from(c.beds), "lugares para dormir"),
+                        crate::i18n::count(u64::from(c.bathrooms), "banheiros"),
                         c.dining_seats,
                         crate::i18n::tr("à mesa"),
                         c.living_seats,

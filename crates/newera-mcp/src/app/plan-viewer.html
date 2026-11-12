@@ -68,6 +68,15 @@
     pt: { plan: "Planta", three: "3D", refresh: "Atualizar", open: "Abrir editor", waiting: "Aguardando a planta…", busy: "Renderizando…", failed: "Não foi possível renderizar: ", rooms: "cômodos", walls: "paredes", pieces: "peças", area: "m²" },
     es: { plan: "Plano", three: "3D", refresh: "Actualizar", open: "Abrir editor", waiting: "Esperando el plano…", busy: "Renderizando…", failed: "No se pudo renderizar: ", rooms: "ambientes", walls: "paredes", pieces: "piezas", area: "m²" },
     fr: { plan: "Plan", three: "3D", refresh: "Actualiser", open: "Ouvrir l’éditeur", waiting: "En attente du plan…", busy: "Rendu…", failed: "Rendu impossible : ", rooms: "pièces", walls: "murs", pieces: "objets", area: "m²" },
+    uk: { plan: "План", three: "3D", refresh: "Оновити", open: "Відкрити редактор", waiting: "Очікування плану…", busy: "Рендеринг…", failed: "Не вдалося відрендерити: ", rooms: ["кімната", "кімнати", "кімнат"], walls: ["стіна", "стіни", "стін"], pieces: ["елемент", "елементи", "елементів"], area: "м²" },
+  };
+  // A number and what it counts. Ukrainian gives three forms — after 1, after
+  // 2–4 and after the rest (1 стіна, 2 стіни, 5 стін); the others one plural.
+  const count = (n, word) => {
+    if (!Array.isArray(word)) return `${n} ${word}`;
+    const whole = Math.abs(Math.trunc(Number(n))), unit = whole % 10, tens = whole % 100;
+    const form = unit === 1 && tens !== 11 ? 0 : unit >= 2 && unit <= 4 && (tens < 12 || tens > 14) ? 1 : 2;
+    return `${n} ${word[form]}`;
   };
   let words = WORDS.en;
   const $ = (id) => document.getElementById(id);
@@ -129,10 +138,10 @@
     $("title").textContent = data.name || "3D New Era AI";
     const s = data.summary || {};
     const parts = [];
-    if (s.rooms !== undefined) parts.push(`${s.rooms} ${words.rooms}`);
+    if (s.rooms !== undefined) parts.push(count(s.rooms, words.rooms));
     if (s.area !== undefined) parts.push(`${s.area} ${words.area}`);
-    if (s.walls !== undefined) parts.push(`${s.walls} ${words.walls}`);
-    if (s.pieces !== undefined) parts.push(`${s.pieces} ${words.pieces}`);
+    if (s.walls !== undefined) parts.push(count(s.walls, words.walls));
+    if (s.pieces !== undefined) parts.push(count(s.pieces, words.pieces));
     $("foot").textContent = parts.join(" · ");
     if (mode === "plan") setPicture("data:image/svg+xml;charset=utf-8," + encodeURIComponent(sized(data.svg)));
   }
