@@ -52,6 +52,12 @@ pub(crate) struct CutListParams {
     /// Write `.csv` (spreadsheet), `.dxf` (sheets for CNC) or `.svg` (sheets to view).
     #[schemars(skip)]
     path: Option<String>,
+    /// Sheet `[length,width]` mm by longest board name prefix; default `*` 2750×1830, Pedra 3200×1900, Gesso 2400×1200, Ripa 3000×300.
+    sheets: Option<std::collections::BTreeMap<String, [f64; 2]>>,
+    /// Saw kerf between boards (default 4).
+    kerf: Option<f64>,
+    /// Factory edge cut off each side of a sheet (default 0).
+    trim: Option<f64>,
 }
 /// Where to write a cut list.
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -61,15 +67,57 @@ pub(crate) struct CutListExportParams {
     ids: Option<Vec<String>>,
     /// `.csv` (spreadsheet), `.dxf` (sheets for CNC) or `.svg` (sheets to view).
     path: String,
+    /// Sheet `[length,width]` mm by longest board name prefix; default `*` 2750×1830, Pedra 3200×1900, Gesso 2400×1200, Ripa 3000×300.
+    sheets: Option<std::collections::BTreeMap<String, [f64; 2]>>,
+    /// Saw kerf between boards, mm (default 4).
+    kerf: Option<f64>,
+    /// Factory edge cut off each side of a sheet, mm (default 0).
+    trim: Option<f64>,
 }
-/// Thickest part of a drawn group read as a board, mm: a 50 mm stone or a
-/// double panel still is, a 30 cm body of a model is not.
-const DRAWN_BOARD_MM: f64 = 50.0;
+
+/// The workshop's sheets: the defaults with what the call changed, or why
+/// the numbers cannot be cut from.
+fn sheet_stock(
+    sheets: Option<&std::collections::BTreeMap<String, [f64; 2]>>,
+    kerf: Option<f64>,
+    trim: Option<f64>,
+) -> Result<newera_joinery::SheetStock, ErrorData> {
+    let mut stock = newera_joinery::SheetStock::default();
+    if let Some(kerf) = kerf {
+        if !(0.0..=10.0).contains(&kerf) {
+            return Err(invalid(format!(
+                "kerf {kerf} mm: a saw blade takes 0 to 10 mm (default 4)"
+            )));
+        }
+        stock.kerf = kerf;
+    }
+    if let Some(trim) = trim {
+        if !(0.0..=50.0).contains(&trim) {
+            return Err(invalid(format!(
+                "trim {trim} mm: the edge cut off each side is 0 to 50 mm (default 0)"
+            )));
+        }
+        stock.trim = trim;
+    }
+    if let Some(sheets) = sheets {
+        for (board, [length, width]) in sheets {
+            if !(100.0..=6000.0).contains(length) || !(100.0..=6000.0).contains(width) {
+                return Err(invalid(format!(
+                    "sheets.{board} {length}×{width} mm: give [length, width] in mm, each 100 to 6000 (e.g. [2800, 2070])"
+                )));
+            }
+        }
+        stock = stock.with_sizes(sheets.iter().map(|(k, v)| (k.clone(), *v)));
+    }
+    // Every sheet, the defaults too, must outlast the trim.
+    stock.check().map_err(invalid)?;
+    Ok(stock)
+}
 
 #[tool_router(router = joinery_router, vis = "pub(crate)")]
 impl NewEraMcp {
     #[tool(
-        description = "Parametric joinery and interiors: the server computes every board, clearance and rule and answers {id,name,size,parts,hardware,notes}. Workshop advice (a board nobody stocks, a sagging shelf, a short drawer front) comes back in notes and the piece is built anyway; only what has no geometry fails, saying why. kind + p: cabinet {w,h,d cm; t 15|18|25 mm; back mm; door hinged|sliding|drawers|none; doors; shelves; drawers; dividers; plinth; cooktop; top_cutout [x,y,w,d] cm from the left-back; color; front finish} · slats {w,h cm; slat, thickness, gap mm; orientation vertical|horizontal; backing; finish} · countertop {length,depth,height,thickness cm; material; support none|legs|brackets; cutouts [{kind sink|cooktop|grommet, x, w?, d?}]} · cove {room or pts; type open|closed|inverted; ceiling, width, drop, slot cm; led} · shadow_gap {room or pts; ceiling, gap, depth cm; led} · sofa {length,depth,seat,back cm; arms straight|rounded|none; modules; color}. Place with at|wall(+along), angle, elev. Change a build with id + p holding only the new values; a new size keeps its back (anchor back|front|left|right|bottom|top|+x|-x|+y|-y|center). dry=true validates only."
+        description = "Parametric joinery and interiors: the server computes every board, clearance and rule and answers {id,name,size,parts,hardware,notes}. Workshop advice (a board nobody stocks, a sagging shelf) comes back in notes and the piece is built anyway; only what has no geometry fails, saying why. kind + p: cabinet {w,h,d cm; t 15|18|25 mm; back mm; board MDP|MDF; front_board, front_t; door hinged|sliding|drawers|lift|none; doors; shelves; drawers; dividers; plinth; cooktop; top_cutout [x,y,w,d] cm from the left-back; color; front finish} · slats {w,h cm; slat, thickness, gap mm; orientation vertical|horizontal; backing; finish} · countertop {length,depth,height,thickness cm; material; support none|legs|brackets; cutouts [{kind sink|cooktop|grommet, x, w?, d?}]} · cove {room or pts; type open|closed|inverted; ceiling, width, drop, slot cm; led} · shadow_gap {room or pts; ceiling, gap, depth cm; led} · sofa {length,depth,seat,back cm; arms straight|rounded|none; modules; color}. Place with at|wall(+along), angle, elev. Change a build with id + p holding only the new values; a new size keeps its back (anchor back|front|left|right|bottom|top|+x|-x|+y|-y|center). dry=true validates only."
     )]
     pub(crate) fn joinery(
         &self,
@@ -278,7 +326,7 @@ impl NewEraMcp {
     }
     #[tool(
         name = "cut_list",
-        description = "Cut list of joinery builds, and of groups drawn by hand: each part of a drawn group up to 50 mm thick is a board at the size it was drawn (board is its finish and thickness, no edge banding), the groups are named in drawn and the parts that are not boards in skipped [[id,name]]. Rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. export what=cut_list writes it as .csv, or .dxf/.svg (boards laid out on sheets). sources names the panel standards behind the boards: MDF is a dry-process fibreboard (NBR 15316), MDP a particleboard of 551 to 750 kg/m³ that holds screws better (NBR 14810)."
+        description = "Cut list of joinery builds, and of groups drawn by hand: each part of a drawn group up to 50 mm thick is a board at the size it was drawn (board is its finish and thickness, no edge banding), the groups are named in drawn and the parts that are not boards in skipped [[id,name]]. Rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. The workshop's stock sets the layout: sheets {\"MDF\":[2800,2070]} by board name, kerf, trim mm. export what=cut_list writes it as .csv, or .dxf/.svg (boards laid out on sheets). sources names the panel standards behind the boards: MDF is a dry-process fibreboard (NBR 15316), MDP a particleboard of 551 to 750 kg/m³ that holds screws better (NBR 14810)."
     )]
     pub(crate) fn read_cut_list(
         &self,
@@ -299,6 +347,9 @@ impl NewEraMcp {
         self.cut_list(Parameters(CutListParams {
             ids: p.ids,
             path: Some(p.path),
+            sheets: p.sheets,
+            kerf: p.kerf,
+            trim: p.trim,
         }))
     }
     /// The cut list, written to a file when a path is given.
@@ -306,111 +357,50 @@ impl NewEraMcp {
         &self,
         Parameters(p): Parameters<CutListParams>,
     ) -> Result<String, ErrorData> {
+        // Numbers that cannot be cut from are said before anything is read.
+        let stock = sheet_stock(p.sheets.as_ref(), p.kerf, p.trim)?;
         let doc = self.document.read();
         let home = doc.home();
         let view = home.level_view(home.current_level());
-        let wanted: Option<Vec<String>> = p.ids.clone();
-        let mut rows: Vec<newera_joinery::CutRow> = Vec::new();
-        let mut hardware: Vec<String> = Vec::new();
-        let mut builds = 0;
-        for group in view.furniture.iter().filter(|f| {
-            f.properties.contains_key(newera_joinery::PARAMS_KEY)
-                && wanted
-                    .as_ref()
-                    .is_none_or(|ids| ids.contains(&f.id.to_string()))
-        }) {
-            let build: newera_joinery::Build =
-                serde_json::from_str(&group.properties[newera_joinery::PARAMS_KEY])
-                    .map_err(|e| invalid(format!("{}: {e}", group.id)))?;
-            let output = newera_joinery::generate(&build).map_err(invalid)?;
-            builds += 1;
-            hardware.extend(output.hardware.iter().map(|h| format!("{}: {h}", group.id)));
-            for row in newera_joinery::cut_list(&output) {
-                match rows.iter_mut().find(|r| {
-                    r.board == row.board
-                        && r.edge == row.edge
-                        && r.holes == row.holes
-                        && r.size
-                            .iter()
-                            .zip(row.size)
-                            .all(|(a, b)| (a - b).abs() < 0.05)
-                }) {
-                    Some(existing) => existing.qty += row.qty,
-                    None => rows.push(row),
-                }
-            }
-        }
-        // Joinery drawn by hand — a group of solids, boards and all — is cut
-        // from the same sheets: every part thin enough to be a board is one,
-        // with the size it was drawn at. What is not a board is named, not
-        // guessed into a row.
-        let mut drawn: Vec<String> = Vec::new();
-        let mut skipped: Vec<serde_json::Value> = Vec::new();
-        for group in view.furniture.iter().filter(|f| {
-            f.is_group()
-                && !f.properties.contains_key(newera_joinery::PARAMS_KEY)
-                && wanted
-                    .as_ref()
-                    .is_none_or(|ids| ids.contains(&f.id.to_string()))
-        }) {
-            let mut boards = 0;
-            let mut left = Vec::new();
-            for part in group.visible_leaves() {
-                let mut size =
-                    [part.width, part.depth, part.height].map(|cm| (cm * 100.0).round() / 10.0);
-                size.sort_by(|a, b| b.total_cmp(a));
-                if part.model.is_some() || size[2] > DRAWN_BOARD_MM || size[2] <= 0.0 {
-                    left.push(serde_json::json!([part.id.to_string(), part.name]));
-                    continue;
-                }
-                boards += 1;
-                let board = part.texture.as_ref().map_or_else(
-                    || format!("desenhado {} mm", size[2]),
-                    |mat| format!("{mat} {} mm", size[2]),
-                );
-                let row = newera_joinery::CutRow {
-                    name: part.name.clone(),
-                    board,
-                    qty: 1,
-                    size,
-                    edge: [0, 0],
-                    holes: Vec::new(),
-                };
-                match rows.iter_mut().find(|r| {
-                    r.board == row.board
-                        && r.name == row.name
-                        && r.size
-                            .iter()
-                            .zip(row.size)
-                            .all(|(a, b)| (a - b).abs() < 0.05)
-                }) {
-                    Some(existing) => existing.qty += 1,
-                    None => rows.push(row),
-                }
-            }
-            if boards > 0 {
-                drawn.push(group.id.to_string());
-                skipped.extend(left);
-            }
-        }
-        if builds == 0 && drawn.is_empty() {
+        // Ids that name nothing on this storey simply match nothing.
+        let wanted: Option<Vec<newera_core::FurnitureId>> = p.ids.as_ref().map(|ids| {
+            view.furniture
+                .iter()
+                .filter(|f| ids.contains(&f.id.to_string()))
+                .map(|f| f.id)
+                .collect()
+        });
+        let found = newera_joinery::gather(&view.furniture, wanted.as_deref()).map_err(invalid)?;
+        if found.is_empty() {
             return Err(invalid(
                 "no joinery here: no joinery builds (make one with the joinery tool) and no group drawn with board parts",
             ));
         }
+        let rows = found.rows;
+        let hardware: Vec<String> = found
+            .hardware
+            .iter()
+            .map(|(id, h)| format!("{id}: {h}"))
+            .collect();
+        let drawn: Vec<String> = found.drawn.iter().map(ToString::to_string).collect();
+        let skipped: Vec<serde_json::Value> = found
+            .skipped
+            .iter()
+            .map(|(id, name)| serde_json::json!([id.to_string(), name]))
+            .collect();
         // Where the project stands, before the document is let go: the panel
         // standards oblige here and inform elsewhere, like every other source.
         let place = doc.home().compass.place();
         drop(doc);
-        let mut sheets = Vec::new();
+        let mut sheets = newera_joinery::sheets_used(&rows, &stock).map_err(invalid)?;
         if let Some(path) = &p.path {
             let ext = std::path::Path::new(path)
                 .extension()
                 .and_then(|e| e.to_str())
                 .map(str::to_ascii_lowercase);
             let layout = match ext.as_deref() {
-                Some("dxf") => Some(newera_joinery::cut_list_dxf(&rows)),
-                Some("svg") => Some(newera_joinery::cut_list_svg(&rows)),
+                Some("dxf") => Some(newera_joinery::cut_list_dxf(&rows, &stock).map_err(invalid)?),
+                Some("svg") => Some(newera_joinery::cut_list_svg(&rows, &stock).map_err(invalid)?),
                 Some("csv") => None,
                 _ => return Err(invalid("path must end in .csv, .dxf or .svg")),
             };
@@ -449,8 +439,12 @@ impl NewEraMcp {
             "hardware": hardware,
             "sources": super::sources(&["nbr14810", "nbr15316"], &place),
         });
-        if !sheets.is_empty() {
-            reply["sheets"] = serde_json::json!(sheets);
+        if !sheets.sheets.is_empty() {
+            reply["sheets"] = serde_json::json!(sheets.sheets);
+        }
+        // Boards no sheet holds whole: counted, but they need a splice.
+        if !sheets.oversize.is_empty() {
+            reply["oversize"] = serde_json::json!(sheets.oversize);
         }
         if !drawn.is_empty() {
             reply["drawn"] = serde_json::json!(drawn);
@@ -732,6 +726,7 @@ mod tests {
             &s.cut_list(Parameters(CutListParams {
                 ids: None,
                 path: Some(csv.display().to_string()),
+                ..CutListParams::default()
             }))
             .unwrap(),
         )
@@ -763,6 +758,7 @@ mod tests {
             &s.cut_list(Parameters(CutListParams {
                 ids: Some(vec![id]),
                 path: Some(dxf.display().to_string()),
+                ..CutListParams::default()
             }))
             .unwrap(),
         )
@@ -773,9 +769,60 @@ mod tests {
         s.cut_list(Parameters(CutListParams {
             ids: None,
             path: Some(svg.display().to_string()),
+            ..CutListParams::default()
         }))
         .unwrap();
         assert!(std::fs::read_to_string(&svg).unwrap().starts_with("<svg"));
         std::fs::remove_dir_all(dir).ok();
+
+        // The workshop's own sheets: a read already says how many it takes.
+        let read = |json: &str| {
+            s.read_cut_list(Parameters(serde_json::from_str(json).unwrap()))
+                .map(|r| serde_json::from_str::<serde_json::Value>(&r).unwrap())
+        };
+        let sheets_of = |reply: &serde_json::Value, board: &str| {
+            reply["sheets"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|r| r[0] == board)
+                .map(|r| r[1].as_u64().unwrap())
+                .unwrap()
+        };
+        let stock = read("{}").unwrap();
+        let chipboard = read(r#"{"sheets":{"*":[2800,2070]},"kerf":3,"trim":10}"#).unwrap();
+        assert!(
+            sheets_of(&chipboard, "MDF 18") <= sheets_of(&stock, "MDF 18"),
+            "{stock} {chipboard}"
+        );
+        // Cove strips longer than a gypsum board are named once each; the
+        // cabinet's boards fit their sheets.
+        let oversize: Vec<&str> = stock["oversize"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|b| b.as_str())
+            .collect();
+        assert!(oversize.iter().all(|b| b.contains("Gesso")), "{stock}");
+        assert!(oversize.windows(2).all(|w| w[0] != w[1]), "{oversize:?}");
+        // A side longer than a 1 m sheet is still counted, and named.
+        let small = read(r#"{"sheets":{"*":[1000,1000]}}"#).unwrap();
+        assert!(
+            small["oversize"].as_array().is_some_and(|o| o
+                .iter()
+                .any(|b| b.as_str().is_some_and(|b| b.contains("(MDF 18)")))),
+            "{small}"
+        );
+        // Numbers nobody can cut from are refused, saying what to give.
+        let blade = read(r#"{"kerf":20}"#).unwrap_err();
+        assert!(blade.message.contains("0 to 10 mm"), "{}", blade.message);
+        let tiny = read(r#"{"sheets":{"MDF":[50,2070]}}"#).unwrap_err();
+        assert!(tiny.message.contains("[2800, 2070]"), "{}", tiny.message);
+        let eaten = read(r#"{"sheets":{"MDF":[100,100]},"trim":50}"#).unwrap_err();
+        assert!(
+            eaten.message.contains("nothing is left"),
+            "{}",
+            eaten.message
+        );
     }
 }

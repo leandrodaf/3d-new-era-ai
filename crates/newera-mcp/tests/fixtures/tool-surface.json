@@ -349,7 +349,7 @@
         },
         "p": {
           "additionalProperties": true,
-          "description": "Flat choices, all optional: row base|wall|tall, h, d, elev, t (mm), front, color and `handle_color` [r,g,b] or \"#hex\", handle bar|profile|knob|cava|none (bar), drawers (drawer units), max (widest module, 90), target (60), top (base countertop, true), `top_material`, sink / cooktop (center cm along the wall: its cabinet and cutout; null removes it), `sink_w` (80), `cooktop_w` (60), interior shelves|hanging|wardrobe (tall rows; wardrobe by default facing a bedroom)",
+          "description": "Flat choices, all optional: row base|wall|tall, h, d, elev, t (mm), front, color and `handle_color` [r,g,b] or \"#hex\", handle bar|profile|knob|cava|none (bar), drawers (drawer units), max (widest module, 90), target (60), top (base countertop, true), `top_material`, sink / cooktop (center cm along the wall: its cabinet and cutout; null removes it), `sink_w` (80), `cooktop_w` (60), interior shelves|hanging|wardrobe (tall rows; wardrobe by default facing a bedroom), lift (wall rows: lift-up flaps, false), board (carcass: MDP chipboard or MDF, the default), `front_board` and `front_t` mm (fronts and fillers cut apart, MDF 19 on MDP 18)",
           "type": "object"
         },
         "room": {
@@ -1020,7 +1020,7 @@
       "readOnlyHint": true,
       "title": "Cut list"
     },
-    "description": "Cut list of joinery builds, and of groups drawn by hand: each part of a drawn group up to 50 mm thick is a board at the size it was drawn (board is its finish and thickness, no edge banding), the groups are named in drawn and the parts that are not boards in skipped [[id,name]]. Rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. export what=cut_list writes it as .csv, or .dxf/.svg (boards laid out on sheets). sources names the panel standards behind the boards: MDF is a dry-process fibreboard (NBR 15316), MDP a particleboard of 551 to 750 kg/m³ that holds screws better (NBR 14810).",
+    "description": "Cut list of joinery builds, and of groups drawn by hand: each part of a drawn group up to 50 mm thick is a board at the size it was drawn (board is its finish and thickness, no edge banding), the groups are named in drawn and the parts that are not boards in skipped [[id,name]]. Rows [part,board,qty,length,width,thickness mm,edge long+short,cutouts [x,y,w,d] mm?] merged by size, hardware, sheets per board. The workshop's stock sets the layout: sheets {\"MDF\":[2800,2070]} by board name, kerf, trim mm. export what=cut_list writes it as .csv, or .dxf/.svg (boards laid out on sheets). sources names the panel standards behind the boards: MDF is a dry-process fibreboard (NBR 15316), MDP a particleboard of 551 to 750 kg/m³ that holds screws better (NBR 14810).",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -1030,6 +1030,26 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "kerf": {
+          "description": "Saw kerf between boards (default 4)",
+          "type": "number"
+        },
+        "sheets": {
+          "additionalProperties": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "description": "Sheet `[length,width]` mm by longest board name prefix; default `*` 2750×1830, Pedra 3200×1900, Gesso 2400×1200, Ripa 3000×300",
+          "type": "object"
+        },
+        "trim": {
+          "description": "Factory edge cut off each side of a sheet (default 0)",
+          "type": "number"
         }
       },
       "type": "object"
@@ -1044,6 +1064,12 @@
           "type": "array"
         },
         "hardware": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "oversize": {
           "items": {
             "type": "string"
           },
@@ -3168,12 +3194,32 @@
           },
           "type": "array"
         },
+        "kerf": {
+          "description": "For `cut_list`: saw kerf (default 4)",
+          "type": "number"
+        },
         "path": {
           "description": "The file to write; its extension picks the format",
           "type": "string"
         },
         "scale": {
           "description": "For `plan`, `.pdf`: scale denominator (50 → 1:50); omitted fits the sheet",
+          "type": "number"
+        },
+        "sheets": {
+          "additionalProperties": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "description": "For `cut_list`: the workshop's sheet sizes, as `cut_list` takes them",
+          "type": "object"
+        },
+        "trim": {
+          "description": "For `cut_list`: edge cut off each sheet side (default 0)",
           "type": "number"
         },
         "w": {
@@ -3217,6 +3263,12 @@
         },
         "ok": {
           "type": "boolean"
+        },
+        "oversize": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "rev": {
           "type": "integer"
@@ -3597,7 +3649,7 @@
       "readOnlyHint": false,
       "title": "Build joinery"
     },
-    "description": "Parametric joinery and interiors: the server computes every board, clearance and rule and answers {id,name,size,parts,hardware,notes}. Workshop advice (a board nobody stocks, a sagging shelf, a short drawer front) comes back in notes and the piece is built anyway; only what has no geometry fails, saying why. kind + p: cabinet {w,h,d cm; t 15|18|25 mm; back mm; door hinged|sliding|drawers|none; doors; shelves; drawers; dividers; plinth; cooktop; top_cutout [x,y,w,d] cm from the left-back; color; front finish} · slats {w,h cm; slat, thickness, gap mm; orientation vertical|horizontal; backing; finish} · countertop {length,depth,height,thickness cm; material; support none|legs|brackets; cutouts [{kind sink|cooktop|grommet, x, w?, d?}]} · cove {room or pts; type open|closed|inverted; ceiling, width, drop, slot cm; led} · shadow_gap {room or pts; ceiling, gap, depth cm; led} · sofa {length,depth,seat,back cm; arms straight|rounded|none; modules; color}. Place with at|wall(+along), angle, elev. Change a build with id + p holding only the new values; a new size keeps its back (anchor back|front|left|right|bottom|top|+x|-x|+y|-y|center). dry=true validates only.",
+    "description": "Parametric joinery and interiors: the server computes every board, clearance and rule and answers {id,name,size,parts,hardware,notes}. Workshop advice (a board nobody stocks, a sagging shelf) comes back in notes and the piece is built anyway; only what has no geometry fails, saying why. kind + p: cabinet {w,h,d cm; t 15|18|25 mm; back mm; board MDP|MDF; front_board, front_t; door hinged|sliding|drawers|lift|none; doors; shelves; drawers; dividers; plinth; cooktop; top_cutout [x,y,w,d] cm from the left-back; color; front finish} · slats {w,h cm; slat, thickness, gap mm; orientation vertical|horizontal; backing; finish} · countertop {length,depth,height,thickness cm; material; support none|legs|brackets; cutouts [{kind sink|cooktop|grommet, x, w?, d?}]} · cove {room or pts; type open|closed|inverted; ceiling, width, drop, slot cm; led} · shadow_gap {room or pts; ceiling, gap, depth cm; led} · sofa {length,depth,seat,back cm; arms straight|rounded|none; modules; color}. Place with at|wall(+along), angle, elev. Change a build with id + p holding only the new values; a new size keeps its back (anchor back|front|left|right|bottom|top|+x|-x|+y|-y|center). dry=true validates only.",
     "inputSchema": {
       "$defs": {
         "Point2": {
@@ -3713,7 +3765,7 @@
       "readOnlyHint": true,
       "title": "Check the layout"
     },
-    "description": "Layout problems on a storey — pieces colliding or clashing, blocked doors and windows: overlap, blocked, in_wall, blocks_door, blocks_window, no_door, backwards, turned, unrated_light, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose and above_ceiling, as {kind: [rows]}; {} means none. Every row is an object with the `key` it is accepted by and the elements involved (name, bounds, z). Overlaps are classified collision (a real clash, first), nesting, served or cross_level, with extent [x,y,z] cm, counted in overlap_kinds. accepted {key, kind, why, extent} lists findings `accept` marked right as drawn; orphaned [[key, reason]] acceptances whose finding is gone. What each problem means and how to fix it: `rules` topic=layout. level: a storey id or `all` (default the one shown); areas {name|id: m²} compares room areas with a reference drawing.",
+    "description": "Layout problems on a storey — pieces colliding or clashing, blocked doors and windows: overlap, blocked, opens_into, in_wall, blocks_door, blocks_window, no_door, backwards, turned, unrated_light, unclear_front, loose_opening, outgrew_niche, outside_rooms, loose and above_ceiling, as {kind: [rows]}; {} means none. Every row is an object with the `key` it is accepted by and the elements involved (name, bounds, z). Overlaps are classified collision (a real clash, first), nesting, served or cross_level, with extent [x,y,z] cm, counted in overlap_kinds. accepted {key, kind, why, extent} lists findings `accept` marked right as drawn; orphaned [[key, reason]] acceptances whose finding is gone. What each problem means and how to fix it: `rules` topic=layout. level: a storey id or `all` (default the one shown); areas {name|id: m²} compares room areas with a reference drawing.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -3765,6 +3817,9 @@
           "type": "array"
         },
         "no_door": {
+          "type": "array"
+        },
+        "opens_into": {
           "type": "array"
         },
         "orphaned": {

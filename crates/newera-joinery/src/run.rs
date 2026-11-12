@@ -149,6 +149,20 @@ pub struct RunParams {
     pub sink_real: Option<[f64; 2]>,
     /// A real cooktop `[w, d]` stays in the cutout.
     pub cooktop_real: Option<[f64; 2]>,
+    /// Wall row: lift-up flaps (porta basculante) instead of hinged doors,
+    /// over the fridge too; a blind corner keeps its hinged door.
+    pub lift: bool,
+    /// Carcass board material: `MDP` (particleboard, LDSP) or `MDF`
+    /// (default).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub board: Option<String>,
+    /// Board of the fronts and of the filler panels between modules, cut
+    /// apart from the carcass (default the carcass's).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub front_board: Option<String>,
+    /// Front board thickness, mm (default `t`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub front_t: Option<f64>,
 }
 
 impl Default for RunParams {
@@ -175,6 +189,10 @@ impl Default for RunParams {
             interior: None,
             sink_real: None,
             cooktop_real: None,
+            lift: false,
+            board: None,
+            front_board: None,
+            front_t: None,
         }
     }
 }
@@ -262,6 +280,10 @@ pub struct FillerParams {
     #[schemars(with = "Option<HandleColor>")]
     pub color: Option<[u8; 3]>,
     pub front: Option<String>,
+    /// Board material, the start of its name in the cut list (default
+    /// `MDF`): a filler stands with the fronts, so a run gives it theirs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub board: Option<String>,
 }
 
 impl Default for FillerParams {
@@ -273,10 +295,12 @@ impl Default for FillerParams {
             t: 18.0,
             color: None,
             front: None,
+            board: None,
         }
     }
 }
 
+/// A filler panel: one board in the front plane, banded on its long edges.
 pub(crate) fn filler(p: &FillerParams) -> Result<Output, String> {
     if p.w <= 0.0 || p.h <= 0.0 || p.d < cm(p.t) {
         return Err("O tamponamento precisa de largura e altura positivas e profundidade maior que a chapa.".into());
@@ -286,7 +310,11 @@ pub(crate) fn filler(p: &FillerParams) -> Result<Output, String> {
         "Tamponamento",
         [0.0, p.d - t, 0.0],
         [p.w, t, p.h],
-        &format!("MDF {}", num(p.t)),
+        &format!(
+            "{} {}",
+            crate::cabinet::material(p.board.as_deref(), "MDF")?,
+            num(p.t)
+        ),
         p.color.unwrap_or(crate::MDF_WHITE),
     )
     .banded(2, 0);
@@ -455,6 +483,14 @@ pub fn plan_run(
         ));
     }
     let plinth = if p.row == RunRow::Wall { 0.0 } else { 10.0 };
+    // Lift-up flaps open over a wall cabinet; under a countertop or on a
+    // tall unit they have nowhere to go.
+    let lift = p.lift && p.row == RunRow::Wall;
+    if p.lift && !lift {
+        rules.push(
+            "lift vale só para a fileira de aéreos (row = wall): as portas saíram de giro.".into(),
+        );
+    }
     let shelves = match p.row {
         RunRow::Base | RunRow::Wall => 1,
         RunRow::Tall => 4,
@@ -469,6 +505,9 @@ pub fn plan_run(
         shelves,
         plinth,
         color: p.color,
+        board: p.board.clone(),
+        front_board: p.front_board.clone(),
+        front_t: p.front_t,
         front: p.front.clone(),
         handle: p.handle,
         handle_color: p.handle_color.clone(),
@@ -663,6 +702,9 @@ pub fn plan_run(
                     }
                     c.blind_left = left;
                     c.blind_right = right;
+                    if lift && left + right <= 0.0 {
+                        c.door = DoorType::Lift;
+                    }
                     if left + right > 0.0 {
                         blind_note = true;
                         (Role::Corner, Build::Cabinet(c))
@@ -737,9 +779,19 @@ pub fn plan_run(
             continue;
         }
         let w = o.to - o.from;
-        let mut params = cabinet(w, DoorType::Hinged, 0, height, 0);
+        let mut params = cabinet(
+            w,
+            if lift {
+                DoorType::Lift
+            } else {
+                DoorType::Hinged
+            },
+            0,
+            height,
+            0,
+        );
         params.plinth = 0.0;
-        params.doors = Some(if w > 60.0 { 2 } else { 1 });
+        params.doors = (!lift).then_some(if w > 60.0 { 2 } else { 1 });
         modules.push(RunModule {
             from: o.from,
             width: w,
@@ -794,6 +846,8 @@ pub fn plan_run(
     Ok((modules, notes))
 }
 
+/// A filler panel module closing `w` cm of a row from `from`, cut from the
+/// fronts' board and thickness since it stands among them.
 fn filler_module(from: f64, w: f64, h: f64, d: f64, elev: f64, p: &RunParams) -> RunModule {
     RunModule {
         from,
@@ -805,9 +859,10 @@ fn filler_module(from: f64, w: f64, h: f64, d: f64, elev: f64, p: &RunParams) ->
             w,
             h,
             d,
-            t: p.t,
+            t: p.front_t.unwrap_or(p.t),
             color: p.color,
             front: p.front.clone(),
+            board: p.front_board.clone().or_else(|| p.board.clone()),
         }),
     }
 }
@@ -835,6 +890,43 @@ mod tests {
             .filter(|m| m.role != Role::Countertop)
             .map(|m| (m.role, (m.width * 10.0).round() / 10.0))
             .collect()
+    }
+
+    /// A run with its own front board gives it to the cabinets' fronts and
+    /// to the filler panels among them, and keeps the carcass's for the rest.
+    #[test]
+    fn a_run_cuts_its_fronts_and_fillers_from_the_front_board() {
+        let (modules, _) = plan_run(
+            &[gap(0.0, 250.0, EndKind::Wall, EndKind::Fridge)],
+            &[],
+            &[],
+            &RunParams {
+                board: Some("MDP".into()),
+                front_board: Some("MDF".into()),
+                front_t: Some(19.0),
+                ..RunParams::default()
+            },
+        )
+        .unwrap();
+        let filler = modules.iter().find(|m| m.role == Role::Filler).unwrap();
+        match &filler.build {
+            Build::Filler(f) => {
+                assert_eq!((f.board.as_deref(), f.t), (Some("MDF"), 19.0));
+            }
+            other => panic!("{other:?}"),
+        }
+        let cabinet = modules
+            .iter()
+            .find_map(|m| match &m.build {
+                Build::Cabinet(c) => Some(c),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(cabinet.board.as_deref(), Some("MDP"));
+        assert_eq!(cabinet.front_board.as_deref(), Some("MDF"));
+        assert_eq!(cabinet.front_t, Some(19.0));
+        let rows = crate::cut_list(&crate::generate(&filler.build).unwrap());
+        assert_eq!(rows[0].board, "MDF 19");
     }
 
     #[test]
@@ -1125,6 +1217,63 @@ mod tests {
                 .iter()
                 .all(|r| *r != Role::Drawers && *r != Role::Countertop)
         );
+    }
+
+    /// A wall row of the default height with `lift` hangs flaps that lift
+    /// instead of hinged doors, over the fridge too, without a note; the
+    /// blind corner keeps its hinged door, and a base row ignores it and
+    /// says so.
+    #[test]
+    fn a_lift_up_wall_row_hangs_flaps() {
+        let gaps = [RunGap {
+            from: 0.0,
+            to: 240.0,
+            start: EndKind::Wall,
+            end: EndKind::Wall,
+            blind_start: 60.0,
+            blind_end: 0.0,
+        }];
+        let over = [RunOver {
+            from: 240.0,
+            to: 310.0,
+            bottom: 165.0,
+        }];
+        let p = RunParams {
+            row: RunRow::Wall,
+            lift: true,
+            ..RunParams::default()
+        };
+        let (modules, notes) = plan_run(&gaps, &over, &[], &p).unwrap();
+        let doors = |m: &RunModule| match &m.build {
+            Build::Cabinet(c) => Some(c.door),
+            _ => None,
+        };
+        let corner = modules.iter().find(|m| m.role == Role::Corner).unwrap();
+        assert_eq!(doors(corner), Some(DoorType::Hinged));
+        let plain: Vec<_> = modules.iter().filter(|m| m.role == Role::Doors).collect();
+        assert!(!plain.is_empty(), "{modules:?}");
+        assert!(
+            plain.iter().all(|m| doors(m) == Some(DoorType::Lift)),
+            "{modules:?}"
+        );
+        let fridge = modules.iter().find(|m| m.role == Role::Over).unwrap();
+        assert_eq!(doors(fridge), Some(DoorType::Lift));
+        assert!(notes.iter().all(|n| !n.contains("lift")), "{notes:?}");
+        let (modules, notes) = plan_run(
+            &gaps,
+            &[],
+            &[],
+            &RunParams {
+                row: RunRow::Base,
+                ..p
+            },
+        )
+        .unwrap();
+        assert!(
+            modules.iter().all(|m| doors(m) != Some(DoorType::Lift)),
+            "{modules:?}"
+        );
+        assert!(notes.iter().any(|n| n.contains("lift")), "{notes:?}");
     }
 
     #[test]

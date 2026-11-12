@@ -166,6 +166,10 @@ pub(crate) struct NewEraApp {
     pub(crate) ergonomics: Option<crate::ergonomics::ErgonomicsWindow>,
     /// The "Armários na parede" window, while open.
     pub(crate) cabinets: Option<crate::cabinets::CabinetsWindow>,
+    /// The "Lista de corte" window, while open.
+    pub(crate) cut_list: Option<crate::cutlist::CutListWindow>,
+    /// The boards the last cabinets were cut from, offered for the next wall.
+    pub(crate) cabinet_boards: crate::cabinets::Boards,
     /// Top-view provider for the plan: `(look, asset dir, provider)`.
     top_views: Option<(
         FurnitureLook,
@@ -281,6 +285,8 @@ impl NewEraApp {
             video: None,
             ergonomics: None,
             cabinets: None,
+            cut_list: None,
+            cabinet_boards: crate::cabinets::Boards::default(),
             top_views: None,
             top_view_generation: 0,
             #[cfg(not(target_arch = "wasm32"))]
@@ -1882,7 +1888,19 @@ impl NewEraApp {
                     single_wall.is_some(),
                 ) && let Some(id) = single_wall
                 {
-                    self.cabinets = Some(crate::cabinets::CabinetsWindow::new(id));
+                    let mut window = crate::cabinets::CabinetsWindow::new(id);
+                    window.boards = self.cabinet_boards.clone();
+                    self.cabinets = Some(window);
+                    ui.close();
+                }
+                if menu_item(
+                    ui,
+                    icon::LIST_NUMBERS,
+                    crate::i18n::tr("Lista de corte…"),
+                    "",
+                    true,
+                ) {
+                    self.cut_list.get_or_insert_with(Default::default);
                     ui.close();
                 }
                 if menu_item(
@@ -2919,6 +2937,7 @@ impl eframe::App for NewEraApp {
         crate::video::show(self, &ctx);
         crate::ergonomics::show(self, &ctx);
         crate::cabinets::show(self, &ctx);
+        crate::cutlist::show(self, &ctx);
 
         self.follow_theme(&ctx);
         self.shortcuts(&ctx);

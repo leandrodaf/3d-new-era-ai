@@ -6,6 +6,61 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `layout` finds doors, drawers and appliance doors that run into something while they open
+  (`opens_into`): a door whose handle meets the wall beside its hinge, a drawer pulled into the
+  handle of the corner cabinet, a fridge hinged against a wall, a washer's porthole swung into
+  the wall or the tall cabinet beside it, an oven, dishwasher or dryer door that drops onto a
+  piece in front of it, a wall cabinet's lift-up flap that rises into something hung over it or
+  into the ceiling. Closed, nothing touches, so no other check saw it. A door sweeps its width
+  around the hinge to 90° and stands past the hinge side by its thickness and handle, a drawer
+  comes out by its slide, a washer's porthole turns about a hinge standing 4 cm off its face to
+  135° (measured on a 60 cm machine: 45 cm out half open, 30 cm past the side fully open, clear
+  of a niche 4 cm deep), a flap lies flat at its hinge line (the bottom edge dropped, the top
+  edge lifted) and reaches out by its height (an appliance's door, about 82% of the machine: a
+  dryer 85 cm tall drops about 70 cm), meeting what stands in the quarter turn on the way. A
+  doorway in the wall beside a door is room to swing into; the wall under a window is not.
+  Joinery fronts say how they open (an `opens` property on
+  each door and drawer front, with the handle's stand-off: `hinge-left`, `hinge-right`,
+  `porthole-left`, `porthole-right`, `drawer 45`, `flap-down` or `flap-up`), and a fridge,
+  freezer, microwave, front-loading washer, oven, dishwasher or dryer from the catalog opens the
+  way such appliances do. A flap that lifts past the ceiling of its room meets the room; a piece
+  already through the ceiling is `above_ceiling`'s.
+- The review asks for room to load a washer or a dryer, not only the 50 cm NBR 15575-1 keeps in
+  front of it: a washer's porthole (45 cm) and 45 cm more to crouch in front of it, 90 cm in all; a
+  dryer the 74 cm its door drops into, since it is loaded from beside the door. Set in a passage,
+  the machine opens and cannot be used, and says so. Below 50 cm the finding cites the standard;
+  past it, common practice.
+- `joinery` cabinets take `door: lift`: one flap across the front hinged at its top, pulled by its
+  lower edge, with cup hinges and a pair of lift-up fittings in the hardware, and a note when it is
+  too tall (over 80 cm, a bi-fold fitting) or too wide (over 120 cm) for one leaf, or sits on a
+  plinth under a countertop. `cabinet_run` takes `p.lift` on a wall row: every door module and the
+  cabinet over the fridge get a flap, a blind corner keeps its hinged door.
+- Fronts are cut from their own board: a cabinet takes `board` (the carcass: `MDP` for
+  particleboard, `MDF` by default), `front_board` and `front_t` mm (the doors, drawer fronts and
+  blind panels), and `cabinet_run` gives the same to its cabinets and to the filler panels among
+  the fronts, keeping them when a wall is filled again. The cut list then lists and lays out each
+  board on its own sheets: MDF 19 fronts apart from an MDP 18 carcass. "Armários na parede…"
+  chooses them too, and offers the next wall the boards of the last one.
+- "Armários na parede…" hangs lift-up flaps on a wall row ("Portas basculantes"), as
+  `cabinet_run` does with `p.lift`.
+- "Lista de corte…" in the editor (Planta menu): the desktop app cuts its own kitchen. It lists
+  the boards of the storey's joinery (the cabinets made with "Armários na parede…", and groups
+  drawn by hand with board parts) by material, with the sheets each takes, the edge banding and
+  the hardware, and saves it as CSV, or as DXF or SVG with the boards laid out on sheets. The
+  workshop's sheet size, saw kerf and trim are set in the window, and a board larger than the
+  sheet is named on screen before any file is saved. The storey's list is gathered
+  by one function, `newera_joinery::gather`, that the `cut_list` tool reads as well.
+- The cut list lays boards out on the workshop's own sheets: `sheets` gives `[length, width]` mm
+  by the start of the board name (`{"*": [2800, 2070]}` for 2800 × 2070 mm chipboard, `{"MDF 6":
+  [2440, 1220]}` for one board only, the longest match wins), `kerf` the saw blade (default 4 mm)
+  and `trim` the factory edge cut off each side of a sheet (default 0). `cut_list` and `export
+  what=cut_list` both take them, and a read already answers how many sheets each board takes.
+  Without them the layout is the one it always was: 2750 × 1830 mm panels, 3200 × 1900 mm stone,
+  2400 × 1200 mm gypsum and 3000 × 300 mm slats; `*` leaves those three on their own sheets.
+  Boards larger than their trimmed sheet come back in `oversize`, with the count.
+
 ## [3.3.0] - 2026-11-02
 
 ### Fixed
