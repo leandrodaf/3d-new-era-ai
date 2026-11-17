@@ -11,6 +11,9 @@ use newera_core::{Camera, Home};
 
 use crate::{Mesh, ModelCache, RenderOptions, Selection, View, render};
 
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+mod metal;
+
 /// Turning speed used to time keyframes that mostly rotate, degrees/s.
 const TURN_DEG_PER_S: f64 = 45.0;
 
@@ -205,17 +208,37 @@ fn render_frames_until(
             })
             .clone()
     };
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    let mut metal = if std::env::var("NEWERA_VIDEO_BACKEND").as_deref() == Ok("metal") {
+        metal::Renderer::new(&mesh, (width, height), &load)
+    } else {
+        None
+    };
     for (i, camera) in cameras.iter().enumerate() {
         if newera_core::progress::cancelled() {
             break;
         }
-        let view = View::from_camera(camera, aspect);
+        let view_proj = View::from_camera(camera, aspect).view_proj(aspect);
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        if let Some(gpu) = &mut metal {
+            if let Some(image) = gpu.frame(view_proj, home.environment.sky_color) {
+                if i == 0 {
+                    eprintln!("New Era video: Metal");
+                }
+                if !on_frame(i, image) {
+                    break;
+                }
+                continue;
+            }
+            eprintln!("New Era video: Metal unavailable; using CPU");
+            metal = None;
+        }
         let image = render(
             &mesh,
             &RenderOptions {
                 width,
                 height,
-                view_proj: view.view_proj(aspect),
+                view_proj,
                 sky: home.environment.sky_color,
                 supersample: 2,
                 load_image: &load,
