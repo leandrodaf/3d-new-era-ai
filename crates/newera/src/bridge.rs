@@ -11,12 +11,17 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use anyhow::Context as _;
 
 const SESSION: &str = "mcp-session-id";
+
+/// How long opening a new session may take. Ordinary calls have no limit (a
+/// photo can take minutes), but a window that stops answering the replayed
+/// `initialize` must not hold every other call behind `Link::reopening`.
+const RECOVERY_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// The window's endpoint, if one answers on `addr`.
 pub(crate) fn window(addr: SocketAddr, token: Option<&str>) -> Option<Endpoint> {
@@ -62,7 +67,7 @@ pub(crate) fn run(endpoint: &Endpoint) -> anyhow::Result<()> {
         if line.trim().is_empty() {
             continue;
         }
-        let first = is_initialize(&line) && link.session().is_none();
+        let first = is_initialize(&line) && matches!(link.session(), Ok(None));
         let (link, out) = (link.clone(), out.clone());
         let pass = move || {
             if let Err(err) = link.forward(&line, &out) {
@@ -99,6 +104,8 @@ type Out = Arc<Mutex<dyn Write + Send>>;
 /// until it is restarted.
 struct Link {
     agent: ureq::Agent,
+    /// The same agent with a time limit, for opening a new session.
+    recovery: ureq::Agent,
     endpoint: Endpoint,
     session: Mutex<Option<String>>,
     hello: Mutex<Option<String>>,
@@ -109,8 +116,14 @@ struct Link {
 
 impl Link {
     fn new(agent: ureq::Agent, endpoint: Endpoint) -> Self {
+        let recovery = ureq::Agent::config_builder()
+            .http_status_as_error(false)
+            .timeout_global(Some(RECOVERY_TIMEOUT))
+            .build()
+            .into();
         Self {
             agent,
+            recovery,
             endpoint,
             session: Mutex::default(),
             hello: Mutex::default(),
@@ -118,33 +131,33 @@ impl Link {
         }
     }
 
-    fn session(&self) -> Option<String> {
-        self.session.lock().expect("lock").clone()
+    fn session(&self) -> anyhow::Result<Option<String>> {
+        Ok(lock(&self.session, "session")?.clone())
     }
 
     /// One message to the window, and whatever it answers back out.
     fn forward(&self, line: &str, out: &Out) -> anyhow::Result<()> {
         let hello = is_initialize(line);
         if hello {
-            *self.hello.lock().expect("lock") = Some(line.to_owned());
+            *lock(&self.hello, "initialize")? = Some(line.to_owned());
         }
-        let sent_with = self.session();
-        let mut response = self.send(line, sent_with.as_deref())?;
+        let sent_with = self.session()?;
+        let mut response = self.send(&self.agent, line, sent_with.as_deref())?;
         if response.status().as_u16() == 404 && sent_with.is_some() && !hello {
             drop(response);
             self.reopen(sent_with.as_deref())?;
-            response = self.send(line, self.session().as_deref())?;
+            response = self.send(&self.agent, line, self.session()?.as_deref())?;
         }
         deliver(response, out)
     }
 
     fn send(
         &self,
+        agent: &ureq::Agent,
         line: &str,
         session: Option<&str>,
     ) -> anyhow::Result<ureq::http::Response<ureq::Body>> {
-        let mut request = self
-            .agent
+        let mut request = agent
             .post(&self.endpoint.url)
             .header("content-type", "application/json")
             .header("accept", "application/json, text/event-stream");
@@ -160,7 +173,7 @@ impl Link {
             .get(SESSION)
             .and_then(|v| v.to_str().ok())
         {
-            *self.session.lock().expect("lock") = Some(id.to_owned());
+            *lock(&self.session, "session")? = Some(id.to_owned());
         }
         Ok(response)
     }
@@ -169,27 +182,39 @@ impl Link {
     /// introduced the first one. Its answer to `initialize` is the bridge's
     /// own business: the client already had one and is not waiting for another.
     fn reopen(&self, stale: Option<&str>) -> anyhow::Result<()> {
-        let _one_at_a_time = self.reopening.lock().expect("lock");
-        if self.session().as_deref() != stale {
+        let _one_at_a_time = lock(&self.reopening, "reopening")?;
+        if self.session()?.as_deref() != stale {
             return Ok(()); // another call already opened the new one
         }
-        let hello =
-            self.hello.lock().expect("lock").clone().context(
-                "the window closed the session, and there is no initialize to open another",
-            )?;
+        let hello = lock(&self.hello, "initialize")?
+            .clone()
+            .context("the window closed the session, and there is no initialize to open another")?;
         tracing::info!("window bridge: the window closed the session; opening a new one");
-        let mut answer = self.send(&hello, None)?;
+        let mut answer = self.send(&self.recovery, &hello, None)?;
         let status = answer.status();
-        let _ = answer.body_mut().read_to_string();
-        if !status.is_success() || self.session().as_deref() == stale {
+        answer
+            .body_mut()
+            .read_to_string()
+            .context("reading the window's answer to initialize")?;
+        if !status.is_success() || self.session()?.as_deref() == stale {
             anyhow::bail!("the window closed the session and did not open another ({status})");
         }
-        let session = self.session();
+        let session = self.session()?;
         let ready = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
-        let mut answer = self.send(ready, session.as_deref())?;
-        let _ = answer.body_mut().read_to_string();
+        let mut answer = self.send(&self.recovery, ready, session.as_deref())?;
+        answer
+            .body_mut()
+            .read_to_string()
+            .context("reading the window's answer to notifications/initialized")?;
         Ok(())
     }
+}
+
+/// A lock another thread panicked while holding is an error for this call,
+/// answered to the client like any other, not a panic of the bridge.
+fn lock<'a, T>(m: &'a Mutex<T>, what: &str) -> anyhow::Result<MutexGuard<'a, T>> {
+    m.lock()
+        .map_err(|_| anyhow::anyhow!("the bridge's {what} lock is poisoned"))
 }
 
 fn is_initialize(line: &str) -> bool {
@@ -375,7 +400,7 @@ mod tests {
         let buffer: Arc<Mutex<Vec<u8>>> = Arc::default();
         let out: Out = buffer.clone();
         link.forward(HELLO, &out).unwrap();
-        assert_eq!(link.session().as_deref(), Some("s1"));
+        assert_eq!(link.session().unwrap().as_deref(), Some("s1"));
         *link.session.lock().unwrap() = Some("closed".to_owned());
 
         link.forward(CALL, &out).unwrap();
@@ -384,7 +409,7 @@ mod tests {
         assert_eq!(answers.len(), 2, "{answers:?}");
         assert_eq!(answers[1]["id"], 7);
         assert!(answers[1].get("result").is_some(), "{answers:?}");
-        assert_eq!(link.session().as_deref(), Some("s2"));
+        assert_eq!(link.session().unwrap().as_deref(), Some("s2"));
         assert_eq!(
             *seen.lock().unwrap(),
             [
