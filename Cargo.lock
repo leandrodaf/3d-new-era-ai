@@ -3600,6 +3600,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "newera-metal"
+version = "3.3.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "newera-plugins"
 version = "3.3.0"
 dependencies = [
@@ -3639,6 +3646,7 @@ dependencies = [
  "newera-catalog",
  "newera-core",
  "newera-draw",
+ "newera-metal",
  "newera-sh3d",
  "serde_json",
  "thiserror 2.0.21",

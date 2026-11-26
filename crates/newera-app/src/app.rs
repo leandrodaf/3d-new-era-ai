@@ -2080,7 +2080,8 @@ impl NewEraApp {
             #[cfg(not(target_arch = "wasm32"))]
             self.plugins_menu(ui);
             ui.menu_button(crate::i18n::tr("Ajuda"), |ui| {
-                ui.menu_button(format!("{} Idioma / Language", icon::TRANSLATE), |ui| {
+                let title = format!("{} {}", icon::TRANSLATE, crate::i18n::language_menu_label());
+                ui.menu_button(title, |ui| {
                     let current = crate::i18n::lang();
                     for lang in crate::i18n::Lang::ALL {
                         if ui.radio(lang == current, lang.label()).clicked() {
@@ -2501,7 +2502,7 @@ impl NewEraApp {
     fn update_title(&mut self, ctx: &egui::Context) {
         let doc = self.document.read();
         let file = doc.path().and_then(Path::file_name).map_or_else(
-            || doc.home().name.clone(),
+            || crate::i18n::shown_home(&doc.home().name),
             |n| n.to_string_lossy().into_owned(),
         );
         let title = format!(

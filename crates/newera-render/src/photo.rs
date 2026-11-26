@@ -1,4 +1,4 @@
-//! Photo renderer: a CPU path tracer over scene meshes with sunlight from
+//! Photo path tracer over scene meshes with sunlight from
 //! the home's location and time, light sources from furniture, soft
 //! indirect light and translucent glass. Leaves CPU capacity for the editor.
 
@@ -8,6 +8,9 @@ use image::{Rgba, RgbaImage};
 use crate::camera::View;
 use crate::mesh::Mesh;
 use crate::raster::{Images, detail};
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+mod metal;
 
 /// A light source: a small sphere shining in every direction or as a spot
 /// pointing down, or an oriented flat panel.
@@ -652,6 +655,14 @@ fn radiance(
 )]
 pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
     newera_core::progress::step("Preparando cena", 0, 0);
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    if std::env::var("NEWERA_PHOTO_BACKEND").as_deref() == Ok("metal") {
+        if let Some(image) = metal::render(mesh, options) {
+            return image;
+        }
+        eprintln!("New Era photo: Metal unavailable; using CPU");
+    }
+
     let mut tris: Vec<[u32; 3]> = Vec::new();
     let mut transparent = Vec::new();
     for (list, clear) in [(&mesh.indices, false), (&mesh.transparent, true)] {
@@ -804,8 +815,23 @@ pub fn render_photo(mesh: &Mesh, options: &PhotoOptions<'_>) -> RgbaImage {
     if watcher.as_ref().is_some_and(|p| p.cancelled()) {
         return RgbaImage::new(1, 1);
     }
+    finish_photo(&pixels, w, h, exposure, 5)
+}
+
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+fn finish_photo(
+    pixels: &[(Vec3, Surface)],
+    w: usize,
+    h: usize,
+    exposure: f32,
+    denoise_passes: u32,
+) -> RgbaImage {
     newera_core::progress::step("Finalizando imagem", 0, 0);
-    let mut denoised = denoise(&pixels, w, h);
+    let mut denoised = denoise(pixels, w, h, denoise_passes);
     white_balance(&mut denoised, WHITE_BALANCE);
     // Auto exposure: bring the scene's average brightness to a middle tone
     // (calibrated against Sweet Home 3D photos of the same cameras).
@@ -913,7 +939,7 @@ fn white_balance(pixels: &mut [Vec3], strength: f32) {
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss
 )]
-fn denoise(pixels: &[(Vec3, Surface)], w: usize, h: usize) -> Vec<Vec3> {
+fn denoise(pixels: &[(Vec3, Surface)], w: usize, h: usize, passes: u32) -> Vec<Vec3> {
     let albedo: Vec<Vec3> = pixels
         .iter()
         .map(|(_, s)| s.albedo.max(Vec3::splat(0.03)))
@@ -924,7 +950,7 @@ fn denoise(pixels: &[(Vec3, Surface)], w: usize, h: usize) -> Vec<Vec3> {
         .map(|((c, _), a)| *c / *a)
         .collect();
     let kernel = [1.0 / 16.0, 0.25, 3.0 / 8.0, 0.25, 1.0 / 16.0];
-    for pass in 0..5 {
+    for pass in 0..passes {
         let step = 1i64 << pass;
         let source = light.clone();
         for y in 0..h {

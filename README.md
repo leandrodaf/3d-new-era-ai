@@ -14,7 +14,7 @@ joinery, checks lighting and ergonomics against real standards and renders the p
 while every change shows up live on screen and is one Ctrl+Z away.
 
 A Sweet Home 3D alternative for Windows, macOS, Linux and the browser, in English,
-Portuguese, Spanish and French.
+Portuguese, Spanish, French and Ukrainian.
 
 ![Editor with a furnished 105 m² apartment: catalog, rendered floor plan and live 3D view](docs/images/editor.png)
 
