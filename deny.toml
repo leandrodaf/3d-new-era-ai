@@ -13,6 +13,9 @@ ignore = [
   { id = "RUSTSEC-2026-0370", reason = "zvariant: transitive via accesskit_unix; no upgrade available" },
   { id = "RUSTSEC-2026-0371", reason = "zbus_names: transitive via accesskit_unix; no upgrade available" },
   { id = "RUSTSEC-2026-0372", reason = "zvariant_derive: transitive via accesskit_unix; no upgrade available" },
+  # Unmaintained notice (not a vulnerability) for chrono, pulled in by rmcp and
+  # schemars for their date-time support. Revisit when either drops it.
+  { id = "RUSTSEC-2026-0543", reason = "chrono: transitive via rmcp and schemars; no upgrade available" },
 ]
 
 [licenses]

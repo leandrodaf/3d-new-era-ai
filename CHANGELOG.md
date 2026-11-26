@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- The MCP library `rmcp` moves to 3.11.0: before 3.9.0 its HTTP clients read a server's answer
+  into memory with no limit, so a hostile MCP server could exhaust the memory of the app
+  (RUSTSEC-2026-0462). `url` moves to 2.5.9, which no longer overflows the stack on nested
+  `blob:` URLs (RUSTSEC-2026-0592).
+
+### Fixed
+
+- On a tablet (768 px wide) the site's top bar no longer runs past the screen: below 900 px the
+  GitHub star count moves into the menu, as it already did on a phone.
+
 ## [3.3.0] - 2026-11-02
 
 ### Fixed
