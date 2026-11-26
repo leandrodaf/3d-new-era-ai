@@ -16,7 +16,8 @@ All notable changes to this project are documented here. The format follows
 ### Fixed
 
 - On a tablet (768 px wide) the site's top bar no longer runs past the screen: below 900 px the
-  GitHub star count moves into the menu, as it already did on a phone.
+  GitHub button with its star count leaves the bar, and the menu's plain GitHub link takes its
+  place, as it already did on a phone.
 
 ## [3.3.0] - 2026-11-02
 
