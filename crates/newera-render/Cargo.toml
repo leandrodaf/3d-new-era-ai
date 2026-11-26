@@ -28,4 +28,4 @@ newera-draw.workspace = true
 newera-sh3d.workspace = true
 
 [target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
-newera-metal = { path = "../newera-metal" }
+newera-metal.workspace = true
