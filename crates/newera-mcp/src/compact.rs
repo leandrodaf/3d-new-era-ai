@@ -510,6 +510,12 @@ pub(crate) fn issue_ref(home: &Home, id: newera_core::ElementId) -> Value {
                 .unwrap_or_else(|| "parede".to_owned())
         );
     }
+    // A room is met by its ceiling: a flap lifted into it.
+    if let ElementId::Room(r) = id
+        && let Some(room) = home.rooms.iter().find(|room| room.id == r)
+    {
+        v["name"] = json!(room.name);
+    }
     if let Some((min, max)) = newera_core::element_bounds(home, id) {
         v["bounds"] = json!([point(min), point(max)]);
     }
@@ -678,6 +684,21 @@ pub(crate) fn issues(home: &Home, scope: newera_core::Storeys) -> Value {
                     ("ceiling", num(ceiling)),
                     ("top", num(top)),
                     ("over", num(top - ceiling)),
+                ]),
+            ),
+            Issue::OpensInto {
+                piece,
+                front,
+                against,
+                how,
+            } => push(
+                "opens_into",
+                obj([
+                    ("key", json!(key)),
+                    ("piece", issue_ref(home, piece.into())),
+                    ("front", issue_ref(home, front.into())),
+                    ("against", issue_ref(home, against)),
+                    ("how", json!(how)),
                 ]),
             ),
             Issue::UnratedLight(f) => push("unrated_light", keyed(issue_ref(home, f.into()), &key)),
