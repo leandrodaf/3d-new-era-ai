@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-11-26
+
 ### Added
 
 - Fronts are cut from their own board: a cabinet takes `board` (the carcass: `MDP` for
@@ -1395,7 +1397,8 @@ MCP server, with everything below.
 - `scripts/mcp.sh` / `make mcp` to call MCP tools from the shell.
 - CI for formatting, clippy, tests on Linux/macOS/Windows, MCP smoke test, MSRV and cargo-deny; release builds.
 
-[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v3.3.0...HEAD
+[Unreleased]: https://github.com/leandrodaf/3d-new-era-ai/compare/v3.4.0...HEAD
+[3.4.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/leandrodaf/3d-new-era-ai/compare/v3.0.0...v3.1.0
