@@ -582,5 +582,11 @@ button { font: inherit; color: inherit; }
   .nav__links { display: none; }
   .nav__toggle { display: inline-flex; }
 }
+/* The star count comes from GitHub's API and grows: on a tablet it is what
+   pushed the bar past the screen. Below 900px the menu's GitHub link stands
+   in for it, as it already did on a phone. */
+@media (max-width: 900px) {
+  .nav__actions > .stars { display: none; }
+}
 .store { display: inline-flex; align-self: flex-start; margin-bottom: 6px; border-radius: 6px; }
 .store img { display: block; }
