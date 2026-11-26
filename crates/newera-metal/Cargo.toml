@@ -1,0 +1,15 @@
+[package]
+name = "newera-metal"
+description = "Native Metal bridge for New Era's photo renderer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[build-dependencies]
+cc = "1.4.6"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"

@@ -300,11 +300,10 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                 Some((file, Ok(info))) => {
                     ui.label(
                         RichText::new(format!(
-                            "{} {} · {} {} · {:.1} s",
+                            "{} {} · {} · {:.1} s",
                             tr("Vídeo salvo em"),
                             file.display(),
-                            info.frames,
-                            tr("quadros"),
+                            crate::i18n::count(info.frames as u64, "quadros"),
                             info.seconds
                         ))
                         .weak(),

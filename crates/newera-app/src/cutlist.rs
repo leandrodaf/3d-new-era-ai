@@ -208,11 +208,11 @@ pub(crate) fn show(app: &mut NewEraApp, ctx: &egui::Context) {
                 ui.label(crate::i18n::fill(
                     "{} e {}.",
                     &[
-                        &crate::i18n::count(
+                        &crate::i18n::count_of(
                             "{} peça de marcenaria|{} peças de marcenaria",
                             read.found.builds as u64,
                         ),
-                        &crate::i18n::count(
+                        &crate::i18n::count_of(
                             "{} grupo desenhado|{} grupos desenhados",
                             read.found.drawn.len() as u64,
                         ),
@@ -325,11 +325,11 @@ fn boards(
             .filter(|r| r.board == material)
             .map(|r| r.qty)
             .sum();
-        let mut count = crate::i18n::count("{} peça|{} peças", u64::from(pieces));
+        let mut count = crate::i18n::count_of("{} peça|{} peças", u64::from(pieces));
         if sheets > 0 {
             count = format!(
                 "{count}, {}",
-                crate::i18n::count("{} chapa|{} chapas", u64::from(sheets))
+                crate::i18n::count_of("{} chapa|{} chapas", u64::from(sheets))
             );
         }
         let title = crate::i18n::fill("{}: {}", &[&material, &count]);

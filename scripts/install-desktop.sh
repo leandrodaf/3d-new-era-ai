@@ -5,9 +5,9 @@
 #   ./install-desktop.sh              install (or update)
 #   ./install-desktop.sh --uninstall  remove it again
 #
-# Speaks the language the system does — Portuguese, Spanish or French, and
-# English for everyone else (NEWERA_LANG=en forces one). Shipped inside
-# newera-linux-x64.tar.gz, next to the binary.
+# Speaks the language the system does — Portuguese, Spanish, French or
+# Ukrainian, and English for everyone else (NEWERA_LANG=en forces one).
+# Shipped inside newera-linux-x64.tar.gz, next to the binary.
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -21,19 +21,21 @@ old_desktop="$data/applications/newera.desktop"
 mime="$data/mime/packages/newera.xml"
 metainfo="$data/metainfo/io.github.leandrodaf.newera.metainfo.xml"
 
-# The language the system asks for, of the four the app speaks.
+# The language the system asks for, of the five the app speaks.
 case "${NEWERA_LANG:-${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}}" in
     pt*) LANG_TAG=pt ;;
     es*) LANG_TAG=es ;;
     fr*) LANG_TAG=fr ;;
+    uk*) LANG_TAG=uk ;;
     *) LANG_TAG=en ;;
 esac
-# t <pt> <en> <es> <fr>
+# t <pt> <en> <es> <fr> <uk>
 t() {
     case "$LANG_TAG" in
         pt) printf '%s' "$1" ;;
         es) printf '%s' "$3" ;;
         fr) printf '%s' "$4" ;;
+        uk) printf '%s' "$5" ;;
         *) printf '%s' "$2" ;;
     esac
 }
@@ -121,7 +123,8 @@ if [ "${1:-}" = "--uninstall" ]; then
     t "removidos: atalho, ícones, tipo .newera e $bin/newera" \
       "removed: launcher entry, icons, the .newera type and $bin/newera" \
       "eliminados: acceso directo, iconos, tipo .newera y $bin/newera" \
-      "supprimés : raccourci, icônes, type .newera et $bin/newera"
+      "supprimés : raccourci, icônes, type .newera et $bin/newera" \
+      "вилучено: ярлик, значки, тип .newera і $bin/newera"
     echo
     exit 0
 fi
@@ -159,7 +162,8 @@ count install
 t "3D New Era AI no menu; .newera com ícone e duplo clique; comando: $bin/newera" \
   "3D New Era AI is in the menu; .newera files have their icon and open on a double click; command: $bin/newera" \
   "3D New Era AI está en el menú; los .newera tienen su icono y se abren con doble clic; comando: $bin/newera" \
-  "3D New Era AI est dans le menu ; les .newera ont leur icône et s'ouvrent d'un double-clic ; commande : $bin/newera"
+  "3D New Era AI est dans le menu ; les .newera ont leur icône et s'ouvrent d'un double-clic ; commande : $bin/newera" \
+  "3D New Era AI у меню; файли .newera мають свій значок і відкриваються подвійним клацанням; команда: $bin/newera"
 echo
 case ":$PATH:" in
     *":$bin:"*) ;;
@@ -167,7 +171,8 @@ case ":$PATH:" in
         t "dica: adicione $bin ao seu PATH para usar 'newera' no terminal" \
           "tip: add $bin to your PATH to use 'newera' in the terminal" \
           "consejo: añada $bin a su PATH para usar 'newera' en el terminal" \
-          "astuce : ajoutez $bin à votre PATH pour utiliser « newera » dans le terminal"
+          "astuce : ajoutez $bin à votre PATH pour utiliser « newera » dans le terminal" \
+          "порада: додайте $bin до свого PATH, щоб запускати «newera» в терміналі"
         echo
         ;;
 esac

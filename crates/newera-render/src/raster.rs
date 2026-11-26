@@ -143,6 +143,41 @@ impl Images<'_> {
     }
 }
 
+/// Upload-ready RGBA layers for Metal renderers, in mesh image order.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub(crate) fn metal_textures(
+    mesh: &Mesh,
+    load: &dyn Fn(&str) -> Option<RgbaImage>,
+) -> Option<Vec<u8>> {
+    use newera_metal::TEXTURE_SIZE;
+    if mesh.vertices.iter().any(|v| {
+        let kind = kind_layer(v.kind);
+        kind >= IMAGE_BASE && (kind - IMAGE_BASE) as usize >= mesh.images.len()
+    }) {
+        return None;
+    }
+    let mut textures = Vec::new();
+    for path in &mesh.images {
+        if newera_core::progress::cancelled() {
+            return None;
+        }
+        if let Some(image) = load(path) {
+            if (image.width() as usize, image.height() as usize) != (TEXTURE_SIZE, TEXTURE_SIZE) {
+                return None;
+            }
+            textures.extend_from_slice(image.as_raw());
+        } else {
+            textures.extend(
+                [179, 179, 179, 255]
+                    .into_iter()
+                    .cycle()
+                    .take(TEXTURE_SIZE * TEXTURE_SIZE * 4),
+            );
+        }
+    }
+    Some(textures)
+}
+
 fn light_dir() -> Vec3 {
     Vec3::new(-0.4, -1.0, -0.3).normalize()
 }

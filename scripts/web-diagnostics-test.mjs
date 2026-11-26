@@ -5,7 +5,7 @@ import vm from 'node:vm';
 const html = readFileSync(new URL('../web/editor/index.html', import.meta.url), 'utf8');
 const source = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
   .map(m => m[1]).find(s => s.includes('const WORDS'));
-function page() {
+function page(languages = ['pt-BR']) {
   const nodes = new Map();
   const node = id => {
     if (!nodes.has(id)) nodes.set(id, {textContent:'', style:{}, remove(){}, addEventListener(){}});
@@ -13,7 +13,7 @@ function page() {
   };
   const events = {};
   const context = {
-    navigator:{languages:['pt-BR']}, localStorage:{getItem:()=> 'seen'},
+    navigator:{languages}, localStorage:{getItem:()=> 'seen'},
     document:{documentElement:{}, getElementById:node,
       body:{getAttribute:key => key === 'data-render-build' ? 'test-build' : 'BrowserWebGpu'}},
     addEventListener:(name, fn) => {events[name] = fn;}, setTimeout(){},
@@ -50,7 +50,19 @@ function page() {
   c.neweraOperation('end', render);
   assert.equal(d.operations.length, 1, 'failure snapshot survives cleanup');
 }
-console.log('Editor diagnostics: startup, runtime, concurrent operations and redaction passed');
+// A failure after start is told in the page's language, not left in Portuguese.
+for (const [languages, said] of [
+  [['en-US'], /while running/],
+  [['es-ES'], /durante el uso/],
+  [['fr-FR'], /en cours d’utilisation/],
+  [['uk-UA'], /під час роботи/],
+]) {
+  const {context:c, node} = page(languages);
+  c.neweraReady = true;
+  c.neweraFail('RuntimeError: unreachable');
+  assert.match(node('failed-text').textContent, said, languages[0]);
+}
+console.log('Editor diagnostics: startup, runtime, concurrent operations, redaction and languages passed');
 
 {
   class Socket extends EventTarget {

@@ -8,6 +8,37 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Fronts are cut from their own board: a cabinet takes `board` (the carcass: `MDP` for
+  particleboard, `MDF` by default), `front_board` and `front_t` mm (the doors, drawer fronts and
+  blind panels), and `cabinet_run` gives the same to its cabinets and to the filler panels among
+  the fronts, keeping them when a wall is filled again. The cut list then lists and lays out each
+  board on its own sheets: MDF 19 fronts apart from an MDP 18 carcass. "Armários na parede…"
+  chooses them too, and offers the next wall the boards of the last one.
+- "Armários na parede…" hangs lift-up flaps on a wall row ("Portas basculantes"), as
+  `cabinet_run` does with `p.lift`.
+- "Lista de corte…" in the editor (Planta menu): the desktop app cuts its own kitchen. It lists
+  the boards of the storey's joinery (the cabinets made with "Armários na parede…", and groups
+  drawn by hand with board parts) by material, with the sheets each takes, the edge banding and
+  the hardware, and saves it as CSV, or as DXF or SVG with the boards laid out on sheets. The
+  workshop's sheet size, saw kerf and trim are set in the window. The storey's list is gathered
+  by one function, `newera_joinery::gather`, that the `cut_list` tool reads as well.
+- The cut list lays boards out on the workshop's own sheets: `sheets` gives `[length, width]` mm
+  by the start of the board name (`{"*": [2800, 2070]}` for 2800 × 2070 mm chipboard, `{"MDF 6":
+  [2440, 1220]}` for one board only, the longest match wins), `kerf` the saw blade (default 4 mm)
+  and `trim` the factory edge cut off each side of a sheet (default 0). `cut_list` and `export
+  what=cut_list` both take them, and a read already answers how many sheets each board takes.
+  Without them the layout is the one it always was: 2750 × 1830 mm panels, 3200 × 1900 mm stone,
+  2400 × 1200 mm gypsum and 3000 × 300 mm slats; `*` leaves those three on their own sheets.
+  Boards larger than their trimmed sheet are listed once each in `oversize`, as
+  `"<part> <W>x<H> (<board>)"`; they are still drawn cut to the sheet and counted in `sheets`.
+- The window speaks Ukrainian: pick "Українська" in Help → Language, or let it follow a
+  `uk_*` system locale (`NEWERA_LANG=uk`) or a browser set to Ukrainian. Every label, the
+  catalog and the materials are translated, and so are the Linux desktop installer, the
+  browser editor's loading and failure messages, the web viewer and the plan viewer an AI
+  client shows.
+- Counts on screen agree with their number where the language needs it: Ukrainian says
+  "1 стіна", "2 стіни", "5 стін" in the home's summary, the catalog, the video and the
+  ergonomics capacity line.
 - `layout` finds doors, drawers and appliance doors that run into something while they open
   (`opens_into`): a door whose handle meets the wall beside its hinge, a drawer pulled into the
   handle of the corner cabinet, a fridge hinged against a wall, a washer's porthole swung into
@@ -37,29 +68,19 @@ All notable changes to this project are documented here. The format follows
   too tall (over 80 cm, a bi-fold fitting) or too wide (over 120 cm) for one leaf, or sits on a
   plinth under a countertop. `cabinet_run` takes `p.lift` on a wall row: every door module and the
   cabinet over the fridge get a flap, a blind corner keeps its hinged door.
-- Fronts are cut from their own board: a cabinet takes `board` (the carcass: `MDP` for
-  particleboard, `MDF` by default), `front_board` and `front_t` mm (the doors, drawer fronts and
-  blind panels), and `cabinet_run` gives the same to its cabinets and to the filler panels among
-  the fronts, keeping them when a wall is filled again. The cut list then lists and lays out each
-  board on its own sheets: MDF 19 fronts apart from an MDP 18 carcass. "Armários na parede…"
-  chooses them too, and offers the next wall the boards of the last one.
-- "Armários na parede…" hangs lift-up flaps on a wall row ("Portas basculantes"), as
-  `cabinet_run` does with `p.lift`.
-- "Lista de corte…" in the editor (Planta menu): the desktop app cuts its own kitchen. It lists
-  the boards of the storey's joinery (the cabinets made with "Armários na parede…", and groups
-  drawn by hand with board parts) by material, with the sheets each takes, the edge banding and
-  the hardware, and saves it as CSV, or as DXF or SVG with the boards laid out on sheets. The
-  workshop's sheet size, saw kerf and trim are set in the window, and a board larger than the
-  sheet is named on screen before any file is saved. The storey's list is gathered
-  by one function, `newera_joinery::gather`, that the `cut_list` tool reads as well.
-- The cut list lays boards out on the workshop's own sheets: `sheets` gives `[length, width]` mm
-  by the start of the board name (`{"*": [2800, 2070]}` for 2800 × 2070 mm chipboard, `{"MDF 6":
-  [2440, 1220]}` for one board only, the longest match wins), `kerf` the saw blade (default 4 mm)
-  and `trim` the factory edge cut off each side of a sheet (default 0). `cut_list` and `export
-  what=cut_list` both take them, and a read already answers how many sheets each board takes.
-  Without them the layout is the one it always was: 2750 × 1830 mm panels, 3200 × 1900 mm stone,
-  2400 × 1200 mm gypsum and 3000 × 300 mm slats; `*` leaves those three on their own sheets.
-  Boards larger than their trimmed sheet come back in `oversize`, with the count.
+
+### Fixed
+
+- On a tablet (768 px wide) the site's top bar no longer runs past the screen: below 900 px the
+  GitHub button with its star count leaves the bar, and the menu's plain GitHub link takes its
+  place, as it already did on a phone.
+
+### Security
+
+- The MCP library `rmcp` moves to 3.11.0: before 3.9.0 its HTTP clients read a server's answer
+  into memory with no limit, so a hostile MCP server could exhaust the memory of the app
+  (RUSTSEC-2026-0462). `url` moves to 2.5.9, which no longer overflows the stack on nested
+  `blob:` URLs (RUSTSEC-2026-0592).
 
 ## [3.3.0] - 2026-11-02
 
