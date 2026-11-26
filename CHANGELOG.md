@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The Apple silicon build links again: the Metal bridge's `@available` checks call
+  `__isPlatformVersionAtLeast`, which lives in clang's runtime library, and the release binary
+  now links it. 3.4.0 shipped no macOS Apple silicon download because of it.
+
 ## [3.4.0] - 2026-11-26
 
 ### Added
