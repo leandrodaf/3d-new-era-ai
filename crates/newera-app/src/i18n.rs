@@ -2,6 +2,8 @@
 //! looked up here when another language is chosen; unknown texts stay as
 //! written.
 
+mod de;
+
 use std::sync::atomic::{AtomicU8, Ordering};
 
 /// A language the window speaks.
@@ -14,12 +16,13 @@ pub(crate) enum Lang {
     En,
     Es,
     Fr,
+    De,
     Uk,
 }
 
 impl Lang {
     /// Every language, in the order the menu lists them.
-    pub(crate) const ALL: [Self; 5] = [Self::Pt, Self::En, Self::Es, Self::Fr, Self::Uk];
+    pub(crate) const ALL: [Self; 6] = [Self::Pt, Self::En, Self::Es, Self::Fr, Self::De, Self::Uk];
 
     /// How the language names itself — the one name whoever looks for it
     /// reads without knowing any of the others.
@@ -29,6 +32,7 @@ impl Lang {
             Self::En => "English",
             Self::Es => "Español",
             Self::Fr => "Français",
+            Self::De => "Deutsch",
             Self::Uk => "Українська",
         }
     }
@@ -40,6 +44,7 @@ impl Lang {
             Self::En => "en",
             Self::Es => "es",
             Self::Fr => "fr",
+            Self::De => "de",
             Self::Uk => "uk",
         }
     }
@@ -54,7 +59,7 @@ impl Lang {
     /// of the row, not a side of it.
     const fn column(self) -> Option<usize> {
         match self {
-            Self::Pt => None,
+            Self::Pt | Self::De => None,
             Self::En => Some(0),
             Self::Es => Some(1),
             Self::Fr => Some(2),
@@ -68,7 +73,8 @@ impl Lang {
             Self::En => 1,
             Self::Es => 2,
             Self::Fr => 3,
-            Self::Uk => 4,
+            Self::De => 4,
+            Self::Uk => 5,
         }
     }
 
@@ -77,7 +83,8 @@ impl Lang {
             1 => Self::En,
             2 => Self::Es,
             3 => Self::Fr,
-            4 => Self::Uk,
+            4 => Self::De,
+            5 => Self::Uk,
             _ => Self::Pt,
         }
     }
@@ -118,12 +125,22 @@ pub(crate) fn lang() -> Lang {
     Lang::from_code(LANG.load(Ordering::Relaxed))
 }
 
+pub(crate) fn language_menu_label() -> &'static str {
+    if lang() == Lang::De {
+        "Sprache"
+    } else {
+        "Idioma / Language"
+    }
+}
+
 /// The language a finding is said in. Findings carry Portuguese and English;
 /// where the window speaks neither, English is the one more readers share.
 pub(crate) fn findings_language() -> newera_core::vocabulary::Language {
     match lang() {
         Lang::Pt => newera_core::vocabulary::Language::Portuguese,
-        Lang::En | Lang::Es | Lang::Fr | Lang::Uk => newera_core::vocabulary::Language::English,
+        Lang::En | Lang::Es | Lang::Fr | Lang::De | Lang::Uk => {
+            newera_core::vocabulary::Language::English
+        }
     }
 }
 
@@ -136,36 +153,56 @@ pub(crate) fn decimal_comma() -> bool {
 /// Translates a line that only exists at run time: what a background job says
 /// it is doing comes from the work itself, not from a literal in this crate.
 pub(crate) fn dynamic(pt: &str) -> String {
-    let Some(column) = lang().column() else {
-        return pt.to_owned();
-    };
-    translations(pt).map_or_else(|| pt.to_owned(), |row| row[column].to_owned())
+    translated(pt, lang()).unwrap_or(pt).to_owned()
 }
 
-/// A name that lives in the project, as the window shows it. The defaults
-/// the project starts with ("Nova casa", "Versão 1", "Versão 1 (cópia)") and
-/// the catalog names pieces are placed under are Portuguese in the file; on
-/// screen they follow the window's language. A name somebody typed is theirs
-/// and stays as it is.
+const COPY_SUFFIX: &str = " (cópia)";
+
+/// Display a saved name that can be a catalog label or a generated default.
 pub(crate) fn shown(name: &str) -> String {
     shown_in(name, lang())
 }
 
+/// Only generated default patterns are localized for project titles.
+pub(crate) fn shown_home(name: &str) -> String {
+    shown_home_in(name, lang())
+}
+
+fn shown_home_in(name: &str, lang: Lang) -> String {
+    let base = name.trim_end_matches(COPY_SUFFIX);
+    if base == "Nova casa" || version_number(base).is_some() {
+        shown_in(name, lang)
+    } else {
+        name.to_owned()
+    }
+}
+
+fn version_number(name: &str) -> Option<&str> {
+    name.strip_prefix("Versão ")
+        .filter(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+}
+
 /// [`shown`] in one named language. See [`say`].
 fn shown_in(name: &str, lang: Lang) -> String {
-    let Some(column) = lang.column() else {
+    if lang == Lang::Pt {
         return name.to_owned();
+    }
+    let mut base = name;
+    let mut copies = 0;
+    while let Some(original) = base.strip_suffix(COPY_SUFFIX) {
+        base = original;
+        copies += 1;
+    }
+    let mut shown = if let Some(n) = version_number(base) {
+        fill_in("Versão {}", lang, &[&n])
+    } else {
+        translated(base, lang).unwrap_or(base).to_owned()
     };
-    if let Some(original) = name.strip_suffix(" (cópia)") {
-        return format!("{}{}", shown_in(original, lang), say(" (cópia)", lang));
+    let suffix = say(COPY_SUFFIX, lang);
+    for _ in 0..copies {
+        shown.push_str(suffix);
     }
-    if let Some(n) = name.strip_prefix("Versão ")
-        && !n.is_empty()
-        && n.chars().all(|c| c.is_ascii_digit())
-    {
-        return fill_in("Versão {}", lang, &[&n]);
-    }
-    translations(name).map_or_else(|| name.to_owned(), |row| row[column].to_owned())
+    shown
 }
 
 /// The text in the language the window is set to: `pt` is the Portuguese
@@ -186,10 +223,15 @@ pub(crate) fn every(pt: &'static str) -> impl Iterator<Item = &'static str> {
 /// itself always wants [`tr`]; this is for the tests, which run beside each
 /// other and must not shout across.
 fn say(pt: &'static str, lang: Lang) -> &'static str {
-    let Some(column) = lang.column() else {
-        return pt;
-    };
-    translations(pt).map_or(pt, |row| row[column])
+    translated(pt, lang).unwrap_or(pt)
+}
+
+fn translated(pt: &str, lang: Lang) -> Option<&'static str> {
+    if lang == Lang::De {
+        return de::translation(pt);
+    }
+    let column = lang.column()?;
+    translations(pt).map(|row| row[column])
 }
 
 /// A sentence with things in it: `{}` in the text marks where each one goes,
@@ -3302,6 +3344,17 @@ mod tests {
         assert_eq!(shown_in("Versão 12", Lang::Es), "Versión 12");
         assert_eq!(shown_in("Versão 1 (cópia)", Lang::Fr), "Version 1 (copie)");
         assert_eq!(shown_in("Nova casa", Lang::En), "New home");
+        assert_eq!(shown_in("Nova casa", Lang::De), "Neues Projekt");
+        assert_eq!(
+            shown_in("Versão 12 (cópia)", Lang::De),
+            "Version 12 (Kopie)"
+        );
+        assert_eq!(shown_in("Mein Grundriss", Lang::De), "Mein Grundriss");
+        assert_eq!(
+            shown_in("Mein Grundriss (cópia) (cópia)", Lang::De),
+            "Mein Grundriss (Kopie) (Kopie)"
+        );
+        assert_eq!(shown_in("Porta-janela", Lang::De), "Fenstertür");
         assert_eq!(shown_in("Versão 2 (cópia)", Lang::Uk), "Версія 2 (копія)");
         assert_eq!(shown_in("Nova casa", Lang::Uk), "Новий будинок");
         assert_eq!(shown_in("Porta-janela", Lang::En), "French door");
@@ -3371,17 +3424,41 @@ mod tests {
                 // A blank side is worse than no row: the label disappears.
                 // A side without the `{}` of the key drops what goes in it.
                 let places = text.matches("{}").count();
-                match translations(text) {
-                    Some(row)
-                        if row
-                            .iter()
-                            .all(|t| !t.trim().is_empty() && t.matches("{}").count() == places) => {
-                    }
-                    _ => missing.push(text.to_owned()),
+                if Lang::ALL
+                    .into_iter()
+                    .filter(|&lang| lang != Lang::Pt)
+                    .any(|lang| {
+                        translated(text, lang).is_none_or(|t| {
+                            t.trim().is_empty() || t.matches("{}").count() != places
+                        })
+                    })
+                {
+                    missing.push(text.to_owned());
                 }
             }
         }
         missing
+    }
+
+    #[test]
+    fn home_names_only_localize_generated_defaults() {
+        assert_eq!(shown_home_in("Cozinha", Lang::De), "Cozinha");
+        assert_eq!(
+            shown_home_in("Cozinha (cópia)", Lang::De),
+            "Cozinha (cópia)"
+        );
+        assert_eq!(shown_home_in("Nova casa", Lang::De), "Neues Projekt");
+        assert_eq!(
+            shown_home_in("Nova casa (cópia)", Lang::De),
+            "Neues Projekt (Kopie)"
+        );
+        assert_eq!(
+            shown_home_in("Versão 12 (cópia)", Lang::De),
+            "Version 12 (Kopie)"
+        );
+        assert_eq!(shown_home_in("Versão final", Lang::De), "Versão final");
+        assert_eq!(shown_in("Cozinha", Lang::De), "Küche");
+        assert_eq!(say("Contínuo", Lang::De), "Durchgezogen");
     }
 
     #[test]
@@ -3401,6 +3478,7 @@ mod tests {
             (Lang::En, "Save"),
             (Lang::Es, "Guardar"),
             (Lang::Fr, "Enregistrer"),
+            (Lang::De, "Speichern"),
             (Lang::Uk, "Зберегти"),
         ] {
             assert_eq!(say("Salvar", lang), saved);
@@ -3464,6 +3542,10 @@ mod tests {
             "Ouvert : casa.n3d"
         );
         assert_eq!(
+            fill_in("Aberto: {}", Lang::De, &[&"Wohnung.newera"]),
+            "Geöffnet: Wohnung.newera"
+        );
+        assert_eq!(
             fill_in(
                 "⚠ Não foi possível abrir {}: {}",
                 Lang::Fr,
@@ -3486,9 +3568,12 @@ mod tests {
     fn every_piece_of_the_catalog_is_named_in_every_language() {
         let mut missing: Vec<&str> = Vec::new();
         for item in newera_catalog::CATALOG {
-            match translations(item.name) {
-                Some(row) if row.iter().all(|t| !t.trim().is_empty()) => {}
-                _ => missing.push(item.name),
+            if Lang::ALL
+                .into_iter()
+                .filter(|&lang| lang != Lang::Pt)
+                .any(|lang| translated(item.name, lang).is_none_or(|text| text.trim().is_empty()))
+            {
+                missing.push(item.name);
             }
         }
         assert!(missing.is_empty(), "not translated: {missing:#?}");
@@ -3501,7 +3586,8 @@ mod tests {
         assert_eq!(Lang::from_locale("es-419"), Some(Lang::Es));
         assert_eq!(Lang::from_locale("fr_CA"), Some(Lang::Fr));
         assert_eq!(Lang::from_locale("uk_UA.UTF-8"), Some(Lang::Uk));
-        assert_eq!(Lang::from_locale("de_DE.UTF-8"), None);
+        assert_eq!(Lang::from_locale("de_DE.UTF-8"), Some(Lang::De));
+        assert_eq!(Lang::from_locale("de-CH"), Some(Lang::De));
         assert_eq!(Lang::from_locale("C"), None);
         assert_eq!(Lang::from_locale(""), None);
     }

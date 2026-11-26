@@ -570,7 +570,7 @@ fn outliner(app: &mut NewEraApp, ui: &mut egui::Ui) {
     header(
         ui,
         icon::HOUSE_LINE,
-        &crate::i18n::shown(&home.name),
+        &crate::i18n::shown_home(&home.name),
         &unit.format_area(total),
     );
     ui.label(crate::theme::fig(
