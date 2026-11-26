@@ -364,6 +364,10 @@ fn issues() -> Vec<(&'static str, Value)> {
             "backwards",
             list("Pieces turned to face a wall: {key, piece, wall, cm, fix}"),
         ),
+        (
+            "opens_into",
+            list("Doors and drawers that hit something opening: {key, piece, front, against, how}"),
+        ),
         ("in_wall", list("Pieces inside a wall: {key, piece, wall}")),
         ("blocks_door", list("Doors blocked: {key, door, by}")),
         (

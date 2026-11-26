@@ -11,6 +11,20 @@ the `key` it is accepted by and the elements involved (name, bounds and z).
   overlap_kinds counts them.
 - **blocked**: a cabinet, fridge or wardrobe whose opening face is against a solid. It
   cannot be used, and `angle` alone does not show it.
+- **opens_into** `{key, piece, front, against, how}`: a door, drawer or appliance door
+  (`how`: `door`, `porthole`, `drawer`, `flap_down`, `flap_up`) that runs into a solid while it opens —
+  the wall beside its hinge, the fridge next to it, the handle of the drawer in the corner, the
+  box hung over a wall cabinet's lift-up flap. Closed, nothing touches, so no other check sees
+  it. A door sweeps its width around the hinge to 90° and stands past the hinge side by its
+  thickness and handle (a fridge, freezer or microwave swings its door like this); a washer's
+  porthole (`opens: porthole-left|porthole-right`) turns about a hinge 4 cm off its face to 135°,
+  about 45 cm out and 30 cm past its hinge side, so it clears a niche 4 cm deep but not a wall or
+  tall cabinet right beside it; a drawer comes out by its slide; an oven, dishwasher or dryer door
+  drops flat at its bottom edge and a lift-up flap (`opens: flap-up`) rises flat at its top
+  edge, each reaching out by its height (an appliance's door, not its plinth and panel: about
+  70 cm of a dryer 85 cm tall). A filler panel at the corner, the hinge on the other
+  side, a narrower handle or more room in front clears it. A flap that lifts past the ceiling
+  meets the room (`against` is the room's id): hang the cabinet lower or give it hinged doors.
 - **in_wall** `{key, piece, wall}`: a piece inside a wall.
 - **blocks_door** `{key, door, by}`: includes a 60 cm approach on either face, even for
   sliding doors and passages.
