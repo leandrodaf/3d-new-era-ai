@@ -955,6 +955,11 @@ pub(super) fn translation(pt: &str) -> Option<&'static str> {
             "Mit dieser Adresse lässt sich das Projekt bearbeiten. Die Adresse wie ein Passwort behandeln."
         }
         "cooktop" => "Kochfeld",
+        "Controle de câmera" => "Kamerasteuerung",
+        "Pavimento e altura do olho" => "Geschoss & Augenhöhe",
+        "Térreo único (0.00 m)" => "Eingeschossig (0.00 m)",
+        "Posição, elevação e lente" => "Position, Höhe & Objektiv",
+        "Pontos de vista salvos" => "Gespeicherte Blickpunkte",
         _ => return None,
     })
 }

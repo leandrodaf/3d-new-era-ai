@@ -49,6 +49,9 @@ struct Settings {
     /// `lang`: read once, on the first run after the update.
     #[serde(default)]
     english: bool,
+    /// Whether the docked Camera Control side panel stays open across runs.
+    #[serde(default)]
+    camera_panel: bool,
 }
 
 /// Plan drawing of furniture.
@@ -168,6 +171,8 @@ pub(crate) struct NewEraApp {
     pub(crate) cabinets: Option<crate::cabinets::CabinetsWindow>,
     /// The "Lista de corte" window, while open.
     pub(crate) cut_list: Option<crate::cutlist::CutListWindow>,
+    /// Docked Camera Control side panel.
+    pub(crate) camera_control: crate::camera_control::CameraControlPanel,
     /// The boards the last cabinets were cut from, offered for the next wall.
     pub(crate) cabinet_boards: crate::cabinets::Boards,
     /// Top-view provider for the plan: `(look, asset dir, provider)`.
@@ -258,6 +263,7 @@ impl NewEraApp {
         crate::i18n::set(lang);
         crate::theme::set_mode(&cc.egui_ctx, settings.theme);
         let dark = cc.egui_ctx.theme() == egui::Theme::Dark;
+        let camera_panel = settings.camera_panel;
         #[cfg(target_arch = "wasm32")]
         let restored = crate::recovery_web::load();
         #[cfg(not(target_arch = "wasm32"))]
@@ -286,6 +292,10 @@ impl NewEraApp {
             ergonomics: None,
             cabinets: None,
             cut_list: None,
+            camera_control: crate::camera_control::CameraControlPanel {
+                open: camera_panel,
+                ..Default::default()
+            },
             cabinet_boards: crate::cabinets::Boards::default(),
             top_views: None,
             top_view_generation: 0,
@@ -359,6 +369,11 @@ impl NewEraApp {
 
     pub(crate) fn unit(&self) -> LengthUnit {
         self.settings.unit
+    }
+
+    pub(crate) fn set_camera_panel_open(&mut self, open: bool) {
+        self.camera_control.open = open;
+        self.settings.camera_panel = open;
     }
 
     pub(crate) fn set_status(&mut self, text: impl Into<String>) {
@@ -692,6 +707,21 @@ impl NewEraApp {
             next.observer = visitor.camera.clone();
             next.stored.push(camera);
             self.run(|doc| doc.execute(Command::SetCameras { cameras: next }));
+            ui.close();
+        }
+        let mut show_camera = self.camera_control.open;
+        if ui
+            .checkbox(
+                &mut show_camera,
+                format!(
+                    "{} {}",
+                    icon::SLIDERS_HORIZONTAL,
+                    crate::i18n::tr("Controle de câmera")
+                ),
+            )
+            .changed()
+        {
+            self.set_camera_panel_open(show_camera);
             ui.close();
         }
     }
@@ -2984,6 +3014,7 @@ impl eframe::App for NewEraApp {
                 .resizable(true)
                 .default_size(270.0)
                 .show(ui, |ui| panels::left(self, ui));
+            crate::camera_control::show(self, ui);
         }
 
         egui::CentralPanel::default()

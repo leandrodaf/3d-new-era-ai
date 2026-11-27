@@ -3473,6 +3473,36 @@ fn translations(pt: &str) -> Option<[&'static str; 4]> {
             "Quiconque a cette adresse modifie ce projet : traitez-la comme un mot de passe.",
             "Будь-хто з цією адресою редагує цей проєкт: бережіть її як пароль.",
         ],
+        "Controle de câmera" => [
+            "Camera Control",
+            "Control de cámara",
+            "Contrôle caméra",
+            "Керування камерою",
+        ],
+        "Pavimento e altura do olho" => [
+            "Storey & Eye Level",
+            "Planta y altura del ojo",
+            "Étage et hauteur d'œil",
+            "Поверх і висота очей",
+        ],
+        "Térreo único (0.00 m)" => [
+            "Single-storey (0.00 m)",
+            "Planta única (0.00 m)",
+            "Niveau unique (0.00 m)",
+            "Один поверх (0.00 м)",
+        ],
+        "Posição, elevação e lente" => [
+            "Position, Elevation & Lens",
+            "Posición, elevación y lente",
+            "Position, élévation et focale",
+            "Позиція, висота та об'єктив",
+        ],
+        "Pontos de vista salvos" => [
+            "Saved Viewpoints",
+            "Puntos de vista guardados",
+            "Points de vue enregistrés",
+            "Збережені ракурси",
+        ],
         _ => return None,
     })
 }
